@@ -81,6 +81,13 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 5173,
+    // Vite refuses requests whose Host header isn't localhost/an IP (host
+    // check, 5.4.12+). When the dev server sits behind a tunnel or reverse
+    // proxy (e.g. cloudflared), list the public hostnames here via
+    // VITE_ALLOWED_HOSTS=host1,host2 in that container's env.
+    allowedHosts: process.env.VITE_ALLOWED_HOSTS
+      ? process.env.VITE_ALLOWED_HOSTS.split(",").map((h) => h.trim()).filter(Boolean)
+      : undefined,
     proxy: {
       // Forward /api/* to the backend. In native dev (npm run dev on the
       // host), the backend is at http://localhost:3000. In dockerised dev

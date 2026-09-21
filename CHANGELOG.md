@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-09-21 — Vite dev server can be reached through a tunnel or reverse proxy
+
+- **`frontend/vite.config.ts`** — `server.allowedHosts` is read from `VITE_ALLOWED_HOSTS` (comma-separated hostnames; unset leaves Vite's default host check in place). Why: Vite 5.4.12+ refuses any request whose `Host` header is not localhost or an IP address, so opening the dev server through a cloudflared tunnel (or any reverse proxy with a public hostname) answered "Blocked request. This host is not allowed." The variable follows the same pattern as `VITE_API_PROXY_TARGET`: set it in the frontend container's environment (the local `docker-compose.yml`), never in the repository.
+
 ### Changed — 2026-09-21 — Customer distribution builds and installs its own images
 
 - **`.github/workflows/docker-publish.yml`** — the image name is derived from the repository (`ghcr.io/<owner>/<repository>-backend` and `-frontend`), so this repository publishes `ghcr.io/alfi-rajasyah/solvro-cust-backend` and `ghcr.io/alfi-rajasyah/solvro-cust-frontend`; the `IMAGE_OWNER` variable is replaced by `IMAGE_NAME` (`github.repository`). The trigger is unchanged: a green CI run on `main`, a `v*` tag, or a manual dispatch. Why: the copied workflow published to the source repository's image names, so a green run here would have overwritten the production `latest` images.
