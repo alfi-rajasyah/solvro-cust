@@ -1,0 +1,625 @@
+// Solvro data model — see PRD §6.4 for the conceptual schema.
+// Naming: camelCase in TS via Prisma client; snake_case in SQL via @map.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum RiskCategory {
+  EXTERNAL
+  INTERNAL
+  TECHNICAL
+  ORGANIZATIONAL
+  FINANCIAL
+}
+
+enum RiskStatus {
+  OPEN
+  MITIGATED
+  CLOSED
+}
+
+// Network Diagram dependency edges. HARD = solid (true blocking),
+// SOFT = dashed (estimated/optional). Per CLAUDE.md the diagram only
+// uses these two — no FS/SS/FF/SF lag semantics.
+enum DependencyType {
+  HARD
+  SOFT
+}
+
+// Daily Review note visibility. The Internal/Customer-facing toggle is
+// removed from the UI; the UI only ever writes INTERNAL. Column and default
+// stay so the "INTERNAL notes never appear in exports" guardrail holds.
+enum NoteVisibility {
+  INTERNAL
+  CUSTOMER_FACING
+}
+
+enum WeeklyHealth {
+  GREEN
+  AMBER
+  RED
+}
+
+enum WeeklyStatus {
+  NOT_STARTED
+  DRAFT
+  DONE
+}
+
+// Pipeline module (native port of Velora). All 9 stages of the reference
+// app's live schema are represented here (an earlier 6-value version of
+// this enum omitted poc/technical_clarification/hold, which would have
+// forced a value-translation step for those rows on import). DB labels are
+// @map'd to Velora's lowercase literals verbatim, so the one-time data
+// import can copy the `stage` column as-is. Enum ORDER is load-bearing: the
+// opportunity list route sorts `stage: "asc"`, and Postgres orders enum
+// values by declaration order, so this order IS the board's column order.
+enum PipelineStage {
+  ASSESSMENT              @map("assessment")
+  RFP                     @map("rfp")
+  POC                     @map("poc")
+  TECHNICAL_CLARIFICATION @map("technical_clarification")
+  DELIVER_PROPOSAL        @map("deliver_proposal")
+  WAITING_RESPONSE        @map("waiting_response")
+  WON                     @map("won")
+  DROP                    @map("drop")
+  HOLD                    @map("hold")
+}
+
+// Brand-new to Solvro (nothing has imported into it yet), so it follows the
+// house UPPERCASE enum-label convention rather than Velora's lowercase
+// literals — unlike PipelineStage there is no existing data to stay
+// verbatim-compatible with.
+enum PipelineImportStatus {
+  OK
+  ERROR
+}
+
+model Role {
+  id          Int    @id @default(autoincrement())
+  roleName    String @unique @map("role_name")
+  permissions Json   @default("[]") @db.JsonB
+  users       User[]
+
+  @@map("roles")
+}
+
+model User {
+  id                     Int                   @id @default(autoincrement())
+  username               String                @unique
+  email                  String                @unique
+  // Nullable since Google-provisioned users have no password.
+  // POST /auth/login rejects users with a null hash (HTTP 401 "google_only").
+  passwordHash           String?               @map("password_hash")
+  // Google `sub` claim. Unique per Google identity; null for password-only users.
+  googleSub              String?               @unique @map("google_sub")
+  avatarUrl              String?               @map("avatar_url")
+  roleId                 Int                   @map("role_id")
+  role                   Role                  @relation(fields: [roleId], references: [id])
+  active                 Boolean               @default(true)
+  createdAt              DateTime              @default(now()) @map("created_at")
+  projectsAsSA           Project[]             @relation("ProjectSA")
+  projectsAsTAM          Project[]             @relation("ProjectTAM")
+  projectBaselinesLocked Project[]             @relation("ProjectBaselineLockedBy")
+  assignedTasks          Task[]
+  comments               Comment[]
+  projectNotes           ProjectNote[]
+  authConfigUpdates      AuthConfig[]          @relation("AuthConfigUpdatedBy")
+  opportunitiesAsPic     Opportunity[]         @relation("OpportunityPic")
+  opportunityActivities  OpportunityActivity[] @relation("OpportunityActivityUser")
+  pipelineImportLogs     PipelineImportLog[]   @relation("PipelineImportLogUser")
+  tamCustomers           Customer[]            @relation("CustomerTam")
+  customerNotes          CustomerNote[]
+  weeklyUpdates          WeeklyUpdate[]
+  projectReviews         ProjectReview[]
+
+  @@index([roleId])
+  @@map("users")
+}
+
+// Singleton row (id="default") holding policy that the in-app admin can edit
+// without a redeploy. The Google Client ID stays in env (infra-level); the
+// allowed-domains list lives here (operational policy).
+model AuthConfig {
+  id                   String   @id @default("default")
+  // Google OAuth 2.0 Client ID. Public — Google verifies ID tokens server-side
+  // against this audience. Stored in DB so the admin can configure it from the
+  // app (Admin > Sign-in) without a redeploy / rebuild.
+  googleClientId       String?  @map("google_client_id")
+  googleAllowedDomains String[] @default([]) @map("google_allowed_domains")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  updatedById          Int?     @map("updated_by_id")
+  updatedBy            User?    @relation("AuthConfigUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("auth_config")
+}
+
+model Project {
+  id                   Int              @id @default(autoincrement())
+  name                 String
+  description          String?
+  saId                 Int?             @map("sa_id")
+  tamId                Int              @map("tam_id")
+  customerId           Int?             @map("customer_id")
+  sa                   User?            @relation("ProjectSA", fields: [saId], references: [id])
+  tam                  User             @relation("ProjectTAM", fields: [tamId], references: [id])
+  customer             Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  status               ProjectStatus    @default(PLANNING)
+  // Kanban WIP limits per top-level status column. Shape:
+  // {"TODO": number|null, "IN_PROGRESS": number|null, "DONE": number|null}.
+  // null (or an absent key) means "no limit" for that column. Visual only —
+  // the board never blocks a move when a column is over its limit, it just
+  // renders the count pill in amber.
+  wipLimits            Json?            @map("wip_limits") @db.JsonB
+  // Administrative containers (e.g. per-TAM "Opty Timelines") stay usable as
+  // projects but are excluded from portfolio roll-ups (Executive dashboard,
+  // Overview, overdue monitoring) via computePortfolioRows.
+  excludeFromPortfolio Boolean          @default(false) @map("exclude_from_portfolio")
+  baselineLockedAt     DateTime?        @map("baseline_locked_at")
+  baselineLockedById   Int?             @map("baseline_locked_by_id")
+  baselineLockedBy     User?            @relation("ProjectBaselineLockedBy", fields: [baselineLockedById], references: [id])
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+  tasks                Task[]
+  labels               Label[]
+  sections             Section[]
+  risks                Risk[]
+  taskDependencies     TaskDependency[]
+  notes                ProjectNote[]
+  services             ProjectService[]
+  reviews              ProjectReview[]
+  // Won-deal handoff link (native replacement for the PRD's cross-DB
+  // Project.sourceDealId soft link) — the Opportunity side owns the FK.
+  opportunity          Opportunity?
+
+  @@index([saId])
+  @@index([tamId])
+  @@index([customerId])
+  @@index([status])
+  @@map("projects")
+}
+
+model Customer {
+  id                Int               @id @default(autoincrement())
+  name              String            @unique
+  accountManager    String?           @map("account_manager")
+  solutionArchitect String?           @map("solution_architect")
+  description       String            @db.Text
+  createdAt         DateTime          @default(now()) @map("created_at")
+  projects          Project[]
+  services          CustomerService[]
+  tamId             Int?              @map("tam_id")
+  tam               User?             @relation("CustomerTam", fields: [tamId], references: [id], onDelete: SetNull)
+  notes             CustomerNote[]
+  weeklyUpdates     WeeklyUpdate[]
+
+  @@index([tamId])
+  @@map("customers")
+}
+
+model Service {
+  id          Int               @id @default(autoincrement())
+  name        String            @unique
+  description String?           @db.Text
+  active      Boolean           @default(true)
+  createdAt   DateTime          @default(now()) @map("created_at")
+  customers   CustomerService[]
+  projects    ProjectService[]
+
+  @@map("services")
+}
+
+model CustomerService {
+  id         Int      @id @default(autoincrement())
+  customerId Int      @map("customer_id")
+  serviceId  Int      @map("service_id")
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  service    Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  tools      String[] @default([]) // free-text tool names per assignment, e.g. ["Acronis", "Veeam"]
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([customerId, serviceId])
+  @@index([customerId])
+  @@index([serviceId])
+  @@map("customer_services")
+}
+
+model ProjectService {
+  id        Int      @id @default(autoincrement())
+  projectId Int      @map("project_id")
+  serviceId Int      @map("service_id")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  tools     String[] @default([]) // free-text tool names per assignment, e.g. ["Acronis", "Veeam"]
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([projectId, serviceId])
+  @@index([projectId])
+  @@index([serviceId])
+  @@map("project_services")
+}
+
+model Task {
+  id                Int              @id @default(autoincrement())
+  projectId         Int              @map("project_id")
+  project           Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sectionId         Int?             @map("section_id")
+  section           Section?         @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  title             String
+  description       String?
+  status            TaskStatus       @default(TODO)
+  priority          Priority         @default(MEDIUM)
+  startDate         DateTime?        @map("start_date")
+  dueDate           DateTime?        @map("due_date")
+  // Explicit milestone flag. Historically derived in the frontend
+  // (startDate === dueDate, or dueDate-only); backfilled once by the
+  // task_is_milestone migration, user-controlled thereafter.
+  isMilestone       Boolean          @default(false) @map("is_milestone")
+  // Manual "if this task slips, the project end date slips" flag, set by the
+  // TAM. Independent of priority; NOT computed from dependencies — the
+  // computed critical path (Kahn sort + longest path) stays deferred.
+  isCriticalPath    Boolean          @default(false) @map("is_critical_path")
+  baselineStartDate DateTime?        @map("baseline_start_date")
+  baselineDueDate   DateTime?        @map("baseline_due_date")
+  assignedToId      Int?             @map("assigned_to")
+  assignedTo        User?            @relation(fields: [assignedToId], references: [id])
+  parentTaskId      Int?             @map("parent_task_id")
+  parent            Task?            @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  subtasks          Task[]           @relation("TaskSubtasks")
+  // Sibling ordering. For top-level tasks (parentTaskId null) the sibling
+  // list is the project's single dense top-level order (projectId alone) —
+  // ONE canonical order shared by List, Kanban, and Gantt; status does NOT
+  // partition it, so a status change keeps the task's slot. For subtasks the
+  // sibling list is the parent's subtask list (unchanged: also unpartitioned
+  // by status). Dense 0..n-1 within a sibling list — maintained by the
+  // reorder/re-parent logic in routes/tasks.ts and routes/projects.ts.
+  position          Int              @default(0) @map("position")
+  labels            Label[]
+  comments          Comment[]
+  // Dependency edges (Gantt connector arrows).
+  predecessors      TaskDependency[] @relation("DependencySuccessor")
+  successors        TaskDependency[] @relation("DependencyPredecessor")
+
+  @@index([projectId])
+  @@index([sectionId])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([priority])
+  @@index([dueDate])
+  @@index([parentTaskId])
+  @@index([projectId, position])
+  @@map("tasks")
+}
+
+model TaskDependency {
+  id                Int            @id @default(autoincrement())
+  // projectId is denormalised so the row cascades on project delete
+  // and so visibility filters can scope by project without a join.
+  projectId         Int            @map("project_id")
+  project           Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  predecessorTaskId Int            @map("predecessor_task_id")
+  predecessor       Task           @relation("DependencyPredecessor", fields: [predecessorTaskId], references: [id], onDelete: Cascade)
+  successorTaskId   Int            @map("successor_task_id")
+  successor         Task           @relation("DependencySuccessor", fields: [successorTaskId], references: [id], onDelete: Cascade)
+  type              DependencyType @default(HARD)
+  // Network-Diagram routing hints. Capture which side of each node the
+  // user dragged from/to, so the edge re-renders the same way after
+  // reload. Optional: when null we default to right-source → left-target.
+  sourceHandle      String?        @map("source_handle")
+  targetHandle      String?        @map("target_handle")
+  createdAt         DateTime       @default(now()) @map("created_at")
+
+  @@unique([predecessorTaskId, successorTaskId])
+  @@index([projectId])
+  @@index([successorTaskId])
+  @@map("task_dependencies")
+}
+
+model Section {
+  id        Int      @id @default(autoincrement())
+  projectId Int      @map("project_id")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  // Hex color used as the phase track tint in the Network Diagram view.
+  // Default neutral slate-400 keeps existing seeds visually stable.
+  color     String   @default("#94a3b8")
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  tasks     Task[]
+
+  @@index([projectId])
+  @@map("sections")
+}
+
+model Label {
+  id        Int     @id @default(autoincrement())
+  projectId Int     @map("project_id")
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  color     String  @default("#3aae51")
+  tasks     Task[]
+
+  @@unique([projectId, name])
+  @@index([projectId])
+  @@map("labels")
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  taskId    Int      @map("task_id")
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  Int      @map("author_id")
+  author    User     @relation(fields: [authorId], references: [id])
+  body      String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([taskId])
+  @@index([authorId])
+  @@map("comments")
+}
+
+model Risk {
+  id              Int          @id @default(autoincrement())
+  projectId       Int          @map("project_id")
+  project         Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  description     String       @db.Text
+  category        RiskCategory @default(INTERNAL)
+  probability     Int          @default(1)
+  impact          Int          @default(1)
+  status          RiskStatus   @default(OPEN)
+  mitigationPlan  String?      @map("mitigation_plan") @db.Text
+  contingencyPlan String?      @map("contingency_plan") @db.Text
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  @@index([projectId])
+  @@index([status])
+  @@index([category])
+  @@map("risks")
+}
+
+// Daily Review notes — TAM logs cross-project notes per session, each
+// scoped to a single project. The Internal/Customer-facing toggle is
+// removed from the UI; the UI only ever writes INTERNAL. Column and default
+// stay so the "INTERNAL notes never appear in exports" guardrail holds.
+model ProjectNote {
+  id         Int            @id @default(autoincrement())
+  projectId  Int            @map("project_id")
+  project    Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  authorId   Int            @map("author_id")
+  author     User           @relation(fields: [authorId], references: [id])
+  body       String         @db.Text
+  visibility NoteVisibility @default(INTERNAL)
+  noteDate   DateTime       @map("note_date") @db.Date
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  @@index([projectId, createdAt])
+  @@index([authorId])
+  @@index([projectId, noteDate])
+  @@map("project_notes")
+}
+
+// Operations notes — issues outside any project, scoped to a customer. The
+// title is typed manually (required, 1-120 chars) rather than a service
+// selector (user decision 2026-08-29, replacing the earlier service link).
+// Same author-only edit / wildcard-delete rule as ProjectNote.
+model CustomerNote {
+  id         Int      @id @default(autoincrement())
+  customerId Int      @map("customer_id")
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  authorId   Int      @map("author_id")
+  author     User     @relation(fields: [authorId], references: [id])
+  noteDate   DateTime @map("note_date") @db.Date
+  body       String   @db.Text
+  title      String   @db.VarChar(120)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([customerId, noteDate])
+  @@index([authorId])
+  @@map("customer_notes")
+}
+
+// Weekly update per customer, drafted from that week's project + operations
+// notes. NOT_STARTED is the client-side state for "no row yet" — the enum
+// value exists so a saved update can be reset without deleting the row.
+// Mid-week highlights (one row per highlight, each with its own risk and
+// action) live in the child table WeeklyHighlight, not on this model.
+// Reflection texts (outstanding issue, lesson learned, next week focus,
+// manager decision) live per achievement in the child table
+// WeeklyAchievement, not on this model — see WeeklyAchievement below.
+model WeeklyUpdate {
+  id             Int                 @id @default(autoincrement())
+  customerId     Int                 @map("customer_id")
+  customer       Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  weekStart      DateTime            @map("week_start") @db.Date
+  authorId       Int                 @map("author_id")
+  author         User                @relation(fields: [authorId], references: [id])
+  category       String?             @db.VarChar(120)
+  highlights     WeeklyHighlight[]
+  achievements   WeeklyAchievement[]
+  midweekSavedAt DateTime?           @map("midweek_saved_at")
+  health         WeeklyHealth?
+  status         WeeklyStatus        @default(DRAFT)
+  doneAt         DateTime?           @map("done_at")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  @@unique([customerId, weekStart])
+  @@index([authorId])
+  @@map("weekly_updates")
+}
+
+// One Mid-week highlight — one row of Monday's table. Risk and Action live
+// here, not on the week. `position` is the list order the form saved.
+model WeeklyHighlight {
+  id             Int          @id @default(autoincrement())
+  weeklyUpdateId Int          @map("weekly_update_id")
+  weeklyUpdate   WeeklyUpdate @relation(fields: [weeklyUpdateId], references: [id], onDelete: Cascade)
+  position       Int
+  title          String       @db.VarChar(200)
+  detail         String?      @db.Text
+  risk           String?      @db.Text
+  action         String?      @db.Text
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  @@unique([weeklyUpdateId, position])
+  @@map("weekly_highlights")
+}
+
+// One Reflection achievement — one row of Monday's Reflection table. Every
+// Reflection text belongs to the row; Health and Status stay on the week.
+model WeeklyAchievement {
+  id               Int          @id @default(autoincrement())
+  weeklyUpdateId   Int          @map("weekly_update_id")
+  weeklyUpdate     WeeklyUpdate @relation(fields: [weeklyUpdateId], references: [id], onDelete: Cascade)
+  position         Int
+  title            String       @db.VarChar(200)
+  detail           String?      @db.Text
+  outstandingIssue String?      @map("outstanding_issue") @db.Text
+  lessonLearned    String?      @map("lesson_learned") @db.Text
+  nextWeekFocus    String?      @map("next_week_focus") @db.Text
+  managerDecision  String?      @map("manager_decision") @db.Text
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  @@unique([weeklyUpdateId, position])
+  @@map("weekly_achievements")
+}
+
+// Explicit, timestamped "reviewed this project today" mark — one per
+// user/project/day (re-marking the same day is idempotent via the unique).
+model ProjectReview {
+  id         Int      @id @default(autoincrement())
+  projectId  Int      @map("project_id")
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId     Int      @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewDate DateTime @map("review_date") @db.Date
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([projectId, userId, reviewDate])
+  @@index([userId, reviewDate])
+  @@map("project_reviews")
+}
+
+// Pipeline module (Solution Architect sales tracker) — native port of
+// Velora (docs/plans/pipeline-native-port-plan.md). UUID ids are preserved
+// verbatim from the Velora source so the one-time data import
+// (backend/scripts/import-velora.ts) can copy rows and their foreign keys
+// without minting new identifiers.
+model Opportunity {
+  id              String                @id @default(uuid())
+  title           String
+  customerName    String                @map("customer_name")
+  dealValue       BigInt                @default(0) @map("deal_value")
+  stage           PipelineStage         @default(ASSESSMENT)
+  picId           Int?                  @map("pic_id")
+  pic             User?                 @relation("OpportunityPic", fields: [picId], references: [id], onDelete: SetNull)
+  // Plain calendar day (DateField contract) — no instant conversion.
+  deadline        DateTime?             @db.Date
+  // Date the opportunity/request came in — same plain-calendar-day
+  // semantics as deadline, manually entered. Velora: request_date.
+  requestDate     DateTime?             @map("request_date") @db.Date
+  description     String?
+  productSolution String                @default("") @map("product_solution")
+  leadSource      String?               @map("lead_source")
+  winProbability  Int                   @default(50) @map("win_probability")
+  stageOrder      Int                   @default(0) @map("stage_order")
+  // Set only on transition into WON, cleared on leaving it — a route
+  // concern (the stage-transition handler in routes/opportunities.ts),
+  // never a schema default. Backs the board KPI's "Won this month" tile.
+  wonAt           DateTime?             @map("won_at")
+  // Records the stage a deal was in immediately before entering HOLD, so
+  // leaving HOLD can restore it — same route-concern pattern as wonAt: set
+  // on transition into HOLD, cleared on leaving it, never a schema default.
+  // Divergence from the reference: Velora's pre_hold_stage is free TEXT;
+  // here it's typed against PipelineStage since HOLD can only be entered
+  // from one of the 9 known stages.
+  preHoldStage    PipelineStage?        @map("pre_hold_stage")
+  // Won-deal handoff link — replaces the PRD's cross-DB soft link.
+  projectId       Int?                  @unique @map("project_id")
+  project         Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+  activities      OpportunityActivity[]
+  links           OpportunityLink[]
+
+  @@index([stage])
+  @@index([picId])
+  @@map("opportunities")
+}
+
+model OpportunityActivity {
+  id            String      @id @default(uuid())
+  opportunityId String      @map("opportunity_id")
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  // Nullable + SetNull — deliberate divergence from Velora's
+  // activity_logs.user_id (NOT NULL + Cascade): activity history should
+  // survive the acting user's deletion rather than disappear with them.
+  userId        Int?        @map("user_id")
+  user          User?       @relation("OpportunityActivityUser", fields: [userId], references: [id], onDelete: SetNull)
+  note          String
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@index([opportunityId])
+  @@map("opportunity_activities")
+}
+
+model OpportunityLink {
+  id            String      @id @default(uuid())
+  opportunityId String      @map("opportunity_id")
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  label         String
+  url           String
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@index([opportunityId])
+  @@map("opportunity_links")
+}
+
+// Row-per-run log for the Pipeline admin "Import" tab (import history).
+model PipelineImportLog {
+  id           String               @id @default(uuid())
+  userId       Int?                 @map("user_id")
+  user         User?                @relation("PipelineImportLogUser", fields: [userId], references: [id], onDelete: SetNull)
+  totalRows    Int                  @default(0) @map("total_rows")
+  validCount   Int                  @default(0) @map("valid_count")
+  skipCount    Int                  @default(0) @map("skip_count")
+  invalidCount Int                  @default(0) @map("invalid_count")
+  status       PipelineImportStatus @default(OK)
+  errorMessage String?              @map("error_message")
+  createdAt    DateTime             @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("pipeline_import_logs")
+}

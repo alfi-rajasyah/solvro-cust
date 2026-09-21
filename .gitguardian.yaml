@@ -1,0 +1,15 @@
+# GitGuardian configuration.
+#
+# The only "secrets" remaining in the tree are deterministic, zero-config
+# defaults inside dedicated test-fixture files. They are never used against
+# any real system:
+#   - backend/test/env.ts   local unit-test JWT secret + disposable Postgres URI
+#   - e2e/fixtures/seed.ts   local e2e admin password (CI supplies its own via
+#                            an Actions secret; this default is for local runs)
+# Real CI credentials were moved to repo Actions secrets, and the JWT secret is
+# generated per run — so no infrastructure credential lives in the repo.
+version: 2
+secret:
+  ignored-paths:
+    - "backend/test/env.ts"
+    - "e2e/fixtures/seed.ts"

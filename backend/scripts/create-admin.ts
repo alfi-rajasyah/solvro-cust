@@ -1,0 +1,60 @@
+import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcrypt";
+
+const prisma = new PrismaClient();
+
+async function main() {
+  const email = process.env.ADMIN_EMAIL;
+  const password = process.env.ADMIN_PASSWORD;
+
+  if (!email || !password) {
+    throw new Error(
+      "ADMIN_EMAIL and ADMIN_PASSWORD must be set in the environment",
+    );
+  }
+  if (!email.includes("@")) {
+    throw new Error("ADMIN_EMAIL must be a valid email address");
+  }
+  if (password.length < 8) {
+    throw new Error("ADMIN_PASSWORD must be at least 8 characters");
+  }
+
+  const adminRole = await prisma.role.findUnique({
+    where: { roleName: "ADMIN" },
+  });
+  if (!adminRole) {
+    throw new Error(
+      "ADMIN role missing — `prisma db seed` must run before this script",
+    );
+  }
+
+  const username = email.split("@")[0];
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  const user = await prisma.user.upsert({
+    where: { email },
+    update: {
+      username,
+      passwordHash,
+      roleId: adminRole.id,
+      active: true,
+    },
+    create: {
+      username,
+      email,
+      passwordHash,
+      roleId: adminRole.id,
+    },
+  });
+
+  console.log(`Admin user ready: ${user.email} (id=${user.id})`);
+}
+
+main()
+  .catch((err) => {
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

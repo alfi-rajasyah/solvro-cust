@@ -1,0 +1,354 @@
+---
+name: Technical Precision
+theme_default: dark
+maintained_by: solvro-docs-keeper — regenerated whenever a diff touches index.css or theme.tsx (tailwind.config.ts was deleted 2026-07-24, Tailwind v4 CSS-first migration — see CHANGELOG)
+source_of_truth: frontend/src/index.css (CSS-first `@theme`/`@theme inline` token definitions + `:root`/`.dark` CSS custom properties for both themes) + frontend/src/lib/theme.tsx (theme switching)
+
+colors:
+  dark:
+    surface: '#232321'
+    surface-dim: '#1a1a18'
+    surface-bright: '#2a2a28'
+    surface-container-lowest: '#1a1a18'
+    surface-container-low: '#232321'
+    surface-container: '#2a2a28'
+    surface-container-high: '#323230'
+    surface-container-highest: '#3a3a37'
+    on-surface: '#f0ede8'
+    on-surface-variant: '#b0ada8'
+    inverse-surface: '#f0ede8'
+    inverse-on-surface: '#232321'
+    outline: '#4a4a47'
+    outline-variant: '#3a3a37'
+    primary: '#3aae51'
+    on-primary: '#0f2b16'
+    primary-container: '#2d9042'
+    on-primary-container: '#e8f7eb'
+    inverse-primary: '#2d9042'
+    secondary: '#888780'
+    on-secondary: '#1a1a18'
+    secondary-container: '#323230'
+    on-secondary-container: '#b0ada8'
+    tertiary: '#707570'
+    on-tertiary: '#f0ede8'
+    error: '#f87171'
+    on-error: '#2a0a0a'
+    error-container: '#3d1212'
+    on-error-container: '#fca5a5'
+    background: '#1a1a18'
+    on-background: '#f0ede8'
+  light:
+    surface: '#f9f9f7'
+    surface-dim: '#e8e8e4'
+    surface-bright: '#ffffff'
+    surface-container-lowest: '#ffffff'
+    surface-container-low: '#f2f2ee'
+    surface-container: '#ebebe7'
+    surface-container-high: '#e4e4e0'
+    surface-container-highest: '#dededa'
+    on-surface: '#1a1a18'
+    on-surface-variant: '#4a4a47'
+    inverse-surface: '#232321'
+    inverse-on-surface: '#f0ede8'
+    outline: '#9a9a97'
+    outline-variant: '#d0d0cc'
+    primary: '#2d9042'
+    on-primary: '#ffffff'
+    primary-container: '#c8e6cf'
+    on-primary-container: '#0f2b16'
+    inverse-primary: '#3aae51'
+    secondary: '#5f5e57'
+    on-secondary: '#ffffff'
+    secondary-container: '#e0dfd8'
+    on-secondary-container: '#323230'
+    tertiary: '#5a5f5a'
+    on-tertiary: '#ffffff'
+    error: '#ba1a1a'
+    on-error: '#ffffff'
+    error-container: '#ffdad6'
+    on-error-container: '#93000a'
+    background: '#f9f9f7'
+    on-background: '#1a1a18'
+chips:
+  dark:
+    emerald-bg: '#064e3b'
+    emerald-text: '#a7f3d0'
+    amber-bg: '#78350f'
+    amber-text: '#fde68a'
+    rose-bg: '#7f1d1d'
+    rose-text: '#fecaca'
+    violet-bg: '#4c1d95'
+    violet-text: '#ddd6fe'
+  light:
+    emerald-bg: '#dcfce7'
+    emerald-text: '#16a34a'
+    amber-bg: '#fef3c7'
+    amber-text: '#d97706'
+    rose-bg: '#fee2e2'
+    rose-text: '#dc2626'
+    violet-bg: '#ede9fe'
+    violet-text: '#6d28d9'
+fixed:
+  ink: '#191919'
+  ink-hover: '#2e2e2e'
+  sidebar: '#232321'
+typography:
+  family: Source Sans 3
+  aliases: [font-display, font-body]
+  weights_loaded: 300..700 (variable font range)
+  mono_family: Tailwind default monospace stack (font-mono is not remapped)
+  scale:
+    xs: { size: 13px, lineHeight: '1.35' }
+    sm: { size: 15px, lineHeight: '1.45' }
+    base: { size: 17px, lineHeight: '1.55' }
+    lg: { size: 19px, lineHeight: '1.55' }
+    xl: { size: 21px, lineHeight: '1.5' }
+    2xl: { size: 25px, lineHeight: '1.4' }
+    3xl: { size: 31px, lineHeight: '1.3' }
+    4xl: { size: 37px, lineHeight: '1.2' }
+  roles:
+    h1: { fontSize: 32px, fontWeight: '600', lineHeight: '1.2' }
+    h2: { fontSize: 24px, fontWeight: '600', lineHeight: '1.2' }
+    body-lg: { fontSize: 16px, fontWeight: '450', lineHeight: '1.5' }
+    body-sm: { fontSize: 15px, fontWeight: '450', lineHeight: '1.5' }
+    data-mono: { fontSize: 13px, fontWeight: '500', lineHeight: '1.4', letterSpacing: -0.01em }
+    label-caps: { fontSize: 12px, fontWeight: '700', lineHeight: '1', letterSpacing: 0.05em, transform: uppercase }
+radii:
+  sm: 0.125rem
+  DEFAULT: 0.25rem
+  md: 0.375rem
+  lg: 0.5rem
+  xl: 0.75rem
+  full: 9999px
+shadows:
+  overlay: 0 4px 24px rgba(0,0,0,0.18)
+spacing:
+  sidebar: 260px
+  sidebar-collapsed: 4rem
+  context-panel: 320px
+---
+
+## 0. What this file is
+
+**Technical Precision** — Solvro's design system. Bare-metal, data-dense, built for TAMs running high-density dashboards, not consumer software.
+
+**DARK is the default and canonical theme.** The system is designed dark-first: reference mockups, the login screen, and the sidebar all render dark unconditionally. Light is a fully supported variant of the same structural language, not an afterthought — but every new component should be designed against the dark palette first.
+
+**Maintenance: code is the source of truth.** This file describes `frontend/src/index.css` (CSS-first `@theme` token wiring — colors, radii, font scale, shadow token — plus `:root`/`.dark` CSS custom properties) and `frontend/src/lib/theme.tsx` (theme switching). It is regenerated by the `solvro-docs-keeper` agent whenever a diff touches either file. `tailwind.config.ts` was deleted 2026-07-24 (Tailwind v4 CSS-first migration, Plan A Task 2) — token wiring that used to live there now lives directly in `index.css`'s `@theme` block. If this file and the code ever disagree, **the code is right** — file a docs-sync task rather than trusting the table.
+
+The frontmatter above is the canonical machine-readable token map. The tables below are the human-readable rendering of the same values — kept in lockstep by hand today, value-checked against `index.css` on every edit.
+
+---
+
+## 1. Colors — Semantic Tokens
+
+Every token is a CSS custom property in `index.css` (`--token-name`, space-separated RGB triple), routed to a Tailwind-consumable color in the primary `@theme inline` block via `rgb(var(--token))` (e.g. `--color-primary: rgb(var(--primary));`). The block must stay `inline`: with `inline`, each utility compiles the RGB triplet directly into its own rule (e.g. `.bg-primary { color: rgb(var(--primary)) }`), so `var(--token)` resolves at the *consuming* element rather than freezing at `:root` (the declaring element) — this is what keeps subtree `dark` pins (`Login.tsx`, `Sidebar.tsx`, see §5) working, and opacity utilities like `bg-primary/10` keep working via Tailwind v4's `color-mix` wrapping that inlined value. `:root` holds the light values; `.dark` overrides them — `@custom-variant dark (&:where(.dark, .dark *));` (also in `index.css`) means the whole flip is one class toggle on `<html>`, not a media query. (Pre-2026-07-24 this was Tailwind v3's `darkMode: "class"` config key — same behavior, now expressed in CSS. A non-inline `@theme` regressed the Login/Sidebar subtree pins between the 2026-07-24 v4 migration and its 2026-07-25 fix — see CHANGELOG.)
+
+| Token | Dark (default) | Light | Notes |
+|---|---|---|---|
+| `surface` | `#232321` | `#f9f9f7` | |
+| `surface-dim` | `#1a1a18` | `#e8e8e4` | |
+| `surface-bright` | `#2a2a28` | `#ffffff` | |
+| `surface-container-lowest` | `#1a1a18` | `#ffffff` | inputs, deepest inset |
+| `surface-container-low` | `#232321` | `#f2f2ee` | context panel background |
+| `surface-container` | `#2a2a28` | `#ebebe7` | cards, modals |
+| `surface-container-high` | `#323230` | `#e4e4e0` | hover states |
+| `surface-container-highest` | `#3a3a37` | `#dededa` | dividers, strongest tint |
+| `on-surface` | `#f0ede8` | `#1a1a18` | primary text |
+| `on-surface-variant` | `#b0ada8` | `#4a4a47` | secondary/muted text |
+| `inverse-surface` | `#f0ede8` | `#232321` | |
+| `inverse-on-surface` | `#232321` | `#f0ede8` | |
+| `outline` | `#4a4a47` | `#9a9a97` | emphasis borders |
+| `outline-variant` | `#3a3a37` | `#d0d0cc` | default 1px borders — the elevation primitive |
+| `primary` | `#3aae51` | `#2d9042` | Elitery Green — the only accent color |
+| `on-primary` | `#0f2b16` | `#ffffff` | |
+| `primary-container` | `#2d9042` | `#c8e6cf` | |
+| `on-primary-container` | `#e8f7eb` | `#0f2b16` | |
+| `inverse-primary` | `#2d9042` | `#3aae51` | |
+| `secondary` | `#888780` | `#5f5e57` | inactive sidebar icons |
+| `on-secondary` | `#1a1a18` | `#ffffff` | |
+| `secondary-container` | `#323230` | `#e0dfd8` | |
+| `on-secondary-container` | `#b0ada8` | `#323230` | |
+| `tertiary` | `#707570` | `#5a5f5a` | |
+| `on-tertiary` | `#f0ede8` | `#ffffff` | |
+| `error` | `#f87171` | `#ba1a1a` | |
+| `on-error` | `#2a0a0a` | `#ffffff` | |
+| `error-container` | `#3d1212` | `#ffdad6` | |
+| `on-error-container` | `#fca5a5` | `#93000a` | |
+| `background` | `#1a1a18` | `#f9f9f7` | page-level, below `surface` |
+| `on-background` | `#f0ede8` | `#1a1a18` | |
+
+> `tertiary-container` / `on-tertiary-container` are **not defined** as CSS variables in either theme and are **not wired** in the `@theme` block of `index.css` — do not use `bg-tertiary-container` etc.; the class will not resolve to a theme-aware color. (The pre-2026-07-21 DESIGN.md listed them; that was stale.)
+
+### Chip / status tint pairs
+
+Background + text pair per tone, both flip with theme:
+
+| Tone | Dark bg / text | Light bg / text |
+|---|---|---|
+| `chip-emerald` | `#064e3b` / `#a7f3d0` | `#dcfce7` / `#16a34a` |
+| `chip-amber` | `#78350f` / `#fde68a` | `#fef3c7` / `#d97706` |
+| `chip-rose` | `#7f1d1d` / `#fecaca` | `#fee2e2` / `#dc2626` |
+| `chip-violet` | `#4c1d95` / `#ddd6fe` | `#ede9fe` / `#6d28d9` |
+
+> The vendored `Alert` component (`frontend/src/components/reui/alert.tsx`)
+> consumes the chip text tones and the inverse-surface pair through the
+> shadcn semantic bridge (the second `@theme inline` block in `index.css`,
+> see §6): `--color-success` → `chip-emerald-text`, `--color-warning` →
+> `chip-amber-text`, `--color-info` → `chip-violet-text`, `--color-invert` →
+> `inverse-surface`, `--color-invert-foreground` → `inverse-on-surface`. No
+> new custom properties — each name aliases a value already in the tables
+> above. `chip-violet` previously had no assigned status meaning; the Alert
+> bridge is the first thing to route it there (as "info"). It now carries a
+> second meaning: the manual **Critical Path** task mark
+> (`frontend/src/components/CriticalPathMark.tsx`) uses the same pair as a
+> chip (`bg-chip-violet-bg text-chip-violet-text`) and `chip-violet-text`
+> alone for the Gantt bar's inset ring / milestone outline and its glyph. No
+> token change — both consumers reuse the values above.
+
+### Fixed tokens (do not flip with theme)
+
+| Token | Value | Where |
+|---|---|---|
+| `ink` | `#191919` | always-dark brand chrome: login hero panel, primary sign-in button |
+| `ink-hover` | `#2e2e2e` | hover state for `ink` surfaces |
+| `sidebar` | `#232321` | the left nav rail — **fixed in both themes**, see §5 |
+
+---
+
+## 2. Typography
+
+Single typeface app-wide: **Source Sans 3**, loaded 300–700 variable range, aliased to both `font-display` and `font-body` via `--font-display`/`--font-body` in the `@theme` block of `index.css` — there is no separate display face. `font-mono` is **not remapped**; it keeps Tailwind's default monospace stack. It's used ad hoc for dates, IDs, and version/build tags (Gantt date columns, `InlineDateRangeEditor`, the TopBar build tag) — it is not a formally named design role like `data-mono` below.
+
+### Base scale (overrides Tailwind defaults, +1px across the board)
+
+| Class | Size | Line-height |
+|---|---|---|
+| `text-xs` | 13px | 1.35 |
+| `text-sm` | 15px | 1.45 |
+| `text-base` | 17px | 1.55 |
+| `text-lg` | 19px | 1.55 |
+| `text-xl` | 21px | 1.5 |
+| `text-2xl` | 25px | 1.4 |
+| `text-3xl` | 31px | 1.3 |
+| `text-4xl` | 37px | 1.2 |
+
+### Named roles
+
+| Class | Size | Weight | Line-height | Letter-spacing | Use |
+|---|---|---|---|---|---|
+| `text-h1` | 32px | 600 | 1.2 | — | page-level headings |
+| `text-h2` | 24px | 600 | 1.2 | — | section headings |
+| `text-body-lg` | 16px | 450 | 1.5 | — | prominent body copy |
+| `text-body-sm` | 15px | 450 | 1.5 | — | default body text — applied app-wide via `body { @apply ... font-body text-body-sm }` in `index.css` |
+| `text-data-mono` | 13px | 500 | 1.4 | -0.01em | tabular numerics in IDs and data columns |
+| `text-label-caps` | 12px | 700 | 1 | 0.05em | uppercase micro-headers, column labels — pair with `uppercase` utility, transform is not baked into the class itself |
+
+Body weight is **450**, not the CSS-default 400 — this only renders correctly because the variable font's 300–700 range is loaded; a static 400-weight fallback would round down.
+
+These six named roles are also registered as `font-size` keys in the `tailwind-merge` config (`extendTailwindMerge`'s `theme.text` list in `frontend/src/lib/utils.ts`'s `cn()` helper) — without that registration, `twMerge`'s default classifier doesn't recognize `text-h1`/`text-label-caps`/etc. as size utilities, so an unmatched name falls through to the color-utility validator and can silently evict (or be evicted by) a real `text-{color}` class combined with it in the same `cn()` call. Any future named role must be added to that list too, or it inherits the same latent bug.
+
+---
+
+## 3. Radii
+
+| Token | Value | Px |
+|---|---|---|
+| `sm` | `0.125rem` | 2px |
+| `DEFAULT` | `0.25rem` | 4px |
+| `md` | `0.375rem` | 6px |
+| `lg` | `0.5rem` | 8px |
+| `xl` | `0.75rem` | 12px |
+| `full` | `9999px` | pill |
+
+**Large radii are forbidden.** There is no `2xl`/`3xl` radius token — don't invent one. `full` is reserved for pill-shaped status chips and avatar circles only; never use it on cards, panels, or buttons.
+
+> **Tailwind v4 class-name shift (2026-07-24, Plan A Task 1 codemod):** v4's default radius scale renamed the classes under these same values — what emits `0.125rem` is now `rounded-xs` (was `rounded-sm` in v3), and `rounded-sm`/`rounded` now emit `0.25rem`. The token *values* in the table above are unchanged; `index.css`'s `@theme` block explicitly zeroes out `--radius-2xl`/`--radius-3xl`/`--radius-4xl` since v4's defaults already line up with this table post-rename. If you're reading v3-era component code or docs, mentally shift `rounded-sm` → `rounded-xs`.
+
+---
+
+## 4. Elevation Doctrine
+
+Hierarchy comes from **1px `outline-variant` borders and tonal surface shifts** — not drop shadows. This is the single most load-bearing rule in the system; violating it is the fastest way to break the bare-metal aesthetic.
+
+- **Level 0** — canvas: `background` token.
+- **Level 1** — cards, panels, table rows: `surface-container` family + 1px `border-outline-variant`. No shadow.
+- **Level 2** — the one sanctioned exception:
+
+```
+shadow-overlay: 0 4px 24px rgba(0,0,0,0.18)
+```
+
+This value is **fixed** — it does not flip between themes (unlike every color token above). It is wired as `--shadow-overlay` in the primary `@theme inline` block of `frontend/src/index.css` (~line 116), a Tailwind v4 CSS custom property, not a `tailwind.config.ts` `boxShadow.overlay` entry — that config file was deleted 2026-07-24 in the Tailwind v4 CSS-first migration (see CHANGELOG).
+
+**Whitelist — only these may use `shadow-overlay`:**
+
+| Surface | Component(s) |
+|---|---|
+| Modals | `Modal.tsx` |
+| Command palette | `CommandPalette.tsx` (⌘K global search overlay, Modal-convention shell) |
+| Drawer | `Drawer.tsx` |
+| Task detail panel | `TaskPanel.tsx` |
+| Dropdown menus | `TopBar.tsx` user menu, `ProjectList.tsx` filter/sort menus, `SolvroGantt.tsx`'s Export (Excel/PDF) dropdown (`SolvroGantt.tsx:1309`, hand-rolled `absolute top-full` popover, restyled from `shadow-lg` in the Gantt visual refresh phase, 2026-08-03) |
+| Context menu | `ui/context-menu.tsx` (`ContextMenuContent` and `ContextMenuSubContent`, both — z-index moved onto the Positioner per the Popover z-index convention below) — Gantt tree row action menu (Edit/Add subtask/Delete), first consumed by `SolvroGantt.tsx`'s `renderResourceMenu` (right-click or hover "…" button); restyled from `shadow-lg`/`shadow-md` in the Gantt visual refresh phase, 2026-08-03 |
+| Popovers | `TreeCells.tsx`'s `SectionColorCell` color picker (`TreeCells.tsx:76-104`; corrected 2026-08-03 — the old `GanttListRow.tsx` this row used to cite no longer exists), `DateField.tsx` calendar popover, `DateRangeField.tsx` calendar popover (paired START/DUE between-style range picker, user add-on 2026-07-28, plan Task 3.5; mounted via the now-shell-less `InlineDateRangeEditor.tsx` wrapper in `TaskPanel.tsx`'s DATES editor and the Gantt tree's `TreeCells.tsx`, and directly in `TaskFormModal.tsx`'s merged "Dates" row) — uses `shadow-overlay!` (`!important`, added in a fix round so the sanctioned shadow doesn't silently lose to the vendored Popover's default `shadow-md` depending on stylesheet load order); `DateField.tsx`'s own popup was deliberately left as plain `shadow-overlay` (out of scope for that fix round) — a known parity gap between the two sibling components |
+| Drag overlay | dragging card state: `ProjectKanban.tsx` (via `kanban-v2/cards.tsx`) and the Pipeline board's `pipeline/OpportunityCard.tsx` — the same byte-identical treatment |
+| Right context panel | `RightSidebar.tsx` |
+
+> Implementation note: `RightSidebar.tsx` is in the whitelist by design intent (it's a floating overlay layer, same as Drawer), but as of this writing it does **not** apply the `shadow-overlay` class — it relies on `border-l border-outline-variant` + `backdrop-blur-md` only. Don't flag this as a violation; flag it as a gap if you're implementing elevation work in that file.
+
+Nothing else gets a shadow. No card shadows, no hover-lift shadows, no focus-ring glows beyond the 2px primary outline. The app-wide focus treatment (reduced form, user decision 2026-08-29) is `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30` — no `focus-visible:border-primary` (adapted to `has-focus:`/`group-data-*` prefixes where the trigger is a wrapper rather than the focusable element itself, e.g. `calendar.tsx`'s dropdown root and day button). This is the one focus treatment for every form control app-wide; there is no separate "Buttons/Inputs conventions" section to consult. `frontend/src/components/gantt-v2/SolvroGantt.tsx` still carries the older, fuller form (with `focus-visible:border-primary`) and may be aligned to the reduced form opportunistically.
+
+**AI Breakdown** styling (`.ai-glow`, amber inner-border + glow) was reserved for blueprint-generated task cards; the Secure Ingestion Port that would have produced them is cancelled (see CLAUDE.md's Standing decisions), so this reservation is retired — see §5.
+
+---
+
+## 5. Behavioral Rules (MUST / NEVER)
+
+| Rule | Detail |
+|---|---|
+| **Sidebar is fixed-dark** | `bg-sidebar` (`#232321`) in **both** themes — a literal hex (`--color-sidebar: #232321;`) in the `@theme` block of `index.css`, not a CSS-var-routed token. The rail never flips to light, even in light mode. |
+| **Login always renders dark** | `Login.tsx` hard-pins the `dark` class on its root wrapper regardless of the user's theme preference. Left hero panel uses `bg-background` (`#1a1a18`), right form panel uses `bg-surface` (`#232321`) — both resolved through the forced `.dark` scope, so they land on the dark values above. |
+| **Primary is Elitery Green — never blue** | `#3aae51` dark / `#2d9042` light. This is the only accent color in the app: CTAs, active nav state, focus rings, links. Blue never appears as a primary/CTA color. |
+| **`IN_PROGRESS` chip tone is misleadingly named "blue"** | `TaskStatusChip`'s `blue` tone renders `bg-primary/10 text-primary dark:bg-primary/20` — it is **green-tinted**, not literal blue. Same for `ProjectStatusChip`'s `PLANNING`/`COMPLETED` tones, which also use the `blue` tone class. Don't "fix" this by pointing it at an actual blue token — it's intentional, per `StatusChip.tsx`. |
+| **`.ai-glow` is retired, not reserved** | Amber (`#f59e0b`) inner-border + outer glow was reserved exclusively for blueprint-generated (AI Breakdown) task cards; that concept is cancelled along with the Secure Ingestion Port. `.ai-glow` does not exist anywhere in `frontend/src/` — do not introduce it for other status highlights without a new design decision. |
+| **Icons are Material Symbols Outlined** | Loaded via Google Fonts in `index.html` (`opsz,wght,FILL,GRAD@24,400,0,0`), rendered with the `.material-symbols-outlined` class (variation settings pinned in `index.css`). Design/mockup tooling that can't render icon-font ligatures (e.g. Paper canvases) must substitute inline SVGs — this does not change the in-app convention. |
+| **Compact data-grid mode** | Implemented via the vendored data grid's `tableLayout={{ dense: true }}` (`frontend/src/components/reui/data-grid/`), used on the Admin Users, Tasks, and CustomerDetail Overview grids: reduced cell padding/row height, and dense body/footer cells step down to `text-xs` (13px) — the nearest sanctioned token to a 12px body size, since no dedicated 12px body-text token exists (`text-label-caps` is reserved for uppercase labels). Column headers always render at `text-label-caps` (12px/700/uppercase) regardless of dense/default. Any hand-rolled table still needs this pattern applied by hand — check the specific component before assuming it's wired. |
+| **Drag-drop insert-before indicator** | Corrected 2026-08-03 — the old `GanttListRow.tsx` this row used to cite no longer exists. The indicator is now the vendored engine's own `data-slot="gantt-reorder-indicator"` (`reui/gantt/gantt-view.tsx:2234-2257`): a caret head + 1px hairline pinned to the drop boundary, `border-s-primary`/`bg-primary` when the proposed drop is valid, `border-s-destructive`/`bg-destructive` when not. No `// SOLVRO PATCH` marker on this block — stock upstream engine behavior, not Solvro-authored, and `SolvroGantt.tsx` doesn't override `canReorderResource` to scope which rows can trigger it. |
+
+### Status chip tone table
+
+`CHIP_BASE` = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-display text-[11px] font-semibold leading-[18px]` (`StatusChip.tsx`).
+
+| Chip | Status | Tone | Renders as |
+|---|---|---|---|
+| `ProjectStatusChip` | PLANNING | blue | `bg-primary/10 text-primary` |
+| | ACTIVE | emerald | `bg-chip-emerald-bg text-chip-emerald-text` |
+| | ON_HOLD | amber | `bg-chip-amber-bg text-chip-amber-text` |
+| | COMPLETED | blue | `bg-primary/10 text-primary` |
+| | CANCELLED | rose | `bg-chip-rose-bg text-chip-rose-text` |
+| `TaskStatusChip` | TODO | gray | `bg-surface-container-high text-on-surface-variant` |
+| | IN_PROGRESS | blue | `bg-primary/10 text-primary` |
+| | DONE | emerald | `bg-chip-emerald-bg text-chip-emerald-text` |
+| `StageChip` | ASSESSMENT | gray | `bg-surface-container-high text-on-surface-variant` |
+| | RFP / POC / TECHNICAL_CLARIFICATION | blue | `bg-primary/10 text-primary` |
+| | DELIVER_PROPOSAL | amber | `bg-chip-amber-bg text-chip-amber-text` |
+| | WAITING_RESPONSE | violet | `bg-chip-violet-bg text-chip-violet-text` |
+| | WON | emerald | `bg-chip-emerald-bg text-chip-emerald-text` |
+| | DROP | rose | `bg-chip-rose-bg text-chip-rose-text` |
+| | HOLD | amber + `pause_circle` glyph | `bg-chip-amber-bg text-chip-amber-text` (icon disambiguates from DELIVER_PROPOSAL) |
+
+The generic `Chip` export takes any of `emerald` / `amber` / `rose` / `violet` / `blue` / `gray` directly for one-off use (risk scores, priority badges, etc.).
+
+---
+
+## 6. Theme Mechanics
+
+`frontend/src/lib/theme.tsx` owns theme state:
+
+- **Choice**: `"light" | "dark" | "system"`, persisted to `localStorage["solvro.theme"]`. Defaults to `"system"` when nothing is stored.
+- **Resolution**: `"system"` resolves live against `window.matchMedia("(prefers-color-scheme: dark)")`, including a listener that updates `resolved` if the OS preference changes mid-session. Explicit `"light"`/`"dark"` choices short-circuit resolution.
+- **Application**: the resolved theme is applied by toggling the **`dark` class** on `document.documentElement` (`classList.add("dark")` / `remove("dark")`). `index.css`'s `@custom-variant dark (&:where(.dark, .dark *));` is what makes every `dark:`-prefixed utility and every CSS-var token respond to that single class (Tailwind v4's CSS-first replacement for v3's `darkMode: "class"` config key — same behavior).
+- **Not** a `data-theme` attribute — the previous DESIGN.md described `data-theme`, which does not match the implementation. Correct mental model: **one class, `.dark`, on `<html>`; `:root` holds light values, `.dark` overrides them.**
+- `useTheme()` exposes `{ choice, resolved, setChoice, toggle }` via `ThemeContext` — components should consume this, never poke `document.documentElement.classList` directly.
+- Tokens are consumed directly in the primary `@theme inline` block of `index.css` via var-in-var routing (e.g. `--color-primary: rgb(var(--primary));`) — no config-file helper function exists anymore (pre-2026-07-24 this was a `const c = (name) => \`rgb(var(${name}) / <alpha-value>)\`` helper in `tailwind.config.ts`). The block must stay `inline`, not just `@theme`: `inline` compiles each utility's RGB triplet directly into its own rule, which is both what lets Tailwind opacity utilities (`bg-primary/10`, `border-outline-variant/40`) work against CSS-variable-backed colors (via v4's `color-mix`) and what makes `var(--token)` resolve at the consuming element — required for the `Login.tsx`/`Sidebar.tsx` subtree `dark` pins above to work (a non-inline `@theme` freezes resolution at `:root` and breaks them; regressed 2026-07-24, fixed 2026-07-25, see CHANGELOG). A second `@theme inline` block bridges vendored shadcn/ReUI components' semantic class names (`bg-background`, `text-muted-foreground`, `border-border`, etc.) onto the same Technical Precision tokens, including the `Alert` component's `success`/`warning`/`info`/`invert`/`invert-foreground` tones (see §1's chip note) — see `frontend/src/index.css` lines ~130–164.

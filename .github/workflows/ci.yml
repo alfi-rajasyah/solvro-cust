@@ -1,0 +1,299 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# The workflow only reads the repo; never grant the default token more.
+permissions:
+  contents: read
+
+env:
+  # bcrypt ships a prebuilt binary download as part of `npm ci`; that
+  # download flakes transiently on GitHub's runners. Retrying the whole
+  # `npm ci` once is cheaper than diagnosing a specific transient host.
+  NPM_CI_RETRY_SLEEP: 10
+  # A registry connection that hangs otherwise sits out npm's default
+  # 5-minute fetch timeout before the first retry — seen as "added 6
+  # packages in 7m" on three runs in a row. Fail a request after 60s and
+  # retry more often instead; every tarball this repo fetches is small.
+  npm_config_fetch_timeout: "60000"
+  npm_config_fetch_retries: "5"
+  npm_config_fetch_retry_maxtimeout: "30000"
+
+jobs:
+  # Fast-feedback gate: surfaces type errors in ~2 minutes instead of burying
+  # them inside the e2e job's Docker image builds. Covers all three packages,
+  # including the e2e suite whose typecheck is not exercised anywhere else.
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+            e2e/package-lock.json
+
+      - name: npm ci (backend, retry once on failure)
+        working-directory: backend
+        run: |
+          npm ci || (echo "npm ci failed, retrying once after ${NPM_CI_RETRY_SLEEP}s..." && sleep "$NPM_CI_RETRY_SLEEP" && npm ci)
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: Typecheck backend
+        working-directory: backend
+        run: npx tsc --noEmit
+
+      - name: npm ci (frontend, retry once on failure)
+        working-directory: frontend
+        run: |
+          npm ci || (echo "npm ci failed, retrying once after ${NPM_CI_RETRY_SLEEP}s..." && sleep "$NPM_CI_RETRY_SLEEP" && npm ci)
+
+      - name: Typecheck frontend
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Run frontend test suite
+        working-directory: frontend
+        run: npm test
+
+      # Second run east of UTC: the date-contract invariant (dateField.ts, UTC-midnight
+      # serialization) is invisible under a UTC clock — Asia/Jakarta is the zone that
+      # exposed the original walk-back bug and the only run that can catch a regression.
+      - name: Run frontend test suite (TZ=Asia/Jakarta)
+        working-directory: frontend
+        run: npm test
+        env:
+          TZ: Asia/Jakarta
+
+      - name: npm ci (e2e, retry once on failure)
+        working-directory: e2e
+        run: |
+          npm ci || (echo "npm ci failed, retrying once after ${NPM_CI_RETRY_SLEEP}s..." && sleep "$NPM_CI_RETRY_SLEEP" && npm ci)
+
+      - name: Typecheck e2e
+        working-directory: e2e
+        run: npm run typecheck
+
+  backend-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: solvro
+          # Deliberate literal, not a secret. A service container's `env:` is
+          # resolved before any step runs, so a per-run generated value is
+          # impossible here — and secrets are unavailable to Dependabot-
+          # triggered runs (GitHub passes only the Dependabot secret store to
+          # those, which is why every Dependabot PR failed with "Database is
+          # uninitialized and superuser password is not specified").
+          # This database lives and dies inside one job on a throwaway runner
+          # and is reachable only on localhost, so the value protects nothing
+          # and granting it secret status bought no security.
+          POSTGRES_PASSWORD: ci-ephemeral-postgres
+          # _test suffix required: the backend test globalSetup hard-refuses
+          # to truncate any database whose name doesn't end in "_test".
+          POSTGRES_DB: solvro_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U solvro -d solvro_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # Must match the service-container literal above.
+      DATABASE_URL: postgresql://solvro:ci-ephemeral-postgres@localhost:5432/solvro_test?schema=public
+    steps:
+      - uses: actions/checkout@v4
+
+      # Generate a throwaway JWT secret per run — never stored in the repo.
+      - name: Generate ephemeral JWT secret
+        run: echo "JWT_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: npm ci (backend, retry once on failure)
+        working-directory: backend
+        run: |
+          npm ci || (echo "npm ci failed, retrying once after ${NPM_CI_RETRY_SLEEP}s..." && sleep "$NPM_CI_RETRY_SLEEP" && npm ci)
+
+      - name: Prisma migrate deploy
+        working-directory: backend
+        run: npx prisma migrate deploy
+
+      - name: Run backend test suite
+        working-directory: backend
+        run: npm test
+
+  # One job per Playwright project (desktop, mobile), each on its own stack,
+  # so the two halves of the suite run side by side instead of back to back.
+  # Each job keeps Playwright's single worker: the specs share one database
+  # and assert deltas against it, which two workers on one stack would race.
+  # The images build through BuildKit's GitHub Actions cache, so the three
+  # `npm ci` layers inside the Dockerfiles are rebuilt only when a lock file
+  # changes — on every other run the build is seconds, not minutes, and a
+  # slow registry cannot stall the gate.
+  e2e:
+    name: e2e (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [desktop, mobile]
+    env:
+      ADMIN_EMAIL: qa@solvro.test
+    steps:
+      - uses: actions/checkout@v4
+
+      # Generated per run rather than read from the repo secret store, and
+      # exported via $GITHUB_ENV so every later step sees them: docker compose
+      # interpolation in ci/docker-compose.ci.yml, the admin-creation step,
+      # and Playwright's fixtures (e2e/fixtures/test.ts reads ADMIN_PASSWORD
+      # from the environment).
+      #
+      # This is what makes Dependabot PRs work. GitHub passes only the
+      # Dependabot secret store to Dependabot-triggered runs, so every
+      # `secrets.CI_*` reference resolved to an empty string and the stack
+      # failed to boot. Generating the values removes that whole class of
+      # failure and keeps human and bot PRs on an identical path — while
+      # being strictly better hygiene than a stored credential, since these
+      # now never outlive the job.
+      - name: Generate ephemeral run credentials
+        run: |
+          {
+            echo "JWT_SECRET=$(openssl rand -hex 32)"
+            echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
+            echo "ADMIN_PASSWORD=$(openssl rand -hex 24)"
+          } >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Both images are built here, not by `compose up --build`, so BuildKit
+      # can read and write the GitHub Actions layer cache. `load: true` puts
+      # the result in the local daemon under the `image:` name the compose
+      # file declares, and `compose up` below starts it without rebuilding.
+      - name: Build backend image (cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          target: runtime
+          tags: solvro-ci-backend:latest
+          load: true
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Build frontend image (cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          target: runtime
+          tags: solvro-ci-frontend:latest
+          load: true
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Start stack
+        run: docker compose -f ci/docker-compose.ci.yml up -d --no-build
+
+      - name: Wait for backend health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3300/health; then
+              echo "backend healthy"
+              exit 0
+            fi
+            if [ "$(docker compose -f ci/docker-compose.ci.yml ps -q backend | xargs -r docker inspect -f '{{.State.Status}}')" = "exited" ]; then
+              echo "backend container exited — failing fast instead of waiting out the timeout"
+              break
+            fi
+            echo "waiting for backend... ($i)"
+            sleep 2
+          done
+          echo "backend did not become healthy in time"
+          exit 1
+
+      - name: Create e2e admin user
+        run: |
+          docker compose -f ci/docker-compose.ci.yml exec -T \
+            -e ADMIN_EMAIL="$ADMIN_EMAIL" \
+            -e ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+            backend npx tsx scripts/create-admin.ts
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: npm ci (e2e, retry once on failure)
+        working-directory: e2e
+        run: |
+          npm ci || (echo "npm ci failed, retrying once after ${NPM_CI_RETRY_SLEEP}s..." && sleep "$NPM_CI_RETRY_SLEEP" && npm ci)
+
+      # The Chromium download is the same on every run for a given Playwright
+      # version, so it is cached on the e2e lock file. On a hit only the
+      # system libraries are (re)installed, which takes seconds.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
+
+      - name: Install Playwright browsers (chromium)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system dependencies (cached browser)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        working-directory: e2e
+        run: npx playwright install-deps chromium
+
+      - name: Run Playwright tests (${{ matrix.project }})
+        working-directory: e2e
+        env:
+          BASE_URL: http://localhost:8080
+          CI: "true"
+        run: npx playwright test --project=${{ matrix.project }}
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose -f ci/docker-compose.ci.yml logs --no-color --tail 100
+
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-${{ matrix.project }}
+          path: |
+            e2e/test-results/
+            e2e/playwright-report/
+          retention-days: 7
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f ci/docker-compose.ci.yml down -v

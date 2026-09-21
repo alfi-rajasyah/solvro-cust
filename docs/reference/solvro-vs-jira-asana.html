@@ -1,0 +1,962 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Solvro vs Jira vs Asana</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300..700&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f9f9f7;
+    --surface: #f2f2ee;
+    --surface-2: #ebebe7;
+    --surface-3: #e4e4e0;
+    --ink: #1a1a18;
+    --ink-2: #4a4a47;
+    --ink-3: #6f6e69;
+    --line: #d0d0cc;
+    --line-2: #9a9a97;
+    --accent: #2d9042;
+    --accent-ink: #ffffff;
+    --accent-wash: rgba(45, 144, 66, 0.10);
+    --cov-3: #1a5f2b;   /* native */
+    --cov-2: #2d9042;   /* partial */
+    --cov-1: #6ab97b;   /* add-on / higher plan */
+    --cov-0: #c9c9c4;   /* not available */
+    --amber-bg: #fef3c7; --amber-ink: #b45309;
+    --rose-bg: #fee2e2;  --rose-ink: #b91c1c;
+    --emerald-bg: #dcfce7; --emerald-ink: #15803d;
+    --shadow: 0 1px 2px rgba(26,26,24,0.06);
+    --font: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #1a1a18;
+      --surface: #232321;
+      --surface-2: #2a2a28;
+      --surface-3: #323230;
+      --ink: #f0ede8;
+      --ink-2: #b0ada8;
+      --ink-3: #888780;
+      --line: #3a3a37;
+      --line-2: #4a4a47;
+      --accent: #3aae51;
+      --accent-ink: #0f2b16;
+      --accent-wash: rgba(58, 174, 81, 0.14);
+      --cov-3: #8fd99e;
+      --cov-2: #43b45a;
+      --cov-1: #337f44;
+      --cov-0: #4a4a47;
+      --amber-bg: #78350f; --amber-ink: #fde68a;
+      --rose-bg: #7f1d1d;  --rose-ink: #fecaca;
+      --emerald-bg: #064e3b; --emerald-ink: #a7f3d0;
+      --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #1a1a18;
+    --surface: #232321;
+    --surface-2: #2a2a28;
+    --surface-3: #323230;
+    --ink: #f0ede8;
+    --ink-2: #b0ada8;
+    --ink-3: #888780;
+    --line: #3a3a37;
+    --line-2: #4a4a47;
+    --accent: #3aae51;
+    --accent-ink: #0f2b16;
+    --accent-wash: rgba(58, 174, 81, 0.14);
+    --cov-3: #8fd99e;
+    --cov-2: #43b45a;
+    --cov-1: #337f44;
+    --cov-0: #4a4a47;
+    --amber-bg: #78350f; --amber-ink: #fde68a;
+    --rose-bg: #7f1d1d;  --rose-ink: #fecaca;
+    --emerald-bg: #064e3b; --emerald-ink: #a7f3d0;
+    --shadow: none;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.5;
+    font-weight: 400;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 1160px;
+    margin: 0 auto;
+    padding-inline: clamp(16px, 4vw, 40px);
+    padding-block: 40px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+  h1, h2, h3 { margin: 0; text-wrap: balance; line-height: 1.2; }
+  h1 { font-size: clamp(28px, 4vw, 38px); font-weight: 600; letter-spacing: -0.01em; }
+  h2 { font-size: 24px; font-weight: 600; }
+  h3 { font-size: 17px; font-weight: 600; }
+  p { margin: 0; }
+  .lede { color: var(--ink-2); font-size: 18px; max-width: 62ch; }
+  .caps {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--ink-3); line-height: 1;
+  }
+  .mono { font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: -0.01em; }
+  .muted { color: var(--ink-2); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover, a:focus-visible { text-decoration: underline; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Header */
+  .masthead { display: flex; flex-direction: column; gap: 18px; }
+  .masthead .meta { display: flex; flex-wrap: wrap; gap: 8px 24px; color: var(--ink-3); font-size: 14px; }
+  .masthead .meta span b { color: var(--ink-2); font-weight: 600; }
+
+  section { display: flex; flex-direction: column; gap: 20px; }
+  .section-head { display: flex; flex-direction: column; gap: 6px; }
+  .section-head p { color: var(--ink-2); max-width: 70ch; }
+
+  /* Tool profiles */
+  .profiles {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .profile {
+    background: var(--surface);
+    padding: 22px 22px 20px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .profile.solvro { background: var(--surface-2); }
+  .profile header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .profile header h3 { font-size: 22px; }
+  .profile .tag {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 4px 8px; border-radius: 3px; background: var(--surface-3); color: var(--ink-2);
+  }
+  .profile.solvro .tag { background: var(--accent); color: var(--accent-ink); }
+  .profile dl { margin: 0; display: grid; grid-template-columns: 100px 1fr; gap: 10px 12px; font-size: 15px; }
+  .profile dt { color: var(--ink-3); font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 3px; }
+  .profile dd { margin: 0; color: var(--ink); }
+  .profile dd .mono { color: var(--ink); }
+  .profile dd small { display: block; color: var(--ink-3); font-size: 13px; }
+
+  /* Filter row */
+  .filters {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+    position: sticky; top: 0; z-index: 5;
+    background: var(--bg);
+    padding-block: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .filters .caps { margin-right: 4px; }
+  .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 4px; overflow: hidden; }
+  .seg label { position: relative; }
+  .seg input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+  .seg span {
+    display: inline-block; padding: 7px 14px; font-size: 14px; font-weight: 600; color: var(--ink-2);
+    border-right: 1px solid var(--line-2); cursor: pointer; user-select: none;
+  }
+  .seg label:last-child span { border-right: 0; }
+  .seg input:checked + span { background: var(--accent); color: var(--accent-ink); }
+  .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .filters .count { font-size: 14px; color: var(--ink-3); font-variant-numeric: tabular-nums; margin-left: auto; }
+
+  /* Legend */
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; font-size: 14px; color: var(--ink-2); }
+  .legend .key { display: inline-flex; align-items: center; gap: 8px; }
+
+  /* Coverage glyphs: shape + color */
+  .glyph { display: inline-block; width: 14px; height: 14px; border-radius: 50%; position: relative; flex: none; }
+  .glyph.c3 { background: var(--cov-3); }
+  .glyph.c2 { background: linear-gradient(90deg, var(--cov-2) 50%, transparent 50%); box-shadow: inset 0 0 0 2px var(--cov-2); }
+  .glyph.c1 { box-shadow: inset 0 0 0 2px var(--cov-1); }
+  .glyph.c1::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: var(--cov-1); }
+  .glyph.c0 { box-shadow: inset 0 0 0 1.5px var(--cov-0); }
+  .glyph.c0::after { content: ""; position: absolute; left: 3px; right: 3px; top: 6px; height: 2px; background: var(--cov-0); }
+
+  /* Coverage small multiples */
+  .areas {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 14px;
+  }
+  .area {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 16px 18px 14px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .area h3 { font-size: 16px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .area h3 small { color: var(--ink-3); font-weight: 500; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .bars { display: grid; grid-template-columns: 56px 1fr 32px; gap: 8px 10px; align-items: center; }
+  .bars .lbl { font-size: 14px; color: var(--ink-2); font-weight: 600; }
+  .bars .lbl.is-solvro { color: var(--ink); }
+  .bars .val { font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; text-align: right; }
+  .bar { display: flex; height: 16px; gap: 2px; border-radius: 0 4px 4px 0; overflow: hidden; }
+  .bar span { display: block; height: 100%; transition: width 220ms ease; }
+  .bar .s3 { background: var(--cov-3); }
+  .bar .s2 { background: var(--cov-2); }
+  .bar .s1 { background: var(--cov-1); }
+  .bar .s0 { background: var(--cov-0); opacity: 0.55; }
+  .bar span:last-child { border-radius: 0 4px 4px 0; }
+  .bar span[style*="width: 0%"] { display: none; }
+  .area.is-empty { opacity: 0.35; }
+
+  /* Matrix */
+  .matrix-wrap { border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; background: var(--surface); }
+  @media (min-width: 900px) { .matrix-wrap { overflow: visible; } }
+  .matrix thead th:first-child { border-top-left-radius: 6px; }
+  .matrix thead th:last-child { border-top-right-radius: 6px; }
+  table.matrix { width: 100%; min-width: 760px; border-collapse: separate; border-spacing: 0; font-size: 15px; }
+  .matrix thead th {
+    position: sticky; top: var(--filter-h, 0px); z-index: 2;
+    background: var(--surface-2);
+    text-align: left; padding: 12px 14px;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-3);
+    border-bottom: 1px solid var(--line);
+  }
+  .matrix thead th.tool { text-align: center; width: 150px; }
+  .matrix thead th.tool.solvro { color: var(--ink); background: var(--accent-wash); }
+  .matrix thead th.persona { width: 84px; }
+  .matrix tbody tr.group th {
+    text-align: left; padding: 18px 14px 8px; background: var(--surface);
+    font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent);
+    border-bottom: 1px solid var(--line);
+  }
+  .matrix tbody td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .matrix tbody td.feature { color: var(--ink); font-weight: 500; }
+  .matrix tbody td.feature small { display: block; color: var(--ink-3); font-weight: 400; font-size: 13px; }
+  .matrix tbody td.persona { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--ink-3); letter-spacing: 0.02em; }
+  .matrix tbody td.cell { text-align: center; padding: 6px; }
+  .matrix tbody td.cell.solvro { background: var(--accent-wash); }
+  .cellbtn {
+    appearance: none; border: 0; background: transparent; cursor: pointer;
+    display: inline-flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 6px 8px; border-radius: 4px; min-width: 96px; min-height: 44px;
+    font: inherit; color: var(--ink-2); font-size: 12px; font-weight: 600;
+  }
+  .cellbtn:hover, .cellbtn:focus-visible { background: var(--surface-3); }
+  .cellbtn .glyph { width: 16px; height: 16px; }
+  .matrix tr.hidden { display: none; }
+  .matrix tr.group.hidden { display: none; }
+
+  /* Tooltip */
+  .tip {
+    position: fixed; z-index: 50; max-width: 320px;
+    background: var(--ink); color: var(--bg);
+    padding: 10px 12px; border-radius: 4px; font-size: 14px; line-height: 1.4;
+    pointer-events: none; box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  }
+  .tip b { display: block; font-size: 15px; margin-bottom: 2px; }
+  .tip .who { opacity: 0.7; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; margin-bottom: 4px; }
+
+  /* Journeys */
+  .journeys { display: flex; flex-direction: column; gap: 18px; }
+  .journey {
+    border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
+    display: grid; grid-template-columns: 240px 1fr; overflow: hidden;
+  }
+  .journey .job {
+    padding: 20px; border-right: 1px solid var(--line); background: var(--surface-2);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .journey .job .caps { color: var(--accent); }
+  .journey .job h3 { font-size: 18px; }
+  .journey .job p { color: var(--ink-2); font-size: 14px; }
+  .lanes { display: grid; grid-template-rows: repeat(3, auto); }
+  .lane { display: grid; grid-template-columns: 76px 1fr; gap: 14px; padding: 16px 20px; border-bottom: 1px solid var(--line); align-items: start; }
+  .lane:last-child { border-bottom: 0; }
+  .lane .who { font-weight: 600; font-size: 15px; color: var(--ink-2); padding-top: 4px; }
+  .lane.is-solvro .who { color: var(--ink); }
+  .lane .body { display: flex; flex-direction: column; gap: 10px; }
+  .steps { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .step {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border-radius: 3px; font-size: 14px;
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--ink);
+  }
+  .lane.is-solvro .step { background: var(--accent-wash); border-color: transparent; }
+  .step.warn { background: var(--amber-bg); color: var(--amber-ink); border-color: transparent; }
+  .step.gap { background: transparent; border-style: dashed; color: var(--ink-3); }
+  .arrow { color: var(--ink-3); font-size: 13px; }
+  .lane .note { font-size: 14px; color: var(--ink-2); }
+  .lane .note b { color: var(--ink); font-weight: 600; }
+
+  /* Gaps */
+  .two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+  .panel { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }
+  .panel ul { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .panel li { display: grid; grid-template-columns: 18px 1fr; gap: 10px; font-size: 15px; color: var(--ink-2); align-items: start; }
+  .panel li b { color: var(--ink); font-weight: 600; }
+  .panel li .glyph { margin-top: 4px; }
+
+  /* Sources */
+  .sources ol { margin: 0; padding-left: 20px; color: var(--ink-2); font-size: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 4px 28px; }
+  .sources li { line-height: 1.4; }
+  .footnote { font-size: 13px; color: var(--ink-3); max-width: 80ch; }
+
+  @media (max-width: 820px) {
+    .profiles { grid-template-columns: 1fr; }
+    .journey { grid-template-columns: 1fr; }
+    .journey .job { border-right: 0; border-bottom: 1px solid var(--line); }
+    .lane { grid-template-columns: 1fr; gap: 8px; }
+    .filters .count { margin-left: 0; width: 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bar span { transition: none; }
+  }
+</style>
+
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <span class="caps">Feature comparison · from the seat of the person using it</span>
+    <h1>Solvro vs Jira vs Asana</h1>
+    <p class="lede">Three tools, read the way a Technical Account Manager, a Solution Architect, or their manager meets them: what is on the screen when you open it, and what you have to build, buy, or work around.</p>
+    <div class="meta">
+      <span><b>Jira</b> Cloud, Standard and Premium, Summer 2026 release</span>
+      <span><b>Asana</b> Starter and Advanced, mid-2026</span>
+      <span><b>Solvro</b> develop branch, 12 Sep 2026</span>
+    </div>
+  </header>
+
+  <!-- Profiles -->
+  <section aria-labelledby="profiles-h">
+    <div class="section-head">
+      <h2 id="profiles-h">Who each tool was built for</h2>
+      <p>The first thing you feel is not a feature. It is whether the tool already speaks your job.</p>
+    </div>
+    <div class="profiles">
+      <article class="profile">
+        <header><h3>Jira</h3><span class="tag">Atlassian</span></header>
+        <dl>
+          <dt>Built for</dt><dd>Software teams running Scrum or Kanban. Everything is an issue in a workflow.</dd>
+          <dt>First hour</dt><dd>An admin picks issue types, workflows, and schemes before you can work. Reviewers call it dense and configuration-heavy.</dd>
+          <dt>Price</dt><dd><span class="mono">$7.91</span> Standard · <span class="mono">$14.54</span> Premium<small>per user per month, annual; Free up to 10 users</small></dd>
+          <dt>Hosting</dt><dd>Cloud. Self-hosting only as Data Center, enterprise-priced.</dd>
+          <dt>AI</dt><dd>Rovo on every paid plan: natural language to JQL, epic breakdown, summaries.</dd>
+        </dl>
+      </article>
+      <article class="profile">
+        <header><h3>Asana</h3><span class="tag">Asana Inc.</span></header>
+        <dl>
+          <dt>Built for</dt><dd>Business teams: marketing, operations, general work management. A task belongs to projects and sections.</dd>
+          <dt>First hour</dt><dd>Templates and a clean list view. Most people do basic work with no training.</dd>
+          <dt>Price</dt><dd><span class="mono">$10.99</span> Starter · <span class="mono">$24.99</span> Advanced<small>per user per month, annual; Personal plan is free</small></dd>
+          <dt>Hosting</dt><dd>Cloud only.</dd>
+          <dt>AI</dt><dd>Asana AI from Starter: status drafts, summaries, rule suggestions. AI Teammates in beta.</dd>
+        </dl>
+      </article>
+      <article class="profile solvro">
+        <header><h3>Solvro</h3><span class="tag">This repo</span></header>
+        <dl>
+          <dt>Built for</dt><dd>TAMs who run customer deliveries and SAs who run the sales pipeline. Customers, notes, and the weekly rhythm are first-class objects.</dd>
+          <dt>First hour</dt><dd>One installer creates the admin. Nothing to configure: the workflow, stages, and roles are already the team's own.</dd>
+          <dt>Price</dt><dd>No per-seat fee<small>your own server, Docker, and Postgres</small></dd>
+          <dt>Hosting</dt><dd>Self-hosted by default. <span class="mono">setup.sh</span> writes the compose file and pulls the images.</dd>
+          <dt>AI</dt><dd>None. Weekly Sync drafts itself from your notes, but by rule, not by model.</dd>
+        </dl>
+      </article>
+    </div>
+  </section>
+
+  <!-- Filter row: scopes everything below -->
+  <div class="filters" role="group" aria-label="Show features for a role">
+    <span class="caps">I am a</span>
+    <div class="seg" id="persona-seg">
+      <label><input type="radio" name="persona" value="ALL" id="p-all" checked><span>Everyone</span></label>
+      <label><input type="radio" name="persona" value="TAM" id="p-tam"><span>TAM</span></label>
+      <label><input type="radio" name="persona" value="SA" id="p-sa"><span>SA</span></label>
+      <label><input type="radio" name="persona" value="LEAD" id="p-lead"><span>Manager</span></label>
+    </div>
+    <span class="count" id="row-count"></span>
+  </div>
+
+  <!-- Coverage by area -->
+  <section aria-labelledby="areas-h">
+    <div class="section-head">
+      <h2 id="areas-h">Where each tool is deep</h2>
+      <p>Each bar counts the rows of the matrix below by how much of the job the tool does out of the box. Jira and Asana are wide. Solvro is deep in the TAM and SA rows and empty in the general collaboration rows.</p>
+    </div>
+    <div class="legend" aria-hidden="true">
+      <span class="key"><i class="glyph c3"></i> Native, on the screen already</span>
+      <span class="key"><i class="glyph c2"></i> Partial or a workaround</span>
+      <span class="key"><i class="glyph c1"></i> Add-on or a higher plan</span>
+      <span class="key"><i class="glyph c0"></i> Not available</span>
+    </div>
+    <div class="areas" id="areas"></div>
+  </section>
+
+  <!-- Matrix -->
+  <section aria-labelledby="matrix-h">
+    <div class="section-head">
+      <h2 id="matrix-h">The matrix</h2>
+      <p>One row per thing a person tries to do. Hover or focus a cell to read how the tool actually does it. The role column says who reaches for that row.</p>
+    </div>
+    <div class="matrix-wrap">
+      <table class="matrix" id="matrix">
+        <thead>
+          <tr>
+            <th scope="col">What you want to do</th>
+            <th scope="col" class="persona">Role</th>
+            <th scope="col" class="tool">Jira</th>
+            <th scope="col" class="tool">Asana</th>
+            <th scope="col" class="tool solvro">Solvro</th>
+          </tr>
+        </thead>
+        <tbody id="matrix-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Journeys -->
+  <section aria-labelledby="journeys-h">
+    <div class="section-head">
+      <h2 id="journeys-h">Four jobs, walked through</h2>
+      <p>The same task in each tool. Chips are the screens and objects you touch. Amber chips need an admin, a paid tier, or a marketplace app first. Dashed chips are steps the tool cannot do, so you leave the tool.</p>
+    </div>
+    <div class="journeys" id="journeys"></div>
+  </section>
+
+  <!-- Gaps -->
+  <section aria-labelledby="gaps-h">
+    <div class="section-head">
+      <h2 id="gaps-h">What you give up, and what you get</h2>
+      <p>The honest trade. These are read from the Solvro code on the develop branch, not from a roadmap.</p>
+    </div>
+    <div class="two-col">
+      <div class="panel">
+        <h3>Solvro does not have this today</h3>
+        <ul>
+          <li><i class="glyph c0"></i><span><b>Notifications or an inbox.</b> Nothing pings you when a task or deal changes. You open the page.</span></li>
+          <li><i class="glyph c0"></i><span><b>Automation rules.</b> No "when status becomes Done, then…". Weekly Sync drafting is the only rule-based step.</span></li>
+          <li><i class="glyph c0"></i><span><b>Custom fields.</b> The task, risk, and opportunity shapes are fixed.</span></li>
+          <li><i class="glyph c0"></i><span><b>File attachments.</b> The customer page shows a placeholder for documents.</span></li>
+          <li><i class="glyph c0"></i><span><b>Time tracking.</b> Work Logs is a placeholder for a future iTop integration.</span></li>
+          <li><i class="glyph c0"></i><span><b>Integrations and AI.</b> Google sign-in and Excel import/export are the only doors in and out.</span></li>
+          <li><i class="glyph c2"></i><span><b>Native mobile app.</b> It is an installable PWA that works down to 375 px.</span></li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>Only Solvro has this on the screen</h3>
+        <ul>
+          <li><i class="glyph c3"></i><span><b>Customers as the spine.</b> Every project, note, service, and deal hangs off a customer with an owning TAM, an account manager, and an SA of record.</span></li>
+          <li><i class="glyph c3"></i><span><b>Daily Review.</b> One page per week: dated notes per project and per customer, overdue tasks, open risks, and a "Mark reviewed" stamp.</span></li>
+          <li><i class="glyph c3"></i><span><b>Weekly Sync tables.</b> Mid-week highlights and Reflection achievements, Green / Amber / Red per customer, "Copy as table" for the Monday document.</span></li>
+          <li><i class="glyph c3"></i><span><b>Won deal to delivery project</b> in one click and one database transaction, linked both ways.</span></li>
+          <li><i class="glyph c3"></i><span><b>Baseline lock</b> on the Gantt with planned-versus-actual slip in days, and Indonesian public holidays shaded.</span></li>
+          <li><i class="glyph c3"></i><span><b>Internal notes never leave.</b> Every note is INTERNAL unless marked customer-facing, and exports and search respect it.</span></li>
+          <li><i class="glyph c3"></i><span><b>Hidden means 404.</b> A project outside your visibility does not exist to you, not even as a "no access" page.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sources -->
+  <section class="sources" aria-labelledby="sources-h">
+    <div class="section-head">
+      <h2 id="sources-h">Sources</h2>
+      <p class="footnote">Jira and Asana facts come from vendor pages and 2026 reviews read on 12 Sep 2026. Solvro facts come from the repository README, routes, and Prisma schema on the develop branch. Prices are list prices, annual billing, and change without notice.</p>
+    </div>
+    <ol>
+      <li><a href="https://www.atlassian.com/software/jira/features">Jira features (Atlassian)</a></li>
+      <li><a href="https://community.atlassian.com/forums/Jira-articles/Introducing-the-Jira-2026-Summer-Release-%EF%B8%8F/ba-p/3268349">Jira 2026 Summer Release (Atlassian Community)</a></li>
+      <li><a href="https://community.atlassian.com/forums/App-Central-articles/Jira-Hierarchy-Levels-Structure-amp-Best-Practices/ba-p/3264323">Jira hierarchy: levels and structure</a></li>
+      <li><a href="https://www.eesel.ai/blog/atlassian-brings-an-ai-assistant-to-jira-and-confluence">Rovo in Jira and Confluence, 2026 review</a></li>
+      <li><a href="https://support.atlassian.com/jira-software-cloud/docs/configure-columns/">Jira column limits (Atlassian Support)</a></li>
+      <li><a href="https://www.visor.us/blog/jira-portfolio-management/">Jira Plans limits: no baseline, no milestones</a></li>
+      <li><a href="https://www.herocoders.com/blog/jira-time-tracking-everything-you-need-to-know">Jira native time tracking</a></li>
+      <li><a href="https://community.atlassian.com/forums/App-Central-articles/Jira-Pricing-How-Much-Does-Jira-Cost-in-2026/ba-p/3284604">Jira pricing 2026</a></li>
+      <li><a href="https://help.asana.com/s/article/all-asana-features?language=en_US">All Asana features (Asana Help Center)</a></li>
+      <li><a href="https://ido-clarity.com/blog/asana-may-2026-updates/">Asana May 2026 updates</a></li>
+      <li><a href="https://firebearstudio.com/blog/what-is-asana.html">Asana project management and AI in 2026</a></li>
+      <li><a href="https://forum.asana.com/t/add-wip-limits-xx-xx-x-x/16365">Asana forum: WIP limits request</a></li>
+      <li><a href="https://www.gend.co/blog/asana-pricing">Asana pricing 2026</a></li>
+      <li><a href="https://zapier.com/blog/asana-vs-jira/">Asana vs Jira (Zapier)</a></li>
+      <li><a href="https://learn.g2.com/asana-vs-jira">Asana vs Jira tested (G2)</a></li>
+      <li><a href="https://www.proofhub.com/articles/asana-vs-jira">Asana vs Jira features and pricing (ProofHub)</a></li>
+    </ol>
+  </section>
+
+</div>
+
+<div class="tip" id="tip" hidden role="tooltip"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // Coverage levels: 3 native · 2 partial/workaround · 1 add-on or higher plan · 0 not available
+  const LEVEL_NAME = { 3: 'Native', 2: 'Partial', 1: 'Add-on', 0: 'None' };
+  const TOOLS = ['jira', 'asana', 'solvro'];
+  const TOOL_NAME = { jira: 'Jira', asana: 'Asana', solvro: 'Solvro' };
+
+  // Each row: feature, optional sub, persona (TAM | SA | LEAD | ALL), then per tool [level, how]
+  const AREAS = [
+    {
+      name: 'Plan the work',
+      rows: [
+        ['Gantt chart with zoom levels', 'Bars, phases, drag to reschedule', 'TAM',
+          [3, 'Timeline view per project; cross-project needs Plans on Premium.'],
+          [3, 'Timeline and Gantt views from the Starter plan.'],
+          [3, 'Four zoom levels, collapsible phase rows, weekend shading. Desktop only; phones fall back to the List.']],
+        ['Baseline lock and slip', 'Planned dates frozen, actual drift shown', 'TAM',
+          [1, 'Not in Timeline or Plans. Marketplace apps such as Tempo or BigPicture add baselines.'],
+          [0, 'No baseline. Timeline shows only current dates.'],
+          [3, 'One click freezes every task\'s dates. Ghost bars show the plan; Daily Review reports slip in days.']],
+        ['Dependencies drawn on the chart', 'Hard and soft links between tasks', 'TAM',
+          [3, 'Dependency lines on Timeline; cross-project dependencies need Premium.'],
+          [3, 'Dependencies in Timeline and Gantt views.'],
+          [3, 'Drag from bar to bar. HARD and SOFT types render as different arrows.']],
+        ['Dependents move when a date moves', 'Auto-shift the chain', 'TAM',
+          [1, 'Plans auto-scheduler on Premium. Team boards do not shift.'],
+          [3, 'Auto-shifting dates for dependent tasks is built in.'],
+          [0, 'Arrows only. Moving a predecessor does not move the successor.']],
+        ['Milestones', 'Zero-length markers on the plan', 'TAM',
+          [2, 'Release and version markers. No milestone issue type on the Timeline.'],
+          [3, 'A task can be a milestone; shown as a diamond.'],
+          [3, 'Milestone flag on a task; drawn as a marker on the Gantt.']],
+        ['WIP limits with an over-limit warning', 'Kanban column caps', 'TAM',
+          [3, 'Column constraints; the column header turns red over the limit.'],
+          [2, 'No native limit. Workarounds: a counting custom field with a rule alert, or a browser extension.'],
+          [3, 'Per-column limits on the project; the count pill turns amber over the limit.']],
+        ['Public holidays on the schedule', 'Non-working days shaded', 'TAM',
+          [1, 'Not on the Timeline. Resource apps add team calendars.'],
+          [0, 'Weekends are skipped. No holiday calendar.'],
+          [3, 'Indonesian public holidays shaded on the Gantt alongside weekends.']],
+        ['Project templates', 'Start from a repeatable structure', 'TAM',
+          [3, 'Project and issue templates; company-managed and team-managed projects.'],
+          [3, 'Project templates, task templates, and bundles.'],
+          [2, 'Duplicate a task or a whole phase, subtasks included. No project-level template.']],
+      ],
+    },
+    {
+      name: 'Run the day',
+      rows: [
+        ['Dated notes per customer and per project', 'A daily log that survives the meeting', 'TAM',
+          [0, 'There is no customer object. Notes live as comments on issues or in Confluence.'],
+          [2, 'Project brief and status updates; a customer is at best a portfolio or a custom field.'],
+          [3, 'Daily Review: dated project notes plus operations notes per customer, with a "Mark reviewed" stamp.']],
+        ['Internal notes stay internal', 'A gate before anything reaches the customer', 'TAM',
+          [2, 'Comment visibility can be restricted to a group. Internal notes proper are a Service Management feature.'],
+          [0, 'No per-comment visibility. Only whole projects can be private.'],
+          [3, 'Every note is INTERNAL unless set CUSTOMER_FACING. Exports and search never include internal notes.']],
+        ['Overdue tasks and open risks per customer', 'One page, ready for the stand-up', 'TAM',
+          [2, 'A saved JQL filter on a dashboard gadget; per project, not per customer.'],
+          [2, 'Saved searches and dashboards; My Tasks shows only your own overdue work.'],
+          [3, 'Each customer card on Daily Review lists overdue tasks and open risks with actions.']],
+        ['Risk register', 'Probability × impact, mitigation, status', 'TAM',
+          [2, 'A Risk issue type with custom fields, or a marketplace risk app.'],
+          [2, 'A Risks section with custom fields for probability and impact.'],
+          [3, 'Risks tab per project: category, probability × impact score, mitigation and contingency, open / mitigated / closed.']],
+        ['Weekly sync table from the week\'s notes', 'Monday\'s read, drafted for you', 'TAM',
+          [0, 'No weekly roll-up object. You write it in Confluence from dashboards.'],
+          [2, 'Status updates per project, AI-drafted. No table across customers.'],
+          [3, 'Mid-week and Reflection tables draft from the notes; Green / Amber / Red per customer; "Copy as table" as TSV and HTML.']],
+        ['Service catalogue per customer', 'What the customer buys and which tools run it', 'TAM',
+          [1, 'A service catalogue exists in Jira Service Management, a separate product.'],
+          [0, 'No service object. A custom field or a tag at most.'],
+          [3, 'Services assigned at the customer and the project level, each tagged with the tools in use.']],
+        ['Customer directory with account ownership', 'Owning TAM, account manager, SA of record', 'TAM',
+          [1, 'Customers exist only as portal users in Jira Service Management.'],
+          [2, 'A CRM template turns a project into a contact list. No ownership model.'],
+          [3, 'Customers page: owning TAM, account manager, SA, services, projects. Visibility follows ownership.']],
+        ['Subtasks, labels, comments', 'The everyday task shape', 'ALL',
+          [3, 'Sub-tasks, labels, components, comments with mentions.'],
+          [3, 'Subtasks, tags, comments with mentions and likes.'],
+          [3, 'Subtasks, project-scoped labels, and comments. No mentions.']],
+      ],
+    },
+    {
+      name: 'Sell the deal',
+      rows: [
+        ['Stage board with deal value per column', 'Nine stages, money summed at the top', 'SA',
+          [2, 'A Kanban board over a custom workflow. Sums live in dashboards, not on the board.'],
+          [2, 'Sales pipeline template board. Sums show in List view, not on the board.'],
+          [3, 'Assessment to Won plus Drop and Hold. Each column sums its deal value; a KPI bar sits on top.']],
+        ['Swimlane and quarter views of the pipeline', 'PIC × stage, or by request date', 'SA',
+          [3, 'Swimlanes by assignee are native on boards.'],
+          [2, 'Group-by in List view. The Board view has no swimlanes.'],
+          [3, 'Board, List, Swimlane (PIC × stage), and Quarter views share one switcher.']],
+        ['Won deal becomes a delivery project', 'Handoff without retyping', 'SA',
+          [2, 'An automation rule can create issues on transition. It cannot create a project.'],
+          [2, 'A rule can create a project from a template when a card moves to Won. You fill the rest.'],
+          [3, '"Create project" on a won deal: one transaction, pre-filled, linked both ways, activity logged.']],
+        ['Claim an unassigned deal', 'Ownership decides who may edit', 'SA',
+          [2, '"Assign to me". No ownership gate beyond project permissions.'],
+          [2, 'Assign yourself. Edit rights are per project, not per deal.'],
+          [3, 'Assign PIC claims a deal. Edit and delete are gated by ownership of the deal.']],
+        ['Import deals from Excel or CSV', 'With a preview before commit', 'SA',
+          [3, 'CSV import with field mapping.'],
+          [3, 'CSV importer into a project.'],
+          [3, 'Template download, in-browser validation preview, per-row results, 500 rows per run, history in Admin.']],
+        ['Pipeline analytics', 'Funnel, PIC leaderboard, trend, workload heatmap', 'SA',
+          [2, 'Dashboard gadgets over filters; Rovo can summarise. No funnel out of the box.'],
+          [2, 'Dashboards with charts over custom fields.'],
+          [3, 'Stage funnel, PIC leaderboard and table, 12-month trend, workload heatmap with per-PIC drill-down.']],
+      ],
+    },
+    {
+      name: 'See the big picture',
+      rows: [
+        ['Every project across every TAM', 'The org-wide roll-up', 'LEAD',
+          [1, 'Plans on Premium; or dashboards stitched from filters.'],
+          [1, 'Portfolios on the Advanced plan.'],
+          [3, 'Executive page behind its own permission: overdue worklist, portfolio timelines, pipeline analytics.']],
+        ['Cross-project timeline', 'All deliveries on one axis', 'LEAD',
+          [1, 'Plans on Premium.'],
+          [1, 'Portfolio timeline on Advanced.'],
+          [3, 'Portfolio timelines for every project on Executive; the Overview shows your own.']],
+        ['Health per customer', 'Green / Amber / Red with a Draft / Done state', 'LEAD',
+          [2, 'Status lives on goals or a custom field. Per project, never per customer.'],
+          [2, 'On track / At risk / Off track per project status update. Not per customer.'],
+          [3, 'Weekly Sync carries a health and a status per customer per week.']],
+        ['Find anything fast', 'Projects, tasks, customers', 'ALL',
+          [3, 'Quick search and JQL; Rovo turns plain language into JQL.'],
+          [3, 'Search across tasks, projects, and people.'],
+          [3, '⌘K palette: navigation plus search over projects, tasks, and customers, scoped to what you may see.']],
+      ],
+    },
+    {
+      name: 'Collaborate and automate',
+      rows: [
+        ['Get told when something changes', 'Notifications, an inbox', 'ALL',
+          [3, 'In-app, email, and Slack notifications.'],
+          [3, 'Inbox plus email and mobile push.'],
+          [0, 'Nothing. You open the page.']],
+        ['Automation rules', '"When this, then that"', 'ALL',
+          [3, 'Automation with triggers, conditions, and actions; usage limits by plan.'],
+          [3, 'Rules from Starter, with branching, variables, and AI suggestions.'],
+          [0, 'None.']],
+        ['Custom fields', 'Your own columns on a task', 'ALL',
+          [3, 'Custom fields of many types, plus formula fields in 2026.'],
+          [3, 'Custom, formula, and reference fields from Starter.'],
+          [0, 'Fixed shapes for tasks, risks, and opportunities.']],
+        ['Attach a file', 'Docs and screenshots on the work', 'ALL',
+          [3, 'Attachments on every issue.'],
+          [3, 'Attachments on every task.'],
+          [0, 'A placeholder on the customer page.']],
+        ['Track time', 'Log hours against work', 'ALL',
+          [3, 'Log Work on an issue; remaining estimate updates.'],
+          [1, 'Native time tracking on the Advanced plan.'],
+          [0, 'Work Logs is a placeholder for a future iTop integration.']],
+        ['AI help', 'Drafting, summarising, breaking work down', 'ALL',
+          [3, 'Rovo on every paid plan with monthly credits.'],
+          [3, 'Asana AI from Starter; AI Teammates in beta.'],
+          [0, 'None.']],
+        ['Connect other tools', 'Slack, Git, calendar, docs', 'ALL',
+          [3, 'Over 3,000 marketplace apps and integrations.'],
+          [3, 'Hundreds of integrations and an open API.'],
+          [0, 'Google sign-in and Excel import/export only.']],
+        ['Sprints, backlog, burndown', 'Agile ceremonies', 'ALL',
+          [3, 'Scrum boards, backlog, sprint reports, velocity, capacity view.'],
+          [2, 'Sprint templates over sections. No burndown.'],
+          [0, 'Not a concept in Solvro.']],
+        ['Use it on a phone', 'A native app or a good mobile web', 'ALL',
+          [3, 'Native iOS and Android apps.'],
+          [3, 'Native iOS and Android apps.'],
+          [2, 'Installable PWA down to 375 px; Kanban becomes a swipeable pager. No Gantt on phones.']],
+      ],
+    },
+    {
+      name: 'Own it',
+      rows: [
+        ['Run it on your own server', 'Data stays with you', 'ALL',
+          [1, 'Data Center only, enterprise pricing. Server edition ended in 2024.'],
+          [0, 'Cloud only.'],
+          [3, 'Docker Compose, Postgres, one installer, one command to upgrade.']],
+        ['Roles and permissions', 'Who sees and edits what', 'ALL',
+          [3, 'Permission schemes, project roles, issue security levels.'],
+          [3, 'Admin console, member and guest roles, project permissions.'],
+          [3, 'Permission lists per role, admin-managed custom roles, row-level visibility. Hidden means 404.']],
+        ['Export the schedule', 'Excel or PDF for the customer', 'TAM',
+          [2, 'Issues export to CSV or Excel; the Timeline exports as an image.'],
+          [2, 'CSV and JSON export. No Gantt PDF.'],
+          [3, 'Gantt exports to Excel and PDF. Internal notes are never included.']],
+      ],
+    },
+  ];
+
+  const JOURNEYS = [
+    {
+      who: 'TAM · every day',
+      title: 'Write today\'s note for a customer and see what is overdue for them',
+      why: 'The note has to land where the next person looks, and the overdue list has to be on the same screen.',
+      lanes: [
+        { tool: 'jira', steps: [
+            ['Dashboard'], ['Saved JQL filter', 'warn'], ['Open the issue'], ['Comment'], ['Confluence page for the narrative', 'gap']
+          ], note: 'There is no customer. The note is a comment on one issue or a Confluence page. Overdue needs a filter an admin or you wrote first.' },
+        { tool: 'asana', steps: [
+            ['Project'], ['Status update or comment'], ['Advanced search: due before today', 'warn'], ['Save as report']
+          ], note: 'The note is a project status update. Overdue across projects is a saved search; My Tasks shows only your own.' },
+        { tool: 'solvro', steps: [
+            ['Daily Review'], ['Customer card'], ['Type the dated note'], ['Mark reviewed']
+          ], note: 'Overdue tasks and open risks are already on the customer card. The note is INTERNAL unless you say otherwise.' },
+      ],
+    },
+    {
+      who: 'TAM · every Monday',
+      title: 'Get the weekly sync table ready',
+      why: 'One table across all customers: highlights, risks, achievements, decisions needed, and a health colour.',
+      lanes: [
+        { tool: 'jira', steps: [
+            ['Dashboard gadgets', 'warn'], ['Export issues to CSV'], ['Write the table in Confluence', 'gap'], ['Rovo summary of a page']
+          ], note: 'Jira has no weekly roll-up object. The table is assembled outside the tool.' },
+        { tool: 'asana', steps: [
+            ['Each project'], ['Status update, AI-drafted'], ['Set On track / At risk / Off track'], ['Portfolio view', 'warn'], ['Copy into the document', 'gap']
+          ], note: 'One status per project, not per customer. The cross-customer table is copy-paste from a Portfolio on Advanced.' },
+        { tool: 'solvro', steps: [
+            ['Weekly Sync'], ['Rows drafted from the week\'s notes'], ['Edit, set Green / Amber / Red'], ['Copy as table']
+          ], note: 'Rows needing a decision pin to the top. The clipboard carries TSV and HTML, so it pastes into any document.' },
+      ],
+    },
+    {
+      who: 'SA · when a deal closes',
+      title: 'Move a deal to Won and start the delivery project',
+      why: 'The SA\'s last step and the TAM\'s first step should be the same click.',
+      lanes: [
+        { tool: 'jira', steps: [
+            ['Custom sales workflow', 'warn'], ['Transition to Won'], ['Automation rule creates issues', 'warn'], ['Create the delivery project by hand', 'gap'], ['Link the two']
+          ], note: 'A rule can create issues, not a project. Someone with admin rights creates the project and links it.' },
+        { tool: 'asana', steps: [
+            ['Sales pipeline template'], ['Drag card to Won'], ['Rule: create project from template', 'warn'], ['Fill in the project details']
+          ], note: 'Closest of the two. The new project is a template shell; the deal fields do not carry over.' },
+        { tool: 'solvro', steps: [
+            ['Pipeline board'], ['Drag to Won, confirm'], ['Create project'], ['Project opens, pre-filled']
+          ], note: 'One transaction. The deal and the project link both ways and the activity is logged. Two people racing get a clean 409.' },
+      ],
+    },
+    {
+      who: 'Manager · any time',
+      title: 'See every project across every TAM, with health',
+      why: 'The leadership view should not depend on which TAM you ask.',
+      lanes: [
+        { tool: 'jira', steps: [
+            ['Plans', 'warn'], ['Add every project as a source'], ['Dashboard for status', 'warn']
+          ], note: 'Plans needs Premium. Health is a custom field or a Goal status, not a built-in signal per project.' },
+        { tool: 'asana', steps: [
+            ['Portfolio', 'warn'], ['Add projects'], ['Status roll-up and Workload']
+          ], note: 'Portfolios on Advanced do this well. Health is per project; there is no customer to roll up to.' },
+        { tool: 'solvro', steps: [
+            ['Executive'], ['Overdue worklist, portfolio timelines, pipeline analytics']
+          ], note: 'Behind one permission. Every project across every TAM; container projects can be excluded from the roll-up.' },
+      ],
+    },
+  ];
+
+  // ---- Helpers
+  const el = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  };
+  const glyph = (level, size) => {
+    const g = el('i', 'glyph c' + level);
+    g.setAttribute('aria-hidden', 'true');
+    return g;
+  };
+
+  let persona = 'ALL';
+  const rowVisible = (row) => persona === 'ALL' || row[2] === persona || row[2] === 'ALL';
+
+  // ---- Coverage small multiples
+  const areasHost = document.getElementById('areas');
+  function renderAreas() {
+    areasHost.textContent = '';
+    AREAS.forEach((area) => {
+      const rows = area.rows.filter(rowVisible);
+      const card = el('article', 'area' + (rows.length === 0 ? ' is-empty' : ''));
+      const h = el('h3');
+      h.appendChild(el('span', '', area.name));
+      h.appendChild(el('small', '', rows.length + (rows.length === 1 ? ' row' : ' rows')));
+      card.appendChild(h);
+
+      const grid = el('div', 'bars');
+      TOOLS.forEach((tool, ti) => {
+        const counts = [0, 0, 0, 0];
+        rows.forEach((r) => { counts[r[3 + ti][0]]++; });
+        const total = rows.length || 1;
+        const lbl = el('div', 'lbl' + (tool === 'solvro' ? ' is-solvro' : ''), TOOL_NAME[tool]);
+        const bar = el('div', 'bar');
+        bar.setAttribute('role', 'img');
+        bar.setAttribute('aria-label', TOOL_NAME[tool] + ': ' + counts[3] + ' native, ' + counts[2] + ' partial, ' + counts[1] + ' add-on, ' + counts[0] + ' not available');
+        [3, 2, 1, 0].forEach((lv) => {
+          const seg = el('span', 's' + lv);
+          seg.style.width = (counts[lv] / total * 100) + '%';
+          seg.dataset.tip = JSON.stringify({ who: TOOL_NAME[tool] + ' · ' + area.name, title: counts[lv] + ' of ' + rows.length + ' rows', body: LEVEL_NAME[lv] });
+          bar.appendChild(seg);
+        });
+        const val = el('div', 'val', rows.length ? counts[3] + '/' + rows.length : '–');
+        val.title = 'Native rows out of all rows in this area';
+        grid.appendChild(lbl); grid.appendChild(bar); grid.appendChild(val);
+      });
+      card.appendChild(grid);
+      areasHost.appendChild(card);
+    });
+  }
+
+  // ---- Matrix
+  const body = document.getElementById('matrix-body');
+  function buildMatrix() {
+    AREAS.forEach((area) => {
+      const gtr = el('tr', 'group');
+      gtr.dataset.group = area.name;
+      const gth = el('th'); gth.colSpan = 5; gth.textContent = area.name; gth.scope = 'colgroup';
+      gtr.appendChild(gth);
+      body.appendChild(gtr);
+      area.rows.forEach((row) => {
+        const tr = el('tr');
+        tr.dataset.persona = row[2];
+        tr.dataset.group = area.name;
+        const f = el('td', 'feature');
+        f.appendChild(document.createTextNode(row[0]));
+        if (row[1]) f.appendChild(el('small', '', row[1]));
+        tr.appendChild(f);
+        tr.appendChild(el('td', 'persona', row[2] === 'LEAD' ? 'MGR' : row[2]));
+        TOOLS.forEach((tool, ti) => {
+          const [level, how] = row[3 + ti];
+          const td = el('td', 'cell' + (tool === 'solvro' ? ' solvro' : ''));
+          const btn = el('button', 'cellbtn');
+          btn.type = 'button';
+          btn.appendChild(glyph(level));
+          btn.appendChild(el('span', '', LEVEL_NAME[level]));
+          btn.setAttribute('aria-label', TOOL_NAME[tool] + ', ' + row[0] + ': ' + LEVEL_NAME[level] + '. ' + how);
+          btn.dataset.tip = JSON.stringify({ who: TOOL_NAME[tool] + ' · ' + LEVEL_NAME[level], title: row[0], body: how });
+          td.appendChild(btn);
+          tr.appendChild(td);
+        });
+        body.appendChild(tr);
+      });
+    });
+  }
+  function filterMatrix() {
+    let shown = 0;
+    const groupsShown = {};
+    body.querySelectorAll('tr:not(.group)').forEach((tr) => {
+      const ok = persona === 'ALL' || tr.dataset.persona === persona || tr.dataset.persona === 'ALL';
+      tr.classList.toggle('hidden', !ok);
+      if (ok) { shown++; groupsShown[tr.dataset.group] = true; }
+    });
+    body.querySelectorAll('tr.group').forEach((tr) => {
+      tr.classList.toggle('hidden', !groupsShown[tr.dataset.group]);
+    });
+    document.getElementById('row-count').textContent = shown + ' of ' + AREAS.reduce((n, a) => n + a.rows.length, 0) + ' rows';
+  }
+
+  // ---- Journeys
+  const jHost = document.getElementById('journeys');
+  function buildJourneys() {
+    JOURNEYS.forEach((j) => {
+      const art = el('article', 'journey');
+      const job = el('div', 'job');
+      job.appendChild(el('span', 'caps', j.who));
+      job.appendChild(el('h3', '', j.title));
+      job.appendChild(el('p', '', j.why));
+      art.appendChild(job);
+      const lanes = el('div', 'lanes');
+      j.lanes.forEach((lane) => {
+        const l = el('div', 'lane' + (lane.tool === 'solvro' ? ' is-solvro' : ''));
+        l.appendChild(el('div', 'who', TOOL_NAME[lane.tool]));
+        const b = el('div', 'body');
+        const steps = el('div', 'steps');
+        lane.steps.forEach((s, i) => {
+          if (i > 0) steps.appendChild(el('span', 'arrow', '→'));
+          steps.appendChild(el('span', 'step' + (s[1] ? ' ' + s[1] : ''), s[0]));
+        });
+        b.appendChild(steps);
+        b.appendChild(el('p', 'note', lane.note));
+        l.appendChild(b);
+        lanes.appendChild(l);
+      });
+      art.appendChild(lanes);
+      jHost.appendChild(art);
+    });
+  }
+
+  // ---- Tooltip (hover + focus)
+  const tip = document.getElementById('tip');
+  function showTip(target, x, y) {
+    let data;
+    try { data = JSON.parse(target.dataset.tip); } catch (e) { return; }
+    tip.textContent = '';
+    tip.appendChild(el('div', 'who', data.who));
+    tip.appendChild(el('b', '', data.title));
+    tip.appendChild(document.createTextNode(data.body));
+    tip.hidden = false;
+    positionTip(x, y);
+  }
+  function positionTip(x, y) {
+    const pad = 12;
+    const r = tip.getBoundingClientRect();
+    let left = x + pad, top = y + pad;
+    if (left + r.width > window.innerWidth - pad) left = x - r.width - pad;
+    if (top + r.height > window.innerHeight - pad) top = y - r.height - pad;
+    tip.style.left = Math.max(pad, left) + 'px';
+    tip.style.top = Math.max(pad, top) + 'px';
+  }
+  function hideTip() { tip.hidden = true; }
+  document.addEventListener('pointermove', (e) => {
+    const t = e.target.closest('[data-tip]');
+    if (t) showTip(t, e.clientX, e.clientY); else hideTip();
+  });
+  document.addEventListener('pointerleave', hideTip);
+  document.addEventListener('focusin', (e) => {
+    const t = e.target.closest('[data-tip]');
+    if (!t) { hideTip(); return; }
+    const r = t.getBoundingClientRect();
+    showTip(t, r.left + r.width / 2, r.bottom);
+  });
+  document.addEventListener('focusout', hideTip);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideTip(); });
+
+  // ---- Persona filter scopes everything below it
+  document.getElementById('persona-seg').addEventListener('change', (e) => {
+    if (e.target.name !== 'persona') return;
+    persona = e.target.value;
+    renderAreas();
+    filterMatrix();
+    try { localStorage.setItem('solvro-compare-persona', persona); } catch (err) {}
+  });
+
+  // ---- Boot
+  buildMatrix();
+  buildJourneys();
+  try {
+    const saved = localStorage.getItem('solvro-compare-persona');
+    const input = saved && document.querySelector('input[name="persona"][value="' + saved + '"]');
+    if (input) { input.checked = true; persona = saved; }
+  } catch (err) {}
+  renderAreas();
+  filterMatrix();
+
+  // Sticky matrix header sits under the sticky filter row
+  const filtersEl = document.querySelector(".filters");
+  function setFilterHeight() {
+    document.documentElement.style.setProperty("--filter-h", filtersEl.offsetHeight + "px");
+  }
+  setFilterHeight();
+  window.addEventListener("resize", setFilterHeight);
+})();
+</script>
+</body>
+</html>

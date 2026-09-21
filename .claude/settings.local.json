@@ -1,0 +1,46 @@
+{
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": false
+  },
+  "permissions": {
+    "allow": [
+      "Bash(grep -v \"^$\")",
+      "Bash(sed 's/\"$//')",
+      "Bash(python3 -c \"import fitz; print\\('pymupdf ok'\\)\")",
+      "Bash(python3 -c \"import pdf2image; print\\('pdf2image ok'\\)\")",
+      "Bash(python3)",
+      "Bash(npm run *)",
+      "Bash(xargs perl -i -e 's/shadow-sm/shadow-card/g')",
+      "Bash(docker compose *)",
+      "Bash(npm i *)",
+      "Bash(npm audit *)",
+      "Bash(npx tsc *)",
+      "Bash(npx prisma *)",
+      "Bash(gh pr create *)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git fetch --quiet origin develop main 2>/dev/null; for b in develop main; do behind=$(git rev-list --count \"$b..origin/$b\" 2>/dev/null); if [ -n \"$behind\" ] && [ \"$behind\" -gt 0 ]; then echo \"⚠ Local $b is $behind commit(s) behind origin/$b — pull/rebase before editing (hot files: schema.prisma, queries.ts)\"; fi; done; true",
+            "timeout": 15,
+            "statusMessage": "Checking origin for new commits"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/node \"$CLAUDE_PROJECT_DIR/.claude/hooks/reply-style.js\"",
+            "timeout": 5,
+            "statusMessage": "Loading reply-style rules"
+          }
+        ]
+      }
+    ]
+  }
+}

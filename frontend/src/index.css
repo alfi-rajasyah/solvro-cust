@@ -1,0 +1,308 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Class-driven dark mode — theme.tsx toggles `.dark` on <html>; this variant
+   replaces the v3 `darkMode: "class"` config. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* CSS-first port of tailwind.config.ts (deleted). Colors route through the
+   :root/.dark RGB triplets below. Must stay `@theme inline`: a non-inline
+   @theme emits `--color-x: rgb(var(--x))` at :root, and var(--x) there
+   substitutes at computed-value time on the DECLARING element (:root)
+   itself — the resolved (light) value then simply inherits down, so a
+   `.dark` class pinned on a nested element (Login.tsx, Sidebar.tsx) has
+   nothing left to override and the subtree pin breaks. `inline` compiles
+   each utility to the RGB triplet directly (e.g. `rgb(var(--background))`),
+   so resolution instead happens at the consuming element and the pins work
+   again. Opacity modifiers still work — v4 wraps inline values in
+   color-mix. */
+@theme inline {
+  /* — Semantic colors (Technical Precision) — */
+  --color-surface: rgb(var(--surface));
+  --color-surface-dim: rgb(var(--surface-dim));
+  --color-surface-bright: rgb(var(--surface-bright));
+  --color-surface-container-lowest: rgb(var(--surface-container-lowest));
+  --color-surface-container-low: rgb(var(--surface-container-low));
+  --color-surface-container: rgb(var(--surface-container));
+  --color-surface-container-high: rgb(var(--surface-container-high));
+  --color-surface-container-highest: rgb(var(--surface-container-highest));
+  --color-on-surface: rgb(var(--on-surface));
+  --color-on-surface-variant: rgb(var(--on-surface-variant));
+  --color-inverse-surface: rgb(var(--inverse-surface));
+  --color-inverse-on-surface: rgb(var(--inverse-on-surface));
+  --color-outline: rgb(var(--outline));
+  --color-outline-variant: rgb(var(--outline-variant));
+  --color-primary: rgb(var(--primary));
+  --color-on-primary: rgb(var(--on-primary));
+  --color-primary-container: rgb(var(--primary-container));
+  --color-on-primary-container: rgb(var(--on-primary-container));
+  --color-inverse-primary: rgb(var(--inverse-primary));
+  --color-secondary: rgb(var(--secondary));
+  --color-on-secondary: rgb(var(--on-secondary));
+  --color-secondary-container: rgb(var(--secondary-container));
+  --color-on-secondary-container: rgb(var(--on-secondary-container));
+  --color-tertiary: rgb(var(--tertiary));
+  --color-on-tertiary: rgb(var(--on-tertiary));
+  --color-error: rgb(var(--error));
+  --color-on-error: rgb(var(--on-error));
+  --color-error-container: rgb(var(--error-container));
+  --color-on-error-container: rgb(var(--on-error-container));
+  --color-background: rgb(var(--background));
+  --color-on-background: rgb(var(--on-background));
+  /* — Chip / status tones — */
+  --color-chip-emerald-bg: rgb(var(--emerald-bg));
+  --color-chip-emerald-text: rgb(var(--emerald-text));
+  --color-chip-amber-bg: rgb(var(--amber-bg));
+  --color-chip-amber-text: rgb(var(--amber-text));
+  --color-chip-rose-bg: rgb(var(--rose-bg));
+  --color-chip-rose-text: rgb(var(--rose-text));
+  --color-chip-violet-bg: rgb(var(--violet-bg));
+  --color-chip-violet-text: rgb(var(--violet-text));
+  /* — Fixed brand ink + sidebar charcoal (never theme-flip) — */
+  --color-ink: #191919;
+  --color-ink-hover: #2e2e2e;
+  --color-sidebar: #232321;
+
+  /* — Radius: v4 defaults already match DESIGN.md after the Task 1 renames
+       (rounded-xs .125 / rounded-sm .25 / md .375 / lg .5 / xl .75).
+       DESIGN.md forbids larger radii — remove them from the theme. — */
+  --radius-2xl: initial;
+  --radius-3xl: initial;
+  --radius-4xl: initial;
+
+  /* — Typography — */
+  --font-display: "Source Sans 3", system-ui, sans-serif;
+  --font-body: "Source Sans 3", system-ui, sans-serif;
+  /* +1px default scale (was fontSize override in tailwind.config.ts) */
+  --text-xs: 13px;
+  --text-xs--line-height: 1.35;
+  --text-sm: 15px;
+  --text-sm--line-height: 1.45;
+  --text-base: 17px;
+  --text-base--line-height: 1.55;
+  --text-lg: 19px;
+  --text-lg--line-height: 1.55;
+  --text-xl: 21px;
+  --text-xl--line-height: 1.5;
+  --text-2xl: 25px;
+  --text-2xl--line-height: 1.4;
+  --text-3xl: 31px;
+  --text-3xl--line-height: 1.3;
+  --text-4xl: 37px;
+  --text-4xl--line-height: 1.2;
+  /* Named roles — canonical per DESIGN.md typography frontmatter */
+  --text-h1: 32px;
+  --text-h1--line-height: 1.2;
+  --text-h1--font-weight: 600;
+  --text-h2: 24px;
+  --text-h2--line-height: 1.2;
+  --text-h2--font-weight: 600;
+  --text-body-lg: 16px;
+  --text-body-lg--line-height: 1.5;
+  --text-body-lg--font-weight: 450;
+  --text-body-sm: 15px;
+  --text-body-sm--line-height: 1.5;
+  --text-body-sm--font-weight: 450;
+  --text-data-mono: 13px;
+  --text-data-mono--line-height: 1.4;
+  --text-data-mono--letter-spacing: -0.01em;
+  --text-data-mono--font-weight: 500;
+  --text-label-caps: 12px;
+  --text-label-caps--line-height: 1;
+  --text-label-caps--letter-spacing: 0.05em;
+  --text-label-caps--font-weight: 700;
+
+  /* — Elevation: outlines only; the single sanctioned shadow — */
+  --shadow-overlay: 0 4px 24px rgba(0, 0, 0, 0.18);
+
+  /* — Layout tokens (w-sidebar / ml-sidebar-collapsed / w-context-panel) — */
+  --spacing-sidebar: 260px;
+  --spacing-sidebar-collapsed: 4rem;
+  --spacing-context-panel: 320px;
+}
+
+/* shadcn semantic names → Technical Precision. Vendored shadcn/ReUI
+   components use bg-background / text-muted-foreground / border-border etc.;
+   this bridge is the single enforcement point that keeps them on DESIGN.md
+   values in both themes. NOTE: shadcn's --color-background / --color-primary
+   definitions coincide with the Solvro tokens already defined above — the
+   entries here only add the names Solvro doesn't have yet. */
+@theme inline {
+  --color-foreground: rgb(var(--on-surface));
+  --color-card: rgb(var(--surface-container-low));
+  --color-card-foreground: rgb(var(--on-surface));
+  --color-popover: rgb(var(--surface-container));
+  --color-popover-foreground: rgb(var(--on-surface));
+  --color-primary-foreground: rgb(var(--on-primary));
+  --color-secondary-foreground: rgb(var(--on-secondary));
+  --color-muted: rgb(var(--surface-container));
+  --color-muted-foreground: rgb(var(--on-surface-variant));
+  --color-accent: rgb(var(--surface-container-high));
+  --color-accent-foreground: rgb(var(--on-surface));
+  --color-destructive: rgb(var(--error));
+  --color-destructive-foreground: rgb(var(--on-error));
+  --color-border: rgb(var(--outline-variant));
+  --color-input: rgb(var(--outline-variant));
+  --color-ring: rgb(var(--primary));
+  /* Alert semantic tones (frontend/src/components/reui/alert.tsx) — same
+     routing pattern as --color-destructive above: each name aliases an
+     existing Solvro token, no new custom properties added. success and
+     warning reuse the chip-emerald and chip-amber text values (Alert draws
+     a single solid tone with its own opacity modifiers, the same shape as
+     --error, not a separate background/text pair). info uses the
+     chip-violet family: the only chip hue with no status meaning assigned
+     elsewhere. invert reuses inverse-surface and inverse-on-surface: a
+     flipped-polarity filled alert is exactly what that pair already means.
+     invert-foreground pairs with invert; the other three tones have no
+     foreground companion because alert.tsx never references one (it pairs
+     them with card-foreground/on-surface instead). */
+  --color-success: rgb(var(--emerald-text));
+  --color-warning: rgb(var(--amber-text));
+  --color-info: rgb(var(--violet-text));
+  --color-invert: rgb(var(--inverse-surface));
+  --color-invert-foreground: rgb(var(--inverse-on-surface));
+}
+
+/* No manual re-declaration needed for the raw `var(--color-*)` reads inside
+   vendored reui/gantt (gantt-bar.tsx, gantt-view.tsx, gantt-dnd.tsx) —
+   `--color-primary`/`--color-background`/`--color-border`/`--color-destructive`
+   stay emitted at `:root,:host` under Tailwind's generated `@layer theme`
+   even with the primary block above `inline`, because the Oxide scanner
+   treats a bare `var(--color-x)` in scanned source as a used-variable
+   candidate and keeps emitting it regardless of `inline`. Do NOT add a
+   manual `:root { --color-x: ... }` copy here — being outside `@layer
+   theme` it would have higher cascade priority than these `@theme` blocks
+   and silently shadow them, so a future repoint of one of these tokens
+   (e.g. `--color-border` moving off `--outline-variant`) would update
+   every utility but leave the Gantt's raw reads stuck on the stale value. */
+
+@layer base {
+  /* Light theme — off-white surfaces, Elitery Green primary darkened to
+     #2d9042 for WCAG contrast on white. Values from DESIGN.md frontmatter
+     light overrides; tokens the spec omits for light (inverse-*, *-container,
+     secondary/tertiary, error family) are derived from the same palette —
+     see CHANGELOG. */
+  :root {
+    --surface: 249 249 247;
+    --surface-dim: 232 232 228;
+    --surface-bright: 255 255 255;
+    --surface-container-lowest: 255 255 255;
+    --surface-container-low: 242 242 238;
+    --surface-container: 235 235 231;
+    --surface-container-high: 228 228 224;
+    --surface-container-highest: 222 222 218;
+    --on-surface: 26 26 24;
+    --on-surface-variant: 74 74 71;
+    --inverse-surface: 35 35 33;
+    --inverse-on-surface: 240 237 232;
+    --outline: 154 154 151;
+    --outline-variant: 208 208 204;
+    --primary: 45 144 66;
+    --on-primary: 255 255 255;
+    --primary-container: 200 230 207;
+    --on-primary-container: 15 43 22;
+    --inverse-primary: 58 174 81;
+    --secondary: 95 94 87;
+    --on-secondary: 255 255 255;
+    --secondary-container: 224 223 216;
+    --on-secondary-container: 50 50 48;
+    --tertiary: 90 95 90;
+    --on-tertiary: 255 255 255;
+    --error: 186 26 26;
+    --on-error: 255 255 255;
+    --error-container: 255 218 214;
+    --on-error-container: 147 0 10;
+    --background: 249 249 247;
+    --on-background: 26 26 24;
+    /* Chip / status palette — light tone bg + saturated text. */
+    --emerald-bg: 220 252 231;
+    --emerald-text: 22 163 74;
+    --amber-bg: 254 243 199;
+    --amber-text: 217 119 6;
+    --rose-bg: 254 226 226;
+    --rose-text: 220 38 38;
+    --violet-bg: 237 233 254;
+    --violet-text: 109 40 217;
+  }
+
+  /* Dark theme (default) — warm charcoal surfaces + Elitery Green primary.
+     Exact values from DESIGN.md frontmatter (dark is the canonical default). */
+  .dark {
+    --surface: 35 35 33;
+    --surface-dim: 26 26 24;
+    --surface-bright: 42 42 40;
+    --surface-container-lowest: 26 26 24;
+    --surface-container-low: 35 35 33;
+    --surface-container: 42 42 40;
+    --surface-container-high: 50 50 48;
+    --surface-container-highest: 58 58 55;
+    --on-surface: 240 237 232;
+    --on-surface-variant: 176 173 168;
+    --inverse-surface: 240 237 232;
+    --inverse-on-surface: 35 35 33;
+    --outline: 74 74 71;
+    --outline-variant: 58 58 55;
+    --primary: 58 174 81;
+    --on-primary: 15 43 22;
+    --primary-container: 45 144 66;
+    --on-primary-container: 232 247 235;
+    --inverse-primary: 45 144 66;
+    --secondary: 136 135 128;
+    --on-secondary: 26 26 24;
+    --secondary-container: 50 50 48;
+    --on-secondary-container: 176 173 168;
+    --tertiary: 112 117 112;
+    --on-tertiary: 240 237 232;
+    --error: 248 113 113;
+    --on-error: 42 10 10;
+    --error-container: 61 18 18;
+    --on-error-container: 252 165 165;
+    --background: 26 26 24;
+    --on-background: 240 237 232;
+    --emerald-bg: 6 78 59;
+    --emerald-text: 167 243 208;
+    --amber-bg: 120 53 15;
+    --amber-text: 253 230 138;
+    --rose-bg: 127 29 29;
+    --rose-text: 254 202 202;
+    --violet-bg: 76 29 149;
+    --violet-text: 221 214 254;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    /* Body weight is 450 (not 400), carried by the `text-body-sm` token in
+       tailwind.config.ts and inherited app-wide. Needs the Source Sans 3
+       variable font (loaded via the wght@300..700 range in index.html) to
+       render the 450 instance. */
+    @apply bg-background text-on-surface font-body text-body-sm antialiased;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display;
+  }
+
+  /* Native form controls follow the theme. */
+  .dark input[type="text"],
+  .dark input[type="email"],
+  .dark input[type="password"],
+  .dark input[type="number"],
+  .dark input[type="search"],
+  .dark textarea,
+  .dark select {
+    color-scheme: dark;
+  }
+}
+
+@layer components {
+  .material-symbols-outlined {
+    font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  }
+}

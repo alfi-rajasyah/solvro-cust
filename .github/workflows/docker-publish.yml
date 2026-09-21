@@ -1,0 +1,85 @@
+name: Build and push images to GHCR
+
+on:
+  # Publishing for main is gated on CI: this fires when the CI workflow
+  # completes on main, and the job below only proceeds if it succeeded.
+  # Previously this ran on push to main in parallel with CI, so a red
+  # build could still ship `latest` images.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # Tags don't run CI (they're cut from an already-green main), so they
+  # publish directly, as before.
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  # Images are named after this repository (owner/name-service), so this
+  # customer distribution never overwrites the source repository's images.
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - name: backend
+            context: ./backend
+          - name: frontend
+            context: ./frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # On workflow_run events github.sha is the default branch's head at
+          # event-delivery time, which can have moved past the commit CI
+          # actually validated — build exactly the validated commit instead.
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+
+      # Tag images with the checked-out commit rather than metadata-action's
+      # type=sha (github.sha), which would mislabel workflow_run builds for
+      # the same reason as above.
+      - name: Compute short SHA of the built commit
+        id: sha
+        run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # `latest` must track main — the release branch production pulls — and
+      # never "whichever branch is currently the repo default". This was
+      # `enable={{is_default_branch}}`, which silently stops tagging `latest`
+      # the moment the default branch is changed in repo settings. Pinned to
+      # the literal branch name so a settings change can't move the prod tag.
+      # (Tag pushes are deliberately excluded, matching the previous behaviour.)
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service.name }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=raw,value=sha-${{ steps.sha.outputs.short }}
+            type=raw,value=latest,enable=${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.service.context }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}

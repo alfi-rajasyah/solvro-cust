@@ -1,0 +1,63 @@
+# --- Build output ---
+node_modules/
+dist/
+frontend/dev-dist/
+*.tsbuildinfo
+.vite/
+
+# tsc occasionally compiles top-level config files (vite.config.ts ->
+# vite.config.{js,d.ts}); those win over the .ts at runtime and ship a
+# stale config. Keep them out of the working tree.
+frontend/vite.config.js
+frontend/vite.config.d.ts
+frontend/tailwind.config.js
+frontend/tailwind.config.d.ts
+
+# --- Secrets & local env ---
+# Unanchored .env covers every depth: backend/.env, ci/.env, etc.
+.env
+.env.local
+.env.*.local
+# The ROOT env template is local-only (it pairs with the local compose below),
+# and frontend/.env.example is a local dev note (its only variable is optional).
+# Anchored on purpose: backend/.env.example IS tracked as the public template.
+/.env.example
+/frontend/.env.example
+
+# --- Local Docker (the canonical compose definition lives inside setup.sh) ---
+docker-compose.override.yml
+docker-compose.yml
+
+# Prisma dev leftovers
+backend/prisma/migrations/dev.db*
+
+# --- Playwright artifacts ---
+e2e/test-results/
+e2e/playwright-report/
+e2e/blob-report/
+
+# --- Editor / OS ---
+.DS_Store
+.vscode/
+.idea/
+*.log
+
+# New UI/ — local-only design reference (the Figma PDF is 163 MB, over
+# GitHub's 100 MB limit; the HTMLs are dev-only previews, not a build target).
+New UI/
+
+# --- Tool caches (never pushed) ---
+.understand-anything/
+.superpowers/
+
+# --- Claude Code runtime state; the workflow files in .claude/ are tracked in this repo ---
+.claude/worktrees/
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.json
+.claude/routines/.state/
+.claude/checkpoints/
+.claude/mailbox/
+.claude/agent-registry.json
+.claude/agent-memory-local
+.claude/first-run
+.claude/assistant-daemon-state.json

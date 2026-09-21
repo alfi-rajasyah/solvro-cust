@@ -1,0 +1,1231 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agent workflow: phases, gates, one review</title>
+<meta name="description" content="A Claude Code pipeline: parallel sonnet waves, a bash gate script, one opus review per phase." />
+<script>
+/* Runs before first paint: applies a stored theme without a flash, and opts the
+   page into scroll-reveal ONLY when the animation can actually complete. If this
+   script never runs, .js-anim is absent and every section renders visible. */
+(function () {
+  var d = document.documentElement;
+  try {
+    var t = localStorage.getItem("agent-workflow-theme");
+    if (t === "light" || t === "dark") { d.setAttribute("data-theme", t); }
+    else { d.removeAttribute("data-theme"); }
+  } catch (e) { d.removeAttribute("data-theme"); }
+
+  var ok = "IntersectionObserver" in window
+    && window.matchMedia
+    && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (ok) { d.classList.add("js-anim"); }
+})();
+</script>
+<style>
+/* ============================================================
+   Agent workflow - explainer page
+   Dark by default, light via prefers-color-scheme or the nav toggle.
+   Green is not decoration: it is the PASS colour, reused as the accent.
+   ============================================================ */
+
+:root {
+  --bg:            #1a1a18;
+  --surface:       #232321;
+  --surface-2:     #2a2a28;
+  --surface-3:     #323230;
+  --text:          #f0ede8;
+  --text-dim:      #b0ada8;
+  --outline:       #4a4a47;
+  --outline-soft:  #3a3a37;
+  --accent:        #3aae51;
+  --accent-deep:   #2d9042;
+  --accent-ink:    #e8f7eb;
+  --danger:        #f87171;
+  --amber:         #fde68a;
+
+  --r-card: 10px;
+  --r-chip: 6px;
+
+  --shell: 1240px;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --quick: 140ms;
+  --std: 280ms;
+  --slow: 520ms;
+
+  --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg:           #f9f9f7;
+    --surface:      #ffffff;
+    --surface-2:    #f2f2ee;
+    --surface-3:    #ebebe7;
+    --text:         #1a1a18;
+    --text-dim:     #4a4a47;
+    --outline:      #9a9a97;
+    --outline-soft: #d0d0cc;
+    --accent:       #2d9042;
+    --accent-deep:  #2d9042;
+    --accent-ink:   #0f2b16;
+    --danger:       #ba1a1a;
+    --amber:        #d97706;
+    color-scheme: light;
+  }
+}
+
+:root[data-theme="light"] {
+  --bg:           #f9f9f7;
+  --surface:      #ffffff;
+  --surface-2:    #f2f2ee;
+  --surface-3:    #ebebe7;
+  --text:         #1a1a18;
+  --text-dim:     #4a4a47;
+  --outline:      #9a9a97;
+  --outline-soft: #d0d0cc;
+  --accent:       #2d9042;
+  --accent-deep:  #2d9042;
+  --accent-ink:   #0f2b16;
+  --danger:       #ba1a1a;
+  --amber:        #d97706;
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+a { color: inherit; }
+h1, h2, h3, h4 { margin: 0; font-weight: 560; letter-spacing: -0.02em; line-height: 1.12; }
+p { margin: 0; }
+ul, ol { margin: 0; padding: 0; list-style: none; }
+code, kbd, pre { font-family: var(--mono); }
+
+.shell { width: 100%; max-width: var(--shell); margin-inline: auto; padding-inline: 24px; }
+@media (max-width: 640px) { .shell { padding-inline: 18px; } }
+
+.skip {
+  position: absolute; left: -9999px; top: 0; z-index: 100;
+  background: var(--accent); color: var(--accent-ink);
+  padding: 10px 16px; border-radius: var(--r-chip); font-size: 14px; font-weight: 600;
+}
+.skip:focus { left: 12px; top: 12px; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+/* ---------- nav ---------- */
+.nav {
+  position: sticky; top: 0; z-index: 40;
+  height: 66px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--outline-soft);
+}
+.nav-in { height: 100%; display: flex; align-items: center; gap: 18px; }
+.brand { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
+.brand-sub { color: var(--text-dim); font-weight: 450; }
+.nav-links { display: flex; align-items: center; gap: 24px; margin-left: auto; flex: none; }
+.nav-links a {
+  font-size: 13.5px; color: var(--text-dim); text-decoration: none;
+  transition: color var(--quick) var(--ease);
+}
+.nav-links a:hover { color: var(--text); }
+.toggle {
+  margin-left: 18px; flex: none;
+  width: 34px; height: 34px; display: grid; place-items: center;
+  background: var(--surface-2); border: 1px solid var(--outline-soft);
+  border-radius: var(--r-chip); color: var(--text-dim); cursor: pointer;
+  transition: color var(--quick) var(--ease), border-color var(--quick) var(--ease);
+}
+.toggle:hover { color: var(--text); border-color: var(--outline); }
+.toggle:active { transform: scale(0.94); }
+.toggle svg { width: 16px; height: 16px; }
+:root[data-theme="light"] .icon-sun, .icon-moon { display: block; }
+:root[data-theme="light"] .icon-moon, .icon-sun { display: none; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .icon-sun { display: block; }
+  :root:not([data-theme="dark"]) .icon-moon { display: none; }
+}
+@media (max-width: 900px) { .nav-links a { display: none; } .nav-links a.keep { display: inline; } }
+@media (max-width: 560px) {
+  .brand-sub { display: none; }
+  .nav-links { gap: 16px; }
+  .toggle { margin-left: 12px; }
+}
+
+/* ---------- shared section furniture ---------- */
+section { position: relative; }
+section[id] { scroll-margin-top: 86px; } /* clears the sticky nav on anchor jumps */
+.band { padding-block: 108px; border-top: 1px solid var(--outline-soft); }
+@media (max-width: 768px) { .band { padding-block: 72px; } }
+
+.eyebrow {
+  font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.2em; color: var(--accent);
+}
+.h2 { font-size: clamp(28px, 3.6vw, 42px); }
+.lede { margin-top: 18px; color: var(--text-dim); font-size: 17px; max-width: 62ch; }
+.head-block { max-width: 70ch; }
+
+.mono-note { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+/* overflow-wrap, not word-break: long paths still break, short commands do not */
+.path { font-family: var(--mono); font-size: 12.5px; color: var(--text); overflow-wrap: anywhere; }
+
+/* ---------- hero ---------- */
+.hero { padding-top: 96px; padding-bottom: 104px; }
+@media (max-width: 768px) { .hero { padding-top: 56px; padding-bottom: 64px; } }
+.hero-grid { display: grid; grid-template-columns: 1fr; gap: 56px; align-items: start; }
+@media (min-width: 1024px) { .hero-grid { grid-template-columns: 1.28fr 0.72fr; gap: 64px; } }
+
+.hero h1 {
+  margin-top: 20px;
+  font-size: clamp(34px, 4.2vw, 48px);
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  text-wrap: balance;
+}
+.hero h1 em { font-style: normal; color: var(--accent); }
+.hero p.sub { margin-top: 22px; color: var(--text-dim); font-size: 18px; max-width: 50ch; }
+.cta-row { margin-top: 34px; display: flex; flex-wrap: wrap; gap: 12px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 9px; white-space: nowrap;
+  padding: 12px 20px; border-radius: var(--r-chip);
+  font-size: 14.5px; font-weight: 560; text-decoration: none;
+  transition: transform var(--quick) var(--ease), background var(--quick) var(--ease), border-color var(--quick) var(--ease);
+}
+.btn svg { width: 15px; height: 15px; }
+.btn-primary { background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); }
+.btn-primary:hover { background: var(--accent-deep); border-color: var(--accent-deep); }
+.btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--outline); }
+.btn-ghost:hover { border-color: var(--text-dim); background: var(--surface-2); }
+.btn:active { transform: translateY(1px); }
+
+/* delta panel */
+.delta { border: 1px solid var(--outline-soft); border-radius: var(--r-card); background: var(--surface); padding: 26px 24px 22px; }
+.delta-row + .delta-row { margin-top: 26px; padding-top: 24px; border-top: 1px solid var(--outline-soft); }
+.delta-key { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.delta-key b { font-size: 13.5px; font-weight: 560; letter-spacing: -0.01em; }
+.delta-key span { font-family: var(--mono); font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+.dots { margin-top: 14px; display: grid; grid-template-columns: repeat(10, 9px); gap: 6px; width: max-content; }
+.dot { width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--outline); }
+.dot.on { background: var(--accent); border-color: var(--accent); }
+.delta-cap { margin-top: 12px; font-size: 13px; color: var(--text-dim); }
+.delta-foot { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--outline-soft); font-size: 12px; color: var(--text-dim); }
+
+/* ---------- flow diagram ---------- */
+.figure-wrap { margin-top: 44px; overflow-x: auto; padding-bottom: 8px; }
+.figure-wrap svg { display: block; min-width: 940px; width: 100%; height: auto; }
+
+.d-box { fill: var(--surface); stroke: var(--outline-soft); stroke-width: 1; }
+.d-box-accent { fill: color-mix(in srgb, var(--accent) 12%, var(--surface)); stroke: var(--accent); stroke-width: 1; }
+.d-box-dash { fill: var(--surface); stroke: var(--outline); stroke-width: 1; stroke-dasharray: 4 3; }
+.d-title { fill: var(--text); font-family: var(--sans); font-size: 13.5px; font-weight: 560; }
+.d-sub { fill: var(--text-dim); font-family: var(--mono); font-size: 10.5px; }
+.d-edge { fill: var(--text-dim); font-family: var(--mono); font-size: 10.5px; }
+.d-edge-accent { fill: var(--accent); font-family: var(--mono); font-size: 10.5px; }
+.d-line { fill: none; stroke: var(--outline); stroke-width: 1.4; }
+.d-line-accent { fill: none; stroke: var(--accent); stroke-width: 1.4; }
+.d-line-back { fill: none; stroke: var(--outline); stroke-width: 1.4; stroke-dasharray: 5 4; }
+.d-group { fill: none; stroke: var(--outline-soft); stroke-width: 1; stroke-dasharray: 3 3; }
+
+.d-flow { stroke-dashoffset: 0; }
+.js-anim .d-flow { stroke-dasharray: 1; stroke-dashoffset: 1; }
+.js-anim .is-in .d-flow { animation: draw 900ms var(--ease) forwards; }
+.js-anim .is-in .d-flow:nth-of-type(2n) { animation-delay: 90ms; }
+.js-anim .is-in .d-flow:nth-of-type(3n) { animation-delay: 170ms; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+
+.legend { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 26px; font-size: 12.5px; color: var(--text-dim); }
+.legend i { display: inline-block; width: 22px; height: 0; border-top: 1.4px solid var(--outline); vertical-align: middle; margin-right: 9px; }
+.legend i.dash { border-top-style: dashed; }
+.legend i.acc { border-top-color: var(--accent); }
+
+/* ---------- roster bento ---------- */
+.bento { margin-top: 48px; display: grid; gap: 14px; grid-template-columns: 1fr; }
+@media (min-width: 860px) {
+  .bento {
+    grid-template-columns: repeat(6, 1fr);
+    grid-template-areas:
+      "orc orc orc imp imp imp"
+      "rev rev gat gat gat gat"
+      "rev rev doc doc doc doc";
+  }
+  .c-orc { grid-area: orc; } .c-imp { grid-area: imp; }
+  .c-rev { grid-area: rev; } .c-gat { grid-area: gat; } .c-doc { grid-area: doc; }
+}
+.cell {
+  position: relative; overflow: hidden; min-width: 0;
+  border: 1px solid var(--outline-soft); border-radius: var(--r-card);
+  background: var(--surface); padding: 26px 24px;
+  transition: border-color var(--std) var(--ease), transform var(--std) var(--ease);
+}
+.cell:hover { border-color: var(--outline); transform: translateY(-1px); }
+.cell-h { display: flex; align-items: center; gap: 11px; }
+.cell-h h3 { font-size: 17px; }
+.cell p { margin-top: 12px; color: var(--text-dim); font-size: 14.5px; }
+.pill {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em;
+  padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid var(--outline); color: var(--text-dim);
+}
+.pill.acc { border-color: var(--accent); color: var(--accent); }
+.cell-list { margin-top: 16px; display: grid; gap: 8px; }
+.cell-list li { font-size: 13.5px; color: var(--text-dim); padding-left: 16px; position: relative; }
+.cell-list li::before { content: ""; position: absolute; left: 0; top: 10px; width: 7px; height: 1px; background: var(--outline); }
+.cell-never { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--outline-soft); font-size: 13px; color: var(--text-dim); }
+.cell-never b { color: var(--text); font-weight: 560; }
+
+.c-orc { background:
+  radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--accent) 13%, transparent) 0%, transparent 58%),
+  var(--surface); }
+.c-gat { background:
+  linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, transparent) 0%, transparent 70%),
+  var(--surface); }
+
+/* ---------- gates ---------- */
+.gates-grid { margin-top: 48px; display: grid; gap: 22px; grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 1000px) {
+  .gates-grid { grid-template-columns: 1.05fr 0.95fr; gap: 32px; align-items: stretch; }
+  /* Both columns finish on the same line: the transcript column absorbs the
+     slack in its second pane. Blank space under terminal output is what a
+     terminal looks like anyway, so nothing has to be padded to fake it. */
+  .term-stack { grid-template-rows: auto 1fr; }
+}
+
+.term-stack { display: grid; gap: 20px; min-width: 0; }
+.term {
+  min-width: 0;
+  border: 1px solid var(--outline-soft); border-radius: var(--r-card);
+  background: var(--surface-2); overflow: hidden;
+}
+.term-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; border-bottom: 1px solid var(--outline-soft);
+  font-family: var(--mono); font-size: 11.5px; color: var(--text-dim);
+  background: var(--surface-3);
+}
+.term-body { padding: 18px 16px; overflow-x: auto; }
+.term-body pre { margin: 0; font-size: 12.5px; line-height: 1.85; white-space: pre; }
+.ok { color: var(--accent); }
+.no { color: var(--danger); }
+.warn { color: var(--amber); }
+.dim { color: var(--text-dim); }
+
+.gate-groups { display: grid; gap: 20px; }
+.gate-group { border: 1px solid var(--outline-soft); border-radius: var(--r-card); padding: 20px 22px; background: var(--surface); }
+.gate-group h4 { font-size: 13px; letter-spacing: 0.02em; }
+.gate-group h4 span { color: var(--text-dim); font-family: var(--mono); font-size: 11px; font-weight: 400; margin-left: 8px; }
+.gate-items { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 7px; }
+.gate-items code {
+  font-size: 11.5px; padding: 4px 9px; border-radius: var(--r-chip);
+  background: var(--surface-2); border: 1px solid var(--outline-soft); color: var(--text-dim);
+}
+.gate-why { margin-top: 14px; font-size: 13.5px; color: var(--text-dim); }
+
+/* ---------- spine ---------- */
+.spine-grid { margin-top: 48px; display: grid; gap: 12px; grid-template-columns: 1fr; }
+@media (min-width: 720px) { .spine-grid { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 1080px) { .spine-grid { grid-template-columns: repeat(3, 1fr); } }
+.spine-cell {
+  min-width: 0;
+  border: 1px solid var(--outline-soft); border-radius: var(--r-card);
+  background: var(--surface); padding: 20px 22px;
+  transition: border-color var(--std) var(--ease);
+}
+.spine-cell:hover { border-color: var(--accent); }
+.spine-cell h4 { font-size: 14px; }
+.spine-cell ul { margin-top: 12px; display: grid; gap: 6px; }
+.spine-cell li { font-family: var(--mono); font-size: 12px; color: var(--text-dim); overflow-wrap: anywhere; line-height: 1.55; }
+.spine-note {
+  margin-top: 26px; padding: 20px 22px;
+  border: 1px solid var(--accent); border-radius: var(--r-card);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  font-size: 14.5px; color: var(--text);
+}
+.spine-note code { font-size: 13px; color: var(--accent); }
+
+/* ---------- layers ---------- */
+.layers { margin-top: 48px; display: grid; gap: 10px; }
+.layer {
+  display: grid; grid-template-columns: 1fr; gap: 6px;
+  border: 1px solid var(--outline-soft); border-left: 3px solid var(--accent);
+  border-radius: var(--r-card); background: var(--surface);
+  padding: 20px 24px;
+  transition: background var(--std) var(--ease);
+}
+@media (min-width: 860px) {
+  .layer { grid-template-columns: 200px 1fr 260px; gap: 28px; align-items: baseline; }
+}
+.layer:hover { background: var(--surface-2); }
+.layer-name { font-size: 15px; font-weight: 560; }
+.layer-body { font-size: 14.5px; color: var(--text-dim); }
+.layer-where { font-family: var(--mono); font-size: 12px; color: var(--text-dim); word-break: break-all; }
+.layer:nth-child(1) { border-left-color: var(--accent); }
+.layer:nth-child(2) { border-left-color: color-mix(in srgb, var(--accent) 72%, var(--outline)); }
+.layer:nth-child(3) { border-left-color: color-mix(in srgb, var(--accent) 48%, var(--outline)); }
+.layer:nth-child(4) { border-left-color: color-mix(in srgb, var(--accent) 24%, var(--outline)); }
+
+/* ---------- on-disk layout ---------- */
+.layout-grid { margin-top: 48px; display: grid; gap: 22px; grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 1000px) { .layout-grid { grid-template-columns: 1.15fr 0.85fr; gap: 36px; } }
+
+.tree {
+  min-width: 0; overflow-x: auto;
+  border: 1px solid var(--outline-soft); border-radius: var(--r-card);
+  background: var(--surface); padding: 24px 22px;
+}
+.tree pre { margin: 0; font-size: 12.5px; line-height: 1.9; white-space: pre; color: var(--text-dim); }
+.tree pre b { color: var(--text); font-weight: 500; }
+.tree pre i { color: var(--accent); font-style: normal; }
+.tree pre s { color: var(--outline); text-decoration: none; }
+
+.notes { display: grid; gap: 12px; }
+.note {
+  min-width: 0;
+  border: 1px solid var(--outline-soft); border-radius: var(--r-card);
+  background: var(--surface); padding: 20px 22px;
+  transition: border-color var(--std) var(--ease);
+}
+.note:hover { border-color: var(--outline); }
+.note h4 { font-size: 14.5px; }
+.note p { margin-top: 9px; font-size: 14px; color: var(--text-dim); }
+.note p code { font-size: 12.5px; color: var(--text); }
+
+/* ---------- reply style ---------- */
+.reply-compare { margin-top: 48px; display: grid; gap: 14px; grid-template-columns: 1fr; }
+@media (min-width: 900px) { .reply-compare { grid-template-columns: 1fr 1fr; } }
+.reply-panel {
+  min-width: 0; border: 1px solid var(--outline-soft); border-radius: var(--r-card);
+  background: var(--surface); padding: 22px 24px;
+}
+.reply-panel.good { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.reply-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.reply-head h4 { font-size: 14px; }
+.reply-head span { font-family: var(--mono); font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+.reply-q { margin-top: 14px; font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+.reply-body { margin-top: 12px; font-size: 14.5px; color: var(--text-dim); line-height: 1.65; }
+.reply-body p + p { margin-top: 9px; }
+.reply-body b { color: var(--text); font-weight: 560; }
+.reply-metric {
+  margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--outline-soft);
+  font-family: var(--mono); font-size: 11.5px; color: var(--text-dim);
+}
+.reply-panel.good .reply-metric { color: var(--accent); }
+
+.rules { margin-top: 32px; display: grid; gap: 0 32px; grid-template-columns: 1fr; }
+@media (min-width: 720px) { .rules { grid-template-columns: 1fr 1fr; } }
+.rule { min-width: 0; border-top: 1px solid var(--outline-soft); padding: 13px 0; }
+.rule b { display: block; font-size: 14px; font-weight: 560; }
+.rule span { display: block; margin-top: 3px; font-size: 13.5px; color: var(--text-dim); }
+.rule code { font-size: 12.5px; color: var(--text); }
+
+.spine-note > * + * { margin-top: 13px; }
+.spine-note pre {
+  margin: 0; padding: 12px 14px; overflow-x: auto;
+  background: var(--surface); border: 1px solid var(--outline-soft); border-radius: var(--r-chip);
+  font-size: 12px; line-height: 1.85; color: var(--text-dim);
+}
+.spine-note pre b { color: var(--text); font-weight: 400; }
+
+/* ---------- cases ---------- */
+.cases { margin-top: 52px; display: grid; gap: 18px; }
+.case {
+  border: 1px solid var(--outline-soft); border-radius: var(--r-card);
+  background: var(--surface); overflow: hidden;
+}
+.case-top { padding: 26px 28px 22px; display: grid; gap: 18px; grid-template-columns: 1fr; }
+@media (min-width: 900px) { .case-top { grid-template-columns: 0.9fr 1.1fr; gap: 40px; } }
+.case-tag { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.case h3 { margin-top: 14px; font-size: 21px; }
+.case-what { margin-top: 12px; color: var(--text-dim); font-size: 14.5px; }
+.case-trace { display: grid; gap: 0; align-content: start; }
+.trace-step {
+  display: grid; grid-template-columns: 88px 1fr; gap: 16px;
+  padding: 11px 0; border-top: 1px solid var(--outline-soft);
+  font-size: 14px;
+}
+.trace-step:first-child { border-top: none; padding-top: 0; }
+.trace-who { font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; color: var(--accent); padding-top: 3px; }
+.trace-who.muted { color: var(--text-dim); }
+.trace-what { color: var(--text-dim); }
+.trace-what b { color: var(--text); font-weight: 560; }
+.case-foot {
+  padding: 16px 28px; border-top: 1px solid var(--outline-soft);
+  background: var(--surface-2); font-size: 13.5px; color: var(--text-dim);
+}
+.case-foot b { color: var(--text); font-weight: 560; }
+
+/* ---------- setup ---------- */
+.steps { margin-top: 48px; display: grid; gap: 14px; }
+@media (min-width: 900px) { .steps { grid-template-columns: 1fr 1fr; } }
+/* min-width:0 stops a grid item from being widened by its own scrollable <pre> */
+.step { min-width: 0; border: 1px solid var(--outline-soft); border-radius: var(--r-card); background: var(--surface); padding: 24px 26px; }
+.step h4 { font-size: 16px; }
+.step p { margin-top: 10px; font-size: 14.5px; color: var(--text-dim); }
+.step pre {
+  margin-top: 16px; padding: 14px 16px; overflow-x: auto;
+  background: var(--surface-2); border: 1px solid var(--outline-soft);
+  border-radius: var(--r-chip); font-size: 12.5px; line-height: 1.8; color: var(--text-dim);
+}
+.step pre b { color: var(--text); font-weight: 400; }
+
+/* ---------- close + footer ---------- */
+.close { padding-block: 116px; text-align: center; border-top: 1px solid var(--outline-soft); }
+.close h2 { font-size: clamp(26px, 3.4vw, 40px); max-width: 20ch; margin-inline: auto; }
+.close p { margin-top: 18px; color: var(--text-dim); max-width: 54ch; margin-inline: auto; font-size: 16.5px; }
+.close .cta-row { justify-content: center; }
+
+.foot { border-top: 1px solid var(--outline-soft); padding-block: 34px; }
+.foot-in { display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; align-items: center; font-size: 13px; color: var(--text-dim); }
+.foot a { text-decoration: none; }
+.foot a:hover { color: var(--text); }
+
+/* ---------- reveal ----------
+   Scoped under html.js-anim, which the head script adds only when scripting,
+   IntersectionObserver, and no reduced-motion preference are all present.
+   Without that class every element stays visible: content is never hidden by
+   an animation that may not run. */
+.js-anim .rv { opacity: 0; transform: translateY(18px); transition: opacity var(--slow) var(--ease), transform var(--slow) var(--ease); }
+.js-anim .rv.is-in { opacity: 1; transform: none; }
+.js-anim .rv-s > * { opacity: 0; transform: translateY(14px); transition: opacity 460ms var(--ease), transform 460ms var(--ease); }
+.js-anim .rv-s.is-in > * { opacity: 1; transform: none; }
+.js-anim .rv-s.is-in > *:nth-child(1) { transition-delay: 0ms; }
+.js-anim .rv-s.is-in > *:nth-child(2) { transition-delay: 60ms; }
+.js-anim .rv-s.is-in > *:nth-child(3) { transition-delay: 120ms; }
+.js-anim .rv-s.is-in > *:nth-child(4) { transition-delay: 180ms; }
+.js-anim .rv-s.is-in > *:nth-child(5) { transition-delay: 240ms; }
+.js-anim .rv-s.is-in > *:nth-child(6) { transition-delay: 300ms; }
+.js-anim .rv-s.is-in > *:nth-child(7) { transition-delay: 360ms; }
+.js-anim .rv-s.is-in > *:nth-child(8) { transition-delay: 420ms; }
+</style>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="shell nav-in">
+    <span class="brand">Agent workflow <span class="brand-sub">for Claude Code</span></span>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#flow" class="keep">Flow</a>
+      <a href="#roster">Roster</a>
+      <a href="#gates">Gates</a>
+      <a href="#spine">Spine</a>
+      <a href="#replies">Replies</a>
+      <a href="#layout">Files</a>
+      <a href="#cases">Cases</a>
+      <a href="#setup" class="keep">Setup</a>
+      <button class="toggle" id="themeToggle" type="button" aria-label="Switch colour theme">
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ================= HERO ================= -->
+<section class="hero">
+  <div class="shell hero-grid">
+    <div class="rv">
+      <span class="eyebrow">Claude Code at team scale</span>
+      <h1>One phase, one review, <em>nothing ships unapproved.</em></h1>
+      <p class="sub">A Claude Code pipeline: parallel sonnet waves, a bash gate script, one opus review before every PR.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#flow">
+          See the flow
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a class="btn btn-ghost" href="#setup">Copy the setup</a>
+      </div>
+    </div>
+
+    <div class="delta rv">
+      <div class="delta-row">
+        <div class="delta-key"><b>One pipeline per task</b><span>what most setups do</span></div>
+        <div class="dots" aria-hidden="true">
+          <i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i>
+          <i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i>
+          <i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i>
+        </div>
+        <p class="delta-cap">A 5-task phase cost 25 agent contexts nominally, 30 to 35 once fix rounds respawned fresh agents. Wall clock around 8 hours.</p>
+      </div>
+      <div class="delta-row">
+        <div class="delta-key"><b>One pipeline per phase</b><span>what this page describes</span></div>
+        <div class="dots" aria-hidden="true">
+          <i class="dot on"></i><i class="dot on"></i><i class="dot on"></i><i class="dot on"></i><i class="dot on"></i><i class="dot on"></i><i class="dot on"></i>
+        </div>
+        <p class="delta-cap">The same phase costs 6 to 8 contexts: 5 implementors, 1 review, 0 or 1 docs pass. Fixes are continuations. Wall clock around 2 hours.</p>
+      </div>
+      <p class="delta-foot">Measured on one production codebase across real phases. Your numbers will differ; the shape of the difference is the point.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FLOW ================= -->
+<section class="band" id="flow">
+  <div class="shell">
+    <div class="head-block rv">
+      <h2 class="h2">A phase is a branch is a PR</h2>
+      <p class="lede">Tasks are commits. Independent tasks run concurrently. A bash script certifies each wave the moment it integrates, and judgment is spent once, on the combined diff, right before you read the PR.</p>
+    </div>
+
+    <figure class="figure-wrap rv" id="flowFig">
+      <!-- viewBox is cropped to the ink, not to round numbers. Ink spans x 20..1036
+           and y 44..449, so this box leaves an equal 12 of air left and right and an
+           equal 22 above and below. -->
+      <svg viewBox="8 22 1040 446" role="img" aria-labelledby="flowTitle flowDesc">
+        <title id="flowTitle">Phase pipeline</title>
+        <desc id="flowDesc">The orchestrator plans a phase and dispatches two to three concurrent sonnet implementors. A gate script checks every task. Gate failures return to the same implementor. Touching a spine file triggers an instant opus review. At phase end one opus review reads the combined diff, an optional docs pass runs, and the user approves the commit and PR.</desc>
+
+        <!-- wave grouping -->
+        <rect class="d-group" x="200" y="140" width="180" height="216" rx="10"/>
+        <text class="d-edge" x="290" y="112" text-anchor="middle">wave: 2 to 3 concurrent</text>
+        <text class="d-edge" x="290" y="126" text-anchor="middle">scoped checks per task</text>
+
+        <!-- connectors: orchestrator to wave -->
+        <path class="d-line d-flow" pathLength="1" d="M176 248 C 190 248 188 180 200 180"/>
+        <path class="d-line d-flow" pathLength="1" d="M176 248 L 200 248"/>
+        <path class="d-line d-flow" pathLength="1" d="M176 248 C 190 248 188 316 200 316"/>
+        <!-- wave to gates -->
+        <path class="d-line d-flow" pathLength="1" d="M380 180 C 400 180 400 248 420 248"/>
+        <path class="d-line d-flow" pathLength="1" d="M380 248 L 420 248"/>
+        <path class="d-line d-flow" pathLength="1" d="M380 316 C 400 316 400 248 420 248"/>
+        <!-- gates to phase review -->
+        <path class="d-line d-flow" pathLength="1" d="M568 248 L 620 248"/>
+        <!-- gates up to instant review -->
+        <path class="d-line-accent d-flow" pathLength="1" d="M494 200 L 494 120 C 494 96 520 82 560 82 L 620 82"/>
+        <!-- instant review back to wave -->
+        <path class="d-line-back" d="M620 60 L 222 60 C 214 60 210 66 210 76 L 210 140"/>
+        <!-- gate failure back to wave -->
+        <path class="d-line-back" d="M494 296 L 494 414 C 494 424 486 428 476 428 L 306 428 C 296 428 292 422 292 412 L 292 356"/>
+        <!-- phase review to docs keeper -->
+        <path class="d-line d-flow" pathLength="1" d="M708 296 L 708 352"/>
+        <!-- phase review to approval -->
+        <path class="d-line d-flow" pathLength="1" d="M796 248 L 856 248"/>
+        <!-- docs keeper to approval -->
+        <path class="d-line d-flow" pathLength="1" d="M796 386 C 900 386 900 340 946 340 L 946 296"/>
+
+        <!-- arrowheads -->
+        <g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" color="var(--outline)">
+          <path d="M414 243l6 5-6 5"/><path d="M614 243l6 5-6 5"/><path d="M850 243l6 5-6 5"/>
+          <path d="M703 346l5 6 5-6"/><path d="M941 302l5-6 5 6"/>
+          <path d="M194 175l6 5-6 5"/><path d="M194 243l6 5-6 5"/><path d="M194 311l6 5-6 5"/>
+        </g>
+        <g fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M614 77l6 5-6 5"/>
+        </g>
+        <g fill="none" stroke="var(--outline)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M205 134l5 6 5-6"/><path d="M287 362l5-6 5 6"/>
+        </g>
+
+        <!-- edge labels -->
+        <text class="d-edge-accent" x="506" y="146">spine touched</text>
+        <text class="d-edge" x="316" y="52">findings return to the same agent</text>
+        <text class="d-edge" x="486" y="446" text-anchor="middle">gate failure: same agent continues, context intact</text>
+        <text class="d-edge" x="718" y="330">only if triggered</text>
+
+        <!-- orchestrator -->
+        <!-- Text blocks are optically centred, not eyeballed. For every box:
+             title baseline T, sub baselines T+21 / T+37 / T+53; the visual block
+             runs from T-10 (title cap top) to lastBaseline+3 (mono descender),
+             and T is chosen so the air above equals the air below. -->
+
+        <rect class="d-box-accent" x="20" y="200" width="156" height="96" rx="8"/>
+        <text class="d-title" x="38" y="227">Orchestrator</text>
+        <text class="d-sub" x="38" y="248">main session</text>
+        <text class="d-sub" x="38" y="264">plans, routes,</text>
+        <text class="d-sub" x="38" y="280">integrates, accepts</text>
+
+        <!-- implementors: 2 lines in a 56-tall box, 12 of air each side -->
+        <rect class="d-box" x="212" y="152" width="156" height="56" rx="8"/>
+        <text class="d-title" x="228" y="176">Implementor</text>
+        <text class="d-sub" x="228" y="195">sonnet-5 · task 1</text>
+        <rect class="d-box" x="212" y="220" width="156" height="56" rx="8"/>
+        <text class="d-title" x="228" y="244">Implementor</text>
+        <text class="d-sub" x="228" y="263">sonnet-5 · task 2</text>
+        <rect class="d-box" x="212" y="288" width="156" height="56" rx="8"/>
+        <text class="d-title" x="228" y="312">Implementor</text>
+        <text class="d-sub" x="228" y="331">sonnet-5 · task 3</text>
+
+        <!-- gates -->
+        <rect class="d-box-accent" x="420" y="200" width="148" height="96" rx="8"/>
+        <text class="d-title" x="438" y="227">gates.sh</text>
+        <text class="d-sub" x="438" y="248">orchestrator-owned</text>
+        <text class="d-sub" x="438" y="264">serial, one writer</text>
+        <text class="d-sub" x="438" y="280">14 checks, seconds</text>
+
+        <!-- instant review: 3 lines in a 76-tall box, 13 of air each side -->
+        <rect class="d-box" x="620" y="44" width="176" height="76" rx="8"/>
+        <text class="d-title" x="638" y="69">Instant review</text>
+        <text class="d-sub" x="638" y="90">opus-5 · one task</text>
+        <text class="d-sub" x="638" y="106">mid-phase, blocking</text>
+
+        <!-- phase review -->
+        <rect class="d-box" x="620" y="200" width="176" height="96" rx="8"/>
+        <text class="d-title" x="638" y="227">Phase review</text>
+        <text class="d-sub" x="638" y="248">opus-5 · combined diff</text>
+        <text class="d-sub" x="638" y="264">cross-task coherence</text>
+        <text class="d-sub" x="638" y="280">reports, never fixes</text>
+
+        <!-- docs keeper: 2 lines in a 68-tall box, 17 of air each side -->
+        <rect class="d-box-dash" x="620" y="352" width="176" height="68" rx="8"/>
+        <text class="d-title" x="638" y="381">Docs keeper</text>
+        <text class="d-sub" x="638" y="402">sonnet-5 · conditional</text>
+
+        <!-- approval -->
+        <rect class="d-box-accent" x="856" y="200" width="180" height="96" rx="8"/>
+        <text class="d-title" x="874" y="227">You approve</text>
+        <text class="d-sub" x="874" y="248">stage + draft message</text>
+        <text class="d-sub" x="874" y="264">then commit, then PR</text>
+        <text class="d-sub" x="874" y="280">target branch: develop</text>
+      </svg>
+    </figure>
+
+    <div class="legend rv">
+      <span><i class="acc"></i>opus judgment</span>
+      <span><i></i>hand-off</span>
+      <span><i class="dash"></i>dashed: return path, or a step that runs only when a trigger fires</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ROSTER ================= -->
+<section class="band" id="roster">
+  <div class="shell">
+    <div class="head-block rv">
+      <h2 class="h2">Cheap generation, expensive judgment</h2>
+      <p class="lede">Specialists divide by pipeline stage, not by discipline. Sonnet is the floor for every subagent and haiku is never used. The orchestrator is whatever model you started the session with.</p>
+    </div>
+
+    <div class="bento rv-s">
+      <article class="cell c-orc">
+        <div class="cell-h"><h3>Orchestrator</h3><span class="pill">main session</span></div>
+        <p>The interactive session itself. It has no agent file because it is you and Claude in the terminal. It derives the task dependency graph, routes work, integrates waves, appends changelog entries serially, and does final acceptance against each task's criteria.</p>
+        <div class="cell-never"><b>Never:</b> commits or opens a PR on its own. It stages the work and drafts the message, then stops.</div>
+      </article>
+
+      <article class="cell c-imp">
+        <div class="cell-h"><h3>Implementor</h3><span class="pill acc">sonnet-5</span></div>
+        <p>Executes exactly one scoped task per dispatch: code and tests in the same change set, verified with scoped checks only.</p>
+        <ul class="cell-list">
+          <li>Re-reads the contract files every dispatch, never from memory</li>
+          <li>Runs its own area typecheck and the tests it touched, not the full gate script</li>
+          <li>Reports that output verbatim, including failures it could not fix</li>
+          <li>Reports its changelog text when it is part of a wave</li>
+        </ul>
+        <div class="cell-never"><b>Never:</b> marks its own work verified, expands scope, or runs a git write command.</div>
+      </article>
+
+      <article class="cell c-rev">
+        <div class="cell-h"><h3>Reviewer</h3><span class="pill acc">opus-5</span></div>
+        <p>One merged reviewer for code and design. It reads the contract files at review time rather than carrying an inline copy, because inline copies are what rot.</p>
+        <ul class="cell-list">
+          <li>Grep and Bash exist so findings are evidence, not impressions</li>
+          <li>A claim about a value is checked in the source file, not the doc</li>
+          <li>Output is blocker, should-fix, nit, each with file:line</li>
+        </ul>
+        <div class="cell-never"><b>Never:</b> has Write or Edit. Reviewers report, they do not fix.</div>
+      </article>
+
+      <article class="cell c-gat">
+        <div class="cell-h"><h3>gates.sh</h3><span class="pill">zero agents</span></div>
+        <p>A bash script replaced the QA agent entirely. It costs no tokens and finishes in seconds. The orchestrator owns it and runs it serially at each wave integration, after interactive fixes, and at phase close. Two-layer verification survives: the layers are now script plus orchestrator acceptance, and an implementor still cannot certify itself.</p>
+      </article>
+
+      <article class="cell c-doc">
+        <div class="cell-h"><h3>Docs keeper</h3><span class="pill acc">sonnet-5</span></div>
+        <p>Runs at phase end only when a deterministic trigger fires, so it is usually skipped. Its default action on a CLAUDE.md file is deletion, not addition: those files carry rules and traps, never current state.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ================= GATES ================= -->
+<section class="band" id="gates">
+  <div class="shell">
+    <div class="head-block rv">
+      <h2 class="h2">Broken is known in seconds. Wrong can wait for review.</h2>
+      <p class="lede">Every guardrail that must not depend on model attention became a grep. The script prints one line per check and exits non-zero if any of them fail, so the next wave never builds on broken code.</p>
+      <p class="lede">It is deliberately single-writer. Concurrent runs from a parallel wave fight over the same containers, ports, and test database, and cross-contaminate each other's results. A lock directory refuses a second run, and only the orchestrator starts one.</p>
+    </div>
+
+    <div class="gates-grid">
+      <div class="term-stack rv">
+      <div class="term">
+        <div class="term-bar">
+          <span>./scripts/gates.sh --web</span>
+        </div>
+        <div class="term-body">
+<pre><span class="ok">PASS</span> web-typecheck
+<span class="ok">PASS</span> web-unit
+<span class="ok">PASS</span> web-unit-tz
+<span class="ok">PASS</span> e2e-smoke
+<span class="ok">PASS</span> changelog-presence
+<span class="ok">PASS</span> guardrail-route-exists
+<span class="ok">PASS</span> guardrail-banned-dep
+<span class="ok">PASS</span> guardrail-pii-redacted
+<span class="ok">PASS</span> guardrail-local-only-untracked
+<span class="ok">PASS</span> guardrail-vendor-patches
+<span class="warn">SPINE TOUCHED - instant review required:</span>
+<span class="dim">    src/lib/permissions.ts</span>
+<span class="no">FAIL</span> spine-review - spine files touched but no opus
+     review recorded (pass --performed-review=opus
+     after the review)
+<span class="dim">----------------------------------------</span>
+1 GATE(S) FAILED</pre>
+        </div>
+      </div>
+
+      <div class="term">
+        <div class="term-bar">
+          <span>./scripts/gates.sh --api&nbsp;&nbsp;# while a run is active</span>
+        </div>
+        <div class="term-body">
+<pre><span class="no">FAIL</span> gates-lock - another gates.sh run is active
+     (/tmp/gates.lock). Gates are single-writer:
+     wait for it, or rmdir a stale lock.</pre>
+        </div>
+      </div>
+      </div>
+
+      <div class="gate-groups rv-s">
+        <div class="gate-group">
+          <h4>Compile and test <span>conditional on the diff</span></h4>
+          <div class="gate-items">
+            <code>api-typecheck</code><code>api-unit</code><code>web-typecheck</code><code>web-unit</code><code>web-unit-tz</code><code>e2e-smoke</code>
+          </div>
+          <p class="gate-why">Point the test gate at an isolated database, never your development one, or a parallel wave will corrupt the data you are looking at. Then run at least one suite a second time under a hostile condition: a different timezone, a non-English locale, a shifted clock. A suite that only ever runs in one environment is blind to every bug that lives in another.</p>
+        </div>
+
+        <div class="gate-group">
+          <h4>Standing guardrails <span>always, every task</span></h4>
+          <div class="gate-items">
+            <code>changelog-presence</code><code>guardrail-route-exists</code><code>guardrail-banned-dep</code><code>guardrail-pii-redacted</code><code>guardrail-local-only-untracked</code><code>guardrail-vendor-patches</code>
+          </div>
+          <p class="gate-why">Each is one project invariant reduced to a grep. Write one for every rule you have caught yourself repeating in a prompt: a dependency that must never come back, a route that must never be deleted, a field that must never reach an export, a vendored file whose local edits must stay countable.</p>
+        </div>
+
+        <div class="gate-group">
+          <h4>Boundary <span>tripwire and lock</span></h4>
+          <div class="gate-items"><code>spine-review</code><code>gates-lock</code></div>
+          <p class="gate-why">The spine check matches the diff against your spine list and refuses to pass until a review has actually been recorded for that task. The lock is a plain <span class="path">mkdir</span> on a directory in the temp dir, released by an exit trap; a stale one is cleared with <span class="path">rmdir</span>.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SPINE ================= -->
+<section class="band" id="spine">
+  <div class="shell">
+    <div class="head-block rv">
+      <h2 class="h2">The spine is where one mistake breaks several surfaces</h2>
+      <p class="lede">Every codebase has a small set of files that many screens quietly sit on. Break one and three things fail at once. A change confined to a single screen can wait for the phase review. A change to the spine gets expensive eyes the moment it lands.</p>
+      <p class="lede">The membership test is one sentence: if a single mistake in this file can break more than one surface, it belongs on the list. Keep the list short enough that touching it stays rare, or the instant review stops being instant.</p>
+    </div>
+
+    <div class="spine-grid rv-s">
+      <div class="spine-cell">
+        <h4>Ordering and sequencing</h4>
+        <p class="gate-why">Rank or position logic shared by a list, a board, and a timeline. Reorder arithmetic is easy to get subtly wrong and impossible to see from inside one view.</p>
+        <ul>
+          <li>lib/ordering.ts</li>
+          <li>routes/items.ts</li>
+        </ul>
+      </div>
+      <div class="spine-cell">
+        <h4>Serialization contracts</h4>
+        <p class="gate-why">Dates, times, money, IDs. Anywhere a writer and a reader must agree on a format. These fail silently, and often only in some environments.</p>
+        <ul>
+          <li>lib/dates.ts</li>
+          <li>components/DateField.tsx</li>
+        </ul>
+      </div>
+      <div class="spine-cell">
+        <h4>Fetch and mutation layer</h4>
+        <p class="gate-why">The hook or client every screen calls, together with its optimistic updates and its rollback path. A missing rollback shows up as data that silently reverts.</p>
+        <ul>
+          <li>lib/queries.ts</li>
+        </ul>
+      </div>
+      <div class="spine-cell">
+        <h4>Adapters to a view engine</h4>
+        <p class="gate-why">The translation between your data model and whatever board, chart, or grid renders it. Rename one field here and the render breaks while the type check stays green.</p>
+        <ul>
+          <li>components/board/adapter.ts</li>
+          <li>components/chart/mapper.ts</li>
+        </ul>
+      </div>
+      <div class="spine-cell">
+        <h4>Vendored or forked code</h4>
+        <p class="gate-why">Anything copied in from upstream. Re-pulling discards your local edits without a word unless something counts them, so mark every sanctioned edit and assert the count in a gate.</p>
+        <ul>
+          <li>components/vendor/</li>
+        </ul>
+      </div>
+      <div class="spine-cell">
+        <h4>Auth, schema, and infra</h4>
+        <p class="gate-why">Permission checks, migrations, container and environment config. The blast radius is the whole application rather than one screen.</p>
+        <ul>
+          <li>lib/permissions.ts</li>
+          <li>prisma/schema.prisma + migrations</li>
+          <li>compose.yml, .env, nginx.conf</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="spine-note rv">Enforcement is mechanical, not model judgment. The script matches <code>git diff --name-only</code> against your list and fails the task unless <code>--performed-review=opus</code> is passed after a real review. Discretion routes the work; grep guards the boundary.</p>
+  </div>
+</section>
+
+
+<!-- ================= LAYERS ================= -->
+<section class="band">
+  <div class="shell">
+    <div class="head-block rv">
+      <h2 class="h2">Every rule lives in one place and arrives four ways</h2>
+      <p class="lede">Duplication is what rotted the first setup, so no product guardrail is ever copied into an agent file. Delivery is redundant instead: the same rule reaches an agent through automatic context, its own role file, the dispatch brief, and finally a script that does not care whether the model was paying attention.</p>
+    </div>
+
+    <div class="layers rv-s">
+      <div class="layer">
+        <span class="layer-name">Auto-loaded contract</span>
+        <span class="layer-body">Subagents receive project CLAUDE.md automatically, so product rules live only there. Guardrails are user-owned and no agent may edit that block.</span>
+        <span class="layer-where">CLAUDE.md + area files</span>
+      </div>
+      <div class="layer">
+        <span class="layer-name">Role guardrails</span>
+        <span class="layer-body">Agent files carry only what the role may and may not do. Product facts embedded here proved able to drift, so a docs duty now syncs paths and commands that appear in them.</span>
+        <span class="layer-where">.claude/agents/*.md</span>
+      </div>
+      <div class="layer">
+        <span class="layer-name">Dispatch brief</span>
+        <span class="layer-body">The orchestrator passes the task verbatim with its paths and acceptance criteria, and flags which guardrails are hot for this specific change. A flagged rule beats a buried rule.</span>
+        <span class="layer-where">per task, at spawn time</span>
+      </div>
+      <div class="layer">
+        <span class="layer-name">Mechanical enforcement</span>
+        <span class="layer-body">Anything that must never depend on attention becomes a standing check. If a model forgets, the script does not.</span>
+        <span class="layer-where">.claude/scripts/gates.sh</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= REPLY STYLE ================= -->
+<section class="band" id="replies">
+  <div class="shell">
+    <div class="head-block rv">
+      <h2 class="h2">Constrain how the session talks back to you</h2>
+      <p class="lede">The pipeline decides what the agents do. This decides what reaching you costs. A model that answers a yes-or-no question in four paragraphs is not being thorough, it is moving the reading work onto you. Write the rules down once and deliver them at session start.</p>
+    </div>
+
+    <div class="reply-compare rv-s">
+      <div class="reply-panel">
+        <div class="reply-head"><h4>Unconstrained</h4><span>the default</span></div>
+        <p class="reply-q">is my branch behind?</p>
+        <div class="reply-body">
+          <p>Looking at the current state of the repository, it seems that your local develop branch may have fallen somewhat behind the remote. You might want to consider running a pull or a rebase before you continue editing, particularly since there appear to be changes in files that could be relevant to your work.</p>
+        </div>
+        <p class="reply-metric">52 words · 0 numbers · 6 hedges</p>
+      </div>
+
+      <div class="reply-panel good">
+        <div class="reply-head"><h4>Constrained</h4><span>eight rules</span></div>
+        <p class="reply-q">is my branch behind?</p>
+        <div class="reply-body">
+          <p><b>Yes.</b> Local <code>develop</code> is 17 commits behind <code>origin/develop</code>.</p>
+          <p>Hot files: <code>schema.prisma</code>, <code>queries.ts</code>.</p>
+          <p>Rebase before you edit. Want the command?</p>
+        </div>
+        <p class="reply-metric">17 words · 1 number · 0 hedges</p>
+      </div>
+    </div>
+
+    <div class="rules rv-s">
+      <div class="rule"><b>Answer first</b><span>Give the answer in one sentence. Add detail only when asked for it.</span></div>
+      <div class="rule"><b>Twenty words a sentence</b><span>One idea per sentence. Long sentences bury the idea inside them.</span></div>
+      <div class="rule"><b>Lists, not paragraphs</b><span>Five items maximum. A sixth item means the list is really two lists.</span></div>
+      <div class="rule"><b>Exact identifiers</b><span>Copy a path, a flag, a symbol. Never paraphrase one into prose.</span></div>
+      <div class="rule"><b>No hedges</b><span>State the fact, or write <code>unknown</code>. Nothing sits between those two.</span></div>
+      <div class="rule"><b>Numbers, not adjectives</b><span>Write "17 commits behind", never "quite far behind".</span></div>
+      <div class="rule"><b>Offer the detail</b><span>Ask "want the reasoning?" instead of pasting it unrequested.</span></div>
+      <div class="rule"><b>Answer before planning</b><span>A question gets an answer. A plan waits until you ask for one.</span></div>
+    </div>
+
+    <div class="spine-note rv">
+      <p><b>Two constraints make or break this.</b> Scope the rules to conversation only: they must never reach code, comments, commit messages, or any file you write. And do not put them in a CLAUDE.md. Every CLAUDE.md in the hierarchy reaches subagents, where "answer first" would strip the file:line evidence out of a reviewer's findings. A subagent's output is data for the orchestrator, not chat for a human, and it never gets a follow-up turn to supply the detail you cut.</p>
+      <p>A <code>SessionStart</code> hook fires for the main session alone, which is exactly the scope you want. Keep the rules in a file you can edit without touching the hook.</p>
+<pre><b>.claude/reply-style.md</b>         the rules, edit here
+<b>.claude/hooks/reply-style.js</b>   prints them as additionalContext
+<b>.claude/settings.local.json</b>    registers the SessionStart hook</pre>
+      <p>Verify the scope yourself rather than trusting a diagram: start a fresh session, spawn a subagent, and ask it to quote the rules back. Anything that reaches it is in the wrong file.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ON-DISK LAYOUT ================= -->
+<section class="band" id="layout">
+  <div class="shell">
+    <div class="head-block rv">
+      <h2 class="h2">Where the workflow actually sits</h2>
+      <p class="lede">One tracked file, and a whole workflow layer that never leaves the machine. The green paths are the four pieces you would carry into another repository.</p>
+    </div>
+
+    <div class="layout-grid">
+      <div class="tree rv">
+<pre>your-project/
+├─ <b>CLAUDE.md</b>                  <s>guardrails, conventions, traps</s>
+├─ <b>CHANGELOG.md</b>               <s>the only tracked doc here</s>
+├─ api/<b>CLAUDE.md</b>              <s>routing, data access, validation</s>
+├─ web/<b>CLAUDE.md</b>              <s>fetch hooks, styling</s>
+├─ e2e/<b>CLAUDE.md</b>              <s>browser-test conventions</s>
+│
+├─ <b>.claude/</b>                   <s>gitignored, machine-local</s>
+│  ├─ <i>agents/</i>
+│  │  ├─ implementor.md         <s>sonnet, all tools</s>
+│  │  ├─ reviewer.md            <s>opus, no write tools</s>
+│  │  └─ docs-keeper.md         <s>sonnet, docs only</s>
+│  ├─ <i>scripts/</i>
+│  │  └─ gates.sh               <s>your checks, single writer</s>
+│  ├─ <i>hooks/</i>
+│  │  └─ reply-style.js         <s>SessionStart context</s>
+│  ├─ reply-style.md            <s>lives here, not in ~/.claude</s>
+│  ├─ <i>settings.local.json</i>       <s>permissions, hook registration</s>
+│  └─ worktrees/                <s>isolation for overlapping waves</s>
+│
+└─ docs/                        <s>gitignored</s>
+   ├─ ideas/                    <s>raw</s>
+   ├─ plans/                    <s>approved specs</s>
+   ├─ prompts/                  <s>dispatch briefs</s>
+   ├─ reference/                <s>living reference</s>
+   ├─ archive/                  <s>superseded, the only rollback</s>
+   ├─ DESIGN.md                 <s>binding for visual work</s>
+   ├─ CONFIGURATION.md          <s>env, ports, deploy</s>
+   └─ ISSUES.md                 <s>broken or deferred</s></pre>
+      </div>
+
+      <div class="notes rv-s">
+        <div class="note">
+          <h4>Decide what is public before you write it</h4>
+          <p>In this setup only CHANGELOG.md is tracked; every CLAUDE.md, all of <code>.claude/</code>, and all of <code>docs/</code> are gitignored. Whatever you choose, make it a gate rather than a habit: one check that fails the task if git starts tracking something that should have stayed local.</p>
+        </div>
+        <div class="note">
+          <h4>A local layer does not travel</h4>
+          <p>Cloning the repository on a second machine gives you none of it. Copy <code>agents/</code>, <code>scripts/</code>, <code>hooks/</code>, and the settings file by hand. Track the layer instead if your team should share it; the trade is that agent files then live in the repository history.</p>
+        </div>
+        <div class="note">
+          <h4>Know what reaches a subagent</h4>
+          <p>Every CLAUDE.md in the hierarchy does, which is why product rules belong only there. A <code>SessionStart</code> hook's added context does not: it fires for the main session alone. Verify this yourself before you rely on it either way.</p>
+        </div>
+        <div class="note">
+          <h4>Planning moves one direction</h4>
+          <p>An idea becomes a plan, a plan becomes a dispatch brief, and the set moves to <code>archive/</code> when the feature ships. Keep specs in one folder no matter which tool wrote them, or you will end up with a directory per tool and no single place to look.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CASES ================= -->
+<section class="band" id="cases">
+  <div class="shell">
+    <div class="head-block rv">
+      <span class="eyebrow">Where each layer earns its cost</span>
+      <h2 class="h2" style="margin-top:16px">Three things a gate script cannot catch</h2>
+      <p class="lede">Gates are cheap and fast, which is exactly why they are the wrong tool for these. Each pattern below is why one expensive reader stays in the pipeline.</p>
+    </div>
+
+    <div class="cases rv-s">
+
+      <article class="case">
+        <div class="case-top">
+          <div>
+            <div class="case-tag">
+              <span class="pill acc">blind suite</span>
+              <span class="pill">serialization</span>
+            </div>
+            <h3>The suite is structurally unable to see it</h3>
+            <p class="case-what">A writer and a reader disagree about a format: local time against UTC, a locale-dependent number, a currency rounded in two places. The bug only exists outside the environment your tests run in, so the suite is green and stays green.</p>
+          </div>
+          <div class="case-trace">
+            <div class="trace-step"><span class="trace-who">pattern</span><span class="trace-what">Every test passes. The defect is real and reproducible, just never in the one timezone, locale, or clock your runner uses.</span></div>
+            <div class="trace-step"><span class="trace-who">gates miss it</span><span class="trace-what">A gate can only fail on a condition it actually runs. <b>Adding more assertions in the same environment finds nothing.</b></span></div>
+            <div class="trace-step"><span class="trace-who">review sees it</span><span class="trace-what">A reader asks which environment the assertion is true in, rather than whether it passed.</span></div>
+            <div class="trace-step"><span class="trace-who muted">fence it</span><span class="trace-what">Run one suite a second time under the hostile condition, and put that run in the gate script, not only in CI. A fix without a failing-environment test is not a fix.</span></div>
+          </div>
+        </div>
+        <div class="case-foot"><b>The rule this produces:</b> when a bug turns out to be invisible to your suite, the deliverable is a new environment for the suite, not just a patch.</div>
+      </article>
+
+      <article class="case">
+        <div class="case-top">
+          <div>
+            <div class="case-tag">
+              <span class="pill acc">false green</span>
+              <span class="pill">test quality</span>
+            </div>
+            <h3>The test passes through an unrelated guard</h3>
+            <p class="case-what">An assertion reads correctly and passes, but for a reason that has nothing to do with the invariant it claims to pin. Delete the behaviour it is supposed to protect and the test still passes.</p>
+          </div>
+          <div class="case-trace">
+            <div class="trace-step"><span class="trace-who">pattern</span><span class="trace-what">The test targets a value the component happens to produce anyway, or waits on a condition that was already true before the action ran.</span></div>
+            <div class="trace-step"><span class="trace-who">gates miss it</span><span class="trace-what">Green is green. A script has no opinion about <b>why</b> an assertion held.</span></div>
+            <div class="trace-step"><span class="trace-who">review sees it</span><span class="trace-what">Reading the test against the behaviour it names. Coverage tools will not do this, and neither will a rerun.</span></div>
+            <div class="trace-step"><span class="trace-who muted">fence it</span><span class="trace-what">Send the finding back to the <b>same agent</b> that wrote the test, context intact. A fresh agent re-derives the whole file and often reproduces the same mistake.</span></div>
+          </div>
+        </div>
+        <div class="case-foot"><b>The rule this produces:</b> a green suite is mechanical evidence, not judgment. Budget one reader who is allowed to distrust it.</div>
+      </article>
+
+      <article class="case">
+        <div class="case-top">
+          <div>
+            <div class="case-tag">
+              <span class="pill acc">unfenced risk</span>
+              <span class="pill">drift</span>
+            </div>
+            <h3>A risk gets created and only written down</h3>
+            <p class="case-what">You vendor a component from upstream, fork a config, or patch a generated file. Everything works. The danger arrives months later, when someone re-pulls and quietly discards the local edits.</p>
+          </div>
+          <div class="case-trace">
+            <div class="trace-step"><span class="trace-who">pattern</span><span class="trace-what">The task ends with a sentence in a doc: remember that this file has local changes. Nobody reads it at the moment it matters.</span></div>
+            <div class="trace-step"><span class="trace-who">gates miss it</span><span class="trace-what">There is no gate yet. The risk was created by this very task, so nothing was watching for it.</span></div>
+            <div class="trace-step"><span class="trace-who">review sees it</span><span class="trace-what">A reviewer treats an unfenced risk as an incomplete task rather than a documentation item.</span></div>
+            <div class="trace-step"><span class="trace-who muted">fence it</span><span class="trace-what">Ship the check with the change. Mark every sanctioned edit, record the count, assert it: <b>a task that creates a drift risk also creates its gate.</b></span></div>
+          </div>
+        </div>
+        <div class="case-foot"><b>The rule this produces:</b> if the follow-up depends on a human remembering, it is not done. Convert it into a grep on the same day.</div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ================= SETUP ================= -->
+<section class="band" id="setup">
+  <div class="shell">
+    <div class="head-block rv">
+      <h2 class="h2">Porting this to your own repo</h2>
+      <p class="lede">Four pieces, in the order they pay off. None of them needs anything beyond Claude Code, a shell, and git.</p>
+    </div>
+
+    <div class="steps rv-s">
+      <div class="step">
+        <h4>Split the contract file by what it is, not by topic</h4>
+        <p>Rules, decisions, and traps go in CLAUDE.md. Current state goes anywhere else. On one real project this cut a dispatch's reading cost from roughly 230 lines to 82 plus one area file, and the deeper reason is that facts rot while rules do not.</p>
+<pre>CLAUDE.md          <b>guardrails, conventions, traps</b>
+CHANGELOG.md       what shipped
+docs/plans/        what is planned
+docs/ISSUES.md     what is broken or deferred</pre>
+      </div>
+
+      <div class="step">
+        <h4>Write the agent files by pipeline stage</h4>
+        <p>Divide by stage, not by discipline. Give each file only its role guardrails, pin the models, and give the reviewer no write tools at all.</p>
+<pre>.claude/agents/
+  <b>implementor.md</b>   model: sonnet, tools: all
+  <b>reviewer.md</b>      model: opus, tools: Read Grep Glob Bash
+  <b>docs-keeper.md</b>   model: sonnet, tools: + Edit Write</pre>
+      </div>
+
+      <div class="step">
+        <h4>Turn your invariants into a script</h4>
+        <p>Anything you would otherwise write as "remember to" becomes a check. One line of output per gate, non-zero exit on any failure, and a test hook so you can prove each gate fails when it should.</p>
+<pre>$ .claude/scripts/gates.sh --web
+$ GATES_DIFF_OVERRIDE=&quot;src/x.ts&quot; \
+    .claude/scripts/gates.sh   <b># prove a gate fires</b></pre>
+      </div>
+
+      <div class="step">
+        <h4>Name your spine, then let grep police it</h4>
+        <p>List the files where one mistake breaks several surfaces at once. Match the diff against that list and refuse to pass until a real review is recorded. This is the one decision that keeps expensive review scarce without leaving the risky code unread.</p>
+<pre>SPINE=&#39;^src/lib/dates\.ts$|^src/lib/queries\.ts$|...&#39;
+git diff --name-only | grep -E &quot;$SPINE&quot;
+  <b>&rarr; instant review required</b></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CLOSE ================= -->
+<section class="close">
+  <div class="shell rv">
+    <h2>The model never decides when it is done</h2>
+    <p>Implementors report facts. The script certifies mechanics. One reviewer applies judgment. Acceptance and every commit stay with the person whose name is on the repository.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#flow">
+        See the flow
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v10M4 9l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="shell foot-in">
+    <span>A working pipeline, not a proposal. Adapt the names; keep the shape.</span>
+    <span class="mono-note">for teams already using Claude Code</span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- theme toggle: writes an explicit attribute, otherwise the OS decides ----
+  // (the initial value is applied by the head script, before first paint)
+  var root = document.documentElement;
+
+  document.getElementById("themeToggle").addEventListener("click", function () {
+    var current = root.getAttribute("data-theme");
+    if (!current) {
+      current = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    var next = current === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("agent-workflow-theme", next); } catch (e) {}
+  });
+
+  // ---- scroll reveal: IntersectionObserver only, no scroll listener ----
+  // The head script already decided whether reveal is safe. If it is not, the
+  // elements were never hidden, so there is nothing to do here.
+  if (!root.classList.contains("js-anim")) { return; }
+
+  var targets = document.querySelectorAll(".rv, .rv-s, #flowFig");
+
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add("is-in");
+      io.unobserve(entry.target);
+    });
+  }, { rootMargin: "0px 0px -12% 0px", threshold: 0.15 });
+
+  Array.prototype.forEach.call(targets, function (el) { io.observe(el); });
+})();
+</script>
+
+</body>
+</html>

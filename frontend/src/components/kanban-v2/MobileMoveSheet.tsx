@@ -1,0 +1,68 @@
+// Copied from the legacy frontend/src/pages/views/ProjectKanban.tsx
+// (MobileMoveSheet lines 1123-1173, pre-T11 cutover) per Architecture
+// Decision 2 (docs/plans/kanban-reui-swap/plan.md): copy, don't extract. The
+// legacy file is gone as of T11 cutover (git history preserves it). Kept as
+// its own file rather than folded into cards.tsx (T8 brief's "or its own
+// small file if cleaner") since it's a sheet/overlay concern, not a card
+// visual, and needs its own column-label list rather than sharing
+// SolvroKanban.tsx's (adapter.ts/commitMapper.ts stay untouched by this
+// task — see plan T8 scope note).
+import type { Task, TaskStatus } from "@/lib/queries";
+
+const COLUMNS: { id: TaskStatus; label: string }[] = [
+  { id: "TODO", label: "To Do" },
+  { id: "IN_PROGRESS", label: "In Progress" },
+  { id: "DONE", label: "Done" },
+];
+
+export function MobileMoveSheet({
+  task,
+  onClose,
+  onMove,
+}: {
+  task: Task;
+  onClose: () => void;
+  onMove: (status: TaskStatus) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-100 flex items-end md:hidden" onMouseDown={onClose}>
+      <div className="absolute inset-0 bg-inverse-surface/40 backdrop-blur-sm" />
+      <div
+        className="relative w-full rounded-t-xl border-t border-outline-variant bg-surface-container p-4"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <p className="mb-1 truncate text-sm font-bold text-on-surface">{task.title}</p>
+        <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+          Move to
+        </p>
+        <ul className="space-y-1">
+          {COLUMNS.map((col) => {
+            const checked = task.status === col.id;
+            return (
+              <li key={col.id}>
+                <button
+                  type="button"
+                  onClick={() => onMove(col.id)}
+                  className={[
+                    "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm",
+                    checked ? "text-primary" : "text-on-surface",
+                  ].join(" ")}
+                >
+                  <span
+                    className={[
+                      "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
+                      checked ? "border-primary bg-primary text-white" : "border-outline-variant",
+                    ].join(" ")}
+                  >
+                    {checked && <span className="material-symbols-outlined text-[11px] leading-none">check</span>}
+                  </span>
+                  {col.label}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}

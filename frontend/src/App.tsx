@@ -1,0 +1,99 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import { AdminGuard } from "@/components/AdminGuard";
+import { AuthGuard } from "@/components/AuthGuard";
+import { ExecutiveGuard } from "@/components/ExecutiveGuard";
+import { PipelineGuard } from "@/components/PipelineGuard";
+import { Shell } from "@/components/layout/Shell";
+import { Admin } from "@/pages/Admin";
+import { CustomerDetail } from "@/pages/CustomerDetail";
+import { Customers } from "@/pages/Customers";
+import { DailyReview } from "@/pages/DailyReview";
+import { Executive } from "@/pages/Executive";
+import { Login } from "@/pages/Login";
+import { OpportunityDetail } from "@/pages/OpportunityDetail";
+import { Overview } from "@/pages/Overview";
+import { Pipeline } from "@/pages/Pipeline";
+import { ProjectDetail } from "@/pages/ProjectDetail";
+import { Projects } from "@/pages/Projects";
+import { Settings } from "@/pages/Settings";
+import { Tasks } from "@/pages/Tasks";
+import { WeeklySync } from "@/pages/WeeklySync";
+import { WorkLogs } from "@/pages/WorkLogs";
+import { ProjectGantt } from "@/pages/views/ProjectGantt";
+import { ProjectKanban } from "@/pages/views/ProjectKanban";
+import { ProjectList } from "@/pages/views/ProjectList";
+import { ProjectOverview } from "@/pages/views/ProjectOverview";
+import { ProjectRisks } from "@/pages/views/ProjectRisks";
+import { ProjectServices } from "@/pages/views/ProjectServices";
+import { ProjectTimeline } from "@/pages/views/ProjectTimeline";
+
+export function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+
+      <Route
+        element={
+          <AuthGuard>
+            <Shell />
+          </AuthGuard>
+        }
+      >
+        <Route index element={<Navigate to="/overview" replace />} />
+        <Route path="overview" element={<Overview />} />
+        <Route path="projects" element={<Projects />} />
+        <Route path="projects/:id" element={<ProjectDetail />}>
+          <Route index element={<Navigate to="overview" replace />} />
+          <Route path="overview" element={<ProjectOverview />} />
+          <Route path="list" element={<ProjectList />} />
+          <Route path="kanban" element={<ProjectKanban />} />
+          <Route path="gantt" element={<ProjectGantt />} />
+          <Route path="timeline" element={<ProjectTimeline />} />
+          <Route path="risks" element={<ProjectRisks />} />
+          <Route path="services" element={<ProjectServices />} />
+        </Route>
+        <Route path="customers" element={<Customers />} />
+        <Route path="customers/:id" element={<CustomerDetail />} />
+        <Route path="daily-review" element={<DailyReview />} />
+        <Route path="weekly-sync" element={<WeeklySync />} />
+        <Route path="tasks" element={<Tasks />} />
+        <Route path="work-logs" element={<WorkLogs />} />
+        <Route
+          path="pipeline"
+          element={
+            <PipelineGuard>
+              <Pipeline />
+            </PipelineGuard>
+          }
+        />
+        <Route
+          path="pipeline/:id"
+          element={
+            <PipelineGuard>
+              <OpportunityDetail />
+            </PipelineGuard>
+          }
+        />
+        <Route
+          path="executive"
+          element={
+            <ExecutiveGuard>
+              <Executive />
+            </ExecutiveGuard>
+          }
+        />
+        <Route path="settings" element={<Settings />} />
+        <Route
+          path="admin"
+          element={
+            <AdminGuard>
+              <Admin />
+            </AdminGuard>
+          }
+        />
+      </Route>
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}

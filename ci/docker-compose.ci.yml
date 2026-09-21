@@ -1,0 +1,52 @@
+# Ephemeral CI/e2e stack. All credentials come from the environment — there
+# are no secret literals in this file. CI passes POSTGRES_PASSWORD (repo
+# Actions secret) and JWT_SECRET (generated per run). For a local run, copy
+# ci/.env.ci.example to ci/.env and fill it, or export the vars inline:
+#   POSTGRES_PASSWORD=... JWT_SECRET=$(openssl rand -hex 32) \
+#     docker compose --env-file ci/.env -f ci/docker-compose.ci.yml up --build
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: solvro
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: solvro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solvro -d solvro"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    # The workflow builds this image itself (BuildKit + GitHub Actions layer
+    # cache) and starts the stack with `up --no-build`; the `image:` name is
+    # the handshake between the two. `build:` stays for local use.
+    image: solvro-ci-backend:latest
+    build:
+      context: ../backend
+      target: runtime
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://solvro:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/solvro?schema=public
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXPIRES_IN: 8h
+      CORS_ORIGIN: "*"
+      LOG_LEVEL: info
+    command: >
+      sh -c "npx prisma migrate deploy && npx prisma db seed && node dist/index.js"
+    ports:
+      - "127.0.0.1:3300:3000"
+
+  frontend:
+    image: solvro-ci-frontend:latest
+    build:
+      context: ../frontend
+      target: runtime
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:8080:80"

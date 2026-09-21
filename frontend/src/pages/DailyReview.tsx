@@ -1,0 +1,175 @@
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { CustomerGroup } from "@/components/daily-review/CustomerGroup";
+import { StatsBar } from "@/components/daily-review/StatsBar";
+import { UnassignedGroup } from "@/components/daily-review/UnassignedGroup";
+import { WeekStrip } from "@/components/daily-review/WeekStrip";
+import { Alert, AlertDescription } from "@/components/reui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import { hasPermission, useAuth } from "@/lib/auth";
+import { computeDailyReviewStats, firstProjectId as firstProjectIdOf, weekNumberLabel } from "@/lib/dailyReviewStats";
+import { dateToDay } from "@/lib/dateField";
+import { formatWeekRange, parseWeekKey, shiftWeek, weekKeyOf } from "@/lib/isoWeek";
+import { useDailyReview } from "@/lib/queries";
+
+const TODAY_FMT = new Intl.DateTimeFormat(undefined, {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+});
+
+interface FocusRequest {
+  day: string;
+  token: number;
+}
+
+// Daily Review v2 (docs/plans/daily-review-v2-spec.md): a weekly, per-
+// customer surface — daily notes per project, operations notes per
+// customer, an explicit "Mark reviewed" action, actionable overdue-task/
+// open-risk lists, and a weekly update drafted from the week's notes. The
+// page itself only owns layout, URL week-state, and the "scroll to the
+// first card" focus request; everything stateful per project/customer
+// lives in CustomerGroup's subtree (frontend/src/components/daily-review/).
+export function DailyReview() {
+  const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const weekParam = searchParams.get("week");
+  const week = weekParam && parseWeekKey(weekParam) ? weekParam : weekKeyOf(dateToDay(new Date())!);
+
+  // A missing/invalid `?week=` resolves to the current week above for
+  // rendering, but the URL itself is normalized to that resolved value too
+  // (replace, not push, so it doesn't add a spurious history entry) — so
+  // Prev/Next and a shared link always have a concrete week to work from.
+  useEffect(() => {
+    if (weekParam !== week) {
+      const next = new URLSearchParams(searchParams);
+      next.set("week", week);
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [week, weekParam]);
+
+  const { data, isLoading, isError, error } = useDailyReview(week);
+
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
+
+  const stats = useMemo(() => (data ? computeDailyReviewStats(data) : null), [data]);
+  const firstProjectId = useMemo(() => (data ? firstProjectIdOf(data) : null), [data]);
+
+  const canDeleteAny = hasPermission(user, "*");
+  const currentUserId = user?.id ?? -1;
+
+  function goToWeek(next: string) {
+    const params = new URLSearchParams(searchParams);
+    params.set("week", next);
+    setSearchParams(params);
+  }
+
+  const isEmpty = data ? data.customers.length === 0 && data.unassignedProjects.length === 0 : false;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-on-surface">Daily Review</h1>
+          <p className="text-sm text-on-surface-variant">
+            {TODAY_FMT.format(new Date())}
+            {user?.username ? ` — ${user.username}` : ""}. Your customers, their active projects, and each
+            customer's weekly update.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => goToWeek(shiftWeek(week, -1))}
+            aria-label="Previous week"
+            className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          >
+            <span className="material-symbols-outlined text-lg">chevron_left</span>
+          </button>
+          <div className="text-center">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+              Week {weekNumberLabel(week)}
+            </div>
+            <div className="font-mono text-xs tabular-nums text-on-surface">{formatWeekRange(week)}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => goToWeek(shiftWeek(week, 1))}
+            aria-label="Next week"
+            className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          >
+            <span className="material-symbols-outlined text-lg">chevron_right</span>
+          </button>
+        </div>
+      </div>
+
+      {data && (
+        <WeekStrip
+          days={data.week.days}
+          today={data.today}
+          coverage={data.coverage}
+          onDayClick={(day) => setFocusRequest({ day, token: Date.now() })}
+        />
+      )}
+
+      {stats && <StatsBar stats={stats} />}
+
+      {isLoading && <DailyReviewSkeleton />}
+
+      {isError && (
+        <Alert variant="destructive">
+          <AlertDescription>Could not load the daily review: {(error as Error).message}</AlertDescription>
+        </Alert>
+      )}
+
+      {data && isEmpty && (
+        <div className="rounded-sm border border-outline-variant bg-surface-container px-6 py-10 text-center text-sm text-on-surface-variant">
+          No active projects or customers to review this week.
+        </div>
+      )}
+
+      {data && !isEmpty && (
+        <div className="space-y-6">
+          {data.customers.map((customer) => (
+            <CustomerGroup
+              key={customer.id}
+              customer={customer}
+              week={data.week}
+              today={data.today}
+              currentUserId={currentUserId}
+              canDeleteAny={canDeleteAny}
+              firstProjectId={firstProjectId}
+              focusRequest={focusRequest}
+            />
+          ))}
+
+          {data.unassignedProjects.length > 0 && (
+            <UnassignedGroup
+              projects={data.unassignedProjects}
+              today={data.today}
+              days={data.week.days}
+              currentUserId={currentUserId}
+              canDeleteAny={canDeleteAny}
+              firstProjectId={firstProjectId}
+              focusRequest={focusRequest}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DailyReviewSkeleton() {
+  return (
+    <div className="space-y-4">
+      {[0, 1, 2].map((i) => (
+        <Skeleton key={i} className="h-52 w-full rounded-sm" />
+      ))}
+    </div>
+  );
+}
