@@ -1501,7 +1501,12 @@ blocking finding was fixed pre-PR — these are the consciously accepted leftove
   editing (it is a full-overwrite sync; never run it after go-live). Remaining
   cutover acts, at the user's own pace: retire the standalone `/opt/velora` stack
   and its GitLab CI deploy; after a soak period, drop the dev `velora-*` compose
-  services and the `../VeloraApp` clone. Dev-DB fixtures:
+  services and the `../VeloraApp` clone. **Partly resolved 2026-09-21**: the dev
+  `velora-app`/`velora-cron` services, the `velora` logical database and the
+  `../VeloraApp` clone are gone from the dev stack and its documentation (user
+  confirmed nothing remains to use from Velora). Retiring the standalone
+  `/opt/velora` stack and its GitLab CI deploy is infrastructure outside this
+  repository and is not tracked here. Dev-DB fixtures:
   `qa@solvro.test` (id 707) is ALSO the e2e fixture admin — keep it, password
   `QaTest1234!` (gates.sh asserts it pre-smoke); the QA project 1408 ("Delta
   Migration Delivery") + its linked deal are throwaway.

@@ -6,7 +6,7 @@ Shared contract for the interactive session and every subagent in `.claude/agent
 
 ## Product
 
-Solvro serves two roles: TAMs (delivery) and SAs (sales pipeline, via the integrated Velora service — the Pipeline module). TAMs operate via a high-density dashboard (Kanban + Gantt). The SA loop: opty → staged deal → won deal hands off to a TAM project. Solvro replaces Asana (task tracking), Google Docs (daily notes), and the standalone Velora app (opportunity tracking). Multi-user: SA/TAM access is permission-gated — no longer solo-use.
+Solvro serves two roles: TAMs (delivery) and SAs (sales pipeline, via the Pipeline module — natively ported from Velora). TAMs operate via a high-density dashboard (Kanban + Gantt). The SA loop: opty → staged deal → won deal hands off to a TAM project. Solvro replaces Asana (task tracking), Google Docs (daily notes), and the standalone Velora app (opportunity tracking). Multi-user: SA/TAM access is permission-gated — no longer solo-use.
 
 ## Guardrails
 
@@ -50,7 +50,6 @@ Specs and plans land in `docs/plans/` no matter which tool or skill writes them 
 - Dev `node_modules` lives in a Docker named volume, not the host bind mount. After touching `package.json`: `docker compose exec <service> npm install` (plus host `npm ci` for IDE types), then `docker compose restart <service>` for native/Prisma deps.
 - **`package-lock.json` is container-written only** (trap confirmed 2026-08-01, caused two broken-CI incidents): the host's npm 11 rewrites the lock in a form the container/CI's npm 10 cannot `npm ci` (drops the nested vitest→esbuild tree + platform entries). Any lock-writing command (`npm install`, `npm prune`, `npm update`) runs inside the container; on the host use `npm ci` only, which never writes the lock.
 - `docker-compose.yml` and `.env.example` are local-only (untracked). Prod deploys via `setup.sh`, which writes its own compose file — see `docs/CONFIGURATION.md`.
-- The dev stack requires a sibling checkout at `../VeloraApp` (the Pipeline module's source, a separate repo) — `docker compose up -d` fails without it, since the `velora-app` service builds from that path. Clone it alongside this repo before running the dev stack.
 - Never let more than one frontend `tsc --noEmit` run at a time in the frontend container — it's a single-container resource, not just full `gates.sh`: six concurrent scoped typechecks from a 3-implementor wave GC-thrashed the container for 20+ minutes (a single run takes ~50s), 2026-09-09. Serialize scoped per-task typechecks in a parallel wave the same way full gate runs are already serialized.
 
 ## Ops

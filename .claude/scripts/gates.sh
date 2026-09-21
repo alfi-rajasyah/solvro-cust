@@ -143,9 +143,15 @@ if [ -d frontend/src/lib/export ]; then
 elif [ "$NOTE_CONSUMERS" = "$NOTE_ALLOWLIST" ]; then pass "guardrail-internal-notes (note consumers match allowlist)"
 else fail guardrail-internal-notes "note-consuming files drifted from the allowlist (Guardrail: INTERNAL notes never in customer-facing output) — got: $(echo "$NOTE_CONSUMERS" | tr '\n' ' ')"; fi
 
-if [ -z "$(git ls-files -- .claude CLAUDE.md backend/CLAUDE.md frontend/CLAUDE.md e2e/CLAUDE.md docs .superpowers)" ]; then
-  pass guardrail-local-only-untracked
-else fail guardrail-local-only-untracked "local-only workflow files are tracked by git (must never be pushed)"; fi
+# Inverted for the customer distribution (2026-09-21): .claude/, the CLAUDE.md files and
+# docs/ are TRACKED here by user decision, unlike the source repository this script came
+# from. The check guards the inverse mistake — re-adding the source repo's ignore block
+# would silently drop the agent workflow from the distribution. .superpowers stays
+# untracked either way.
+if [ -n "$(git ls-files -- .claude CLAUDE.md backend/CLAUDE.md frontend/CLAUDE.md e2e/CLAUDE.md docs)" ] \
+   && [ -z "$(git ls-files -- .superpowers)" ]; then
+  pass guardrail-local-only-tracked
+else fail guardrail-local-only-tracked "the agent workflow files (.claude/, CLAUDE.md, docs/) must stay tracked in this repository, and .superpowers must not be"; fi
 
 # Update EXPECTED_KANBAN_PATCHES together with the CHANGELOG when a sanctioned patch lands.
 EXPECTED_KANBAN_PATCHES=0

@@ -20,12 +20,12 @@ Solvro has **three** ways to run, and each uses a different combination of the s
 | Shape | What it is | Compose file | Ports exposed to host | When to use |
 |---|---|---|---|---|
 | **Native dev** | Postgres in Docker, backend + frontend run with `npm run dev` on your laptop | `docker-compose.yml` (only `postgres` service started) | 5432 (pg), 3000 (backend, native), 5173 (vite, native) | Day-to-day coding |
-| **Dockerised dev** | Everything in Docker, with hot-reload bind mounts | `docker-compose.yml` (full stack — `postgres` + `backend` + `frontend` + `velora-app` + `velora-cron`) | 5432, 3000, 5173, 3001 (Velora) | When you want a clean, host-agnostic dev environment |
+| **Dockerised dev** | Everything in Docker, with hot-reload bind mounts | `docker-compose.yml` (full stack — `postgres` + `backend` + `frontend`) | 5432, 3000, 5173 | When you want a clean, host-agnostic dev environment |
 | **Production** | Prebuilt GHCR images; nginx serves the frontend and reverse-proxies `/api/*`, but the backend is *also* published directly to the host | `~/solvro/docker-compose.yml` written by [setup.sh](setup.sh) on the server (not committed) | `FRONTEND_PORT` (default 80) + `BACKEND_PORT` (default 3000), both bound to `BIND_ADDR` (default `127.0.0.1`, loopback-only); Postgres optional via `POSTGRES_PORT` | The deployment host |
 
 The same env vars drive all three; the difference is *which* compose file is running and *whether* the backend/frontend are containerised or native.
 
-> **The Pipeline module is native code** — Prisma tables in Solvro's own database, `/opportunities` routes in the same Express backend, React pages in the same bundle. Production deploys carry NO Velora services. The dev stack's `velora-app`/`velora-cron` containers and the `velora` database are a read-only behavior reference and the one-time data source for [scripts/import-velora.ts](../backend/scripts/import-velora.ts) — they retire after cutover. Their build context is the sibling checkout `../VeloraApp`, a hard dev prerequisite until then; `docker compose up -d` fails without it.
+> **The Pipeline module is native code** — Prisma tables in Solvro's own database, `/opportunities` routes in the same Express backend, React pages in the same bundle. No deployment carries a Velora service; the reference stack and its sibling checkout were retired 2026-09-21.
 
 ### Three tiers, one network
 
@@ -62,7 +62,7 @@ The Pipeline module (the SA opportunity tracker ported from Velora) is part of S
 
 ### Secrets discipline
 
-- `JWT_SECRET` must be at least 32 chars, generated with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`. The default in `.env.example` is **a placeholder that will fail Zod validation** — this is intentional. (The dev stack also passes it into the reference `velora-app` container; nothing in production does.)
+- `JWT_SECRET` must be at least 32 chars, generated with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`. The default in `.env.example` is **a placeholder that will fail Zod validation** — this is intentional.
 - `POSTGRES_PASSWORD` defaults to `solvro_dev` for local dev. **Rotate before any deployment.**
 - `.env` files are `.gitignored`; only `.env.example` is committed.
 - The dev-stack `docker-compose.yml` ships a fixed `JWT_SECRET=solvro-dev-jwt-secret-not-for-production-32-chars-minimum-here` so the container starts without an `.env` next to it. **Never use it outside your laptop.**
@@ -119,7 +119,7 @@ Used by the `postgres` service in [docker-compose.yml](docker-compose.yml). When
 
 > **First-start behavior**: postgres only initializes its data directory when the `solvro_pgdata` volume is empty. Changing `POSTGRES_PASSWORD` after the first start has no effect — you need to either drop the volume (`docker compose down -v` — destructive!) or `ALTER USER` from inside the container.
 
-**The reference `velora` database (dev only)**: the dev `postgres` service also hosts a second logical database, `velora` (role `velora`, password `velora_dev`, both created by `docker-compose.yml`'s `configs:` init script on a fresh volume; an older volume needs the two one-shot commands in that file's header). It exists only so the reference `velora-app` container can run and so [scripts/import-velora.ts](../backend/scripts/import-velora.ts) has a dev-side source to rehearse against. Production has no such database — the Pipeline module's tables live inside `solvro` itself.
+> The dev `postgres` service hosts the single `solvro` database. The former `velora` logical database was retired with the reference stack (2026-09-21).
 
 ### 2.4 — GHCR image references (production only)
 
@@ -136,17 +136,14 @@ The **prod-shaped** `docker-compose.yml` written by [setup.sh](setup.sh) pulls p
 | `postgres` | `postgres:15-alpine` | `solvro-postgres` | 5432 | 5432 | Has a `pg_isready` healthcheck; the backend `depends_on` it with `condition: service_healthy`. |
 | `backend` | built from `./backend` (target `dev`) | `solvro-backend` | 3000 | 3000 | Runs `prisma generate && prisma migrate deploy && prisma db seed && npm run dev`. Mounts `./backend` for hot reload. |
 | `frontend` | built from `./frontend` (target `dev`) | `solvro-frontend` | 5173 | 5173 | Vite dev server with HMR. Mounts `./frontend` for hot reload. `VITE_API_PROXY_TARGET=http://backend:3000`. |
-| `velora-app` | built from `../VeloraApp` (sibling checkout, build context) | `solvro-velora-app` | 3000 | 3001 | Next.js SA opportunity tracker (the Pipeline module). Self-migrates its schema on boot (`node scripts/migrate.mjs` entrypoint). `DATABASE_URL` points at the `velora` database/role on the shared `postgres` service. |
-| `velora-cron` | `alpine:3.19` | `solvro-velora-cron` | — | — | Sidecar cron; installs one crontab line (`0 23 * * *`, UTC — no `TZ` set, alpine's default) that calls `velora-app`'s `/api/cron/auto-hold` with `CRON_SECRET`. No published port. Timezone intent unconfirmed — see [docs/ISSUES.md](ISSUES.md). |
 
 #### Volumes
 
 | Volume | Mounted at | Lifetime | Notes |
 |---|---|---|---|
-| `solvro_pgdata` | `/var/lib/postgresql/data` (postgres) | Survives `down`; lost on `down -v` | Postgres data directory — **now also holds the `velora` database**. **Treat `down -v` as destructive.** |
+| `solvro_pgdata` | `/var/lib/postgresql/data` (postgres) | Survives `down`; lost on `down -v` | Postgres data directory. **Treat `down -v` as destructive.** |
 | `solvro_backend_node_modules` | `/app/node_modules` (backend) | Survives `down` | Keeps backend deps off the host filesystem so the bind mount of `./backend` doesn't shadow them. |
 | `solvro_frontend_node_modules` | `/app/node_modules` (frontend) | Survives `down` | Same pattern for frontend. |
-| `velora_uploads` | `/app/uploads` (velora-app) | Survives `down`; lost on `down -v` | Velora's uploaded files. Named `solvro_velora_uploads` in the prod compose file `setup.sh` writes. |
 
 > The `node_modules` volumes are why a `package.json` change requires `docker compose up --build` (rebuild the dev image so the new deps land in the volume) — a plain `up` won't pick them up.
 
@@ -158,9 +155,8 @@ The **prod-shaped** `docker-compose.yml` written by [setup.sh](setup.sh) pulls p
 | 3000 | backend (Express) | Frontend (via proxy) → Backend |
 | 5173 | frontend (Vite dev) | Browser → Frontend (dev only) |
 | 80 | nginx (prod only) | Browser → Frontend (prod) |
-| 3001 | velora-app (dev-only reference container) | Browser → the old Velora UI, for behavior comparison |
 
-> This table describes the dev stack (`backend` on 3000 is reached only via the frontend's proxy). In prod, `BACKEND_PORT` (default 3000) is published to the host directly, not just internally — see [2.13](#213--production-deployment-via-setupsh). `velora-app`'s 3001 exists in dev only — production deploys no Velora container.
+> This table describes the dev stack (`backend` on 3000 is reached only via the frontend's proxy). In prod, `BACKEND_PORT` (default 3000) is published to the host directly, not just internally — see [2.13](#213--production-deployment-via-setupsh).
 
 ### 2.6 — The `/api` reverse-proxy pattern (critical detail)
 
@@ -307,31 +303,13 @@ The `node_modules` directories inside `/app` are intentionally shadowed by **nam
 - **No WS / SSE push** layer yet — also PRD §6, also unimplemented (verified: no `ws`/`socket.io`/`EventSource` usage in `backend/src`).
 - **No CI-side env** beyond GitHub Actions defaults — see [.github/workflows/docker-publish.yml](.github/workflows/docker-publish.yml) for the image-publish flow that produces the GHCR artifacts `setup.sh` consumes.
 
-### 2.16 — The Pipeline module (native) and the Velora reference stack
+### 2.16 — The Pipeline module (native)
 
 The Pipeline module is ordinary Solvro code — nothing here needs separate configuration. What IS operator-relevant:
 
 - **Permissions**: six `pipeline:*` strings (`view`, `create`, `edit_own`, `edit_all`, `delete_own`, `delete_all`). The seed grants `view`/`create`/`edit_own`/`delete_own` to the built-in `SA` role; an "SA Manager"-style role with the `_all` pair is created by an admin in Admin → Roles. `ADMIN`'s `*` wildcard covers everything.
 - **`xlsx` (SheetJS)** is a frontend dependency for the Excel/CSV import dialog, lazy-loaded only when the dialog opens. The container-written-lockfile trap (root CLAUDE.md) applies to it like any dependency.
-- **Dev-only reference stack**: `velora-app` (the old tracker's UI at `:3001`, its own login) + `velora-cron` + the `velora` logical database exist in the dev compose file only, as a read-only behavior reference and the data source for the migration below. They retire after cutover, together with the `../VeloraApp` sibling checkout.
 - **Handoff's customer picker needs `project:view-all`**: `POST /opportunities/:id/handoff` lets the caller pick which customer the new project links to, from the same visible set `customerVisibilityFilter` (`backend/src/lib/visibility.ts`) grants everywhere else — unowned customers, customers the caller owns as TAM, and customers of a project the caller can already see. A custom role that hands off won deals (the `pipeline:*` write permissions plus `project:write`) but lacks `project:view-all` therefore sees only unowned customers and customers of its own projects in that picker. Grant `project:view-all` in Admin > Roles to any role that should hand off to any customer.
-
-#### One-time data migration (cutover)
-
-[backend/scripts/import-velora.ts](../backend/scripts/import-velora.ts) copies opportunities, activity history, and links from a Velora database into the native tables, matching Velora profiles to Solvro users by email (never creating accounts).
-
-```
-docker compose exec \
-  -e VELORA_DATABASE_URL="postgresql://<user>:<pass>@<host>:5432/<restored_velora_db>" \
-  backend npx tsx scripts/import-velora.ts --yes
-```
-
-- The target is the backend's own `DATABASE_URL`; the script refuses to run unless that database is literally named `solvro` (or ends in `_test`), and refuses without `--yes`/`CONFIRM=1`.
-- Idempotent per id — but a re-run is a **full overwrite sync**, not a merge. Never re-run after go-live once users have edited imported deals.
-- The run report lists unmatched profiles (their deals import unassigned), over-length fields (imported verbatim; shorten them or the deal's first UI edit will be rejected), non-dense stage orders, and Hold deals missing a pre-hold stage.
-- Won deals get `won_at` from their last update time — Velora never had a won-date column; this mirrors its own KPI proxy.
-
-Cutover order: freeze edits in the standalone tracker → dump its database (plain format — it runs Postgres 16, Solvro's server runs 15) → restore it somewhere the backend container can reach → run the script → verify in the UI → retire the standalone `/opt/velora` stack and its GitLab CI deploy.
 
 ## Quick reference card
 
@@ -350,8 +328,7 @@ Cutover order: freeze edits in the standalone tracker → dump its database (pla
 │                                                                           │
 │  DOCKERISED DEV BOOTSTRAP:                                                │
 │    docker compose up -d --build                                           │
-│    # everything on :5432, :3000, :5173, :3001 (Velora)                    │
-│    # needs a sibling checkout at ../VeloraApp (Velora build context)      │
+│    # everything on :5432, :3000, :5173                                    │
 │                                                                           │
 │  PROD BOOTSTRAP (deployment host):                                        │
 │    bash setup.sh          # prompts admin+ports; auto-gens secrets;       │

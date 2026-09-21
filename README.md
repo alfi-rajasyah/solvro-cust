@@ -251,7 +251,7 @@ The backend test setup refuses any database whose name does not end in `_test`, 
 
 | Path | Contents |
 |---|---|
-| `backend/` | Express API (`src/routes`, `src/lib`, `src/http`), Prisma schema and migrations, seed, `scripts/` (`create-admin.ts`; `import-velora.ts`, the one-time copy from the previous standalone opportunity tracker; `normalize-day-dates.ts`), Vitest suite in `test/` |
+| `backend/` | Express API (`src/routes`, `src/lib`, `src/http`), Prisma schema and migrations, seed, `scripts/` (`create-admin.ts`, `normalize-day-dates.ts`), Vitest suite in `test/` |
 | `frontend/` | React SPA: pages and views, feature components, vendored drag engines, Base UI primitives, the CSS-first theme, and `nginx.conf` for the production image |
 | `e2e/` | Playwright suite — auth, Kanban and List drag, Gantt, date picker, Daily Review, Weekly Sync, Pipeline board and forms, search, PWA, smoke |
 | `ci/` | The production-shaped compose stack GitHub Actions builds and tests |
