@@ -174,27 +174,17 @@ describe("GET /daily-review — scope (Decisions 8-10)", () => {
     expect(res.body.customers.some((c: any) => c.id === customer.id)).toBe(false);
   });
 
-  it("a customer reached only via the caller's SA assignment (not project TAM) is absent, and does not inflate coverage total", async () => {
-    const sa = await createUserWithRole("SA");
+  it("an unowned customer whose only ACTIVE project belongs to a different TAM is absent, and does not inflate coverage total", async () => {
+    const tam = await createUserWithRole("TAM");
     const otherTam = await createUserWithRole("TAM");
-    const customer = await createCustomer({ tamId: otherTam.userId, name: uniq("SA Only Customer") });
-    // The only ACTIVE project under this customer has the caller as SA, not
-    // TAM — projectVisibilityFilter's saId arm makes the project (and thus
-    // the customer, via the customers query's "attached" OR clause) visible
-    // to the caller, but the attached-tier project query only pulls
-    // Project.tamId = caller, so this project never lands in the result and
-    // the customer must not surface as an empty group.
-    await prisma.project.create({
-      data: {
-        name: uniq("SA Only Project"),
-        tamId: otherTam.userId,
-        saId: sa.userId,
-        customerId: customer.id,
-        status: "ACTIVE",
-      },
-    });
+    const customer = await createCustomer({ tamId: null, name: uniq("Unowned Foreign-Project Customer") });
+    // The customer itself is visible (unowned, tamId: null), but its only
+    // ACTIVE project belongs to a different TAM, which the caller can't
+    // see via projectVisibilityFilter — so the customer must not surface
+    // as an empty group and must not inflate coverage.total.
+    await createProject({ tamId: otherTam.userId, customerId: customer.id, status: "ACTIVE", name: uniq("Foreign Active") });
 
-    const res = await get(sa.token, { week: WEEK, today: TODAY });
+    const res = await get(tam.token, { week: WEEK, today: TODAY });
     expect(res.status).toBe(200);
     expect(res.body.customers.some((c: any) => c.id === customer.id)).toBe(false);
     expect(res.body.coverage[TODAY].total).toBe(0);

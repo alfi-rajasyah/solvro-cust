@@ -6,7 +6,7 @@ Shared contract for the interactive session and every subagent in `.claude/agent
 
 ## Product
 
-Solvro serves two roles: TAMs (delivery) and SAs (sales pipeline, via the Pipeline module — natively ported from Velora). TAMs operate via a high-density dashboard (Kanban + Gantt). The SA loop: opty → staged deal → won deal hands off to a TAM project. Solvro replaces Asana (task tracking), Google Docs (daily notes), and the standalone Velora app (opportunity tracking). Multi-user: SA/TAM access is permission-gated — no longer solo-use.
+Solvro serves TAMs (delivery). TAMs operate via a high-density dashboard (Kanban + Gantt). Solvro replaces Asana (task tracking) and Google Docs (daily notes). Multi-user: access is permission-gated — no longer solo-use.
 
 ## Guardrails
 

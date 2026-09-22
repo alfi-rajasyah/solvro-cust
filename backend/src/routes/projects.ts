@@ -45,7 +45,6 @@ const wipLimitsSchema = z
 export const createProjectSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
-  saId: z.number().int().positive().optional(),
   tamId: z.number().int().positive().optional(),
   customerId: z.number().int().positive(),
   status: z.nativeEnum(ProjectStatus).optional(),
@@ -57,7 +56,6 @@ const updateProjectSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
   status: z.nativeEnum(ProjectStatus).optional(),
-  saId: z.number().int().positive().nullable().optional(),
   tamId: z.number().int().positive().optional(),
   customerId: z.number().int().positive().optional(),
   wipLimits: wipLimitsSchema.optional(),
@@ -74,7 +72,6 @@ const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 // of POST /:id/baseline (previously duplicated three times). Keep list-view
 // includes (GET /, /:id/tasks, etc.) separate — they're intentionally lighter.
 const projectDetailInclude = {
-  sa: { select: { id: true, username: true, email: true } },
   tam: { select: { id: true, username: true, email: true } },
   customer: { select: { id: true, name: true } },
   baselineLockedBy: { select: { id: true, username: true } },
@@ -131,7 +128,6 @@ projectsRouter.get("/", validate("query", projectListQuerySchema), async (req, r
     orderBy: { updatedAt: "desc" },
     include: {
       _count: { select: { tasks: true } },
-      sa: { select: { id: true, username: true } },
       tam: { select: { id: true, username: true } },
       customer: { select: { id: true, name: true } },
     },
@@ -154,7 +150,6 @@ projectsRouter.post(
       data: {
         name: body.name,
         description: body.description,
-        saId: body.saId,
         tamId,
         customerId: body.customerId,
         status: body.status ?? "PLANNING",
@@ -170,7 +165,7 @@ projectsRouter.get("/:id", validate("params", idParamSchema), async (req, res) =
   const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
   // Apply the visibility filter inside the lookup. The previous hand-rolled
   // `"tamId" in filter` guard was a dead no-op — the filter shape is
-  // `{ OR: [{tamId}, {saId}, {customer:{tamId}}] }`, so that key never exists — which left this
+  // `{ OR: [{tamId}, {customer:{tamId}}] }`, so that key never exists — which left this
   // endpoint open to IDOR. Returning 404 (not 403) also stops leaking
   // existence, matching every other project-scoped route.
   const project = await prisma.project.findFirst({
@@ -305,9 +300,6 @@ projectsRouter.patch(
     if (body.name !== undefined) data.name = body.name;
     if (body.description !== undefined) data.description = body.description;
     if (body.status !== undefined) data.status = body.status;
-    if (body.saId !== undefined) {
-      data.sa = body.saId === null ? { disconnect: true } : { connect: { id: body.saId } };
-    }
     if (body.tamId !== undefined) data.tam = { connect: { id: body.tamId } };
     if (body.customerId !== undefined) {
       if (!(await isCustomerVisible(req.user!, body.customerId))) {
@@ -338,9 +330,7 @@ projectsRouter.delete(
     // Hard delete, no soft-delete or undo — the UI confirms first. The schema
     // cascades to the project's tasks (with their subtasks, comments and
     // dependencies), sections, labels, risks, notes, reviews and service
-    // assignments. A won deal linked through Opportunity.projectId keeps its
-    // row and loses the link (onDelete: SetNull), so the pipeline history
-    // survives the project it handed off to.
+    // assignments.
     await prisma.project.delete({ where: { id } });
     res.status(204).end();
   },
@@ -538,7 +528,7 @@ projectsRouter.post(
 // and is the only visibility any customer-facing output may ever surface.
 // Plain calendar day ("yyyy-MM-dd", no time/zone) — noteDate/reviewDate are
 // `@db.Date` columns for exactly this reason. Same house day-string helper
-// routes/tasks.ts and routes/opportunities.ts use (lib/dateBoundary.ts).
+// routes/tasks.ts uses (lib/dateBoundary.ts).
 const dayStringSchema = z
   .string()
   .refine(isValidDayString, { message: "Must be a valid yyyy-MM-dd date" });

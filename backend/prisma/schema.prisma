@@ -73,35 +73,6 @@ enum WeeklyStatus {
   DONE
 }
 
-// Pipeline module (native port of Velora). All 9 stages of the reference
-// app's live schema are represented here (an earlier 6-value version of
-// this enum omitted poc/technical_clarification/hold, which would have
-// forced a value-translation step for those rows on import). DB labels are
-// @map'd to Velora's lowercase literals verbatim, so the one-time data
-// import can copy the `stage` column as-is. Enum ORDER is load-bearing: the
-// opportunity list route sorts `stage: "asc"`, and Postgres orders enum
-// values by declaration order, so this order IS the board's column order.
-enum PipelineStage {
-  ASSESSMENT              @map("assessment")
-  RFP                     @map("rfp")
-  POC                     @map("poc")
-  TECHNICAL_CLARIFICATION @map("technical_clarification")
-  DELIVER_PROPOSAL        @map("deliver_proposal")
-  WAITING_RESPONSE        @map("waiting_response")
-  WON                     @map("won")
-  DROP                    @map("drop")
-  HOLD                    @map("hold")
-}
-
-// Brand-new to Solvro (nothing has imported into it yet), so it follows the
-// house UPPERCASE enum-label convention rather than Velora's lowercase
-// literals — unlike PipelineStage there is no existing data to stay
-// verbatim-compatible with.
-enum PipelineImportStatus {
-  OK
-  ERROR
-}
-
 model Role {
   id          Int    @id @default(autoincrement())
   roleName    String @unique @map("role_name")
@@ -125,16 +96,12 @@ model User {
   role                   Role                  @relation(fields: [roleId], references: [id])
   active                 Boolean               @default(true)
   createdAt              DateTime              @default(now()) @map("created_at")
-  projectsAsSA           Project[]             @relation("ProjectSA")
   projectsAsTAM          Project[]             @relation("ProjectTAM")
   projectBaselinesLocked Project[]             @relation("ProjectBaselineLockedBy")
   assignedTasks          Task[]
   comments               Comment[]
   projectNotes           ProjectNote[]
   authConfigUpdates      AuthConfig[]          @relation("AuthConfigUpdatedBy")
-  opportunitiesAsPic     Opportunity[]         @relation("OpportunityPic")
-  opportunityActivities  OpportunityActivity[] @relation("OpportunityActivityUser")
-  pipelineImportLogs     PipelineImportLog[]   @relation("PipelineImportLogUser")
   tamCustomers           Customer[]            @relation("CustomerTam")
   customerNotes          CustomerNote[]
   weeklyUpdates          WeeklyUpdate[]
@@ -165,10 +132,8 @@ model Project {
   id                   Int              @id @default(autoincrement())
   name                 String
   description          String?
-  saId                 Int?             @map("sa_id")
   tamId                Int              @map("tam_id")
   customerId           Int?             @map("customer_id")
-  sa                   User?            @relation("ProjectSA", fields: [saId], references: [id])
   tam                  User             @relation("ProjectTAM", fields: [tamId], references: [id])
   customer             Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
   status               ProjectStatus    @default(PLANNING)
@@ -195,11 +160,7 @@ model Project {
   notes                ProjectNote[]
   services             ProjectService[]
   reviews              ProjectReview[]
-  // Won-deal handoff link (native replacement for the PRD's cross-DB
-  // Project.sourceDealId soft link) — the Opportunity side owns the FK.
-  opportunity          Opportunity?
 
-  @@index([saId])
   @@index([tamId])
   @@index([customerId])
   @@index([status])
@@ -530,96 +491,4 @@ model ProjectReview {
   @@unique([projectId, userId, reviewDate])
   @@index([userId, reviewDate])
   @@map("project_reviews")
-}
-
-// Pipeline module (Solution Architect sales tracker) — native port of
-// Velora (docs/plans/pipeline-native-port-plan.md). UUID ids are preserved
-// verbatim from the Velora source so the one-time data import
-// (backend/scripts/import-velora.ts) can copy rows and their foreign keys
-// without minting new identifiers.
-model Opportunity {
-  id              String                @id @default(uuid())
-  title           String
-  customerName    String                @map("customer_name")
-  dealValue       BigInt                @default(0) @map("deal_value")
-  stage           PipelineStage         @default(ASSESSMENT)
-  picId           Int?                  @map("pic_id")
-  pic             User?                 @relation("OpportunityPic", fields: [picId], references: [id], onDelete: SetNull)
-  // Plain calendar day (DateField contract) — no instant conversion.
-  deadline        DateTime?             @db.Date
-  // Date the opportunity/request came in — same plain-calendar-day
-  // semantics as deadline, manually entered. Velora: request_date.
-  requestDate     DateTime?             @map("request_date") @db.Date
-  description     String?
-  productSolution String                @default("") @map("product_solution")
-  leadSource      String?               @map("lead_source")
-  winProbability  Int                   @default(50) @map("win_probability")
-  stageOrder      Int                   @default(0) @map("stage_order")
-  // Set only on transition into WON, cleared on leaving it — a route
-  // concern (the stage-transition handler in routes/opportunities.ts),
-  // never a schema default. Backs the board KPI's "Won this month" tile.
-  wonAt           DateTime?             @map("won_at")
-  // Records the stage a deal was in immediately before entering HOLD, so
-  // leaving HOLD can restore it — same route-concern pattern as wonAt: set
-  // on transition into HOLD, cleared on leaving it, never a schema default.
-  // Divergence from the reference: Velora's pre_hold_stage is free TEXT;
-  // here it's typed against PipelineStage since HOLD can only be entered
-  // from one of the 9 known stages.
-  preHoldStage    PipelineStage?        @map("pre_hold_stage")
-  // Won-deal handoff link — replaces the PRD's cross-DB soft link.
-  projectId       Int?                  @unique @map("project_id")
-  project         Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  createdAt       DateTime              @default(now()) @map("created_at")
-  updatedAt       DateTime              @updatedAt @map("updated_at")
-  activities      OpportunityActivity[]
-  links           OpportunityLink[]
-
-  @@index([stage])
-  @@index([picId])
-  @@map("opportunities")
-}
-
-model OpportunityActivity {
-  id            String      @id @default(uuid())
-  opportunityId String      @map("opportunity_id")
-  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
-  // Nullable + SetNull — deliberate divergence from Velora's
-  // activity_logs.user_id (NOT NULL + Cascade): activity history should
-  // survive the acting user's deletion rather than disappear with them.
-  userId        Int?        @map("user_id")
-  user          User?       @relation("OpportunityActivityUser", fields: [userId], references: [id], onDelete: SetNull)
-  note          String
-  createdAt     DateTime    @default(now()) @map("created_at")
-
-  @@index([opportunityId])
-  @@map("opportunity_activities")
-}
-
-model OpportunityLink {
-  id            String      @id @default(uuid())
-  opportunityId String      @map("opportunity_id")
-  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
-  label         String
-  url           String
-  createdAt     DateTime    @default(now()) @map("created_at")
-
-  @@index([opportunityId])
-  @@map("opportunity_links")
-}
-
-// Row-per-run log for the Pipeline admin "Import" tab (import history).
-model PipelineImportLog {
-  id           String               @id @default(uuid())
-  userId       Int?                 @map("user_id")
-  user         User?                @relation("PipelineImportLogUser", fields: [userId], references: [id], onDelete: SetNull)
-  totalRows    Int                  @default(0) @map("total_rows")
-  validCount   Int                  @default(0) @map("valid_count")
-  skipCount    Int                  @default(0) @map("skip_count")
-  invalidCount Int                  @default(0) @map("invalid_count")
-  status       PipelineImportStatus @default(OK)
-  errorMessage String?              @map("error_message")
-  createdAt    DateTime             @default(now()) @map("created_at")
-
-  @@index([createdAt])
-  @@map("pipeline_import_logs")
 }

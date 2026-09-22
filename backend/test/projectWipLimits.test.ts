@@ -2,13 +2,11 @@ import "./env.js";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app.js";
-import { prisma } from "../src/prisma.js";
 import { seedRoles, createAdminAndToken } from "./testAuth.js";
 
 const app = createApp();
 
 let token: string;
-let userId: number;
 
 beforeAll(async () => {
   await seedRoles();
@@ -17,7 +15,6 @@ beforeAll(async () => {
 beforeEach(async () => {
   const admin = await createAdminAndToken();
   token = admin.token;
-  userId = admin.userId;
 });
 
 async function createCustomer(): Promise<number> {
@@ -37,7 +34,6 @@ describe("project wipLimits", () => {
       .set("Authorization", `Bearer ${token}`)
       .send({
         name: "Proj A",
-        saId: userId,
         customerId,
         wipLimits: { TODO: 3, IN_PROGRESS: 2, DONE: null },
       });
@@ -56,7 +52,7 @@ describe("project wipLimits", () => {
     const createRes = await request(app)
       .post("/projects")
       .set("Authorization", `Bearer ${token}`)
-      .send({ name: "Proj B", saId: userId, customerId });
+      .send({ name: "Proj B", customerId });
     expect(createRes.status).toBe(201);
     expect(createRes.body.wipLimits).toBeNull();
   });
@@ -66,7 +62,7 @@ describe("project wipLimits", () => {
     const createRes = await request(app)
       .post("/projects")
       .set("Authorization", `Bearer ${token}`)
-      .send({ name: "Proj C", saId: userId, customerId });
+      .send({ name: "Proj C", customerId });
     const projectId = createRes.body.id as number;
 
     const patchRes = await request(app)
@@ -89,7 +85,7 @@ describe("project wipLimits", () => {
     const res = await request(app)
       .post("/projects")
       .set("Authorization", `Bearer ${token}`)
-      .send({ name: "Proj D", saId: userId, customerId, wipLimits: { TODO: 0 } });
+      .send({ name: "Proj D", customerId, wipLimits: { TODO: 0 } });
     expect(res.status).toBe(400);
   });
 });

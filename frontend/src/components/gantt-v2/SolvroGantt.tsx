@@ -1203,7 +1203,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
               place. The trigger shares the segmented shell and
               TOOLBAR_ITEM_HEIGHT of every other group; the `render` element
               carries all visual content (house pattern — see
-              OpportunityDetail.tsx, reui/gantt/gantt-nav.tsx). */}
+              reui/gantt/gantt-nav.tsx). */}
           <DropdownMenu>
             <div className="inline-flex overflow-hidden rounded-md bg-surface-container-low p-0.5">
               <DropdownMenuTrigger

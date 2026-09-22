@@ -25,8 +25,6 @@ Solvro has **three** ways to run, and each uses a different combination of the s
 
 The same env vars drive all three; the difference is *which* compose file is running and *whether* the backend/frontend are containerised or native.
 
-> **The Pipeline module is native code** — Prisma tables in Solvro's own database, `/opportunities` routes in the same Express backend, React pages in the same bundle. No deployment carries a Velora service; the reference stack and its sibling checkout were retired 2026-09-21.
-
 ### Three tiers, one network
 
 ```
@@ -55,10 +53,6 @@ A missing or invalid env var **crashes the process at startup** with a printed Z
 ### Frontend: zero env vars at runtime
 
 The frontend has **no runtime env vars**. The compiled bundle uses the literal string `/api` as its API base and inherits the origin from `window.location`. The only build-time / dev-time variables are `VITE_API_PROXY_TARGET` — which only matters if you run Vite *inside* a container and need to point its dev proxy at `http://backend:3000` instead of `http://localhost:3000`.
-
-### The Pipeline module
-
-The Pipeline module (the SA opportunity tracker ported from Velora) is part of Solvro itself: `opportunities`/`opportunity_activities`/`opportunity_links`/`pipeline_import_logs` tables in the `solvro` database, `/opportunities` routes in the backend, `/pipeline` pages in the frontend, gated by six `pipeline:*` permission strings (the SA role is seeded with view/create/edit_own/delete_own). The only Velora-shaped things left are the dev stack's reference containers and the one-time migration script — see [2.16](#216--velora-pipeline-integration).
 
 ### Secrets discipline
 
@@ -198,7 +192,7 @@ Backend routers stay mounted at `/auth`, `/projects`, `/tasks`, etc. — **witho
 
 [backend/prisma/seed.ts](backend/prisma/seed.ts) seeds **no users**. It only upserts:
 
-- **Five built-in roles**: `ADMIN` (`*` wildcard), `SA` (`project:read`), `TAM` (`project:read`, `project:write`, `task:read`, `task:write`), `STAKEHOLDER` (`project:read`, `report:read`, `project:view-all`), `PENDING` (empty permissions — the auto-provisioning role for first-time Google sign-ins, see [2.9](#29--auth--rbac-configuration)).
+- **Four built-in roles**: `ADMIN` (`*` wildcard), `TAM` (`project:read`, `project:write`, `task:read`, `task:write`), `STAKEHOLDER` (`project:read`, `project:view-all`), `PENDING` (empty permissions — the auto-provisioning role for first-time Google sign-ins, see [2.9](#29--auth--rbac-configuration)).
 - The `AuthConfig` singleton (`id: "default"`), bootstrapped with an empty `googleAllowedDomains` array so Google sign-in starts disabled until an admin configures it.
 
 The seed is idempotent (`upsert`) and re-running it never overwrites an admin-edited `AuthConfig` row.
@@ -215,7 +209,7 @@ docker compose exec -e ADMIN_EMAIL=you@example.com -e ADMIN_PASSWORD=your-passwo
 
 ### 2.9 — Auth & RBAC configuration
 
-- **Built-in roles** (hard-coded): `SA`, `TAM`, `ADMIN`, `STAKEHOLDER`, `PENDING`. `PENDING` is the auto-provisioning role for first-time Google sign-ins — empty permissions, so every screen renders a permission-denied empty state until an admin promotes the user from Admin > Users.
+- **Built-in roles** (hard-coded): `TAM`, `ADMIN`, `STAKEHOLDER`, `PENDING`. `PENDING` is the auto-provisioning role for first-time Google sign-ins — empty permissions, so every screen renders a permission-denied empty state until an admin promotes the user from Admin > Users.
 - **Custom roles**: created by admins via `POST /admin/roles` with an arbitrary `permissions: string[]`. The wildcard `"*"` short-circuits all permission checks.
 - **JWT payload**: `{ sub: <userId>, role: <RoleName>, permissions: string[] }`. The `permissions` array is materialised at login from the user's role record.
 - **Authorization gate to use** (in priority order):
@@ -302,14 +296,6 @@ The `node_modules` directories inside `/app` are intentionally shadowed by **nam
 - **No Secure Ingestion Port webhook** — cancelled 2026-08-03; the user ended the SA-blueprint ingestion path, so Solvro has no Solution Architect ingestion route and none is planned. No env vars exist for it. Its spec is archived at [docs/archive/plans/secure-ingestion-port-spec.md](archive/plans/secure-ingestion-port-spec.md).
 - **No WS / SSE push** layer yet — also PRD §6, also unimplemented (verified: no `ws`/`socket.io`/`EventSource` usage in `backend/src`).
 - **No CI-side env** beyond GitHub Actions defaults — see [.github/workflows/docker-publish.yml](.github/workflows/docker-publish.yml) for the image-publish flow that produces the GHCR artifacts `setup.sh` consumes.
-
-### 2.16 — The Pipeline module (native)
-
-The Pipeline module is ordinary Solvro code — nothing here needs separate configuration. What IS operator-relevant:
-
-- **Permissions**: six `pipeline:*` strings (`view`, `create`, `edit_own`, `edit_all`, `delete_own`, `delete_all`). The seed grants `view`/`create`/`edit_own`/`delete_own` to the built-in `SA` role; an "SA Manager"-style role with the `_all` pair is created by an admin in Admin → Roles. `ADMIN`'s `*` wildcard covers everything.
-- **`xlsx` (SheetJS)** is a frontend dependency for the Excel/CSV import dialog, lazy-loaded only when the dialog opens. The container-written-lockfile trap (root CLAUDE.md) applies to it like any dependency.
-- **Handoff's customer picker needs `project:view-all`**: `POST /opportunities/:id/handoff` lets the caller pick which customer the new project links to, from the same visible set `customerVisibilityFilter` (`backend/src/lib/visibility.ts`) grants everywhere else — unowned customers, customers the caller owns as TAM, and customers of a project the caller can already see. A custom role that hands off won deals (the `pipeline:*` write permissions plus `project:write`) but lacks `project:view-all` therefore sees only unowned customers and customers of its own projects in that picker. Grant `project:view-all` in Admin > Roles to any role that should hand off to any customer.
 
 ## Quick reference card
 

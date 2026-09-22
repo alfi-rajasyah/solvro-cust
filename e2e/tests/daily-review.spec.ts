@@ -23,9 +23,8 @@ import { createTask, isoDateOffset } from "../fixtures/seed";
 // assertion below instead reads a BASELINE before this spec's customer/
 // project enter scope (the seeded project starts PLANNING/uncustomered, so
 // it contributes nothing to any tile yet) and asserts the exact DELTA this
-// spec's own actions produce — the same defensive-against-shared-DB-
-// pollution approach pipeline-board.spec.ts uses for its column-value-sum
-// assertions (a fresh API read rather than a hardcoded total).
+// spec's own actions produce — a fresh API read rather than a hardcoded
+// total, so shared-DB pollution can't break the assertions.
 //
 // Note for whoever re-runs this spec repeatedly against the same dev DB:
 // unlike other fixtures (which leave their seeded project PLANNING and so
@@ -36,8 +35,7 @@ import { createTask, isoDateOffset } from "../fixtures/seed";
 // keeps the assertions correct regardless of how much of that accumulates.
 //
 // e2e/ is its own standalone TS project with no dependency on frontend/src
-// (confirmed precedent: pipeline-board.spec.ts's header comment) — the ISO
-// week arithmetic for the Prev/Next assertion below is a small local
+// — the ISO week arithmetic for the Prev/Next assertion below is a small local
 // re-derivation for the common (non-year-boundary) case, not an import of
 // lib/isoWeek.ts.
 

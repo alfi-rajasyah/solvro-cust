@@ -6,8 +6,8 @@ import { HttpError } from "../http/errors.js";
 // Project-scoping is permission-based, NOT role-name based. `project:view-all`
 // (which "*" also satisfies via hasPermission) grants global visibility;
 // everyone else sees the projects they're attached to as the assigned TAM
-// or SA on the project row, plus every project of a customer they own as
-// TAM (`Customer.tamId` — user decision 2026-08-31, so the Daily Review's
+// on the project row, plus every project of a customer they own as TAM
+// (`Customer.tamId` — user decision 2026-08-31, so the Daily Review's
 // owned-customer groups are actionable, not read-only). Admin grants broader
 // access by adding "project:view-all" (or "*") to a role's permissions in
 // Admin > Roles.
@@ -21,11 +21,7 @@ import { HttpError } from "../http/errors.js";
 export function projectVisibilityFilter(user: JwtPayload): Prisma.ProjectWhereInput {
   if (hasPermission(user, "project:view-all")) return {};
   return {
-    OR: [
-      { tamId: user.sub },
-      { saId: user.sub },
-      { customer: { tamId: user.sub } },
-    ],
+    OR: [{ tamId: user.sub }, { customer: { tamId: user.sub } }],
   };
 }
 
@@ -62,9 +58,9 @@ export async function ensureTaskVisible(
 // customer when they own it (`Customer.tamId`), when nobody owns it
 // (`tamId: null` — unowned customers stay visible to all, as before the
 // rule existed), or when at least one of its projects is visible to them
-// via projectVisibilityFilter — so an SA or a project TAM can always reach
-// the customer behind a project they can open. Hidden = owned by another
-// TAM with no project of the caller's.
+// via projectVisibilityFilter — so a project's TAM can always reach the
+// customer behind a project they can open. Hidden = owned by another TAM
+// with no project of the caller's.
 //
 // The result's only top-level key is `OR`. AND-compose (never object-spread)
 // when combining it with a sibling `OR` condition, or the visibility arms
@@ -87,8 +83,8 @@ export function customerVisibilityFilter(user: JwtPayload): Prisma.CustomerWhere
 
 // Boolean primitive: does this customer exist AND fall inside the caller's
 // visibility? Routes that take a customerId as a body field (POST /projects,
-// PATCH /projects/:id, the opportunity handoff) use it directly and answer
-// 400 `customer_not_found` — a bad field, not a missing resource.
+// PATCH /projects/:id) use it directly and answer 400 `customer_not_found`
+// — a bad field, not a missing resource.
 export async function isCustomerVisible(
   user: JwtPayload,
   customerId: number,

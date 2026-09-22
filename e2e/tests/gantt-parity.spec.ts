@@ -75,7 +75,6 @@ async function createTask(
 async function createIsolatedProject(
   base: string,
   token: string,
-  userId: number,
   name: string,
 ): Promise<number> {
   const H = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
@@ -87,7 +86,7 @@ async function createIsolatedProject(
   const res = await fetch(`${base}/api/projects`, {
     method: "POST",
     headers: H,
-    body: JSON.stringify({ name, customerId, saId: userId }),
+    body: JSON.stringify({ name, customerId }),
   });
   const body = await res.text();
   expect(res.ok, `createIsolatedProject failed: ${res.status} ${body}`).toBe(true);
@@ -227,10 +226,10 @@ test.describe("gantt parity — ReUI engine (desktop)", () => {
   test(
     "opening the Gantt shows an existing task's bar without manual scrolling, regardless of its dates",
     async ({ page, seededProject }) => {
-      const { token, userId } = seededProject;
+      const { token } = seededProject;
       const base = apiBase(test.info());
       const s = stamp();
-      const projectId = await createIsolatedProject(base, token, userId, `FarPast ${s}`);
+      const projectId = await createIsolatedProject(base, token, `FarPast ${s}`);
       const farPast = await createTask(base, token, projectId, {
         title: `FarPast ${s}`,
         status: "TODO",
@@ -628,10 +627,10 @@ test.describe("gantt parity — ReUI engine (desktop)", () => {
     page,
     seededProject,
   }) => {
-    const { token, userId } = seededProject;
+    const { token } = seededProject;
     const base = apiBase(test.info());
     const s = stamp();
-    const projectId = await createIsolatedProject(base, token, userId, `ZoomPill ${s}`);
+    const projectId = await createIsolatedProject(base, token, `ZoomPill ${s}`);
     const task = await createTask(base, token, projectId, {
       title: `ZoomPill ${s}`,
       status: "TODO",
@@ -995,7 +994,7 @@ test.describe("gantt parity — ReUI engine (desktop)", () => {
     page,
     seededProject,
   }) => {
-    const { token, userId } = seededProject;
+    const { token } = seededProject;
     const base = apiBase(test.info());
     const s = stamp();
     // Own isolated project (not the shared seededProject) — by the time
@@ -1005,7 +1004,7 @@ test.describe("gantt parity — ReUI engine (desktop)", () => {
     // unrelated tasks, making for a cluttered, unrepresentative screenshot.
     // A handful of rows in a dedicated project keeps everything reachable
     // without scrolling gymnastics.
-    const projectId = await createIsolatedProject(base, token, userId, `Checklist ${s}`);
+    const projectId = await createIsolatedProject(base, token, `Checklist ${s}`);
     const pred = await createTask(base, token, projectId, {
       title: "ChecklistPred",
       status: "TODO",

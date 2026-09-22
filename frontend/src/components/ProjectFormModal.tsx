@@ -68,7 +68,6 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [saId, setSaId] = useState<number | "">("");
   const [tamId, setTamId] = useState<number | "">("");
   const [customerId, setCustomerId] = useState<number | "">("");
   const [status, setStatus] = useState<ProjectStatus>("PLANNING");
@@ -82,7 +81,6 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
     if (project) {
       setName(project.name);
       setDescription(project.description ?? "");
-      setSaId(project.saId ?? "");
       setTamId(project.tamId);
       setCustomerId(project.customerId ?? "");
       setStatus(project.status);
@@ -91,7 +89,6 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
     } else {
       setName("");
       setDescription("");
-      setSaId("");
       setTamId("");
       setCustomerId("");
       setStatus("PLANNING");
@@ -100,10 +97,9 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
     }
   }, [open, project, user]);
 
-  // SA / TAM dropdowns list all users — role names no longer gate who's
-  // eligible to be assigned (admin's choice). Anti-self-clutter not done
-  // here because useUsers() doesn't expose `active`.
-  const sas = users ?? [];
+  // TAM dropdown lists all users — role names no longer gate who's eligible
+  // to be assigned (admin's choice). Anti-self-clutter not done here because
+  // useUsers() doesn't expose `active`.
   const tams = users ?? [];
   const canPickTam = user?.permissions?.includes("*") ?? false;
 
@@ -124,7 +120,6 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
         await update.mutateAsync({
           name: name.trim(),
           description: description.trim() || null,
-          saId: saId === "" ? null : Number(saId),
           tamId: tamId === "" ? undefined : Number(tamId),
           customerId: Number(customerId),
           status,
@@ -136,7 +131,6 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
         const created = await create.mutateAsync({
           name: name.trim(),
           description: description.trim() || undefined,
-          saId: saId === "" ? undefined : Number(saId),
           tamId: tamId === "" ? undefined : Number(tamId),
           customerId: Number(customerId),
           status,
@@ -222,36 +216,19 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
           </select>
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Solution Architect">
-            <select
-              value={saId === "" ? "" : String(saId)}
-              onChange={(e) => setSaId(e.target.value === "" ? "" : Number(e.target.value))}
-              className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
-            >
-              <option value="">No SA</option>
-              {sas.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.username}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Status">
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as ProjectStatus)}
-              className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
-            >
-              {PROJECT_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s.replace("_", " ")}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
+        <Field label="Status">
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as ProjectStatus)}
+            className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+          >
+            {PROJECT_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s.replace("_", " ")}
+              </option>
+            ))}
+          </select>
+        </Field>
 
         {canPickTam && (
           <Field label="Technical Account Manager">

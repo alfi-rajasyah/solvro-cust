@@ -1,12 +1,11 @@
 import { Link } from "react-router-dom";
-import { PipelineOverviewPanel } from "@/components/pipeline/PipelineOverviewPanel";
 import {
   PortfolioCalendar,
   sortPortfolioRows,
 } from "@/components/portfolio/PortfolioCalendar";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { ProjectStatusChip } from "@/components/StatusChip";
-import { hasPermission, useAuth } from "@/lib/auth";
+import { useAuth } from "@/lib/auth";
 import { dayLabel } from "@/lib/dailyReviewStats";
 import { dayFromIso } from "@/lib/dateField";
 import {
@@ -41,13 +40,6 @@ export function Overview() {
       )}
 
       {data && <OverviewBody data={data} />}
-
-      {/* Pipeline fold-in (PRD §2.7) — gated on pipeline:view so a TAM
-          without Pipeline access sees no panel at all, not an empty shell,
-          and never triggers the underlying opportunities fetch. Renders
-          independently of useOverview()'s own loading/error state, since
-          it owns its own data (useOpportunities()). */}
-      {hasPermission(user, "pipeline:view") && <PipelineOverviewPanel />}
     </div>
   );
 }
