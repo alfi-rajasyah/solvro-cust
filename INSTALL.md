@@ -51,7 +51,7 @@ The installer asks for:
 | Postgres host port | not published | Leave blank unless you need direct database access. Always bound to `127.0.0.1`. |
 | Bind address | `127.0.0.1` | `127.0.0.1` = reachable from the server only. `0.0.0.0` = reachable on the network. |
 
-It then generates the database password and the signing secret, writes `~/solvro/.env` and `~/solvro/docker-compose.yml`, pulls the images, starts the stack, waits for the API, and creates the admin. A first install takes about 2 minutes after the pull.
+It then generates the database password, the signing secret, and the secrets-at-rest key, writes `~/solvro/.env` and `~/solvro/docker-compose.yml`, pulls the images, starts the stack, waits for the API, and creates the admin. A first install takes about 2 minutes after the pull.
 
 Every prompt can be answered from the environment instead, which makes the install non-interactive:
 

@@ -1875,3 +1875,63 @@ item.
   existing pattern (`MidweekSyncModal.tsx`); not blocking either form. Fix
   direction: mark the offending card itself (e.g. a border in the error
   tone) or scroll/focus it when the save is blocked.
+
+## iTop integration Phase 1 — deferred findings (2026-09-22)
+
+User-deferred findings from the wave-1 review of the iTop integration's first
+phase (branch `feat/itop-p1-tickets` — see `CHANGELOG.md`'s "iTop
+integration: encrypted secrets at rest, ticket snapshot schema, REST client"
+entry). No fix now; each is a Phase 2/3 follow-up per
+`docs/plans/itop-integration.md`.
+
+- **`itop_tickets` has a low-cardinality `@@index([status])`.**
+  `backend/prisma/schema.prisma:559` (`ItopTicket` model, lines 533-563)
+  indexes `status` alone; `status` has only a handful of distinct values
+  (`new`, `assigned`, `resolved`, `closed`, …), so the index does little to
+  narrow a scan once the table has real volume, while every read in
+  `backend/src/routes/itop.ts` (ongoing/resolved/mine scopes) always filters
+  by `customerId` first. Fix direction: replace it with
+  `@@index([customerId, status])` in the next iTop migration.
+- **iTop datetimes are parsed as UTC.** `parseItopDate` in
+  `backend/src/lib/itop/sync.ts:61` treats every date/time string iTop
+  returns (`start_date`, `last_update`, `tto`, `ttr`, `resolution_date`) as
+  UTC with no timezone conversion. If the iTop server itself runs in local
+  (non-UTC) time, every stamp — and the SLA/age math derived from it — is
+  off by the server's UTC offset. Fix direction: a per-install timezone
+  setting (likely on `ItopConfig`) once an iTop admin confirms the source
+  server's zone; no such setting exists yet.
+- **`GET /customers/:id` doesn't type or use `itopOrgId`/`itopOrgName` on
+  the frontend, though the backend response already carries both fields.**
+  `backend/src/routes/customers.ts`'s `GET /:id` calls
+  `prisma.customer.findFirst({ where, include: customerInclude(user) })`
+  with no top-level `select` — Prisma's default behavior for `include`
+  without `select` returns every scalar column of `Customer` (so
+  `itopOrgId`/`itopOrgName` are already on the wire) alongside the included
+  relations. The frontend's `CustomerDetail` type
+  (`frontend/src/lib/queries.ts:83`) doesn't declare either field, and
+  `frontend/src/pages/CustomerDetail.tsx:59-62` instead derives whether a
+  customer is iTop-mapped from the tickets endpoint's own `mapped` flag —
+  its inline comment attributes the omission to a `customers.ts` "select",
+  but the route uses `include`, not `select`, so the fields are just
+  untyped and unread on the frontend, not actually withheld by the backend.
+  Consider typing and using them directly in Phase 2, or explicitly
+  trimming the route's response with a real `select` if withholding them
+  was the intent.
+- **No pino `redact` configuration — defence in depth for the iTop token.**
+  `backend/src/logger.ts` creates the shared pino logger with no `redact`
+  option, though `docs/plans/itop-integration.md` §5 ("Risks") calls for
+  redacting `token` / `Auth-Token` paths. No current code path actually logs
+  the iTop application token — it travels to iTop in a request body that the
+  HTTP request logger (see the next entry) doesn't log — so this is a
+  hardening gap, not a live leak. Fix direction: add a `redact` array
+  (`token`, `Auth-Token`, and the equivalent per-TAM token fields Phase 5
+  introduces) to the `pino()` call in `backend/src/logger.ts`.
+- **Pre-existing: the request logger logs the `Authorization` header
+  (found during this phase's review, unrelated to the iTop diff).**
+  `backend/src/app.ts`'s `app.use(pinoHttp({ logger }))` uses `pino-http`'s
+  default `req` serializer, which logs request headers — including
+  `Authorization` (the caller's bearer JWT) and `Cookie` — at the configured
+  `LOG_LEVEL`. Recommended fix, standalone from the iTop work: add
+  `redact: ["req.headers.authorization", "req.headers.cookie"]` to the pino
+  logger (`backend/src/logger.ts`) so `pino-http` redacts those paths before
+  they're written.
