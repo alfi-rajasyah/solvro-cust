@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-table";
 import { Modal } from "@/components/Modal";
 import { Tabs } from "@/components/Tabs";
+import { ItopTab } from "@/components/admin/ItopTab";
 import { ApiError } from "@/lib/api";
 import {
   type AdminProject,
@@ -38,13 +39,14 @@ import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll
 import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type Tab = "users" | "roles" | "signin" | "projects";
+type Tab = "users" | "roles" | "signin" | "projects" | "itop";
 
 const TAB_ITEMS: ReadonlyArray<{ key: Tab; label: string }> = [
   { key: "users", label: "Users" },
   { key: "roles", label: "Roles" },
   { key: "signin", label: "Sign-in" },
   { key: "projects", label: "Project Override" },
+  { key: "itop", label: "iTop" },
 ];
 
 // Domain regex matches the backend validator (PATCH /admin/settings/auth).
@@ -81,6 +83,7 @@ export function Admin() {
         {tab === "roles" && <RolesTab />}
         {tab === "signin" && <SignInTab />}
         {tab === "projects" && <ProjectsTab />}
+        {tab === "itop" && <ItopTab />}
       </div>
     </div>
   );
