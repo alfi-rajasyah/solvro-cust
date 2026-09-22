@@ -106,6 +106,10 @@ model User {
   customerNotes          CustomerNote[]
   weeklyUpdates          WeeklyUpdate[]
   projectReviews         ProjectReview[]
+  itopConfigUpdates      ItopConfig[]          @relation("ItopConfigUpdatedBy")
+  // iTop Person/User object keys this account is matched to (by email).
+  itopPersonId           Int?                  @unique @map("itop_person_id")
+  itopUserId             Int?                  @unique @map("itop_user_id")
 
   @@index([roleId])
   @@map("users")
@@ -126,6 +130,30 @@ model AuthConfig {
   updatedBy            User?    @relation("AuthConfigUpdatedBy", fields: [updatedById], references: [id])
 
   @@map("auth_config")
+}
+
+// Singleton row (id="default") holding the iTop connection + sync policy,
+// editable by an admin without a redeploy. Copies the AuthConfig singleton
+// pattern above. Token fields hold sealed ciphertext (backend/src/lib/secretBox.ts)
+// — never the plaintext token — set by a later task.
+model ItopConfig {
+  id                   String    @id @default("default")
+  baseUrl              String?   @map("base_url")
+  appTokenEnc          String?   @map("app_token_enc")
+  webhookSecretEnc     String?   @map("webhook_secret_enc")
+  refreshMinutes       Int       @default(5) @map("refresh_minutes")
+  readClasses          String[]  @default(["UserRequest", "Incident"]) @map("read_classes")
+  capacityHoursPerWeek Int       @default(40) @map("capacity_hours_per_week")
+  actionsEnabled       Boolean   @default(false) @map("actions_enabled")
+  lastSyncAt           DateTime? @map("last_sync_at")
+  lastSyncOk           Boolean?  @map("last_sync_ok")
+  lastSyncError        String?   @map("last_sync_error")
+  lastFullSyncAt       DateTime? @map("last_full_sync_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  updatedById          Int?      @map("updated_by_id")
+  updatedBy            User?     @relation("ItopConfigUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("itop_config")
 }
 
 model Project {
@@ -180,6 +208,11 @@ model Customer {
   tam               User?             @relation("CustomerTam", fields: [tamId], references: [id], onDelete: SetNull)
   notes             CustomerNote[]
   weeklyUpdates     WeeklyUpdate[]
+  // iTop Organization this customer is mapped to (admin-mapped or exact
+  // name auto-match). One customer per org.
+  itopOrgId         Int?              @unique @map("itop_org_id")
+  itopOrgName       String?           @map("itop_org_name")
+  itopTickets       ItopTicket[]
 
   @@index([tamId])
   @@map("customers")
@@ -491,4 +524,41 @@ model ProjectReview {
   @@unique([projectId, userId, reviewDate])
   @@index([userId, reviewDate])
   @@map("project_reviews")
+}
+
+// Read-only snapshot of an iTop UserRequest/Incident, refreshed by the
+// scheduled sync (backend/src/lib/itop/sync.ts, later task). `id` is the
+// iTop object key, not a Solvro-assigned autoincrement — never generated
+// here. Log columns (public/private) are added in a later phase.
+model ItopTicket {
+  id                Int       @id
+  class             String
+  ref               String    @unique
+  title             String
+  status            String
+  operationalStatus String?   @map("operational_status")
+  priority          String?
+  agentPersonId     Int?      @map("agent_person_id")
+  agentName         String?   @map("agent_name")
+  teamName          String?   @map("team_name")
+  serviceName       String?   @map("service_name")
+  callerName        String?   @map("caller_name")
+  orgId             Int       @map("org_id")
+  customerId        Int?      @map("customer_id")
+  customer          Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  startDate         DateTime? @map("start_date")
+  lastUpdate        DateTime  @map("last_update")
+  tto               DateTime?
+  ttr               DateTime?
+  slaTtoPassed      Boolean   @default(false) @map("sla_tto_passed")
+  slaTtrPassed      Boolean   @default(false) @map("sla_ttr_passed")
+  resolutionDate    DateTime? @map("resolution_date")
+  syncedAt          DateTime  @map("synced_at")
+
+  @@index([customerId])
+  @@index([status])
+  @@index([lastUpdate])
+  @@index([agentPersonId])
+  @@index([orgId])
+  @@map("itop_tickets")
 }
