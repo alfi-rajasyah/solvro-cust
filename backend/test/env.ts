@@ -13,5 +13,9 @@ process.env.DATABASE_URL =
   process.env.DATABASE_URL ?? "postgresql://solvro:test@localhost:5433/solvro?schema=public";
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? "test-jwt-secret-at-least-32-characters-long";
 process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN ?? "8h";
+// Fixed 32-byte test key (base64 of the literal "solvro-test-secrets-key-32-bytes").
+// Only for the isolated test DB — never reuse outside this suite.
+process.env.SECRETS_KEY =
+  process.env.SECRETS_KEY ?? "c29sdnJvLXRlc3Qtc2VjcmV0cy1rZXktMzItYnl0ZXM=";
 process.env.CORS_ORIGIN = process.env.CORS_ORIGIN ?? "*";
 process.env.LOG_LEVEL = process.env.LOG_LEVEL ?? "error";

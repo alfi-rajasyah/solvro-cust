@@ -530,6 +530,16 @@ export const queryKeys = {
   // Overview without waiting out staleTime.
   recentNotes: (today: string) => ["recent-notes", today] as const,
   recentNotesRoot: ["recent-notes"] as const,
+  // Non-admin iTop reads (Task 1.8) — see the `useItopStatus`/
+  // `useCustomerTickets` hooks below for the routes these back.
+  // `customerTicketsRoot` is the prefix `useRequestItopRefresh` invalidates
+  // after a refresh (same rationale as `recentNotesRoot` above: one root so
+  // every scope/class bucket for that customer refreshes, not just the one
+  // a caller happens to be viewing).
+  itopStatus: ["itop", "status"] as const,
+  customerTicketsRoot: (id: number) => ["itop", "customers", id, "tickets"] as const,
+  customerTickets: (id: number, scope: ItopTicketScope, cls?: ItopTicketClass) =>
+    [...queryKeys.customerTicketsRoot(id), scope, cls ?? null] as const,
 };
 
 export function useOverview() {
@@ -1973,6 +1983,143 @@ export function useAddComment(taskId: number) {
   });
 }
 
+// ---- iTop tickets (Task 1.8) ------------------------------------------
+// Non-admin iTop reads: connection status (gates the Customer Tickets tab
+// and builds "Open in iTop ↗" links) and a customer's ticket list + counts.
+// Backend: routes/itop.ts, mounted at /itop — any authed user with
+// visibility into the customer can read (no admin gate), unlike the
+// adminQueryKeys `itop*` hooks further down this file, which back the Admin
+// "iTop" tab (routes/itopAdmin.ts). See
+// docs/archive/plans/itop-integration.md Task 1.8.
+
+export type ItopTicketScope = "ongoing" | "resolved_week" | "mine";
+export type ItopTicketClass = "UserRequest" | "Incident";
+
+export interface ItopStatus {
+  configured: boolean;
+  baseUrl: string | null;
+  lastSyncAt: string | null;
+  lastSyncOk: boolean | null;
+  // `lastSyncError` is deliberately NOT part of this response — the raw
+  // iTop error text is admin-only (see the Admin "iTop" tab / GET
+  // /admin/itop/settings for that). Non-admin callers only learn
+  // "did the last sync fail", not why.
+  refreshMinutes: number;
+}
+
+export interface ItopTicketRow {
+  id: number;
+  class: ItopTicketClass;
+  ref: string;
+  title: string;
+  status: string;
+  operationalStatus: string | null;
+  priority: string | null;
+  agentPersonId: number | null;
+  agentName: string | null;
+  teamName: string | null;
+  serviceName: string | null;
+  callerName: string | null;
+  startDate: string | null;
+  lastUpdate: string;
+  tto: string | null;
+  ttr: string | null;
+  slaTtoPassed: boolean;
+  slaTtrPassed: boolean;
+  resolutionDate: string | null;
+  isMine: boolean;
+}
+
+export interface ItopTicketCounts {
+  ongoing: number;
+  resolvedWeek: number;
+  mine: number;
+  incidents: number;
+  requests: number;
+}
+
+// Discriminated on `mapped` — GET /itop/customers/:id/tickets answers
+// `mapped: false` (no org linked; empty tickets/counts) or `mapped: true`
+// (org name + the scoped ticket list), rather than a nullable orgName.
+export type CustomerTicketsResponse =
+  | { mapped: false; tickets: []; counts: ItopTicketCounts; syncedAt: null }
+  | {
+      mapped: true;
+      orgName: string | null;
+      tickets: ItopTicketRow[];
+      counts: ItopTicketCounts;
+      syncedAt: string | null;
+    };
+
+export function useItopStatus() {
+  return useQuery({
+    queryKey: queryKeys.itopStatus,
+    queryFn: ({ signal }) => apiRequest<ItopStatus>("/itop/status", { signal }),
+    staleTime: 60_000,
+  });
+}
+
+export function useCustomerTickets(
+  customerId: number,
+  {
+    scope,
+    cls,
+    enabled = true,
+    poll = false,
+  }: { scope: ItopTicketScope; cls?: ItopTicketClass; enabled?: boolean; poll?: boolean },
+) {
+  return useQuery({
+    queryKey: queryKeys.customerTickets(customerId, scope, cls),
+    queryFn: ({ signal }) => {
+      const params = new URLSearchParams({ scope });
+      if (cls) params.set("class", cls);
+      return apiRequest<CustomerTicketsResponse>(
+        `/itop/customers/${customerId}/tickets?${params.toString()}`,
+        { signal },
+      );
+    },
+    enabled,
+    staleTime: 30_000,
+    // The first `refetchInterval` in the app (frontend/CLAUDE.md's Task 1.8
+    // dispatch note flags this) — keep it scoped to this hook only. Backs
+    // the Tickets tab's "refreshed every 5 minutes" promise
+    // (docs/archive/plans/itop-integration-spec.md's mockup) while resting on
+    // top of the backend's own sync cadence; `refetchIntervalInBackground:
+    // false` so a backgrounded tab stops polling. `poll` defaults false so
+    // CustomerDetail.tsx's own tab-visibility gate call (every customer page
+    // load) doesn't quietly turn into a background poll for every visitor —
+    // only TicketsTab.tsx's own call (the tab actually open) passes `true`.
+    refetchInterval: poll ? 60_000 : false,
+    refetchIntervalInBackground: false,
+  });
+}
+
+export function useRequestItopRefresh() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { customerId?: number } = {}) =>
+      apiRequest<{ requested: boolean; reason?: string; lastSyncAt: string | null }>(
+        "/itop/refresh",
+        { method: "POST", body: input },
+      ),
+    onSuccess: (_data, variables) => {
+      // POST /refresh only requests a sync — the sync itself runs async
+      // server-side (routes/itop.ts), so invalidating immediately would
+      // very likely refetch the pre-sync snapshot. 3s is a guess at "long
+      // enough"; useCustomerTickets' own 60s refetchInterval (when polling)
+      // is the belt-and-braces fallback if this fires too early or the sync
+      // takes longer.
+      const key = variables?.customerId !== undefined
+        ? queryKeys.customerTicketsRoot(variables.customerId)
+        : (["itop"] as const);
+      setTimeout(() => {
+        qc.invalidateQueries({ queryKey: key });
+        qc.invalidateQueries({ queryKey: queryKeys.itopStatus });
+      }, 3000);
+    },
+  });
+}
+
 export interface AdminUser {
   id: number;
   username: string;
@@ -2018,6 +2165,10 @@ export const adminQueryKeys = {
   projects: ["admin", "projects"] as const,
   roles: ["admin", "roles"] as const,
   authSettings: ["admin", "settings", "auth"] as const,
+  itopSettings: ["admin", "itop", "settings"] as const,
+  itopOrganizations: ["admin", "itop", "organizations"] as const,
+  itopCustomers: ["admin", "itop", "customers"] as const,
+  itopPersons: ["admin", "itop", "persons"] as const,
 };
 
 export interface AdminRole {
@@ -2233,6 +2384,240 @@ export function useGoogleAuthConfig() {
         auth: false,
       }),
     staleTime: 60_000,
+  });
+}
+
+// ---- iTop admin (Task 1.6) --------------------------------------------
+// Connection settings, org↔customer mapping, and the user↔iTop-person match
+// report behind the Admin "iTop" tab. Backend: routes/itopAdmin.ts, mounted
+// at /admin/itop (docs/archive/plans/itop-integration.md §2 deviation 4) —
+// deliberately its own router, not routes/admin.ts. Kept as one contiguous
+// block per the plan's spine-file convention for lib/queries.ts.
+
+export type ItopReadClass = "UserRequest" | "Incident";
+
+export interface ItopProbeResult {
+  name: string;
+  ok: boolean;
+  message: string;
+}
+
+export interface ItopSettings {
+  baseUrl: string | null;
+  appTokenSet: boolean;
+  webhookSecretSet: boolean;
+  refreshMinutes: number;
+  readClasses: ItopReadClass[];
+  capacityHoursPerWeek: number;
+  actionsEnabled: boolean;
+  lastSyncAt: string | null;
+  lastSyncOk: boolean | null;
+  lastSyncError: string | null;
+  lastFullSyncAt: string | null;
+  updatedAt: string;
+  updatedBy: { id: number; username: string } | null;
+}
+
+// All fields optional: `undefined` (omitted) leaves the column alone on the
+// backend, `null` clears baseUrl. appToken has no clear affordance in this
+// UI (see ItopTab.tsx) but the backend accepts `null` there too.
+export interface UpdateItopSettingsInput {
+  baseUrl?: string | null;
+  appToken?: string | null;
+  refreshMinutes?: number;
+  readClasses?: ItopReadClass[];
+  capacityHoursPerWeek?: number;
+  actionsEnabled?: boolean;
+}
+
+export interface ItopTestConnectionInput {
+  baseUrl?: string;
+  appToken?: string;
+}
+
+export interface ItopTestResult {
+  ok: boolean;
+  probes: ItopProbeResult[];
+}
+
+// POST /admin/itop/sync is fire-and-forget on the backend (routes/itopAdmin.ts):
+// a full first sync of a real install can run past nginx's proxy timeout, so
+// the route kicks syncTickets() off in the background and answers 202
+// immediately — it never returns sync counts inline. `lastSyncAt` on the
+// `started: true` branch is the value from *before* this run, useful only as
+// a "did it actually update yet" baseline while polling useItopSettings.
+export interface ItopSyncStarted {
+  started: true;
+  lastSyncAt: string | null;
+}
+
+export interface ItopSyncNotStarted {
+  started: false;
+  reason: string;
+}
+
+export type ItopSyncResult = ItopSyncStarted | ItopSyncNotStarted;
+
+export interface ItopOrganization {
+  id: number;
+  name: string;
+  mappedCustomerId: number | null;
+}
+
+export type ItopCustomerMatch = "name" | "manual" | "unmatched";
+
+export interface ItopCustomerRow {
+  id: number;
+  name: string;
+  itopOrgId: number | null;
+  itopOrgName: string | null;
+  match: ItopCustomerMatch;
+}
+
+export interface ItopPersonRow {
+  id: number;
+  username: string;
+  email: string;
+  itopPersonId: number | null;
+  itopUserId: number | null;
+  matched: boolean;
+}
+
+export interface ItopPersonsResponse {
+  users: ItopPersonRow[];
+  unmatched: number;
+}
+
+export function useItopSettings() {
+  return useQuery({
+    queryKey: adminQueryKeys.itopSettings,
+    queryFn: ({ signal }) =>
+      apiRequest<ItopSettings>("/admin/itop/settings", { signal }),
+  });
+}
+
+export function useUpdateItopSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateItopSettingsInput) =>
+      apiRequest<ItopSettings>("/admin/itop/settings", {
+        method: "PATCH",
+        body: input,
+      }),
+    onSuccess: (fresh) => {
+      qc.setQueryData(adminQueryKeys.itopSettings, fresh);
+      qc.invalidateQueries({ queryKey: adminQueryKeys.itopSettings });
+    },
+  });
+}
+
+// No invalidation: a test run never persists anything server-side.
+export function useTestItopConnection() {
+  return useMutation({
+    mutationFn: (input: ItopTestConnectionInput) =>
+      apiRequest<ItopTestResult>("/admin/itop/test", {
+        method: "POST",
+        body: input,
+      }),
+  });
+}
+
+export function useItopSyncNow() {
+  const qc = useQueryClient();
+  function refetchSyncedState() {
+    qc.invalidateQueries({ queryKey: adminQueryKeys.itopSettings });
+    qc.invalidateQueries({ queryKey: adminQueryKeys.itopCustomers });
+  }
+  return useMutation({
+    mutationFn: (input: { full?: boolean } = {}) =>
+      apiRequest<ItopSyncResult>("/admin/itop/sync", {
+        method: "POST",
+        body: input,
+      }),
+    onSuccess: (result) => {
+      refetchSyncedState();
+      // The sync itself finishes on the server after this 202 response — poll
+      // twice more so the "Synced … · ok" line and the customer mapping
+      // table pick up the result without the admin needing to hit refresh.
+      if (result.started) {
+        setTimeout(refetchSyncedState, 3_000);
+        setTimeout(refetchSyncedState, 15_000);
+      }
+    },
+  });
+}
+
+export function useItopOrganizations() {
+  return useQuery({
+    queryKey: adminQueryKeys.itopOrganizations,
+    queryFn: ({ signal }) =>
+      apiRequest<ItopOrganization[]>("/admin/itop/organizations", { signal }),
+    // Live iTop reads, not snapshot data — cheap to skip refetching for a
+    // minute, and never worth retrying automatically: a 502/409 here means
+    // iTop is unreachable or unconfigured, not a transient network blip.
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
+export function useItopCustomers() {
+  return useQuery({
+    queryKey: adminQueryKeys.itopCustomers,
+    queryFn: ({ signal }) =>
+      apiRequest<ItopCustomerRow[]>("/admin/itop/customers", { signal }),
+  });
+}
+
+export function useMapItopCustomer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, itopOrgId }: { id: number; itopOrgId: number | null }) =>
+      apiRequest<ItopCustomerRow>(`/admin/itop/customers/${id}`, {
+        method: "PATCH",
+        body: { itopOrgId },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: adminQueryKeys.itopCustomers });
+      qc.invalidateQueries({ queryKey: adminQueryKeys.itopOrganizations });
+    },
+  });
+}
+
+export function useAutomatchItopCustomers() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiRequest<{ matched: number; customers: ItopCustomerRow[] }>(
+        "/admin/itop/customers/automatch",
+        { method: "POST" },
+      ),
+    onSuccess: (fresh) => {
+      qc.setQueryData(adminQueryKeys.itopCustomers, fresh.customers);
+      qc.invalidateQueries({ queryKey: adminQueryKeys.itopCustomers });
+      qc.invalidateQueries({ queryKey: adminQueryKeys.itopOrganizations });
+    },
+  });
+}
+
+export function useItopPersons() {
+  return useQuery({
+    queryKey: adminQueryKeys.itopPersons,
+    queryFn: ({ signal }) =>
+      apiRequest<ItopPersonsResponse>("/admin/itop/persons", { signal }),
+  });
+}
+
+export function useMatchItopPersons() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiRequest<ItopPersonsResponse>("/admin/itop/persons/match", {
+        method: "POST",
+      }),
+    onSuccess: (fresh) => {
+      qc.setQueryData(adminQueryKeys.itopPersons, fresh);
+      qc.invalidateQueries({ queryKey: adminQueryKeys.itopPersons });
+    },
   });
 }
 

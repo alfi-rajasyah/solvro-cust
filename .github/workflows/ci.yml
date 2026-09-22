@@ -124,9 +124,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Generate a throwaway JWT secret per run — never stored in the repo.
-      - name: Generate ephemeral JWT secret
-        run: echo "JWT_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      # Generate throwaway secrets per run — never stored in the repo.
+      - name: Generate ephemeral secrets
+        run: |
+          {
+            echo "JWT_SECRET=$(openssl rand -hex 32)"
+            echo "SECRETS_KEY=$(openssl rand -base64 32)"
+          } >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
@@ -185,6 +189,7 @@ jobs:
         run: |
           {
             echo "JWT_SECRET=$(openssl rand -hex 32)"
+            echo "SECRETS_KEY=$(openssl rand -base64 32)"
             echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
             echo "ADMIN_PASSWORD=$(openssl rand -hex 24)"
           } >> "$GITHUB_ENV"

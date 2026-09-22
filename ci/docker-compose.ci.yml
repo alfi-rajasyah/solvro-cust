@@ -1,8 +1,8 @@
 # Ephemeral CI/e2e stack. All credentials come from the environment — there
 # are no secret literals in this file. CI passes POSTGRES_PASSWORD (repo
-# Actions secret) and JWT_SECRET (generated per run). For a local run, copy
+# Actions secret), JWT_SECRET and SECRETS_KEY (generated per run). For a local run, copy
 # ci/.env.ci.example to ci/.env and fill it, or export the vars inline:
-#   POSTGRES_PASSWORD=... JWT_SECRET=$(openssl rand -hex 32) \
+#   POSTGRES_PASSWORD=... JWT_SECRET=$(openssl rand -hex 32) SECRETS_KEY=$(openssl rand -base64 32) \
 #     docker compose --env-file ci/.env -f ci/docker-compose.ci.yml up --build
 services:
   postgres:
@@ -33,6 +33,7 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://solvro:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/solvro?schema=public
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      SECRETS_KEY: ${SECRETS_KEY:?SECRETS_KEY is required}
       JWT_EXPIRES_IN: 8h
       CORS_ORIGIN: "*"
       LOG_LEVEL: info

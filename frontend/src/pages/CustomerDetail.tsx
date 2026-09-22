@@ -15,6 +15,7 @@ import { DataGridColumnHeader } from "@/components/reui/data-grid/data-grid-colu
 import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll-area";
 import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
 import { EmptyState } from "@/components/EmptyState";
+import { TicketsTab } from "@/components/itop/TicketsTab";
 import { ServiceMappingList } from "@/components/services/ServiceMappingList";
 import { Chip, ProjectStatusChip } from "@/components/StatusChip";
 import { Tabs } from "@/components/Tabs";
@@ -31,21 +32,15 @@ import {
   type WeeklyStatus,
   type WeeklyUpdate,
   useCustomer,
+  useCustomerTickets,
   useCustomerWeeklyUpdates,
   useDeleteCustomer,
+  useItopStatus,
   useUpdateCustomerServices,
 } from "@/lib/queries";
 import { personNameSortingFn } from "@/lib/tableSort";
 
-type Tab = "overview" | "services" | "topology" | "documents" | "org";
-
-const TAB_ITEMS: ReadonlyArray<{ key: Tab; label: string }> = [
-  { key: "overview", label: "Overview" },
-  { key: "services", label: "Services" },
-  { key: "topology", label: "Topology" },
-  { key: "org", label: "Organization Structure" },
-  { key: "documents", label: "Documents" },
-];
+type Tab = "overview" | "services" | "tickets" | "topology" | "documents" | "org";
 
 export function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
@@ -59,20 +54,57 @@ export function CustomerDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // iTop Tickets tab gating (Task 1.8): the tab only exists when iTop is
+  // configured AND this customer is mapped to an iTop organisation. GET
+  // /customers/:id doesn't expose itopOrgId/itopOrgName (see routes/
+  // customers.ts's select), so "mapped" is derived from the tickets
+  // endpoint's own `mapped` flag instead of a second backend change — this
+  // gate query (scope "ongoing") also doubles as the data the Tickets tab
+  // itself first renders with, since react-query dedupes the identical key.
+  // Both hooks below run unconditionally (hook-order rule); `enabled` does
+  // the gating so a not-yet-loaded customerId or unconfigured iTop just
+  // skips the fetch rather than skipping the hook call.
+  const itopStatus = useItopStatus();
+  const itopConfigured = itopStatus.data?.configured ?? false;
+  const itopTicketsGate = useCustomerTickets(customerId ?? -1, {
+    scope: "ongoing",
+    enabled: itopConfigured && customerId !== null,
+    // This gate call runs on every customer page load (not just while the
+    // Tickets tab is open) — no background polling here. TicketsTab.tsx's
+    // own call opts into polling once the tab is actually visible.
+    poll: false,
+  });
+  const ticketsAvailable = itopConfigured && itopTicketsGate.data?.mapped === true;
+
+  const TAB_ITEMS: ReadonlyArray<{ key: Tab; label: string }> = [
+    { key: "overview", label: "Overview" },
+    { key: "services", label: "Services" },
+    ...(ticketsAvailable ? [{ key: "tickets" as const, label: "Tickets" }] : []),
+    { key: "topology", label: "Topology" },
+    { key: "org", label: "Organization Structure" },
+    { key: "documents", label: "Documents" },
+  ];
+
   const initialTab = (() => {
     const t = searchParams.get("tab");
     return TAB_ITEMS.some((x) => x.key === t) ? (t as Tab) : "overview";
   })();
   const [tab, setTab] = useState<Tab>(initialTab);
 
-  // Honor ?tab= changes from external navigation (e.g. project sidebar Documents link).
+  // Honor ?tab= changes from external navigation (e.g. project sidebar
+  // Documents link) — `ticketsAvailable` is in the dep list too, so a
+  // `?tab=tickets` URL that arrived before the gate query resolved (tab
+  // falls back to "overview" on that first render, see `initialTab` above)
+  // is recovered once `ticketsAvailable` flips true, instead of staying
+  // stuck on the fallback for the rest of the session.
   useEffect(() => {
     const t = searchParams.get("tab");
     if (t && TAB_ITEMS.some((x) => x.key === t) && t !== tab) {
       setTab(t as Tab);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, [searchParams, ticketsAvailable]);
 
   function handleTabChange(next: Tab) {
     setTab(next);
@@ -163,6 +195,12 @@ export function CustomerDetail() {
                 <span className="material-symbols-outlined text-base">support_agent</span>
                 <span>TAM: {customer.tam ? customer.tam.username : "—"}</span>
               </div>
+              {ticketsAvailable && itopTicketsGate.data?.mapped && (
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-base">sync_alt</span>
+                  <span>iTop org · {itopTicketsGate.data.orgName ?? "—"}</span>
+                </div>
+              )}
             </div>
             {canMutate && (
               <div className="mt-3 flex items-center gap-1 border-t border-outline-variant pt-2">
@@ -234,6 +272,7 @@ export function CustomerDetail() {
         {tab === "services" && (
           <ServicesTab customer={customer} canMutate={canMutate} />
         )}
+        {tab === "tickets" && ticketsAvailable && <TicketsTab customerId={customer.id} />}
         {tab === "topology" && (
           <EmptyState
             icon="hub"

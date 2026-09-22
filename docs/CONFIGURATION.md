@@ -48,7 +48,7 @@ When the backend reads a value, it looks here in this order (last wins):
 2. **`process.env`** — set by docker-compose's `environment:` block when running in Docker. Used by **dockerised dev** and **prod**.
 3. **Zod schema defaults** in [backend/src/env.ts](backend/src/env.ts) — applied if the variable is missing entirely.
 
-A missing or invalid env var **crashes the process at startup** with a printed Zod error. There is no silent fallback for required values (`DATABASE_URL`, `JWT_SECRET`).
+A missing or invalid env var **crashes the process at startup** with a printed Zod error. There is no silent fallback for required values (`DATABASE_URL`, `JWT_SECRET`, `SECRETS_KEY`).
 
 ### Frontend: zero env vars at runtime
 
@@ -57,9 +57,10 @@ The frontend has **no runtime env vars**. The compiled bundle uses the literal s
 ### Secrets discipline
 
 - `JWT_SECRET` must be at least 32 chars, generated with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`. The default in `.env.example` is **a placeholder that will fail Zod validation** — this is intentional.
+- `SECRETS_KEY` must be a base64 string decoding to exactly 32 bytes, generated with `openssl rand -base64 32`. It's the AES-256-GCM key for secrets at rest (integration tokens — see [2.16](#216--itop-integration)); rotating it invalidates every stored token, which must be re-entered.
 - `POSTGRES_PASSWORD` defaults to `solvro_dev` for local dev. **Rotate before any deployment.**
 - `.env` files are `.gitignored`; only `.env.example` is committed.
-- The dev-stack `docker-compose.yml` ships a fixed `JWT_SECRET=solvro-dev-jwt-secret-not-for-production-32-chars-minimum-here` so the container starts without an `.env` next to it. **Never use it outside your laptop.**
+- The dev-stack `docker-compose.yml` ships a fixed `JWT_SECRET=solvro-dev-jwt-secret-not-for-production-32-chars-minimum-here` and a fixed dev-only `SECRETS_KEY` so the container starts without an `.env` next to it. **Never use either outside your laptop.**
 
 ---
 
@@ -76,8 +77,10 @@ Defined and validated in [backend/src/env.ts](backend/src/env.ts) (Zod). All oth
 | `DATABASE_URL` | **yes** | none | must be a URL | Prisma connection string. Crashes on startup if unset/invalid. |
 | `JWT_SECRET` | **yes** | none | string, **min 32 chars** | HMAC key for issued tokens. Anything shorter is rejected by Zod. **Rotate before deploy.** |
 | `JWT_EXPIRES_IN` | no | `8h` | string (passed to `jsonwebtoken`) | Token lifetime. Accepts the `jsonwebtoken` shorthand (`60`, `"2 days"`, `"10h"`, `"7d"`). |
+| `SECRETS_KEY` | **yes** | none | base64 string decoding to **exactly 32 bytes** | AES-256-GCM key for secrets at rest (`backend/src/lib/secretBox.ts`) — currently the iTop application token and, from Phase 5, per-TAM iTop tokens. Generate with `openssl rand -base64 32`. Crashes on startup if unset or the wrong length. **Rotating it invalidates every stored token** — they must be re-entered after a rotation. |
 | `CORS_ORIGIN` | no | `http://localhost:5173` | string | Comma-separated origin allowlist. The literal value `*` (after trim) enables `cors({ origin: true })`. |
 | `LOG_LEVEL` | no | `info` | enum: `fatal` \| `error` \| `warn` \| `info` \| `debug` \| `trace` | Pino level threshold. |
+| `ITOP_SYNC_DISABLED` | no | `false` | enum: `true` \| `false` | Kill switch for the in-process iTop sync scheduler (`backend/src/lib/itop/scheduler.ts`) — set `true` to turn the background sync off (e.g. a dev stack with no iTop admin config yet, or a maintenance window). Default off means the sync runs whenever iTop is configured. |
 
 > Looking for Google OAuth config (Client ID, allowed domains)? It's **not** an env var — it's admin-managed in the database. See [2.9](#29--auth--rbac-configuration).
 
@@ -263,7 +266,7 @@ The committed `docker-compose.yml` is a **dev** file. Production is bootstrapped
 **Fresh install** (no `~/solvro/.env` yet):
 
 1. Collects `ADMIN_EMAIL` / `ADMIN_PASSWORD` and the host ports/bind address — `FRONTEND_PORT` (default `80`), `BACKEND_PORT` (default `3000`), `POSTGRES_PORT` (default: unset, stays unpublished), `BIND_ADDR` (default `127.0.0.1`, loopback-only; `0.0.0.0` publishes to the network) — either from env vars (so `ADMIN_EMAIL=... bash <(curl -sSL <url>)` works non-interactively) or interactive prompts read from `/dev/tty`.
-2. **Auto-generates** `POSTGRES_PASSWORD` (`openssl rand -hex 24`) and `JWT_SECRET` (`openssl rand -hex 48`) — these are never prompted for.
+2. **Auto-generates** `POSTGRES_PASSWORD` (`openssl rand -hex 24`), `JWT_SECRET` (`openssl rand -hex 48`), and `SECRETS_KEY` (`openssl rand -base64 32`) — these are never prompted for. On a **re-run** against an install that predates `SECRETS_KEY` (older installs), the script generates one and appends it to `~/solvro/.env` once, without overwriting any value already there.
 3. Writes `~/solvro/.env` (`chmod 600`) and `~/solvro/docker-compose.yml` — a prod-shaped compose file with the GHCR image references hardcoded (see [2.4](#24--ghcr-image-references-production-only)).
 4. Drops any prior `solvro_pgdata` volume (`docker compose down` + `docker volume rm` — **destructive**, intentional on a fresh install to clear stale postgres state), then pulls images and starts the stack.
 5. Polls `GET /health` for up to ~2 minutes, then runs `scripts/create-admin.ts` inside the backend container with the collected admin credentials — a fresh install ends with a working login, no manual step required.
@@ -291,11 +294,20 @@ The `node_modules` directories inside `/app` are intentionally shadowed by **nam
 
 - **Backend has a test runner**: `vitest` — `npm test` (= `vitest run`) from `backend/`. Don't call this unconfigured.
 - **A Playwright e2e suite exists** in `e2e/` (own `package.json`, `playwright.config.ts`): `auth`, `kanban-dnd`, `pwa`, and `smoke` specs in `e2e/tests/`, run against desktop and mobile projects (`npm test` / `npm run test:desktop` / `npm run test:mobile` from `e2e/`).
-- **`ci/docker-compose.ci.yml`** stands up an ephemeral stack (real Postgres, `runtime`-target backend/frontend images) for CI — credentials come entirely from the environment (`POSTGRES_PASSWORD`, `JWT_SECRET`; see `ci/.env.ci.example`), no literals in the file.
+- **`ci/docker-compose.ci.yml`** stands up an ephemeral stack (real Postgres, `runtime`-target backend/frontend images) for CI — credentials come entirely from the environment (`POSTGRES_PASSWORD`, `JWT_SECRET`, `SECRETS_KEY`; see `ci/.env.ci.example`), no literals in the file. `.github/workflows/ci.yml` generates a throwaway `SECRETS_KEY` per run in every job that boots the backend.
 - **Frontend still has no unit test runner, and no linter/formatter is wired into either app.** Use `npm run typecheck` (frontend) or `npm run build` (backend = `tsc`) for frontend/type verification; don't fabricate a frontend `npm test`.
 - **No Secure Ingestion Port webhook** — cancelled 2026-08-03; the user ended the SA-blueprint ingestion path, so Solvro has no Solution Architect ingestion route and none is planned. No env vars exist for it. Its spec is archived at [docs/archive/plans/secure-ingestion-port-spec.md](archive/plans/secure-ingestion-port-spec.md).
 - **No WS / SSE push** layer yet — also PRD §6, also unimplemented (verified: no `ws`/`socket.io`/`EventSource` usage in `backend/src`).
 - **No CI-side env** beyond GitHub Actions defaults — see [.github/workflows/docker-publish.yml](.github/workflows/docker-publish.yml) for the image-publish flow that produces the GHCR artifacts `setup.sh` consumes.
+
+### 2.16 — iTop integration
+
+Solvro reads tickets (and, in later phases, time entries and write actions) from an external [iTop](https://www.itophub.io/) ITSM instance. Unlike Google sign-in ([2.9](#29--auth--rbac-configuration)), the *connection itself* is env-adjacent (`SECRETS_KEY` gates it) but its settings are DB-configured, not env vars:
+
+- **What the connection needs**: the iTop base URL, and an iTop **application token** with the `REST Services` user right plus a read profile on `Organization`, `UserRequest`, `Incident`, `Person` (and, from Phase 3, `TimeSpent`). These are entered by an admin at **Admin > iTop**, not in `backend/.env` or docker-compose — `POST/PATCH /admin/itop/settings` seals the token with `SECRETS_KEY` before it reaches the `itop_config` table (`backend/src/lib/itop/config.ts`, `backend/src/routes/itopAdmin.ts`). `GET /admin/itop/settings` never echoes the token back.
+- **Sync interval**: `ItopConfig.refreshMinutes`, admin-configurable, **default 5 minutes**, minimum 1 minute — read fresh on every tick so a change applies without a restart (`backend/src/lib/itop/scheduler.ts`). A full resync (drops tickets iTop no longer returns) runs once every 24 hours and on a manual "Sync now" / Refresh. `ITOP_SYNC_DISABLED=true` (see [2.1](#21--backend-environment-variables)) stops the scheduler entirely, independent of `refreshMinutes`.
+- **Ports / network**: the backend calls out to iTop's `rest.php` over HTTPS (outbound only — no inbound port to open for the pull path). Browsers never talk to iTop through Solvro's backend; the "Open in iTop ↗" links on the Tickets tab open the iTop base URL directly from the browser, so the iTop host must also be reachable from wherever Solvro's users sit.
+- **Secrets**: the application token (and, from Phase 5, each TAM's personal iTop token) is encrypted at rest with `SECRETS_KEY` via `backend/src/lib/secretBox.ts` (AES-256-GCM, versioned `v1:` prefix) — see the `SECRETS_KEY` row in [2.1](#21--backend-environment-variables) and the Secrets discipline note above for the rotation caveat.
 
 ## Quick reference card
 
@@ -304,6 +316,7 @@ The `node_modules` directories inside `/app` are intentionally shadowed by **nam
 │  REQUIRED FOR ANY RUN:                                                    │
 │    DATABASE_URL          (postgresql://… ?schema=public)                  │
 │    JWT_SECRET            (≥ 32 chars; generate with node -e crypto)       │
+│    SECRETS_KEY           (base64, 32 bytes; openssl rand -base64 32)      │
 │                                                                           │
 │  NATIVE DEV BOOTSTRAP:                                                    │
 │    cp .env.example .env                                                   │

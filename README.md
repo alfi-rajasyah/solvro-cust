@@ -170,7 +170,7 @@ cd solvro-cust
 bash setup.sh
 ```
 
-The script prompts for an admin email and password and for the host ports (website `80`, API `3000`, both bound to `127.0.0.1` unless you choose otherwise; Postgres stays private). It generates `POSTGRES_PASSWORD` and `JWT_SECRET`, writes `~/solvro/docker-compose.yml` and `~/solvro/.env`, pulls the GHCR images, starts the stack, and creates the admin. The backend container runs `prisma migrate deploy` and the seed on every start.
+The script prompts for an admin email and password and for the host ports (website `80`, API `3000`, both bound to `127.0.0.1` unless you choose otherwise; Postgres stays private). It generates `POSTGRES_PASSWORD`, `JWT_SECRET`, and `SECRETS_KEY` (the secrets-at-rest key for integration tokens — rotating it invalidates every stored token), writes `~/solvro/docker-compose.yml` and `~/solvro/.env`, pulls the GHCR images, starts the stack, and creates the admin. The backend container runs `prisma migrate deploy` and the seed on every start.
 
 Every input can come from the environment instead of a prompt:
 
@@ -246,4 +246,4 @@ Work branches off `develop` and merges back by pull request; `develop` is the in
 
 ## Roadmap
 
-- **Work Logs** — an iTop (ITSM) integration for utilization reporting. The `/work-logs` route is a placeholder today.
+- **Work Logs** — an iTop (ITSM) integration for utilization reporting. The `/work-logs` route is a placeholder today. Once an admin connects iTop (Admin > iTop), a customer's iTop tickets already appear on that customer's page, in its Tickets tab.
