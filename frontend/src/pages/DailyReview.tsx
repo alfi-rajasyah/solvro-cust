@@ -10,7 +10,7 @@ import { hasPermission, useAuth } from "@/lib/auth";
 import { computeDailyReviewStats, firstProjectId as firstProjectIdOf, weekNumberLabel } from "@/lib/dailyReviewStats";
 import { dateToDay } from "@/lib/dateField";
 import { formatWeekRange, parseWeekKey, shiftWeek, weekKeyOf } from "@/lib/isoWeek";
-import { useDailyReview } from "@/lib/queries";
+import { type DailyItopCustomer, useDailyReview, useItopDaily } from "@/lib/queries";
 
 const TODAY_FMT = new Intl.DateTimeFormat(undefined, {
   weekday: "long",
@@ -52,6 +52,23 @@ export function DailyReview() {
   }, [week, weekParam]);
 
   const { data, isLoading, isError, error } = useDailyReview(week);
+
+  // Daily Review's iTop strip (Task 2.2): one fetch for the whole page, keyed
+  // by the resolved "today" (not the viewed week — the strip always shows
+  // today's operations picture regardless of which week is on screen), then
+  // sliced per customer below. `enabled: Boolean(data)` avoids firing before
+  // `data.today` is known; the fallback date only matters for the disabled
+  // query's key shape. A 404/error here (iTop not configured, or the dev
+  // backend not caught up yet) just leaves `itopDaily` undefined — no strip
+  // renders, nothing else on the page is affected.
+  const { data: itopDaily } = useItopDaily(data?.today ?? dateToDay(new Date())!, {
+    enabled: Boolean(data),
+  });
+  const itopByCustomer = useMemo(() => {
+    const map = new Map<number, DailyItopCustomer>();
+    itopDaily?.customers.forEach((c) => map.set(c.customerId, c));
+    return map;
+  }, [itopDaily]);
 
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
 
@@ -144,6 +161,7 @@ export function DailyReview() {
               canDeleteAny={canDeleteAny}
               firstProjectId={firstProjectId}
               focusRequest={focusRequest}
+              itop={itopByCustomer.get(customer.id)}
             />
           ))}
 

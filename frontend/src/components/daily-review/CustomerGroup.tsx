@@ -22,7 +22,7 @@ import { Link } from "react-router-dom";
 import { Badge } from "@/components/reui/badge";
 import { isGroupCollapsible } from "@/lib/dailyReviewStats";
 import { dayFromIso } from "@/lib/dateField";
-import type { DailyReviewCustomer, WeeklyStatus } from "@/lib/queries";
+import type { DailyItopCustomer, DailyReviewCustomer, WeeklyStatus } from "@/lib/queries";
 import { OperationsCard } from "./OperationsCard";
 import { ProjectCard } from "./ProjectCard";
 import { HEALTH_CLASS, WEEKLY_STATUS_BADGE } from "./SyncField";
@@ -36,6 +36,8 @@ export interface CustomerGroupProps {
   canDeleteAny: boolean;
   firstProjectId: number | null;
   focusRequest: { day: string; token: number } | null;
+  /** This customer's slice of GET /itop/daily — absent when iTop isn't configured or the customer isn't mapped to an org (Task 2.2). */
+  itop?: DailyItopCustomer;
 }
 
 export function CustomerGroup({
@@ -46,6 +48,7 @@ export function CustomerGroup({
   canDeleteAny,
   firstProjectId,
   focusRequest,
+  itop,
 }: CustomerGroupProps) {
   const autoCollapse = isGroupCollapsible(customer, today);
   // null = no manual choice yet — follow the auto-collapse default, which
@@ -143,6 +146,7 @@ export function CustomerGroup({
             days={week.days}
             currentUserId={currentUserId}
             canDeleteAny={canDeleteAny}
+            itop={itop}
           />
           <WeeklySyncRow customer={customer} week={week} />
         </div>
