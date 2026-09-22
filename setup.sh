@@ -142,6 +142,7 @@ COMPOSE_HEAD
       DATABASE_URL: postgresql://solvro:${POSTGRES_PASSWORD}@postgres:5432/solvro?schema=public
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: 8h
+      SECRETS_KEY: ${SECRETS_KEY}
       CORS_ORIGIN: "*"
       LOG_LEVEL: info
     ports:
@@ -176,6 +177,12 @@ if [[ -f "$ENV_FILE" ]]; then
   # shellcheck disable=SC1090
   . "$ENV_FILE"
   set +a
+  # Older installs predate SECRETS_KEY (secrets-at-rest for integration
+  # tokens) — generate it once and append, never overwriting an existing value.
+  if [[ -z "${SECRETS_KEY:-}" ]]; then
+    SECRETS_KEY=$(openssl rand -base64 32)
+    echo "SECRETS_KEY=$SECRETS_KEY" >> "$ENV_FILE"
+  fi
   write_compose_file
   docker compose pull
   docker compose up -d
@@ -290,10 +297,13 @@ is_ipv4 "$BIND_ADDR" || {
 # userinfo and truncate it (P1013 "invalid port number"). 24 bytes = 192 bits.
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 JWT_SECRET=$(openssl rand -hex 48)
+# Base64 (not hex): SECRETS_KEY must decode to exactly 32 bytes for AES-256-GCM (backend/src/env.ts).
+SECRETS_KEY=$(openssl rand -base64 32)
 
 cat > "$ENV_FILE" <<EOF
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 JWT_SECRET=$JWT_SECRET
+SECRETS_KEY=$SECRETS_KEY
 BIND_ADDR=$BIND_ADDR
 FRONTEND_PORT=$FRONTEND_PORT
 BACKEND_PORT=$BACKEND_PORT
