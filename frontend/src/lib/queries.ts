@@ -540,6 +540,14 @@ export const queryKeys = {
   customerTicketsRoot: (id: number) => ["itop", "customers", id, "tickets"] as const,
   customerTickets: (id: number, scope: ItopTicketScope, cls?: ItopTicketClass) =>
     [...queryKeys.customerTicketsRoot(id), scope, cls ?? null] as const,
+  // Daily Review's iTop strip (Task 2.2) — keyed by day, one fetch for the
+  // whole page (see useItopDaily below), not per customer. Keyed by the
+  // viewer's UTC offset too — the strip's counts bucket "today" by the
+  // viewer's local day (user decision), so a DST transition or a traveling
+  // viewer changing offsets must refetch rather than keep serving the
+  // previous offset's bucketing.
+  itopDaily: (date: string, utcOffsetMinutes: number) =>
+    ["itop", "daily", date, utcOffsetMinutes] as const,
 };
 
 export function useOverview() {
@@ -2117,6 +2125,54 @@ export function useRequestItopRefresh() {
         qc.invalidateQueries({ queryKey: queryKeys.itopStatus });
       }, 3000);
     },
+  });
+}
+
+// Daily Review's iTop strip (Task 2.2, docs/archive/plans/itop-integration.md):
+// one call per rendered day (not per customer — the Daily Review page fetches
+// this once and hands each CustomerGroup its own slice), backed by GET
+// /itop/daily. `configured: false` (no iTop connection at all) or a customer
+// simply missing from `customers` (not mapped to an iTop org, or not visible
+// to the caller) both mean "no strip for that customer" — DailyItopStrip.tsx
+// callers just look up the slice and render nothing when it's absent.
+export interface DailyItopCustomer {
+  customerId: number;
+  customerName: string;
+  orgName: string | null;
+  counts: { newToday: number; resolvedToday: number; slaBreached: number; ongoing: number };
+  // Max 3, lastUpdate desc — same row shape as the Customer Tickets tab.
+  recent: ItopTicketRow[];
+  syncedAt: string | null;
+}
+
+export interface DailyItopResponse {
+  configured: boolean;
+  date: string;
+  customers: DailyItopCustomer[];
+}
+
+export function useItopDaily(date: string, { enabled = true }: { enabled?: boolean } = {}) {
+  // Local minus UTC, in minutes (UTC+7 = 420) — `getTimezoneOffset()` is the
+  // inverse of that convention (UTC minus local), hence the negation. Sent
+  // so the backend can bucket "today"/"resolved today" by the viewer's
+  // local day rather than server-local or UTC (user decision).
+  const utcOffsetMinutes = -new Date().getTimezoneOffset();
+  return useQuery({
+    queryKey: queryKeys.itopDaily(date, utcOffsetMinutes),
+    queryFn: ({ signal }) =>
+      apiRequest<DailyItopResponse>(
+        `/itop/daily?date=${encodeURIComponent(date)}&utcOffsetMinutes=${utcOffsetMinutes}`,
+        { signal },
+      ),
+    enabled,
+    staleTime: 30_000,
+    // A function, not a flat 60s: an unconfigured install (or a route that's
+    // erroring, e.g. before the backend half of this task lands) leaves
+    // `data` undefined/`configured: false`, and there's nothing to poll for
+    // in either case — polling anyway would just hammer a 404 or a stub
+    // response every minute for every open Daily Review tab.
+    refetchInterval: (query) => (query.state.data?.configured ? 60_000 : false),
+    refetchIntervalInBackground: false,
   });
 }
 
