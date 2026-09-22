@@ -15,6 +15,11 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-09-22 — iTop tickets on the Daily Review page
+
+- **Daily ticket digest API** — `GET /itop/daily?date=YYYY-MM-DD` in **`backend/src/routes/itop.ts`** returns, for every visible customer mapped to an iTop organisation, the day's counts (opened today, resolved today, still open, SLA breached) and the 3 most recently updated tickets per customer. "Today" is the viewer's local day: the browser sends its UTC offset (`utcOffsetMinutes`) and the API brackets that 24-hour window, so a ticket opened at 01:00 local counts as today.
+- **"iTop today" strip on the Daily Review page** — **`frontend/src/components/itop/DailyItopStrip.tsx`** sits on each mapped customer's operations card: counts for new, resolved and SLA-breached tickets today, how many are ongoing and when the data last synced, and the 3 most recently updated tickets with an "Add to note" button that drops the ticket's reference and title into today's operations-note draft (`WeekNotesEditor` gains a `pendingInsert` prop). Nothing is written back to iTop; the note is still saved by hand. Customers not connected to iTop show no strip. Playwright spec: `e2e/tests/itop-daily-review.spec.ts`.
+
 ### Added — 2026-09-22 — iTop integration: encrypted secrets at rest, ticket snapshot schema, REST client
 
 - **Secrets at rest.** Integration tokens and other sensitive values can now be encrypted before they reach the database. A new required `SECRETS_KEY` environment variable (a base64-encoded 32-byte key, `openssl rand -base64 32`) drives AES-256-GCM encryption in **`backend/src/lib/secretBox.ts`**; `backend/src/env.ts` refuses to start without a valid key. `setup.sh` generates the key on a fresh install and backfills it once on an existing install; the dev `docker-compose.yml` carries a fixed dev-only value; CI generates a throwaway key per run (`.github/workflows/ci.yml`, `ci/docker-compose.ci.yml`, `ci/.env.ci.example`). Rotating the key invalidates every stored token — they must be re-entered.
