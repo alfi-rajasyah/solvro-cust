@@ -158,6 +158,13 @@ async function mockTickets(page: Page, mapped: boolean): Promise<void> {
 }
 
 test.describe("Customer Tickets tab", () => {
+  // The CI stack serves the built app, which registers a PWA service worker.
+  // Playwright's page.route cannot intercept SW-handled fetches, so the iTop
+  // mocks below would silently never fire there (they pass on the dev server,
+  // which registers no SW). Blocking SW registration makes the mocks
+  // authoritative on both stacks — same pattern as search.spec.ts.
+  test.use({ serviceWorkers: "block" });
+
   test("lists ongoing tickets breached-first, filters by class, and links out to iTop", async ({
     page,
     seededProject,
