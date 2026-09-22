@@ -20,6 +20,8 @@ import { servicesRouter } from "./routes/services.js";
 import { risksRouter } from "./routes/risks.js";
 import { dependenciesRouter } from "./routes/dependencies.js";
 import { adminRouter } from "./routes/admin.js";
+import { itopAdminRouter } from "./routes/itopAdmin.js";
+import { itopRouter } from "./routes/itop.js";
 import { reportsRouter } from "./routes/reports.js";
 import { searchRouter } from "./routes/search.js";
 import { dailyReviewRouter } from "./routes/dailyReview.js";
@@ -58,6 +60,8 @@ export function createApp(): Express {
   app.use("/risks", risksRouter);
   app.use("/dependencies", dependenciesRouter);
   app.use("/admin", adminRouter);
+  app.use("/admin/itop", itopAdminRouter);
+  app.use("/itop", itopRouter);
   app.use("/reports", reportsRouter);
   app.use("/search", searchRouter);
 
