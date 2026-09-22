@@ -14,7 +14,6 @@ import {
 } from "recharts";
 import { useProjectContext } from "../ProjectDetail";
 import { hasPermission, useAuth } from "@/lib/auth";
-import { DealCard } from "@/components/DealCard";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { scoreClass, scoreLevel } from "@/components/RiskFormModal";
 import { Chip } from "@/components/StatusChip";
@@ -60,15 +59,6 @@ export function ProjectOverview() {
 
   return (
     <div className="space-y-4">
-      {/* Scoped to the Overview tab per PRD §2.10 (finding N9) — a linked
-          Pipeline deal is project-level provenance info, which reads as
-          Overview content, not something that should follow every tab
-          (List/Kanban/Gantt/...). Shows nothing when no Pipeline deal links
-          to this project (or the caller lacks pipeline:view) — see
-          DealCard.tsx's own doc comment for why this is a client-side find
-          over useOpportunities() rather than a new backend lookup. */}
-      <DealCard projectId={project.id} />
-
       {project.description && (
         <p className="max-w-3xl wrap-break-word text-sm text-on-surface-variant">
           {project.description}

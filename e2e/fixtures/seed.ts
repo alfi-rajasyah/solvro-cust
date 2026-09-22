@@ -1,11 +1,6 @@
 // Ported from the QA gate script (qa-fixtures.mjs): seeds a fresh project
 // (with a handful of tasks/subtasks) via the API so specs never depend on
 // pre-existing data beyond the admin account created in CI /locally.
-//
-// Login uses the "sa" (service area) id from the login response itself
-// (user.id) rather than a hardcoded id — the QA script's `saId: 1` only
-// worked because the admin happened to be user #1; using the caller's own
-// id is correct regardless of seeding order.
 
 export const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "qa@solvro.test";
 export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "QaTest1234!";
@@ -125,7 +120,6 @@ export async function seedFixture(base: string): Promise<SeededFixture> {
       name: `Gate ${stamp}`,
       description: "e2e fixture project",
       customerId: custId,
-      saId: userId,
     }),
   }).then((r) => json<{ id: number }>(r));
 

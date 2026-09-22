@@ -1,6 +1,6 @@
 # Solvro
 
-Solvro is the delivery and pipeline workspace for Technical Account Managers and Solution Architects: projects, tasks (Kanban and Gantt), daily notes, weekly syncs, customers, and the sales pipeline.
+Solvro is the delivery workspace for Technical Account Managers: projects, tasks (Kanban and Gantt), daily notes, weekly syncs, and customers.
 
 This repository is what a Solvro customer needs to run it on their own server:
 

@@ -2,7 +2,7 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-// The five built-in roles. These are seeded on every container start
+// The four built-in roles. These are seeded on every container start
 // (idempotent upsert). Admins can create additional custom roles at
 // runtime via POST /admin/roles, but these are protected from deletion
 // because backend code references them by name.
@@ -12,13 +12,6 @@ const prisma = new PrismaClient();
 // state until the admin promotes the user from Admin > Users).
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   ADMIN: ["*"],
-  SA: [
-    "project:read",
-    "pipeline:view",
-    "pipeline:create",
-    "pipeline:edit_own",
-    "pipeline:delete_own",
-  ],
   TAM: ["project:read", "project:write", "task:read", "task:write"],
   STAKEHOLDER: ["project:read", "project:view-all"],
   PENDING: [],

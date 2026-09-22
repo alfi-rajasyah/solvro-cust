@@ -13,7 +13,7 @@ import { apiRequest, getToken, setToken } from "./api";
 // requireAdmin gate). Custom roles created via Admin > Roles tab use other
 // strings; the type is `string` to allow them.
 export type Role = string;
-export const BUILTIN_ROLES = ["SA", "TAM", "ADMIN", "STAKEHOLDER", "PENDING"] as const;
+export const BUILTIN_ROLES = ["TAM", "ADMIN", "STAKEHOLDER", "PENDING"] as const;
 export type BuiltinRole = (typeof BUILTIN_ROLES)[number];
 
 export interface AuthUser {
@@ -36,17 +36,11 @@ export interface PermissionDef {
 }
 export const PERMISSION_CATALOG: PermissionDef[] = [
   { value: "*", label: "Full access (admin)", hint: "Every permission, including the Admin area. Grant sparingly." },
-  { value: "project:view-all", label: "See all projects", hint: "Visibility: see every project, not just the ones you're assigned to as SA/TAM." },
+  { value: "project:view-all", label: "See all projects", hint: "Visibility: see every project, not just the ones where you're the assigned TAM or that belong to a customer you own." },
   { value: "project:read", label: "View projects", hint: "See projects, risks, sections, notes." },
   { value: "project:write", label: "Manage projects", hint: "Create/edit projects, risks, sections, baselines." },
   { value: "task:read", label: "View tasks", hint: "See tasks and subtasks." },
   { value: "task:write", label: "Manage tasks", hint: "Create, edit, move, and delete tasks." },
-  { value: "pipeline:view", label: "View pipeline", hint: "See the Pipeline board, opportunity details, and Pipeline analytics." },
-  { value: "pipeline:create", label: "Create opportunities", hint: "Add new opportunities to the Pipeline board." },
-  { value: "pipeline:edit_own", label: "Edit own opportunities", hint: "Edit and change the stage of opportunities you're the PIC for, and assign a PIC to an unassigned opportunity." },
-  { value: "pipeline:edit_all", label: "Edit all opportunities", hint: "Edit and change the stage of any opportunity, not just your own." },
-  { value: "pipeline:delete_own", label: "Delete own opportunities", hint: "Delete opportunities you're the PIC for." },
-  { value: "pipeline:delete_all", label: "Delete all opportunities", hint: "Delete any opportunity, not just your own." },
   { value: "report:executive", label: "Executive dashboard", hint: "See the org-wide Executive portfolio dashboard (all projects across all TAMs) and overdue-projects monitoring. Read-only." },
 ];
 

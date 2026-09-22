@@ -1,9 +1,6 @@
 import type { ProjectStatus, TaskStatus } from "@/lib/queries";
 
-// Exported (M2 review finding S5) so StageChip.tsx can type its per-stage
-// tone map against this module's own `Tone` union instead of keeping a
-// second, identical copy.
-export type Tone = "emerald" | "amber" | "rose" | "violet" | "blue" | "gray";
+type Tone = "emerald" | "amber" | "rose" | "violet" | "blue" | "gray";
 
 const TONE_CLASS: Record<Tone, string> = {
   emerald: "bg-chip-emerald-bg text-chip-emerald-text",

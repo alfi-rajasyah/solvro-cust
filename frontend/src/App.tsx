@@ -2,7 +2,6 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AdminGuard } from "@/components/AdminGuard";
 import { AuthGuard } from "@/components/AuthGuard";
 import { ExecutiveGuard } from "@/components/ExecutiveGuard";
-import { PipelineGuard } from "@/components/PipelineGuard";
 import { Shell } from "@/components/layout/Shell";
 import { Admin } from "@/pages/Admin";
 import { CustomerDetail } from "@/pages/CustomerDetail";
@@ -10,9 +9,7 @@ import { Customers } from "@/pages/Customers";
 import { DailyReview } from "@/pages/DailyReview";
 import { Executive } from "@/pages/Executive";
 import { Login } from "@/pages/Login";
-import { OpportunityDetail } from "@/pages/OpportunityDetail";
 import { Overview } from "@/pages/Overview";
-import { Pipeline } from "@/pages/Pipeline";
 import { ProjectDetail } from "@/pages/ProjectDetail";
 import { Projects } from "@/pages/Projects";
 import { Settings } from "@/pages/Settings";
@@ -58,22 +55,6 @@ export function App() {
         <Route path="weekly-sync" element={<WeeklySync />} />
         <Route path="tasks" element={<Tasks />} />
         <Route path="work-logs" element={<WorkLogs />} />
-        <Route
-          path="pipeline"
-          element={
-            <PipelineGuard>
-              <Pipeline />
-            </PipelineGuard>
-          }
-        />
-        <Route
-          path="pipeline/:id"
-          element={
-            <PipelineGuard>
-              <OpportunityDetail />
-            </PipelineGuard>
-          }
-        />
         <Route
           path="executive"
           element={

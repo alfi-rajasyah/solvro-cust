@@ -415,19 +415,6 @@ function ProjectsDataGrid({ projects }: { projects: ProjectSummary[] }) {
         meta: { skeleton: <Skeleton className="h-3.5 w-20" /> },
       },
       {
-        id: "sa",
-        // "" fallback (not null) so the column's cell values stay string —
-        // required for personNameSortingFn's localeCompare, and sorts
-        // unassigned SAs first ascending, matching localeCompare("", x) < 0.
-        accessorFn: (row) => row.sa?.username ?? "",
-        header: ({ column }) => <DataGridColumnHeader column={column} title="SA" />,
-        sortingFn: personNameSortingFn,
-        cell: ({ row }) => (
-          <span className="text-on-surface-variant">{row.original.sa?.username ?? "—"}</span>
-        ),
-        meta: { skeleton: <Skeleton className="h-3.5 w-20" /> },
-      },
-      {
         id: "tasks",
         accessorFn: (row) => row._count.tasks,
         header: ({ column }) => <DataGridColumnHeader column={column} title="Tasks" />,

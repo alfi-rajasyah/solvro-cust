@@ -193,7 +193,7 @@ cited files; entries marked *code check* below carry the result).
   `solvro_test` starts empty every invocation; no more manual schema
   drop/recreate. See CHANGELOG's "Backend tests start from a clean database"
   entry.
-- **`backend/test/opportunities.test.ts` flakes under a full gates run, order-dependent on other test files sharing `solvro_test`** (discovered 2026-09-09, weekly-sync-highlight-rows phase close; pre-existing, unrelated to that phase's changes): `"repacks the SOURCE stage densely (0..n-1) after a cross-stage move"` (`opportunities.test.ts:439`) failed once in a full `gates.sh` run — expected `stageOrder` 0, got 1 for the first `DELIVER_PROPOSAL` opportunity — then passed on an immediate single-file re-run (44/44) and in every other full run that same day. The test's own comment assumes `DELIVER_PROPOSAL` is untouched by any earlier test *in that file*, but a full run shares one `solvro_test` database across all 30 test files, so an opportunity another file leaves in that stage (order/timing dependent) shifts the positions this test appends onto. Fix direction: assert relative order among this test's own three rows instead of absolute `stageOrder`, or seed into a stage no other file touches.
+- ~~**`backend/test/opportunities.test.ts` flakes under a full gates run, order-dependent on other test files sharing `solvro_test`** (discovered 2026-09-09, weekly-sync-highlight-rows phase close; pre-existing, unrelated to that phase's changes): `"repacks the SOURCE stage densely (0..n-1) after a cross-stage move"` (`opportunities.test.ts:439`) failed once in a full `gates.sh` run — expected `stageOrder` 0, got 1 for the first `DELIVER_PROPOSAL` opportunity — then passed on an immediate single-file re-run (44/44) and in every other full run that same day. The test's own comment assumes `DELIVER_PROPOSAL` is untouched by any earlier test *in that file*, but a full run shares one `solvro_test` database across all 30 test files, so an opportunity another file leaves in that stage (order/timing dependent) shifts the positions this test appends onto. Fix direction: assert relative order among this test's own three rows instead of absolute `stageOrder`, or seed into a stage no other file touches.~~ **Moot 2026-09-22**: `backend/test/opportunities.test.ts` was deleted with the Pipeline module removal.
 
 ---
 
@@ -209,7 +209,9 @@ cited files; entries marked *code check* below carry the result).
   removed (migration `20260803000000_remove_blueprints`); the spec moved to
   `docs/archive/plans/secure-ingestion-port-spec.md`. The SA user role,
   `Project.saId`, and SA visibility matching are unrelated to the webhook and
-  stay.
+  stay. **Update 2026-09-22**: the SA user role and `Project.saId` were
+  subsequently removed in their own right, as part of the Pipeline-module
+  removal — see the dated line below.
 - ~~**Reports screen revamp**~~ — **Resolved (noted stale 2026-07-25)**:
   shipped. CLAUDE.md's Facts block ("Reports & export (shipped)") documents
   `Reports.tsx` producing the full export packet (identity / health / phase
@@ -1461,40 +1463,73 @@ are accepted-as-deferred, not outstanding review items.
   re-runs two slow specs, so it was left out of the 2026-08-07 subtask-edit
   phase rather than widening that diff.
 
+## Pipeline module and SA project owner removed (2026-09-22)
+
+The Pipeline module (opportunity tracking, native-ported from Velora) and the
+SA project-owner concept (`Project.saId`, the SA role) were removed from
+backend, frontend, e2e, and docs (user decision 2026-09-22). Every entry below
+this line that concerned the Pipeline module, opportunities, or the SA role
+is now moot — its subject no longer exists in the code — and is struck with a
+`**Moot 2026-09-22**` note rather than deleted, per this file's append-only
+convention.
+
+### Deferred — the Daily Review empty-group prune may now be dead code
+
+`backend/src/routes/dailyReview.ts`'s prune branch (the `projectCustomerIds.has(c.id)`
+removal for a non-owned candidate) existed to drop a customer that passed
+`customerVisibilityFilter` but contributed no project to the page. With the `saId`
+arm gone from `projectVisibilityFilter`, the `candidateCustomers` SQL query appears
+to exclude those customers one step earlier: its second clause requires either
+`tamId: user.sub` or an ACTIVE project matching the project filter, which for an
+attached (non-owned) customer reduces to exactly the condition the later
+`projectWhere` attached-tier bucket uses. No scenario was found in which a customer
+is admitted as a candidate and then pruned. **Not acted on** — removing the branch is
+a route-logic simplification, not part of the removal phase. A regression test for the
+observable behaviour (an unowned customer whose only ACTIVE project belongs to another
+TAM is absent, and does not inflate `coverage[TODAY].total`) was added to
+`backend/test/dailyReview.test.ts`, so the behaviour is pinned either way.
+
 ## Pipeline native port — accepted risks & deferred items (2026-08-15)
 
 Collected across the six-milestone native port (branch `velora-integration`); every
 blocking finding was fixed pre-PR — these are the consciously accepted leftovers.
 
-- **`xlsx@0.18.5` ships known npm-audit advisories (prototype pollution, ReDoS) —
+- ~~**`xlsx@0.18.5` ships known npm-audit advisories (prototype pollution, ReDoS) —
   accepted for v1.** The parse is 100% client-side, in the authenticated user's own
   tab, on a file that user personally chose; the server never parses a workbook, so
   there is no remote-attacker path. Upgrade path if a dependency-audit policy ever
   lands: SheetJS's own 0.20.x registry (not npm). No `npm audit` gate exists in CI
-  today, so this cannot break the merge gate.
-- **PRD §2.7's per-PIC Overview summary cards are deliberately omitted** — the
+  today, so this cannot break the merge gate.~~ **Moot 2026-09-22**: `xlsx` and the
+  Excel/CSV import dialog were removed with the Pipeline module.
+- ~~**PRD §2.7's per-PIC Overview summary cards are deliberately omitted** — the
   Overview panel ships KPI tiles + a stage distribution; the per-PIC drill-down is
   fully realized on the Executive dashboard instead. Spec deviation on record, not
-  an unimplemented gap.
+  an unimplemented gap.~~ **Moot 2026-09-22**: the Pipeline Overview panel is gone.
 - **App-wide light-theme hover contrast (pre-existing, NOT pipeline)**:
   `hover:bg-primary-container` paired with `text-on-primary` renders ≈1.3:1 in
   light theme (white label on pale green) across 15+ sites (Admin, Settings,
-  Pipeline, gantt, DateRangeField…). The pipeline buttons just follow the house
-  pattern; fixing it is one global ticket, not per-feature.
-- **DealCard on a project's Overview tab reads the full deal list client-side**
+  gantt, DateRangeField…). This is a general cross-cutting issue, not specific to
+  the removed Pipeline pages; fixing it is still one global ticket.
+- ~~**DealCard on a project's Overview tab reads the full deal list client-side**
   (`useOpportunities().find(projectId)`) — fine at the PRD's "hundreds of deals"
   scale and cache-shared, but PRD §3.3's ~2k-deal revisit trigger applies to this
-  call site too.
+  call site too.~~ **Moot 2026-09-22**: `DealCard.tsx` was deleted with the
+  Pipeline module.
 - **Backend `tsx watch` inotify staleness** observed once on the dev stack (file
   edits silently not picked up until `docker compose restart backend`). If the API
-  ignores fresh code, restart the container before debugging deeper.
-- **`backend/tsconfig.json` excludes `scripts/` from the typecheck gate**
+  ignores fresh code, restart the container before debugging deeper. (General
+  backend dev-loop issue, not Pipeline-specific — unaffected by the removal.)
+- ~~**`backend/tsconfig.json` excludes `scripts/` from the typecheck gate**
   (pre-existing — `create-admin.ts` too). `import-velora.ts` was hand-typechecked
-  clean with the same compiler options; a follow-up could add a scripts tsconfig.
-- **Import parse polish candidate**: an unparseable Win Probability cell silently
+  clean with the same compiler options; a follow-up could add a scripts tsconfig.~~
+  **Moot 2026-09-22**: `import-velora.ts` no longer exists; `create-admin.ts` is
+  the only script left excluded from the typecheck gate, tracked as its own
+  pre-existing nit, not a Pipeline one.
+- ~~**Import parse polish candidate**: an unparseable Win Probability cell silently
   defaults to 50 (`importParse.ts` `winProbRaw`) — same shape as the fixed
-  deal-value bug, much lower stakes.
-- **Cutover checklist — SIMPLIFIED (user decision 2026-08-15: START FRESH, NO
+  deal-value bug, much lower stakes.~~ **Moot 2026-09-22**: `importParse.ts` was
+  deleted with the Pipeline module.
+- ~~**Cutover checklist — SIMPLIFIED (user decision 2026-08-15: START FRESH, NO
   DATA MIGRATION).** The Pipeline begins empty in production; the SA team enters
   or Excel-imports deals fresh. `backend/scripts/import-velora.ts` ships unused —
   it remains available if historical data is ever wanted BEFORE users start
@@ -1509,14 +1544,15 @@ blocking finding was fixed pre-PR — these are the consciously accepted leftove
   repository and is not tracked here. Dev-DB fixtures:
   `qa@solvro.test` (id 707) is ALSO the e2e fixture admin — keep it, password
   `QaTest1234!` (gates.sh asserts it pre-smoke); the QA project 1408 ("Delta
-  Migration Delivery") + its linked deal are throwaway.
+  Migration Delivery") + its linked deal are throwaway.~~ **Moot 2026-09-22**: the
+  Pipeline module (and with it, the cutover/import concern) no longer exists.
 
 ## Velora integration, Phase 1 ("One address") — deferred findings (2026-08-14)
 
 > **PIVOT 2026-08-14 (same day, later): the native-port decision supersedes most of this section** (see CLAUDE.md standing decisions; PR #146 reverted by #148). Item statuses: the `iss`/`aud` shared-verifier requirement is **moot** (no shared verifier exists in the native port); the cron-timezone decision (keep 23:00 UTC = 06:00 WIB) **carries over** into the native re-implementation of the auto-hold job; the GitLab-CI item **reframes** as: retire the standalone `/opt/velora` deploy once the native port ships and its data is migrated; the compose-profile note still describes the dev stack accurately (the Velora services remain as reference/data source).
 
 User-deferred findings from Phase 1 of the Velora (Pipeline) integration
-(`docs/plans/velora-integration-plan.md`, `docs/plans/velora-integration-prd.md`,
+(`docs/archive/plans/velora-integration-plan.md`, `docs/archive/plans/velora-integration-prd.md`,
 branch `velora-integration-phase-1`): `docker-compose.yml` gained `velora-app`
 + `velora-cron` services and a second logical Postgres database (`velora`);
 `frontend/nginx.conf` + `frontend/vite.config.ts` gained the same-origin
@@ -1533,7 +1569,7 @@ routed to a later phase, not outstanding review items.
   live gap yet (nothing but Solvro's backend holds the secret, and Phase 1
   ships no route that issues Velora-shaped tokens), but it becomes load-
   bearing the moment Phase 2's shared sign-in lands. Per
-  `docs/plans/velora-integration-plan.md`'s Phase 2 (`lib/solvro-token.ts`,
+  `docs/archive/plans/velora-integration-plan.md`'s Phase 2 (`lib/solvro-token.ts`,
   Velora repo), that verification step must add and check an `iss`/`aud`
   claim (or equivalent) so a Velora-internal token (if any ever exists) can't
   be replayed against Solvro, and vice versa. File as a Phase 2 acceptance
@@ -1558,14 +1594,14 @@ routed to a later phase, not outstanding review items.
   3001) while the standalone stack presumably uses its own ports. That
   GitLab CI pipeline must be stopped or repointed at cutover, or the two
   stacks will drift and confuse which one is authoritative. User decision
-  due by Phase 2 (tracked in `docs/plans/velora-integration-plan.md`).
+  due by Phase 2 (tracked in `docs/archive/plans/velora-integration-plan.md`).
   Related decision already made (2026-08-14): Velora-side *source* work
   happens on the GitHub repo (`FS3P/VeloraApp`, cloned at `../VeloraApp`),
   not GitLab. Open consequence: `setup.sh`'s `VELORA_IMAGE` default still
   points at the GitLab registry image that GitLab CI builds — where prod
   images build from once development moves to GitHub is part of the same
   cutover decision.~~ **Obsolete 2026-09-02**: code check — `setup.sh` has zero `velora` references; the separate-service prod provisioning this entry was keyed on was removed with the native-port pivot. The external GitLab pipeline is outside this repo.
-- **Declined reviewer nit, recorded for context: no compose profile gates
+- ~~**Declined reviewer nit, recorded for context: no compose profile gates
   the Velora services in the dev stack.** The phase reviewer suggested
   gating `velora-app`/`velora-cron` behind a Docker Compose profile so
   `docker compose up -d` could still start a Velora-less Solvro without an
@@ -1574,7 +1610,9 @@ routed to a later phase, not outstanding review items.
   `velora-app` service's build context) — integration is default-on, not
   opt-in, matching production's default-on `setup.sh` behavior (`SKIP_VELORA=1`
   is the opt-out there). Documented in `docker-compose.yml`'s header comment
-  rather than implemented as a profile.
+  rather than implemented as a profile.~~ **Moot 2026-09-22**: the `velora-app`/
+  `velora-cron` services were already retired 2026-09-21, and the Pipeline
+  module they backed is now removed entirely.
 
 ## Daily Review v2 — deferred findings (2026-08-29)
 
@@ -1803,9 +1841,7 @@ blockers; this is its one deferred finding, not an outstanding review item.
   rendered as `<span className="material-symbols-outlined">person_add</span>`
   inside a labelled `<button>`/`<Link>` contributes its ligature text to the
   computed accessible name (e.g. `person_add Assign PIC`, `edit Edit`,
-  `delete Delete`). Seen on the opportunity detail header row
-  (`frontend/src/pages/OpportunityDetail.tsx` — View project, Create project,
-  Assign PIC, Edit, Delete) and elsewhere: grep-verified rough size is 188
+  `delete Delete`). Grep-verified rough size is 188
   `material-symbols-outlined` spans across 47 files under `frontend/src`,
   with roughly 136 of them sitting inside a `<button>` or `<Link>` element.
   Screen readers announce the glyph name; Playwright locators in `e2e/`
@@ -1813,7 +1849,11 @@ blockers; this is its one deferred finding, not an outstanding review item.
   on every icon span inside a labelled control (or a shared icon component),
   then one e2e pass to restore `exact` matching where wanted. Deferred
   2026-09-08 (phase review, Claim Unassigned Deals) — not fixed piecemeal to
-  avoid one header row with two conventions.
+  avoid one header row with two conventions. **Update 2026-09-22**: the
+  opportunity detail header row cited as the original example
+  (`frontend/src/pages/OpportunityDetail.tsx`) was deleted with the Pipeline
+  module; the general app-wide finding still stands elsewhere and remains
+  open.
 
 ## Weekly Sync achievement rows — deferred findings (2026-09-10)
 

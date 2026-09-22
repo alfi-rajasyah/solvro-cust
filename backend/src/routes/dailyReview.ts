@@ -143,12 +143,12 @@ dailyReviewRouter.get(
     // the customers on the page — a TAM's owned customers (tamId = me;
     // view-all: every customer with a TAM set) plus any customer with at
     // least one ACTIVE project visible to the caller (the "attached" tier,
-    // via projectVisibilityFilter so an SA or a project TAM on someone
-    // else's customer still reaches it) — then split them into owned vs.
-    // attached so the project query below can apply Decision 9's two-tier
-    // rule. AND-composed (not object-spread) so customerVisibilityFilter's
-    // own keys can never collide with or be silently overwritten by a
-    // sibling condition — same pattern as projectWhere below.
+    // via projectVisibilityFilter so a project TAM on someone else's
+    // customer still reaches it) — then split them into owned vs. attached
+    // so the project query below can apply Decision 9's two-tier rule.
+    // AND-composed (not object-spread) so customerVisibilityFilter's own
+    // keys can never collide with or be silently overwritten by a sibling
+    // condition — same pattern as projectWhere below.
     const customerWhere: Prisma.CustomerWhereInput = {
       AND: [
         customerVisibilityFilter(user),
@@ -226,13 +226,12 @@ dailyReviewRouter.get(
     // Decision 9 (fix): an ATTACHED customer surfaces only when it actually
     // has a project in the result above — the customer query's "attached"
     // OR arm admits a customer via ANY project matching
-    // projectVisibilityFilter (which includes the saId arm), while the
-    // project query above only pulls the caller's own (tamId) projects for
-    // an attached customer. Without this prune, a customer the caller
-    // reaches purely as SA would render as an empty group and inflate
-    // coverage.total. Owned customers always stay, even with zero active
-    // projects — they still carry operations notes and the weekly update
-    // (Decision 8).
+    // projectVisibilityFilter, while the project query above only pulls the
+    // caller's own (tamId) projects for an attached customer. Without this
+    // prune, a customer the caller can't actually see any project of would
+    // render as an empty group and inflate coverage.total. Owned customers
+    // always stay, even with zero active projects — they still carry
+    // operations notes and the weekly update (Decision 8).
     const projectCustomerIds = new Set(
       projects.map((p) => p.customerId).filter((id): id is number => id !== null),
     );

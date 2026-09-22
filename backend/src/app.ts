@@ -22,8 +22,6 @@ import { dependenciesRouter } from "./routes/dependencies.js";
 import { adminRouter } from "./routes/admin.js";
 import { reportsRouter } from "./routes/reports.js";
 import { searchRouter } from "./routes/search.js";
-import { opportunitiesRouter } from "./routes/opportunities.js";
-import { opportunityItemsRouter } from "./routes/opportunityItems.js";
 import { dailyReviewRouter } from "./routes/dailyReview.js";
 import { notesRouter } from "./routes/notes.js";
 
@@ -62,11 +60,6 @@ export function createApp(): Express {
   app.use("/admin", adminRouter);
   app.use("/reports", reportsRouter);
   app.use("/search", searchRouter);
-  // Both mounted at the same base path: opportunitiesRouter owns the CRUD +
-  // move endpoints, opportunityItemsRouter owns the /:opportunityId/activities
-  // and /:opportunityId/links sub-routes. Path shapes never collide.
-  app.use("/opportunities", opportunitiesRouter);
-  app.use("/opportunities", opportunityItemsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

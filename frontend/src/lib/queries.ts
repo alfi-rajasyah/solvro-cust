@@ -3,7 +3,6 @@ import { apiRequest } from "./api";
 import { useAuth, type Role } from "./auth";
 import { dateToDay, dayFromIso, isoFromDay } from "./dateField";
 import { parseWeekKey } from "./isoWeek";
-import type { PipelineStage } from "./pipelineFormat";
 
 export type ProjectStatus =
   | "PLANNING"
@@ -99,7 +98,6 @@ export interface ProjectSummary {
   name: string;
   description: string | null;
   status: ProjectStatus;
-  saId: number | null;
   tamId: number;
   customerId: number | null;
   wipLimits: WipLimits | null;
@@ -109,14 +107,12 @@ export interface ProjectSummary {
   baselineLockedById: number | null;
   createdAt: string;
   updatedAt: string;
-  sa: { id: number; username: string } | null;
   tam: { id: number; username: string };
   customer: { id: number; name: string } | null;
   _count: { tasks: number };
 }
 
 export interface ProjectDetail extends ProjectSummary {
-  sa: { id: number; username: string; email: string } | null;
   tam: { id: number; username: string; email: string };
   customer: { id: number; name: string } | null;
   baselineLockedBy: { id: number; username: string } | null;
@@ -524,8 +520,8 @@ export const queryKeys = {
   dailyReview: (week: string, today: string) => ["daily-review", week, today] as const,
   // The bare prefix every `dailyReview(...)` key extends — the
   // invalidate-everything-daily-review-related root every mutation below
-  // uses (same shape as `pipelineKeys.root`), rather than ~20 repeated
-  // `["daily-review"]` array literals that could each silently drift.
+  // uses, rather than ~20 repeated `["daily-review"]` array literals that
+  // could each silently drift.
   dailyReviewRoot: ["daily-review"] as const,
   // Overview's "Recent notes" feed (GET /notes/recent). `today` is folded
   // into the key by useRecentNotes — same day-boundary rationale as
@@ -688,7 +684,6 @@ export function useTasks(filter: TasksFilter = {}) {
 export interface CreateProjectInput {
   name: string;
   description?: string;
-  saId?: number;
   tamId?: number;
   customerId: number;
   status?: ProjectStatus;
@@ -697,15 +692,14 @@ export interface CreateProjectInput {
 }
 
 // The bare row `prisma.project.create` returns (backend/src/routes/
-// projects.ts's POST "/" — and POST /opportunities/:id/handoff below, which
-// mirrors that same `prisma.project.create` call verbatim) — no `sa`/`tam`/
-// `customer`/`_count`, unlike `ProjectSummary`, which only reflects GET
+// projects.ts's POST "/") — no `tam`/`customer`/`_count`, unlike
+// `ProjectSummary`, which only reflects GET
 // /projects's own `include`. `ProjectSummary` was mistyped here (finding
 // N5): nothing currently reads more than `.id` off this result, so it
 // never surfaced as a runtime bug, but a caller trusting the type to read
 // e.g. `.tam.username` off a freshly-created project would silently get
 // `undefined` with no type error to catch it.
-export type CreatedProject = Omit<ProjectSummary, "sa" | "tam" | "customer" | "_count">;
+export type CreatedProject = Omit<ProjectSummary, "tam" | "customer" | "_count">;
 
 export function useCreateProject() {
   const qc = useQueryClient();
@@ -733,7 +727,6 @@ export interface UpdateProjectInput {
   name?: string;
   description?: string | null;
   status?: ProjectStatus;
-  saId?: number | null;
   tamId?: number;
   customerId?: number;
   wipLimits?: WipLimits | null;
@@ -763,8 +756,7 @@ export function useDeleteProject() {
     onSuccess: (_data, id) => {
       // The project is gone: drop its own cache subtree instead of refetching
       // it into 404s, then refresh everything that listed or counted it or
-      // its cascaded tasks — plus the pipeline, where the linked won deal's
-      // `projectId` just went null (the inverse of useHandoffOpportunity).
+      // its cascaded tasks.
       qc.removeQueries({ queryKey: queryKeys.project(id) });
       qc.invalidateQueries({ queryKey: ["projects"] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
@@ -774,7 +766,6 @@ export function useDeleteProject() {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
       qc.invalidateQueries({ queryKey: queryKeys.recentNotesRoot });
       qc.invalidateQueries({ queryKey: queryKeys.executiveReport() });
-      qc.invalidateQueries({ queryKey: pipelineKeys.root });
     },
   });
 }
@@ -1992,7 +1983,6 @@ export interface AdminUser {
   provider: "google" | "password";
   avatarUrl: string | null;
   projectsAsTAM: number;
-  projectsAsSA: number;
 }
 
 export interface AuthSettings {
@@ -2014,12 +2004,10 @@ export interface AdminProject {
   name: string;
   description: string | null;
   status: ProjectStatus;
-  saId: number | null;
   tamId: number;
   customerId: number | null;
   createdAt: string;
   updatedAt: string;
-  sa: { id: number; username: string } | null;
   tam: { id: number; username: string };
   customer: { id: number; name: string } | null;
   _count: { tasks: number };
@@ -2370,554 +2358,3 @@ export function useExecutiveReport() {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// Pipeline (Solution Architect) — Opportunity CRUD, activities, links, and
-// the board's stage-move mutation. Mirrors backend/src/routes/opportunities.ts
-// and routes/opportunityItems.ts verbatim (docs/plans/pipeline-native-port-plan.md).
-// Own key namespace (`pipelineKeys`) — separate from `queryKeys`/`adminQueryKeys`
-// per frontend/CLAUDE.md.
-// ─────────────────────────────────────────────────────────────────────────
-
-export interface OpportunityPic {
-  id: number;
-  username: string;
-  avatarUrl: string | null;
-}
-
-export interface Opportunity {
-  id: string;
-  title: string;
-  customerName: string;
-  dealValue: number;
-  stage: PipelineStage;
-  picId: number | null;
-  pic: OpportunityPic | null;
-  // Plain calendar day ("yyyy-MM-dd"), never an ISO instant — same DateField
-  // contract as Task.startDate/dueDate. See backend's dayStringSchema.
-  deadline: string | null;
-  requestDate: string | null;
-  description: string | null;
-  productSolution: string;
-  leadSource: string | null;
-  winProbability: number;
-  stageOrder: number;
-  wonAt: string | null;
-  preHoldStage: PipelineStage | null;
-  projectId: number | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface OpportunityActivity {
-  id: string;
-  opportunityId: string;
-  userId: number | null;
-  user: OpportunityPic | null;
-  note: string;
-  createdAt: string;
-}
-
-export interface OpportunityLink {
-  id: string;
-  opportunityId: string;
-  label: string;
-  url: string;
-  createdAt: string;
-}
-
-export const pipelineKeys = {
-  // The deliberate invalidate-EVERYTHING-pipeline-related root — every other
-  // key below is a literal array-prefix extension of this one, so
-  // `invalidateQueries({ queryKey: pipelineKeys.root })` (TanStack's default
-  // prefix match) hits the list, every detail/activities/links query, and
-  // the import log all at once. Kept as its own key (review finding N1/N2)
-  // rather than reusing `list` for this — `list` used to BE this array
-  // verbatim, which meant every mutation that invalidated "just the list"
-  // was silently invalidating the entire pipeline cache by prefix-match
-  // accident, not by design. Nothing currently needs the everything-at-once
-  // hammer (each mutation below invalidates precisely what it touches), but
-  // it stays available/documented for a future case that does.
-  root: ["pipeline", "opportunities"] as const,
-  list: ["pipeline", "opportunities", "list"] as const,
-  detail: (id: string) => ["pipeline", "opportunities", id] as const,
-  activities: (id: string) => ["pipeline", "opportunities", id, "activities"] as const,
-  links: (id: string) => ["pipeline", "opportunities", id, "links"] as const,
-  imports: ["pipeline", "opportunities", "imports"] as const,
-};
-
-export function useOpportunities() {
-  return useQuery({
-    queryKey: pipelineKeys.list,
-    queryFn: ({ signal }) => apiRequest<Opportunity[]>("/opportunities", { signal }),
-  });
-}
-
-export function useOpportunity(id: string | null) {
-  return useQuery({
-    queryKey: id ? pipelineKeys.detail(id) : ["pipeline", "opportunities", "noop"],
-    queryFn: ({ signal }) => apiRequest<Opportunity>(`/opportunities/${id}`, { signal }),
-    enabled: id !== null,
-  });
-}
-
-export function useOpportunityActivities(id: string | null) {
-  return useQuery({
-    queryKey: id
-      ? pipelineKeys.activities(id)
-      : ["pipeline", "opportunities", "noop", "activities"],
-    queryFn: ({ signal }) =>
-      apiRequest<OpportunityActivity[]>(`/opportunities/${id}/activities`, { signal }),
-    enabled: id !== null,
-  });
-}
-
-export function useOpportunityLinks(id: string | null) {
-  return useQuery({
-    queryKey: id ? pipelineKeys.links(id) : ["pipeline", "opportunities", "noop", "links"],
-    queryFn: ({ signal }) => apiRequest<OpportunityLink[]>(`/opportunities/${id}/links`, { signal }),
-    enabled: id !== null,
-  });
-}
-
-export interface CreateOpportunityInput {
-  title: string;
-  customerName: string;
-  dealValue?: number;
-  picId?: number | null;
-  deadline?: string | null;
-  requestDate?: string | null;
-  description?: string | null;
-  productSolution?: string;
-  leadSource?: string | null;
-  winProbability?: number;
-  // Create-only — the backend's PATCH schema rejects `stage` (400): stage
-  // transitions after creation go through POST /:id/move only.
-  stage?: PipelineStage;
-}
-
-export function useCreateOpportunity() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: CreateOpportunityInput) =>
-      apiRequest<Opportunity>("/opportunities", { method: "POST", body: input }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: pipelineKeys.list });
-    },
-  });
-}
-
-export interface UpdateOpportunityInput {
-  title?: string;
-  customerName?: string;
-  dealValue?: number;
-  picId?: number | null;
-  deadline?: string | null;
-  requestDate?: string | null;
-  description?: string | null;
-  productSolution?: string;
-  leadSource?: string | null;
-  winProbability?: number;
-}
-
-export function useUpdateOpportunity() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: UpdateOpportunityInput }) =>
-      apiRequest<Opportunity>(`/opportunities/${id}`, { method: "PATCH", body: patch }),
-    onSuccess: (updated) => {
-      qc.invalidateQueries({ queryKey: pipelineKeys.list });
-      qc.invalidateQueries({ queryKey: pipelineKeys.detail(updated.id) });
-    },
-  });
-}
-
-// One writer of a PIC on an unassigned deal for `pipeline:edit_own` holders
-// (the PATCH route keeps refusing an unassigned deal for them — see
-// POST /opportunities/:id/assign in backend/src/routes/opportunities.ts).
-// Not optimistic: this is a dialog submit (AssignPicModal), not an
-// inline-edit field, so there's no local value to write ahead of the
-// response. The route writes an "Assigned to <username>" activity note in
-// the same transaction, but only when the PIC actually changes (D6).
-// `activities(id)` is already a prefix-match of `detail(id)`, so its
-// invalidation below is explicit rather than load-bearing — same
-// enumerate-every-key convention as useDeleteOpportunity/useMoveOpportunity.
-export function useAssignOpportunity() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, picId }: { id: string; picId: number }) =>
-      apiRequest<Opportunity>(`/opportunities/${id}/assign`, { method: "POST", body: { picId } }),
-    onSuccess: (updated) => {
-      qc.invalidateQueries({ queryKey: pipelineKeys.list });
-      qc.invalidateQueries({ queryKey: pipelineKeys.detail(updated.id) });
-      qc.invalidateQueries({ queryKey: pipelineKeys.activities(updated.id) });
-    },
-  });
-}
-
-export function useDeleteOpportunity() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => apiRequest<void>(`/opportunities/${id}`, { method: "DELETE" }),
-    // Explicit per-resource invalidation (list + this id's own detail/
-    // activities/links), not just the list — since the N1/N2 key-hygiene
-    // fix above, `pipelineKeys.list` is a sibling of those keys, not a
-    // shared prefix, so it no longer catches them by accident. Without this,
-    // a stale cached detail/activities/links entry for the just-deleted id
-    // could still be served (e.g. on a browser-back navigation) until it
-    // aged out of the cache on its own.
-    onSuccess: (_data, id) => {
-      qc.invalidateQueries({ queryKey: pipelineKeys.list });
-      qc.invalidateQueries({ queryKey: pipelineKeys.detail(id) });
-      qc.invalidateQueries({ queryKey: pipelineKeys.activities(id) });
-      qc.invalidateQueries({ queryKey: pipelineKeys.links(id) });
-    },
-  });
-}
-
-export function useAddOpportunityActivity(opportunityId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (note: string) =>
-      apiRequest<OpportunityActivity>(`/opportunities/${opportunityId}/activities`, {
-        method: "POST",
-        body: { note },
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: pipelineKeys.activities(opportunityId) });
-    },
-  });
-}
-
-export interface CreateOpportunityLinkInput {
-  label: string;
-  url: string;
-}
-
-export function useAddOpportunityLink(opportunityId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: CreateOpportunityLinkInput) =>
-      apiRequest<OpportunityLink>(`/opportunities/${opportunityId}/links`, {
-        method: "POST",
-        body: input,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: pipelineKeys.links(opportunityId) });
-    },
-  });
-}
-
-export type UpdateOpportunityLinkInput = Partial<CreateOpportunityLinkInput>;
-
-export function useUpdateOpportunityLink(opportunityId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: UpdateOpportunityLinkInput }) =>
-      apiRequest<OpportunityLink>(`/opportunities/${opportunityId}/links/${id}`, {
-        method: "PATCH",
-        body: patch,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: pipelineKeys.links(opportunityId) });
-    },
-  });
-}
-
-export function useDeleteOpportunityLink(opportunityId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      apiRequest<void>(`/opportunities/${opportunityId}/links/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: pipelineKeys.links(opportunityId) });
-    },
-  });
-}
-
-export interface MoveOpportunityInput {
-  id: string;
-  stage: PipelineStage;
-  stageOrder: number;
-}
-
-/**
- * Reorders/re-stages `id` inside a locally-cached opportunity list exactly
- * the way the backend's insertAtStage/closeGapInStage do (see
- * backend/src/routes/opportunities.ts's POST /:id/move): remove `id` from
- * its current stage's sibling list (re-packing it to dense 0..n-1), then
- * insert it into the target stage's sibling list at the clamped requested
- * index (re-packing that too). Mirrors reorderTasksLocally above, scoped to
- * `stage` instead of (parentTaskId, status). Returns a new array; doesn't
- * mutate `opportunities`.
- */
-export function reorderOpportunitiesLocally(
-  opportunities: Opportunity[],
-  id: string,
-  stage: PipelineStage,
-  stageOrder: number,
-): Opportunity[] {
-  const current = opportunities.find((o) => o.id === id);
-  if (!current) return opportunities;
-
-  // Every other opportunity, grouped by which stage it's currently in.
-  const byStage = new Map<PipelineStage, Opportunity[]>();
-  for (const o of opportunities) {
-    if (o.id === id) continue;
-    const arr = byStage.get(o.stage) ?? [];
-    arr.push(o);
-    byStage.set(o.stage, arr);
-  }
-  // Codepoint compare, not `localeCompare` (finding N1): matches
-  // `compareDealsByStageOrder`'s tiebreak (components/pipeline/adapter.ts)
-  // and Postgres's byte-order `uuid` comparison the server's own
-  // `stageSiblingIds` query relies on (`ORDER BY ... id ASC`,
-  // backend/src/routes/opportunities.ts) — `localeCompare` can disagree
-  // with both for some id pairs under locale-aware collation.
-  for (const arr of byStage.values()) {
-    arr.sort((a, b) => a.stageOrder - b.stageOrder || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  }
-
-  const updated: Opportunity = { ...current, stage, stageOrder };
-
-  const targetSiblings = [...(byStage.get(stage) ?? [])];
-  const clamped = Math.max(0, Math.min(stageOrder, targetSiblings.length));
-  targetSiblings.splice(clamped, 0, updated);
-
-  // Re-pack stageOrder for both the target stage (insertion applied) and,
-  // when the deal changed stages, the source stage (gap closed). If
-  // source === target, targetSiblings already covers it.
-  const repacked = new Map<string, number>();
-  targetSiblings.forEach((o, i) => repacked.set(o.id, i));
-  if (current.stage !== stage) {
-    (byStage.get(current.stage) ?? []).forEach((o, i) => repacked.set(o.id, i));
-  }
-
-  return opportunities.map((o) => {
-    if (o.id === id)
-      return { ...updated, stageOrder: repacked.get(id) ?? updated.stageOrder };
-    if (repacked.has(o.id)) return { ...o, stageOrder: repacked.get(o.id)! };
-    return o;
-  });
-}
-
-// The board drag mutation. Optimistic per the house pattern (see
-// useUpdateTask above): onMutate cancels + snapshots the list and
-// optimistically rewrites the moved deal's stage/stageOrder (and resequences
-// stage-siblings the same dense way the server does) — on a REAL stage
-// change (not a same-stage reorder), it also mirrors the server's
-// wonAt/preHoldStage bookkeeping (POST /:id/move in
-// backend/src/routes/opportunities.ts, finding N3) so the optimistic write
-// doesn't visibly diverge from the eventual server response for the moment
-// between commit and invalidation. onError rolls back,
-// onSettled invalidates the list so the server's authoritative order lands.
-export function useMoveOpportunity() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, stage, stageOrder }: MoveOpportunityInput) =>
-      apiRequest<Opportunity>(`/opportunities/${id}/move`, {
-        method: "POST",
-        body: { stage, stageOrder },
-      }),
-    onMutate: async ({ id, stage, stageOrder }) => {
-      await qc.cancelQueries({ queryKey: pipelineKeys.list });
-      const prev = qc.getQueryData<Opportunity[]>(pipelineKeys.list);
-      if (prev) {
-        const current = prev.find((o) => o.id === id);
-        const reordered = reorderOpportunitiesLocally(prev, id, stage, stageOrder);
-        // Bookkeeping mirror of the server's own POST /:id/move transaction
-        // (backend/src/routes/opportunities.ts, finding N3) — deliberately
-        // done HERE, in the caller, rather than inside
-        // reorderOpportunitiesLocally itself: that function stays a pure
-        // repositioning helper (ordering only), while wonAt/preHoldStage are
-        // a business-rule side effect of a REAL stage transition, keyed off
-        // `current`'s pre-move stage (only known here, before reordering).
-        const next =
-          current && current.stage !== stage
-            ? reordered.map((o) => {
-                if (o.id !== id) return o;
-                const enteringWon = stage === "WON";
-                const leavingWon = current.stage === "WON";
-                const enteringHold = stage === "HOLD";
-                const leavingHold = current.stage === "HOLD";
-                return {
-                  ...o,
-                  wonAt: enteringWon ? new Date().toISOString() : leavingWon ? null : o.wonAt,
-                  preHoldStage: enteringHold ? current.stage : leavingHold ? null : o.preHoldStage,
-                };
-              })
-            : reordered;
-        qc.setQueryData<Opportunity[]>(pipelineKeys.list, next);
-      }
-      return { prev };
-    },
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(pipelineKeys.list, ctx.prev);
-    },
-    // Explicitly invalidates this deal's own detail + activities queries,
-    // not just the list — and since the N1/N2 key-hygiene fix
-    // (`pipelineKeys.list` above), this is no longer redundant with
-    // invalidating the list: `list` is a sibling key now, not a shared
-    // array-prefix of `detail`/`activities`, so it doesn't catch them by
-    // accident the way it used to. A move is reachable from
-    // OpportunityDetail's StageMenu (not only the board drag), and the
-    // server logs an OpportunityActivity on a real stage change (POST
-    // /:id/move, backend/src/routes/opportunities.ts) — without these two
-    // explicit calls, a detail-page stage change wouldn't refresh its own
-    // wonAt/preHoldStage or activity feed until something else happened to
-    // invalidate them.
-    onSettled: (_data, _err, { id }) => {
-      qc.invalidateQueries({ queryKey: pipelineKeys.list });
-      qc.invalidateQueries({ queryKey: pipelineKeys.detail(id) });
-      qc.invalidateQueries({ queryKey: pipelineKeys.activities(id) });
-    },
-  });
-}
-
-// Won-deal handoff (PRD §2.10, M5.24) — `POST /opportunities/:id/handoff`.
-// Body is the SAME shape as `POST /projects` (`CreateProjectInput` above;
-// the backend's own handoff schema actually mirrors plain project
-// creation's tamId leniency too — an omitted tamId defaults to the caller
-// — but `HandoffProjectModal` (DealCard.tsx) requires an explicit pick
-// anyway: the caller completing a handoff is typically the SA, not the
-// intended TAM, so that default would misassign ownership more often than
-// not. That's a calling-form choice, not re-typed here). The native port
-// does the whole
-// project-create + `Opportunity.projectId` link in one backend transaction
-// (CLAUDE.md's native-port guardrail: no compensating unlink), so there's
-// nothing to roll back client-side on failure — this mutation is plain
-// (no onMutate optimism), matching useCreateProject's own shape above.
-// `project` is `CreatedProject` (finding N5), not `ProjectSummary` — this
-// route's own `prisma.project.create` call (backend/src/routes/
-// opportunities.ts's POST /:id/handoff) mirrors POST /projects's, with the
-// exact same no-`include` shape; see `CreatedProject`'s doc comment above.
-export interface HandoffOpportunityResult {
-  project: CreatedProject;
-  opportunity: Opportunity;
-}
-
-export function useHandoffOpportunity(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: CreateProjectInput) =>
-      apiRequest<HandoffOpportunityResult>(`/opportunities/${id}/handoff`, {
-        method: "POST",
-        body: input,
-      }),
-    onSuccess: () => {
-      // `pipelineKeys.root` (not just `list`/`detail(id)`): the deal's
-      // `projectId` link is new state every pipeline surface showing this
-      // deal should pick up. `["projects"]` is the same prefix-match key
-      // `useCreateProject` above invalidates — matches `queryKeys.projects`'s
-      // `["projects", filter]` shape by array prefix, catching every
-      // customer-filtered projects-list cache entry, not just the
-      // unfiltered one.
-      qc.invalidateQueries({ queryKey: pipelineKeys.root });
-      qc.invalidateQueries({ queryKey: ["projects"] });
-      // A handoff is ALSO a project create in every way that matters to
-      // these three caches (finding S1) — `useCreateProject` above
-      // invalidates all three for the exact same reason (new/changed
-      // project membership reshapes Overview's counts, the Customers list's
-      // `_count.projects`, and the Executive roll-up), and this mutation
-      // creates a project too, via the same backend `prisma.project.create`
-      // call. Without these, the new delivery project wouldn't appear on
-      // any of those three surfaces until something unrelated happened to
-      // invalidate them first.
-      qc.invalidateQueries({ queryKey: queryKeys.overview });
-      qc.invalidateQueries({ queryKey: queryKeys.customers });
-      qc.invalidateQueries({ queryKey: queryKeys.executiveReport() });
-    },
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Pipeline — Excel import (PRD §2.9). `PipelineImportDialog.tsx` parses the
-// workbook client-side (SheetJS/`xlsx`, lazy-loaded) and POSTs the parsed
-// rows here; the server re-validates and does the actual create/skip work.
-// `ImportOpportunityRow` mirrors `importRowSchema` in
-// backend/src/routes/opportunities.ts's POST /import field-for-field, plus
-// `activityLog`, which seeds the deal's first `OpportunityActivity` note the
-// same way Velora's importer does (`../VeloraApp`
-// app/api/opportunities/import/route.ts, read-only reference) — Opportunity
-// itself has no activity-log column.
-// ─────────────────────────────────────────────────────────────────────────
-
-export interface ImportOpportunityRow {
-  title: string;
-  customerName: string;
-  dealValue: number;
-  stage: PipelineStage;
-  picId?: number | null;
-  deadline?: string | null;
-  productSolution?: string;
-  winProbability?: number;
-  leadSource?: string | null;
-  activityLog?: string | null;
-}
-
-// Per-row outcome in the server's import response — mirrors
-// `ImportRowResult` in backend/src/routes/opportunities.ts's POST /import
-// verbatim: `row` is the 1-based index within the `rows` array this call
-// submitted (not the workbook's row number), `id` is only present when
-// `status === "valid"`. The server doesn't echo back title/customerName —
-// the dialog cross-references `row` against the rows it submitted to show
-// them.
-export interface ImportRowResult {
-  row: number;
-  status: "valid" | "skipped" | "invalid";
-  reason?: string;
-  id?: string;
-}
-
-export interface ImportOpportunitiesResult {
-  totalRows: number;
-  validCount: number;
-  skipCount: number;
-  invalidCount: number;
-  results: ImportRowResult[];
-}
-
-export function useImportOpportunities() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (rows: ImportOpportunityRow[]) =>
-      apiRequest<ImportOpportunitiesResult>("/opportunities/import", {
-        method: "POST",
-        body: { rows },
-      }),
-    // list (new opportunities land on the board) + imports (the admin
-    // Pipeline tab's import-history log, `usePipelineImports()`, gets a new
-    // row every call) — both explicit since the N1/N2 key-hygiene fix:
-    // `pipelineKeys.list` no longer shares an array-prefix with
-    // `pipelineKeys.imports`, so invalidating just the list would silently
-    // stop refreshing the import log after every import.
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: pipelineKeys.list });
-      qc.invalidateQueries({ queryKey: pipelineKeys.imports });
-    },
-  });
-}
-
-// Import admin surface (PRD §2.9/M4.19's "Pipeline" admin tab — Import
-// history). Mirrors GET /opportunities/imports (backend/src/routes/
-// opportunities.ts) verbatim — `user` is the same `PIC_SELECT` projection
-// as `Opportunity.pic`, so it reuses `OpportunityPic`. `status` mirrors the
-// Prisma `PipelineImportStatus` enum (schema.prisma): "OK" | "ERROR".
-export interface PipelineImportLogEntry {
-  id: string;
-  user: OpportunityPic | null;
-  totalRows: number;
-  validCount: number;
-  skipCount: number;
-  invalidCount: number;
-  status: "OK" | "ERROR";
-  errorMessage: string | null;
-  createdAt: string;
-}
-
-export function usePipelineImports() {
-  return useQuery({
-    queryKey: pipelineKeys.imports,
-    queryFn: ({ signal }) =>
-      apiRequest<PipelineImportLogEntry[]>("/opportunities/imports", { signal }),
-  });
-}

@@ -57,7 +57,7 @@ Google sign-in is **not** configured by environment variables. See section 6.
 On every start the backend runs, in order:
 
 1. `prisma migrate deploy` — applies any schema migrations the new version ships. Upgrades need no manual database step.
-2. `prisma db seed` — makes sure the five built-in roles (`ADMIN`, `TAM`, `SA`, `STAKEHOLDER`, `PENDING`) and the sign-in settings row exist. The seed creates no users.
+2. `prisma db seed` — makes sure the four built-in roles (`ADMIN`, `TAM`, `STAKEHOLDER`, `PENDING`) and the sign-in settings row exist. The seed creates no users.
 3. The API.
 
 The installer waits up to 2 minutes for `GET /health` on the API port, then creates the admin user.

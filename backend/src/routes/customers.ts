@@ -197,7 +197,6 @@ function customerInclude(user: JwtPayload) {
       orderBy: { updatedAt: "desc" } as const,
       include: {
         tam: { select: { id: true, username: true } },
-        sa: { select: { id: true, username: true } },
         _count: { select: { tasks: true } },
       },
     },

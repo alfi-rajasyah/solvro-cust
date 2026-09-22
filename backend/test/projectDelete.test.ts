@@ -5,9 +5,8 @@ import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { createAdminAndToken, createUserWithRole, seedRoles } from "./testAuth.js";
 
-// DELETE /projects/:id — hard delete behind project:write and the visibility
-// filter. The schema cascades the project's children; a won deal linked
-// through Opportunity.projectId keeps its row with the link cleared.
+// DELETE /projects/:id — hard delete behind project:write and the
+// visibility filter. The schema cascades the project's children.
 
 const app = createApp();
 
@@ -79,31 +78,6 @@ describe("DELETE /projects/:id", () => {
     expect(await prisma.projectNote.count({ where: { projectId } })).toBe(0);
     // The customer is untouched.
     expect(await prisma.customer.findUnique({ where: { id: customerId } })).not.toBeNull();
-  });
-
-  it("clears the handoff link on a won deal but keeps the deal", async () => {
-    const customerId = await createCustomer();
-    const created = await request(app)
-      .post("/opportunities")
-      .set("Authorization", `Bearer ${admin.token}`)
-      .send({ title: "Deal", customerName: "Acme Corp", picId: admin.userId, stage: "WON" });
-    expect(created.status).toBe(201);
-    const opportunityId = created.body.id as string;
-
-    const handoff = await request(app)
-      .post(`/opportunities/${opportunityId}/handoff`)
-      .set("Authorization", `Bearer ${admin.token}`)
-      .send({ name: uniq("Handed off"), customerId, tamId: admin.userId });
-    expect(handoff.status).toBe(201);
-    const projectId = handoff.body.project.id as number;
-
-    expect((await del(admin.token, projectId)).status).toBe(204);
-
-    const fetched = await request(app)
-      .get(`/opportunities/${opportunityId}`)
-      .set("Authorization", `Bearer ${admin.token}`);
-    expect(fetched.status).toBe(200);
-    expect(fetched.body.projectId).toBeNull();
   });
 
   it("404s for an unknown project", async () => {

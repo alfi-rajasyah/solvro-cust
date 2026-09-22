@@ -94,7 +94,7 @@ export function Projects() {
           <p className="text-sm text-on-surface-variant">
             {activeCustomer
               ? `Filtered by customer: ${activeCustomer.name}`
-              : "All projects you own as a TAM, plus those you lead as an SA."}
+              : "All projects where you're the TAM, plus those for customers you own."}
           </p>
         </div>
         {canCreate && (
@@ -154,7 +154,6 @@ export function Projects() {
 }
 
 function ProjectCard({ project }: { project: ProjectSummary }) {
-  const saInit = project.sa ? project.sa.username.slice(0, 2).toUpperCase() : null;
   const tamInit = project.tam.username.slice(0, 2).toUpperCase();
   const idBadge = `P-${String(project.id).padStart(3, "0")}`;
 
@@ -185,15 +184,6 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
           {project.customer?.name ?? <em className="opacity-70">No customer</em>}
         </span>
         <div className="flex -space-x-1.5">
-          {project.sa && (
-            <span
-              title={`SA: ${project.sa.username}`}
-              className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-surface-container-lowest text-[10px] font-bold text-white"
-              style={{ background: avatarColor(project.sa.username) }}
-            >
-              {saInit}
-            </span>
-          )}
           <span
             title={`TAM: ${project.tam.username}`}
             className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-surface-container-lowest bg-primary text-[10px] font-bold text-on-primary"
@@ -218,13 +208,6 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
       </div>
     </Link>
   );
-}
-
-const AVATAR_PALETTE = ["#0d9488", "#7c3aed", "#dc2626", "#0ea5e9", "#9333ea", "#a78bfa", "#f59e0b", "#10b981"];
-function avatarColor(seed: string) {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
 }
 
 function EmptyState({ onCreate }: { onCreate?: () => void }) {
