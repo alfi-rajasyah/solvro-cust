@@ -548,6 +548,11 @@ export const queryKeys = {
   // previous offset's bucketing.
   itopDaily: (date: string, utcOffsetMinutes: number) =>
     ["itop", "daily", date, utcOffsetMinutes] as const,
+  // Utilization page (Task 3.3) — `scope` is part of the key so switching
+  // Me/By TAM/By customer never serves another scope's cached rows. Keyed
+  // by the viewer's UTC offset too, same rationale as `itopDaily` above.
+  utilization: (week: string, scope: UtilizationScope, utcOffsetMinutes: number) =>
+    ["itop", "utilization", week, scope, utcOffsetMinutes] as const,
 };
 
 export function useOverview() {
@@ -2173,6 +2178,75 @@ export function useItopDaily(date: string, { enabled = true }: { enabled?: boole
     // response every minute for every open Daily Review tab.
     refetchInterval: (query) => (query.state.data?.configured ? 60_000 : false),
     refetchIntervalInBackground: false,
+  });
+}
+
+// Utilization page (Task 3.3, docs/archive/plans/itop-integration.md — "Work
+// Logs becomes Utilization" in docs/archive/plans/itop-integration-spec.md):
+// hours per TAM per customer for a given ISO week, backed by GET
+// /utilization. `me` is readable by anyone; `tam`/`customer` require
+// `report:executive` (backend 403s otherwise) — Utilization.tsx clamps the
+// requested scope to "me" client-side before this hook ever fires for a
+// caller without that permission, so the 403 path is a defense-in-depth
+// backstop, not something this hook needs to special-case. No polling: the
+// week table isn't a live dashboard like the Daily Review strip, so a
+// manual Refresh (`useRequestItopRefresh`, same mutation as the Tickets tab)
+// plus this hook's own 30s staleTime is enough.
+export type UtilizationScope = "me" | "tam" | "customer";
+
+export interface UtilizationTilesData {
+  hoursLogged: number;
+  /** Capacity × people in scope (e.g. one TAM's 40 h for `scope=me`). */
+  capacityHours: number;
+  customersTouched: number;
+  customersAssigned: number;
+  unassignedHours: number;
+}
+
+export interface UtilizationRow {
+  key: string;
+  label: string;
+  kind: "customer" | "tam" | "none";
+  /** Decimal hours, Monday..Sunday, 0 = none logged that day. */
+  hours: number[];
+  total: number;
+  /** Distinct ticket refs, most hours first, max 6. */
+  ticketRefs: string[];
+}
+
+export interface UtilizationResponse {
+  configured: boolean;
+  week: { key: string; start: string; days: string[] };
+  scope: UtilizationScope;
+  capacityHoursPerWeek: number;
+  syncedAt: string | null;
+  tiles: UtilizationTilesData;
+  rows: UtilizationRow[];
+  totals: { hours: number[]; total: number };
+  /** Echoes the request's `utcOffsetMinutes` (local minus UTC) — same contract as `/itop/daily`. */
+  utcOffsetMinutes: number;
+  /** True when the week's raw TimeSpent entries exceeded the backend's row cap (10,000) before aggregation. */
+  truncated: boolean;
+}
+
+export function useUtilization(
+  week: string,
+  scope: UtilizationScope,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  // Local minus UTC, in minutes — same computation and rationale as
+  // useItopDaily above: sent so the backend can bucket by the viewer's
+  // local day/week rather than server-local or UTC.
+  const utcOffsetMinutes = -new Date().getTimezoneOffset();
+  return useQuery({
+    queryKey: queryKeys.utilization(week, scope, utcOffsetMinutes),
+    queryFn: ({ signal }) =>
+      apiRequest<UtilizationResponse>(
+        `/utilization?week=${encodeURIComponent(week)}&scope=${scope}&utcOffsetMinutes=${utcOffsetMinutes}`,
+        { signal },
+      ),
+    enabled,
+    staleTime: 30_000,
   });
 }
 

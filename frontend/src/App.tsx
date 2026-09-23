@@ -14,8 +14,8 @@ import { ProjectDetail } from "@/pages/ProjectDetail";
 import { Projects } from "@/pages/Projects";
 import { Settings } from "@/pages/Settings";
 import { Tasks } from "@/pages/Tasks";
+import { Utilization } from "@/pages/Utilization";
 import { WeeklySync } from "@/pages/WeeklySync";
-import { WorkLogs } from "@/pages/WorkLogs";
 import { ProjectGantt } from "@/pages/views/ProjectGantt";
 import { ProjectKanban } from "@/pages/views/ProjectKanban";
 import { ProjectList } from "@/pages/views/ProjectList";
@@ -54,7 +54,8 @@ export function App() {
         <Route path="daily-review" element={<DailyReview />} />
         <Route path="weekly-sync" element={<WeeklySync />} />
         <Route path="tasks" element={<Tasks />} />
-        <Route path="work-logs" element={<WorkLogs />} />
+        <Route path="utilization" element={<Utilization />} />
+        <Route path="work-logs" element={<Navigate to="/utilization" replace />} />
         <Route
           path="executive"
           element={
