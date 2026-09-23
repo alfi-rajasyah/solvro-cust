@@ -13,7 +13,9 @@ export interface DuplicateOverrides {
 // to null (decision 4) on every copy, top-level or subtask — never selected
 // here since the copy never reads them. No TaskDependency row is ever
 // created for a copy (decision 8); comments are never copied (decision 9) —
-// this helper never touches the Comment or TaskDependency tables.
+// this helper never touches the Comment or TaskDependency tables. itopTicketRef
+// (docs/archive/plans/itop-integration.md Task 4.2) is likewise never
+// selected/copied — a copy must not pin the same iTop ticket as its source.
 const TASK_SELECT = {
   id: true,
   projectId: true,

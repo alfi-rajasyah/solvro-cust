@@ -40,6 +40,17 @@ const updateTaskSchema = z
     sectionId: z.number().int().positive().nullable().optional(),
     labelIds: z.array(z.number().int().positive()).optional(),
     position: z.number().int().min(0).optional(),
+    // Optional pin to one iTop ticket ref, e.g. "R-000123" (1-3 uppercase
+    // letters, a dash, 4-8 digits — matches iTop's default ref format for
+    // UserRequest/Incident). `null` clears it; the ref itself is never
+    // validated against the local snapshot here (see
+    // GET /itop/tickets/by-ref/:ref, which resolves it when present).
+    itopTicketRef: z
+      .string()
+      .trim()
+      .regex(/^[A-Z]{1,3}-\d{4,8}$/)
+      .nullable()
+      .optional(),
   })
   .refine((b) => !(b.isMilestone === true && b.dueDate === null), {
     message: "A milestone requires a due date",
@@ -206,6 +217,7 @@ tasksRouter.patch(
       if (body.dueDate !== undefined) data.dueDate = body.dueDate;
       if (body.isMilestone !== undefined) data.isMilestone = body.isMilestone;
       if (body.isCriticalPath !== undefined) data.isCriticalPath = body.isCriticalPath;
+      if (body.itopTicketRef !== undefined) data.itopTicketRef = body.itopTicketRef;
       // Milestone due-date lockstep: whatever this patch results in, a
       // milestone with a due date must have startDate === dueDate.
       const willBeMilestone = body.isMilestone ?? current.isMilestone;

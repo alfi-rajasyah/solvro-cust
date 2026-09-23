@@ -203,6 +203,35 @@ itopRouter.get(
   },
 );
 
+// ---- GET /tickets/by-ref/:ref --------------------------------------------------
+
+// Resolves a task's pinned itopTicketRef (routes/tasks.ts,
+// Task.itopTicketRef) against the local snapshot, e.g. for the task panel's
+// ticket chip. Same shape and visibility rule as GET /tickets/:id — 404
+// for unknown, hidden, or unmapped (no customer link) refs, so a task with
+// a ref for a ticket outside the snapshot degrades to "not in snapshot"
+// rather than leaking a distinguishable error. See
+// docs/archive/plans/itop-integration.md Task 4.2.
+const ticketRefParamSchema = z.object({ ref: z.string().min(1) });
+
+itopRouter.get(
+  "/tickets/by-ref/:ref",
+  validate("params", ticketRefParamSchema),
+  async (req, res) => {
+    const { ref } = req.params as unknown as z.infer<typeof ticketRefParamSchema>;
+
+    const ticket = await prisma.itopTicket.findUnique({ where: { ref } });
+    if (!ticket || ticket.customerId === null) {
+      throw new HttpError(404, "not_found", "Ticket not found");
+    }
+
+    await ensureCustomerVisible(req.user!, ticket.customerId);
+
+    const myItopPersonId = await getMyItopPersonId(req.user!.sub);
+    res.json(toTicketRow(ticket, myItopPersonId));
+  },
+);
+
 // ---- POST /refresh -------------------------------------------------------------
 
 const refreshBodySchema = z.object({ customerId: z.number().int().positive().optional() });
