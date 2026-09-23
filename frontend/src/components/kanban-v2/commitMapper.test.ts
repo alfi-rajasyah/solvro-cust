@@ -27,6 +27,7 @@ function makeTask(
     section: null,
     labels: [],
     _count: { subtasks: 0, comments: 0 },
+    itopTicketRef: null,
     ...overrides,
   };
 }

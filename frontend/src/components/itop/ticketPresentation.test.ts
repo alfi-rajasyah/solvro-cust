@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { ageLabel, itopTicketUrl, slaLabel, statusLabel, statusTone } from "./ticketPresentation";
+import {
+  ageLabel,
+  isItopRef,
+  itopTicketUrl,
+  slaLabel,
+  statusLabel,
+  statusTone,
+} from "./ticketPresentation";
 
 describe("statusLabel", () => {
   it("humanizes known iTop statuses", () => {
@@ -155,5 +162,23 @@ describe("itopTicketUrl", () => {
     expect(itopTicketUrl("https://itop.example.test//", { id: 7, class: "UserRequest" })).toBe(
       "https://itop.example.test/pages/UI.php?operation=details&class=UserRequest&id=7",
     );
+  });
+});
+
+describe("isItopRef", () => {
+  it("accepts a single-letter prefix", () => {
+    expect(isItopRef("R-004512")).toBe(true);
+  });
+
+  it("accepts a multi-letter prefix", () => {
+    expect(isItopRef("INC-1234")).toBe(true);
+  });
+
+  it("rejects a lowercase prefix", () => {
+    expect(isItopRef("r-004512")).toBe(false);
+  });
+
+  it("rejects a ref with no separating dash", () => {
+    expect(isItopRef("R004512")).toBe(false);
   });
 });

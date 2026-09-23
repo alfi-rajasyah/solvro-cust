@@ -27,6 +27,7 @@ import { reportsRouter } from "./routes/reports.js";
 import { searchRouter } from "./routes/search.js";
 import { dailyReviewRouter } from "./routes/dailyReview.js";
 import { notesRouter } from "./routes/notes.js";
+import { webhookRouter } from "./routes/webhook.js";
 
 export function createApp(): Express {
   const app = express();
@@ -43,6 +44,13 @@ export function createApp(): Express {
     }),
   );
   app.use(pinoHttp({ logger }));
+
+  // Mounted BEFORE the global JSON body parser: the iTop webhook (the first
+  // unauthenticated non-health route — see routes/webhook.ts) ignores its
+  // request body entirely, so a malformed body must never 400 before that
+  // route's own secret check runs.
+  app.use("/webhook", webhookRouter);
+
   app.use(express.json({ limit: "1mb" }));
 
   app.use("/health", healthRouter);

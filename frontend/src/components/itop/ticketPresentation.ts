@@ -118,3 +118,15 @@ export function itopTicketUrl(baseUrl: string, ticket: UrlTicket): string {
   const base = baseUrl.replace(/\/+$/, "");
   return `${base}/pages/UI.php?operation=details&class=${ticket.class}&id=${ticket.id}`;
 }
+
+// Client-side mirror of the backend's ref validator (Task 4.2,
+// docs/archive/plans/itop-integration.md — routes/tasks.ts's PATCH
+// validation for `Task.itopTicketRef`). Kept as the exact same pattern so a
+// ref TaskTicketField.tsx accepts here is never rejected by the server with
+// a 400 the field then has to surface after the fact.
+const ITOP_REF_PATTERN = /^[A-Z]{1,3}-\d{4,8}$/;
+
+/** True for a well-formed iTop ref like "R-004512" or "INC-1234". */
+export function isItopRef(value: string): boolean {
+  return ITOP_REF_PATTERN.test(value);
+}

@@ -140,6 +140,12 @@ export interface Task {
   position: number;
   labels: Label[];
   _count: { subtasks: number; comments: number };
+  // iTop ticket ref pinned to this task (Task 4.2,
+  // docs/archive/plans/itop-integration.md), e.g. "R-004512" — validated by
+  // the backend against `^[A-Z]{1,3}-\d{4,8}$`. Always present on every task
+  // payload (list, detail, kanban, gantt), never omitted, so this is a plain
+  // required field rather than optional.
+  itopTicketRef: string | null;
 }
 
 export interface TaskWithProject extends Task {
@@ -537,6 +543,16 @@ export const queryKeys = {
   // every scope/class bucket for that customer refreshes, not just the one
   // a caller happens to be viewing).
   itopStatus: ["itop", "status"] as const,
+  // Task ticket ref lookup (Task 4.2) — one entry per ref rather than a
+  // customer-scoped key: a task's pinned ref may belong to a customer the
+  // viewer hasn't opened, and `GET /itop/tickets/by-ref/:ref` does its own
+  // visibility check (the ticket's customer), so no customer id is needed
+  // in the key. `itopTicketByRefRoot` is the prefix `useRequestItopRefresh`
+  // invalidates (same rationale as `customerTicketsRoot` below) — a manual
+  // Refresh should also unstick a task's ticket field that was reading
+  // "not in snapshot" before this pull.
+  itopTicketByRefRoot: ["itop", "tickets", "by-ref"] as const,
+  itopTicketByRef: (ref: string) => [...queryKeys.itopTicketByRefRoot, ref] as const,
   customerTicketsRoot: (id: number) => ["itop", "customers", id, "tickets"] as const,
   customerTickets: (id: number, scope: ItopTicketScope, cls?: ItopTicketClass) =>
     [...queryKeys.customerTicketsRoot(id), scope, cls ?? null] as const,
@@ -945,6 +961,7 @@ export interface UpdateTaskInput {
   sectionId?: number | null;
   labelIds?: number[];
   position?: number;
+  itopTicketRef?: string | null;
 }
 
 export interface LockBaselineInput {
@@ -2128,8 +2145,33 @@ export function useRequestItopRefresh() {
       setTimeout(() => {
         qc.invalidateQueries({ queryKey: key });
         qc.invalidateQueries({ queryKey: queryKeys.itopStatus });
+        // Unconditional (not folded into `key` above): a customer-scoped
+        // refresh's `key` is a sibling branch (["itop","customers",id,
+        // "tickets"]) that would never match a by-ref cache entry, and a
+        // task's pinned ticket can belong to any customer regardless of
+        // which one triggered this refresh.
+        qc.invalidateQueries({ queryKey: queryKeys.itopTicketByRefRoot });
       }, 3000);
     },
+  });
+}
+
+// Task ticket ref (Task 4.2, docs/archive/plans/itop-integration.md):
+// TaskTicketField.tsx looks up a task's pinned `itopTicketRef` against the
+// snapshot for its status chip + "Open in iTop" link. `retry: false` — a 404
+// (`not_found`, covering unknown/hidden/unmapped alike per
+// routes/itop.ts) is an expected steady state (the ref hasn't synced yet, or
+// never will), not a transient failure worth retrying.
+export function useItopTicketByRef(ref: string | null) {
+  return useQuery({
+    queryKey: queryKeys.itopTicketByRef(ref ?? ""),
+    queryFn: ({ signal }) =>
+      apiRequest<ItopTicketRow>(`/itop/tickets/by-ref/${encodeURIComponent(ref ?? "")}`, {
+        signal,
+      }),
+    enabled: !!ref,
+    retry: false,
+    staleTime: 60_000,
   });
 }
 
@@ -2636,6 +2678,43 @@ export function useUpdateItopSettings() {
       }),
     onSuccess: (fresh) => {
       qc.setQueryData(adminQueryKeys.itopSettings, fresh);
+      qc.invalidateQueries({ queryKey: adminQueryKeys.itopSettings });
+    },
+  });
+}
+
+// Webhook secret (Task 4.1, docs/archive/plans/itop-integration.md): the
+// secret itself is shown exactly once, in the mutation's response — it's
+// never re-readable, so ItopTab.tsx keeps it in local component state and
+// these hooks only ever invalidate `itopSettings` (whose `webhookSecretSet`
+// boolean is the only trace of it that persists across a remount).
+export interface ItopWebhookSecretResult {
+  secret: string;
+  path: string;
+  header: string;
+}
+
+export function useGenerateItopWebhookSecret() {
+  const qc = useQueryClient();
+  return useMutation({
+    // Also used to rotate an existing secret — same endpoint, same one-time
+    // response shape; the old secret simply stops verifying.
+    mutationFn: () =>
+      apiRequest<ItopWebhookSecretResult>("/admin/itop/webhook-secret", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: adminQueryKeys.itopSettings });
+    },
+  });
+}
+
+export function useRemoveItopWebhookSecret() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiRequest<void>("/admin/itop/webhook-secret", { method: "DELETE" }),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: adminQueryKeys.itopSettings });
     },
   });

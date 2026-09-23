@@ -8,11 +8,12 @@ import {
 } from "./CriticalPathMark";
 import { InlineDateRangeEditor } from "./InlineDateRangeEditor";
 import { LabelPicker } from "./LabelPicker";
+import { TaskTicketField } from "@/components/itop/TaskTicketField";
 import { Alert, AlertDescription } from "@/components/reui/alert";
+import { Sortable, SortableItem, SortableItemHandle } from "@/components/reui/sortable";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { dayFromIso, dayToDate } from "@/lib/dateField";
-import { Sortable, SortableItem, SortableItemHandle } from "@/components/reui/sortable";
 import {
   type Priority,
   type Task,
@@ -22,6 +23,7 @@ import {
   useCreateTask,
   useDeleteTask,
   useDuplicateTask,
+  useItopStatus,
   useProjectSections,
   useProjectTasks,
   useUpdateTask,
@@ -89,6 +91,11 @@ interface TaskPanelProps {
 export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelProps) {
   const { user } = useAuth();
   const canEdit = hasPermission(user, "task:write");
+  // Gates the "iTop ticket" row below — an install with no iTop connection
+  // never sees the row at all (TaskTicketField.tsx repeats the same check
+  // for its own inner rendering, but the label span here needs it too, or
+  // an unconfigured install would show a label with no paired grid cell).
+  const itopConfigured = useItopStatus().data?.configured ?? false;
 
   const { data: tasks } = useProjectTasks(projectId);
   const { data: sections } = useProjectSections(projectId);
@@ -602,6 +609,19 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                 </button>
               )}
             </div>
+
+            {itopConfigured && (
+              <>
+                <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                  iTop ticket
+                </span>
+                <TaskTicketField
+                  itopTicketRef={task.itopTicketRef}
+                  canEdit={canEdit}
+                  onSave={(ref) => patch({ itopTicketRef: ref })}
+                />
+              </>
+            )}
           </div>
 
           {/* Labels */}

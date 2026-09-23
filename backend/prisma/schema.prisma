@@ -302,6 +302,18 @@ model Task {
   // Dependency edges (Gantt connector arrows).
   predecessors      TaskDependency[] @relation("DependencySuccessor")
   successors        TaskDependency[] @relation("DependencyPredecessor")
+  // Optional pin to one iTop ticket ref (e.g. "R-000123"), validated in
+  // routes/tasks.ts. Free-form string, not an FK to ItopTicket — the ref may
+  // not exist in the local snapshot yet (unmapped org, not synced, or the
+  // ticket predates this integration); GET /itop/tickets/by-ref/:ref
+  // resolves it against the snapshot when present. Tasks never become
+  // tickets and this never writes to iTop. See
+  // docs/archive/plans/itop-integration.md Task 4.2.
+  /// Reverse lookup: "which task (if any) pins this ticket ref" — used by
+  /// the iTop ticket panel and the task-to-ticket flow (later phases) to
+  /// find a task from a ticket, the opposite direction of the by-ref
+  /// endpoint above (which resolves a ref to a ticket).
+  itopTicketRef     String?          @map("itop_ticket_ref")
 
   @@index([projectId])
   @@index([sectionId])
@@ -311,6 +323,8 @@ model Task {
   @@index([dueDate])
   @@index([parentTaskId])
   @@index([projectId, position])
+  // Backs the reverse lookup itopTicketRef documents above (ticket ref -> task).
+  @@index([itopTicketRef])
   @@map("tasks")
 }
 

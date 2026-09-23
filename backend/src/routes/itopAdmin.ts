@@ -5,6 +5,7 @@
 // at /admin/itop in src/app.ts. Live iTop reads use the read-only app token
 // (lib/itop/config.ts#getItopAppClient); nothing here writes to iTop.
 import { Router } from "express";
+import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
@@ -12,7 +13,7 @@ import { logger } from "../logger.js";
 import { requireAuth, requireAdmin } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
-import { open, SecretBoxError } from "../lib/secretBox.js";
+import { open, seal, SecretBoxError } from "../lib/secretBox.js";
 import { ItopError } from "../lib/itop/client.js";
 import {
   getItopConfig,
@@ -226,6 +227,37 @@ itopAdminRouter.patch(
     res.json(serializeConfig(row));
   },
 );
+
+// ---- Webhook secret -----------------------------------------------------------
+
+// Generates a fresh secret for iTop's "on ticket update" trigger to send back
+// as X-Solvro-Webhook-Secret (routes/webhook.ts, POST /webhook/itop — the
+// admin-facing counterpart of Task 4.1). Shown once: the plaintext never
+// round-trips through GET /settings, which only reports webhookSecretSet.
+// See docs/archive/plans/itop-integration.md Task 4.1.
+itopAdminRouter.post("/webhook-secret", async (req, res) => {
+  const secret = crypto.randomBytes(32).toString("base64url");
+
+  await getItopConfig(); // ensures the row exists before the update below
+  await prisma.itopConfig.update({
+    where: { id: "default" },
+    data: { webhookSecretEnc: seal(secret), updatedById: req.user!.sub },
+  });
+  bustItopConfigCache();
+
+  res.json({ secret, path: "/api/webhook/itop", header: "X-Solvro-Webhook-Secret" });
+});
+
+itopAdminRouter.delete("/webhook-secret", async (req, res) => {
+  await getItopConfig();
+  await prisma.itopConfig.update({
+    where: { id: "default" },
+    data: { webhookSecretEnc: null, updatedById: req.user!.sub },
+  });
+  bustItopConfigCache();
+
+  res.status(204).end();
+});
 
 // ---- Test connection ---------------------------------------------------------
 
