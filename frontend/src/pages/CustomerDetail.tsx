@@ -16,7 +16,7 @@ import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll
 import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
 import { EmptyState } from "@/components/EmptyState";
 import { TicketPanel } from "@/components/itop/TicketPanel";
-import { TicketsTab } from "@/components/itop/TicketsTab";
+import { TicketsTab, type TicketsTabView } from "@/components/itop/TicketsTab";
 import { ServiceMappingList } from "@/components/services/ServiceMappingList";
 import { Chip, ProjectStatusChip } from "@/components/StatusChip";
 import { Tabs } from "@/components/Tabs";
@@ -149,6 +149,27 @@ export function CustomerDetail() {
         const next = new URLSearchParams(prev);
         next.delete("ticket");
         return next;
+      },
+      { replace: true },
+    );
+  }
+
+  // Board view (Task 6.1, docs/archive/plans/itop-integration.md): `?view=`
+  // is a sibling of `?tab=`/`?ticket=` (the spec mockup's own URL is
+  // `?tab=tickets&view=board`), so it lives here rather than as TicketsTab's
+  // local scope/class state — same functional-updater form as
+  // openTicketPanel/closeTicketPanel above, which is race-safe against a
+  // concurrent `?tab=`/`?ticket=` write because it always reads the latest
+  // committed params rather than a captured snapshot.
+  const view: TicketsTabView = searchParams.get("view") === "board" ? "board" : "table";
+
+  function handleViewChange(next: TicketsTabView) {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if (next === "table") params.delete("view");
+        else params.set("view", next);
+        return params;
       },
       { replace: true },
     );
@@ -311,7 +332,12 @@ export function CustomerDetail() {
           <ServicesTab customer={customer} canMutate={canMutate} />
         )}
         {tab === "tickets" && ticketsAvailable && (
-          <TicketsTab customerId={customer.id} onOpenTicket={openTicketPanel} />
+          <TicketsTab
+            customerId={customer.id}
+            view={view}
+            onViewChange={handleViewChange}
+            onOpenTicket={openTicketPanel}
+          />
         )}
         {tab === "topology" && (
           <EmptyState
