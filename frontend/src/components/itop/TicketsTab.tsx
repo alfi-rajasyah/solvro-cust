@@ -25,7 +25,15 @@ import { SyncedAgo } from "./SyncedAgo";
 import { TicketFilters } from "./TicketFilters";
 import { TicketsTable } from "./TicketsTable";
 
-export function TicketsTab({ customerId }: { customerId: number }) {
+export function TicketsTab({
+  customerId,
+  onOpenTicket,
+}: {
+  customerId: number;
+  /** Deep-links `?ticket=<id>` on the customer page (CustomerDetail.tsx owns
+   * `searchParams`, Task 5.4) — this component just forwards row/card clicks. */
+  onOpenTicket: (id: number) => void;
+}) {
   const [scope, setScope] = useState<ItopTicketScope>("ongoing");
   const [cls, setCls] = useState<ItopTicketClass | undefined>(undefined);
 
@@ -89,7 +97,12 @@ export function TicketsTab({ customerId }: { customerId: number }) {
         />
       </div>
 
-      <TicketsTable tickets={data.tickets} baseUrl={status.data?.baseUrl ?? null} scope={scope} />
+      <TicketsTable
+        tickets={data.tickets}
+        baseUrl={status.data?.baseUrl ?? null}
+        scope={scope}
+        onOpen={(t) => onOpenTicket(t.id)}
+      />
 
       <p className="text-[11px] text-on-surface-variant">
         Tickets belong to the customer&apos;s iTop organisation. Solvro shows them; it does not own
