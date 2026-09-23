@@ -120,8 +120,10 @@ function daysAgo(days: number, hours = 9): string {
 /**
  * Populates 2 organizations, 4 persons (one with an email that matches no
  * Solvro user on purpose), 3 users (contactid -> person), ~12 tickets across
- * both classes and both orgs with mixed statuses, and ~10 TimeSpent rows
- * over the last 3 weeks. Pass the result to `createFakeItop`.
+ * both classes and both orgs with mixed statuses, and ~14 TimeSpent rows
+ * over the last 3 weeks — including current- and previous-week rows for 2
+ * users, some with `org_id: 0` (no organization, exercising the "No
+ * customer" Utilization row). Pass the result to `createFakeItop`.
  */
 export function seedFakeItop(): FakeItopState {
   const state = createEmptyState();
@@ -173,6 +175,14 @@ export function seedFakeItop(): FakeItopState {
     { userId: 2, orgId: 1, ref: "R-004402", daysAgo: 10, minutes: 40 },
     { userId: 3, orgId: 2, ref: "R-004501", daysAgo: 15, minutes: 100 },
     { userId: 1, orgId: 2, ref: "R-004545", daysAgo: 20, minutes: 65 },
+    // Current-week rows for 2 users, one of them not tied to any
+    // organization (org_id 0 — iTop's "unset" for an optional org link).
+    // Phase 3.2's Utilization matrix groups these under "No customer".
+    { userId: 1, orgId: 0, ref: "", daysAgo: 0, minutes: 45 },
+    { userId: 2, orgId: 0, ref: "", daysAgo: 1, minutes: 30 },
+    // Previous-week rows for the same 2 users, same mix of org / no-org.
+    { userId: 1, orgId: 1, ref: "R-004530", daysAgo: 9, minutes: 55 },
+    { userId: 2, orgId: 0, ref: "", daysAgo: 10, minutes: 25 },
   ];
   for (const seed of timeSpentSeeds) {
     const id = state.nextId++;

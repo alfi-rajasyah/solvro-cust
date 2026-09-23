@@ -17,10 +17,8 @@ export const NAV_COMMANDS: readonly NavCommand[] = [
   { to: "/customers", label: "Customers", icon: "groups" },
   { to: "/daily-review", label: "Daily Review", icon: "edit_note" },
   { to: "/weekly-sync", label: "Weekly Sync", icon: "table_chart" },
-  // Work Logs (WorkLogs.tsx) is an unbuilt placeholder (iTop API integration),
-  // so it's intentionally NOT in this catalogue. Route stays registered in
-  // App.tsx — mirror of how Tasks is kept routable but hidden. This also keeps
-  // the nav in CLAUDE.md's canonical order (no Work Logs entry).
+  // Utilization (Utilization.tsx) replaced the old Work Logs placeholder (Task 3.3).
+  { to: "/utilization", label: "Utilization", icon: "schedule" },
   { to: "/executive", label: "Executive", icon: "leaderboard", requires: "report:executive" },
   { to: "/settings", label: "Settings", icon: "settings" },
   { to: "/admin", label: "Admin", icon: "admin_panel_settings", requires: "*" },

@@ -283,6 +283,19 @@ const syncBodySchema = z.object({ full: z.boolean().optional() });
 // that case resolves silently in the background and is not surfaced here).
 let syncInFlight: Promise<void> | null = null;
 
+/**
+ * Test-only hook: resolves once any fire-and-forget sync started by this
+ * route has finished. Without this, a background sync left running past the
+ * end of one test can still be mid-flight when the next test starts — racing
+ * that test's own /sync calls (the "busy" guard) or its manipulation of the
+ * shared ItopConfig singleton row. Not used by production code paths.
+ */
+export async function waitForItopSyncIdle(): Promise<void> {
+  if (syncInFlight) {
+    await syncInFlight;
+  }
+}
+
 itopAdminRouter.post(
   "/sync",
   validate("body", syncBodySchema),

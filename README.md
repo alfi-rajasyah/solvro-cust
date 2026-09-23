@@ -246,4 +246,4 @@ Work branches off `develop` and merges back by pull request; `develop` is the in
 
 ## Roadmap
 
-- **Work Logs** — an iTop (ITSM) integration for utilization reporting. The `/work-logs` route is a placeholder today. Once an admin connects iTop (Admin > iTop), a customer's iTop tickets already appear on that customer's page, in its Tickets tab.
+- **Utilization** (`/utilization`) — hours per customer per week, drawn from iTop's Time Tracking extension once an admin connects iTop (Admin > iTop). Every TAM sees their own hours; holders of the Executive-report permission also get "By TAM" and "By customer" views. The old `/work-logs` URL redirects here. A customer's iTop tickets also appear on that customer's page, in its Tickets tab.

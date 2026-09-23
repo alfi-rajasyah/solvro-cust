@@ -11,6 +11,7 @@ import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { open, seal } from "../src/lib/secretBox.js";
 import { bustItopConfigCache } from "../src/lib/itop/config.js";
+import { waitForItopSyncIdle } from "../src/routes/itopAdmin.js";
 import { createAdminAndToken, createUserWithRole, seedRoles } from "./testAuth.js";
 import { createFakeItop, seedFakeItop, type FakeItopState } from "./itop/fakeItop.js";
 
@@ -439,6 +440,13 @@ describe("persons match report + sync trigger", () => {
   });
 
   afterEach(async () => {
+    // Wait for any fire-and-forget sync from this test to finish BEFORE
+    // closing the fake server or resetting state below — otherwise it can
+    // still be mid-flight when the next test's beforeEach/test body runs,
+    // racing that test's own /sync calls or its ItopConfig reads/writes
+    // (the cause of an intermittent 202 instead of 409 on the
+    // "not configured" test in full-suite runs).
+    await waitForItopSyncIdle();
     if (server) {
       await closeServer(server);
       server = undefined;
@@ -495,6 +503,10 @@ describe("persons match report + sync trigger", () => {
     const second = await call("post", "/admin/itop/sync", adminToken).send({ full: true });
     expect(second.status).toBe(202);
     expect(second.body).toEqual({ started: false, reason: "busy" });
+
+    // Let the one real background run (from `first`) finish before this test
+    // ends, so it can't still be in flight when the next test starts.
+    await waitForItopSyncIdle();
   });
 
   it("POST /sync 409s itop_not_configured when iTop isn't connected", async () => {

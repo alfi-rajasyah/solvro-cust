@@ -14,6 +14,7 @@ describe("filterNavCommands", () => {
       "Customers",
       "Daily Review",
       "Weekly Sync",
+      "Utilization",
       "Settings",
     ]);
   });
@@ -44,6 +45,7 @@ describe("filterNavCommands", () => {
       "/customers",
       "/daily-review",
       "/weekly-sync",
+      "/utilization",
       "/executive",
       "/settings",
       "/admin",
