@@ -1886,7 +1886,7 @@ User-deferred findings from the wave-1 review of the iTop integration's first
 phase (branch `feat/itop-p1-tickets` — see `CHANGELOG.md`'s "iTop
 integration: encrypted secrets at rest, ticket snapshot schema, REST client"
 entry). No fix now; each is a Phase 2/3 follow-up per
-`docs/plans/itop-integration.md`.
+`docs/archive/plans/itop-integration.md`.
 
 - ~~**`itop_tickets` has a low-cardinality `@@index([status])`.**
   `backend/prisma/schema.prisma:559` (`ItopTicket` model, lines 533-563)
@@ -1926,7 +1926,7 @@ entry). No fix now; each is a Phase 2/3 follow-up per
   was the intent.
 - **No pino `redact` configuration — defence in depth for the iTop token.**
   `backend/src/logger.ts` creates the shared pino logger with no `redact`
-  option, though `docs/plans/itop-integration.md` §5 ("Risks") calls for
+  option, though `docs/archive/plans/itop-integration.md` §5 ("Risks") calls for
   redacting `token` / `Auth-Token` paths. No current code path actually logs
   the iTop application token — it travels to iTop in a request body that the
   HTTP request logger (see the next entry) doesn't log — so this is a
@@ -1942,6 +1942,9 @@ entry). No fix now; each is a Phase 2/3 follow-up per
   `redact: ["req.headers.authorization", "req.headers.cookie"]` to the pino
   logger (`backend/src/logger.ts`) so `pino-http` redacts those paths before
   they're written.
+
+Integration complete as of 2026-09-23; the plan is archived at
+`docs/archive/plans/itop-integration.md`.
 
 ---
 
@@ -1969,6 +1972,9 @@ entry). No fix now; each is a Phase 2/3 follow-up per
   being dropped. Fix direction: stamp rows with a `syncRunId`/`seenAt` during
   the upsert and delete with `WHERE seenAt < runStart` instead of `notIn`,
   which needs no per-row parameter regardless of row count.
+
+Integration complete as of 2026-09-23; the plan is archived at
+`docs/archive/plans/itop-integration.md`.
 
 ---
 
@@ -2022,6 +2028,9 @@ each is a follow-up decision.
   currently carried onto the row alongside `t.status`/`t.priority`). Decision
   item — whether this export should show it — not a bug.
 
+Integration complete as of 2026-09-23; the plan is archived at
+`docs/archive/plans/itop-integration.md`.
+
 ---
 
 ## iTop integration Phase 5 — deferred findings (2026-09-23)
@@ -2072,6 +2081,9 @@ each is a follow-up decision.
   reserves `full` for status chips and avatars, yet `frontend/src/components/itop/
   TicketFilters.tsx` and `TicketLog.tsx` use it on toggle buttons (count chips, log tabs).
   Decide once: sanction the pill-toggle pattern in DESIGN.md, or retire it in both files.
+
+Integration complete as of 2026-09-23; the plan is archived at
+`docs/archive/plans/itop-integration.md`.
 
 ---
 
@@ -2137,3 +2149,82 @@ now; each is a follow-up decision.
   target customer's organisation via iTop's service-entitlement link
   (`lnkCustomerContractToService` or equivalent) once a `customerId` is
   known, or accept and document the current organisation-wide visibility.
+
+Integration complete as of 2026-09-23; the plan is archived at
+`docs/archive/plans/itop-integration.md`.
+
+---
+
+## iTop integration Phase 7 — deferred findings (2026-09-23)
+
+User-deferred findings from Phase 7, the last phase (branch
+`feat/itop-p7-timer` — see `CHANGELOG.md`'s "Time tracking and task-to-ticket
+from Solvro" entry). No fix now; each is a follow-up decision.
+
+- **The running timer is shared across every user on one browser profile.**
+  `frontend/src/components/itop/useTicketTimer.ts` persists the single
+  running timer in `localStorage["solvro.itopTimer"]` with no user id in the
+  key or the stored shape. Two Solvro accounts signed in from the same
+  browser profile (e.g. a shared kiosk machine, or one TAM covering for
+  another) see and can stop/discard each other's timer, and a Stop always
+  logs the entry under whichever user's session is currently active, not
+  necessarily the one who started it. Fix direction: key the storage entry
+  (or at least gate reads/writes) by the signed-in user's id.
+- ~~**The Stop-timer response's `myMinutesThisWeek` is UTC-week bucketed; the
+  panel always displays the local-week figure from a separate read.**
+  `POST /itop/tickets/:id/time` (`backend/src/routes/itop.ts`) computes its
+  returned `myMinutesThisWeek` via `currentIsoWeekStart()` (plain UTC
+  Monday), while `TicketTimer.tsx`'s displayed weekly figure comes from
+  `GET /tickets/:id`'s `myMinutesThisWeek`, bucketed by the viewer's local
+  week (`useItopTicket`'s `utcOffsetMinutes`). The two numbers can disagree
+  near a week boundary in a non-UTC timezone. This is already documented in
+  a code comment at the POST handler and in `useLogTicketTimeFor` — the
+  client deliberately never `setQueryData`s the POST response's figure onto
+  the ticket cache, invalidating instead so the next `GET` supplies the
+  correctly-bucketed number. No behavioural bug today, but the mismatched
+  units between the two responses are worth resolving (e.g. have the POST
+  route accept and honor the same `utcOffsetMinutes` the GET route does) so
+  the two payload shapes stop disagreeing on what "this week" means.~~
+  **Resolved 2026-09-23**: `POST /itop/tickets/:id/time` no longer computes
+  or returns `myMinutesThisWeek` at all (`backend/src/routes/itop.ts`'s 201
+  response is now just `{ entry }`) — the route has no `utcOffsetMinutes`
+  input to bucket it correctly by, so the ambiguous figure was dropped
+  rather than fixed to agree. The panel's "this week" figure comes only from
+  `GET /tickets/:id`'s local-week-bucketed value, refetched via
+  `useLogTicketTimeFor`'s invalidation on success — there is no longer a
+  second, differently-bucketed number in play. (Note for a follow-up docs
+  pass: `frontend/src/lib/queries.ts`'s `ItopTimeLogResult` type and its
+  surrounding comments still describe the old `myMinutesThisWeek`-bearing
+  shape as of this writing — worth updating alongside this fix.)
+- **`useItopTicket`'s `utcOffsetMinutes` isn't part of its query key.**
+  `frontend/src/lib/queries.ts`'s `useItopTicket(id)` computes
+  `utcOffsetMinutes` fresh on every render and sends it on the request, but
+  the query key is just `queryKeys.itopTicket(id)` — unlike `useItopDaily`
+  and `useUtilization`, which both fold `utcOffsetMinutes` into their keys.
+  A DST transition (or a laptop's timezone changing mid-session) changes
+  what "this week" means without invalidating the cached response, so the
+  ticket panel's "x h this week" figure can read stale-by-timezone until the
+  query's `staleTime` next elapses on its own. Fix direction: fold
+  `utcOffsetMinutes` into `queryKeys.itopTicket` the same way the other two
+  hooks do.
+- **The `TimeSpent.ticket_ref` attribute name is unverified against the real install.**
+  `POST /itop/tickets/:id/time`'s `core/create TimeSpent` call
+  (`backend/src/routes/itop.ts`) sends `ITOP_TIME_SPENT_TICKET_REF_FIELD`
+  (`backend/src/lib/itop/types.ts`, currently `"ticket_ref"`) to link the new
+  entry back to its ticket. Whether that attribute exists, is spelled that
+  way, and is writable via REST on the real install's Time Tracking
+  extension has not been confirmed — only the fake iTop (`backend/test/itop/
+  fakeItop.ts`) enforces it, by refusing an unknown ref, which is a
+  Solvro-side test stand-in, not evidence about the real server. If the real
+  install accepts the create but silently ignores an unrecognised
+  `ticket_ref` field, the entry still lands in Utilization (time is real and
+  attributed to the right user/customer) but with no ticket link, and the
+  ticket panel's "x h this week on this ticket" figure stays at 0 for every
+  entry logged from Solvro, even though the hours are being counted
+  elsewhere. Action for the iTop admin before go-live: confirm the
+  attribute's name and that it is writable via REST (the same probe
+  discipline already used for `TimeSpent.duration`'s unit, see the Phase 3
+  finding above and `docs/CONFIGURATION.md` §2.16).
+
+Integration complete as of 2026-09-23; the plan is archived at
+`docs/archive/plans/itop-integration.md`.
