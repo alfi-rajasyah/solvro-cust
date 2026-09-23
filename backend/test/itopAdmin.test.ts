@@ -13,7 +13,7 @@ import { open, seal } from "../src/lib/secretBox.js";
 import { bustItopConfigCache } from "../src/lib/itop/config.js";
 import { waitForItopSyncIdle } from "../src/routes/itopAdmin.js";
 import { createAdminAndToken, createUserWithRole, seedRoles } from "./testAuth.js";
-import { createFakeItop, seedFakeItop, type FakeItopState } from "./itop/fakeItop.js";
+import { createFakeItop, seedFakeItop, type FakeItopState, FAKE_ITOP_TOKENS } from "./itop/fakeItop.js";
 
 const app = createApp();
 
@@ -143,7 +143,7 @@ beforeEach(async () => {
 // route's baseUrl validation requires https:// (a real-install guardrail),
 // but the fake iTop test double only serves http — same bypass the sibling
 // sync suite uses (test/itop/sync.test.ts#configureItop).
-async function configureItop(baseUrl: string, appToken = "app-token-readonly"): Promise<void> {
+async function configureItop(baseUrl: string, appToken = FAKE_ITOP_TOKENS.app): Promise<void> {
   await prisma.itopConfig.upsert({
     where: { id: "default" },
     create: { id: "default", baseUrl, appTokenEnc: seal(appToken) },
@@ -299,7 +299,7 @@ describe("POST /admin/itop/test", () => {
     server = started.server;
     const res = await call("post", "/admin/itop/test", adminToken).send({
       baseUrl: started.baseUrl, // http://127.0.0.1:<port> — the fake iTop only serves http
-      appToken: "app-token-readonly",
+      appToken: FAKE_ITOP_TOKENS.app,
     });
     expect(res.status).toBe(400);
   });

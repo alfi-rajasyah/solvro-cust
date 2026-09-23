@@ -4,7 +4,7 @@
 // by the admin "Sync now" route (task 1.5). See
 // docs/plans/itop-integration.md §3 (join rules) and Task 1.4 for the
 // contract this module implements.
-import type { ItopConfig } from "@prisma/client";
+import { Prisma, type ItopConfig } from "@prisma/client";
 
 import { prisma } from "../../prisma.js";
 import { logger } from "../../logger.js";
@@ -22,6 +22,8 @@ import {
   ITOP_TIME_SPENT_OUTPUT_FIELDS,
   ITOP_TIME_SPENT_TICKET_REF_FIELD,
   ITOP_USER_OUTPUT_FIELDS,
+  type ItopCaseLogEntry,
+  type ItopCaseLogRaw,
   type ItopPersonFields,
   type ItopTicketFields,
   type ItopTimeSpentFields,
@@ -102,8 +104,8 @@ function parseItopBoolean(value: string | undefined): boolean {
   return normalized === "yes" || normalized === "1" || normalized === "true";
 }
 
-/** Escapes a single-quoted OQL string literal (iTop/MySQL style: double the quote). */
-function escapeOqlString(value: string): string {
+/** Escapes a single-quoted OQL string literal (iTop/MySQL style: double the quote). Exported so `routes/itopUser.ts`'s email lookup builds the same OQL shape as `syncUsers` rather than re-deriving the escaping rule. */
+export function escapeOqlString(value: string): string {
   return value.replace(/'/g, "''");
 }
 
@@ -216,6 +218,98 @@ export async function syncUsers(): Promise<{ matched: number; unmatched: string[
   return { matched, unmatched };
 }
 
+/** How many case-log entries `normalizeCaseLog` keeps, newest last. */
+const MAX_CASE_LOG_ENTRIES = 50;
+
+/**
+ * Strips a `message_html` fallback down to plain text: `<br>` (any case,
+ * self-closed or not) becomes a newline, every other tag is dropped, and the
+ * five basic HTML entities are decoded (`&amp;` last, so an already-escaped
+ * `&amp;lt;` doesn't get double-decoded into `<`). Only used when iTop's
+ * entry carries no plain `message` at all — `message` itself is trusted
+ * as-is, never run through this.
+ */
+function htmlCaseLogToPlainText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+/**
+ * Sorts `entries` ascending by `date`, WITHOUT moving an entry whose date
+ * couldn't be parsed (`null`) out of its original array slot. A plain
+ * `Array.sort` comparator can't express this correctly: returning `0`
+ * whenever either side is null makes the comparator non-transitive (e.g.
+ * `cmp(dated, undated) === 0` and `cmp(undated, otherDated) === 0` while
+ * `cmp(dated, otherDated) !== 0`), which sort algorithms aren't required to
+ * handle consistently — this was tried and failed test/itop/caseLog.test.ts
+ * with an unpredictable ordering. Instead: collect only the dated entries'
+ * ORIGINAL positions, sort just those entries among themselves, and write
+ * them back into those same positions — every undated entry's array index
+ * never changes at all.
+ */
+function sortCaseLogEntries(entries: ItopCaseLogEntry[]): ItopCaseLogEntry[] {
+  const result = [...entries];
+  const datedIndices: number[] = [];
+  const datedEntries: ItopCaseLogEntry[] = [];
+  entries.forEach((entry, index) => {
+    if (entry.date !== null) {
+      datedIndices.push(index);
+      datedEntries.push(entry);
+    }
+  });
+  datedEntries.sort((a, b) => {
+    const aDate = a.date as string;
+    const bDate = b.date as string;
+    return aDate < bDate ? -1 : aDate > bDate ? 1 : 0;
+  });
+  datedIndices.forEach((index, i) => {
+    result[index] = datedEntries[i];
+  });
+  return result;
+}
+
+/**
+ * Normalises iTop's `public_log`/`private_log` case-log attribute into the
+ * shape `ItopTicket.publicLog`/`privateLog` are stored as. iTop answers
+ * either `{ entries: [...] }` (each with a `date`, `user_login`, `message`)
+ * or, on older versions, a bare string with no structured entries — the
+ * latter becomes a single entry with no author. Entries are sorted
+ * chronologically ascending BEFORE the cap below — some installs answer
+ * newest-first, and capping on iTop's own array order would then keep the
+ * OLDEST entries instead of the newest. Capped at the last
+ * `MAX_CASE_LOG_ENTRIES` after sorting ("newest last" per the field's own
+ * doc comment in types.ts).
+ */
+export function normalizeCaseLog(raw: ItopCaseLogRaw): ItopCaseLogEntry[] {
+  if (!raw) return [];
+  if (typeof raw === "string") {
+    const message = raw.trim();
+    return message ? [{ date: null, author: null, message }] : [];
+  }
+  const entries = raw.entries ?? [];
+  const normalized = entries.map(
+    (entry): ItopCaseLogEntry => ({
+      date: parseItopDate(entry.date)?.toISOString() ?? null,
+      author: entry.user_login ?? null,
+      message: entry.message ?? (entry.message_html ? htmlCaseLogToPlainText(entry.message_html) : ""),
+    }),
+  );
+  const sorted = sortCaseLogEntries(normalized);
+  return sorted.slice(-MAX_CASE_LOG_ENTRIES);
+}
+
+/** `Prisma.JsonNull` when there's nothing to store, else the normalised entries — kept as its own step so `upsertTicket` never stores an empty array. */
+function caseLogJson(raw: ItopCaseLogRaw) {
+  const entries = normalizeCaseLog(raw);
+  return entries.length > 0 ? (entries as unknown as Prisma.InputJsonValue) : Prisma.JsonNull;
+}
+
 async function upsertTicket(
   cls: string,
   row: ItopObjectRow<ItopTicketFields>,
@@ -248,6 +342,8 @@ async function upsertTicket(
     slaTtoPassed: parseItopBoolean(fields.sla_tto_passed),
     slaTtrPassed: parseItopBoolean(fields.sla_ttr_passed),
     resolutionDate: parseItopDate(fields.resolution_date),
+    publicLog: caseLogJson(fields.public_log),
+    privateLog: caseLogJson(fields.private_log),
     syncedAt: new Date(),
   };
 
@@ -256,6 +352,24 @@ async function upsertTicket(
     create: { id: row.key, ...data },
     update: data,
   });
+}
+
+/**
+ * Upserts a single ticket already fetched from iTop (e.g. the re-read after
+ * a Phase 5 action or log write) without requiring the caller to build the
+ * full org→customer map `syncTickets` uses — resolves just this row's org.
+ * Exported for `routes/itop.ts`'s action/log routes: after a write succeeds,
+ * they re-read the ticket with the APPLICATION client and call this so the
+ * snapshot reflects iTop's own answer, never a client-side guess.
+ */
+export async function upsertTicketFromItop(
+  cls: string,
+  row: ItopObjectRow<ItopTicketFields>,
+): Promise<void> {
+  const orgId = Number(row.fields.org_id);
+  const customer = orgId > 0 ? await prisma.customer.findUnique({ where: { itopOrgId: orgId }, select: { id: true } }) : null;
+  const orgIdToCustomerId = new Map<number, number>(customer ? [[orgId, customer.id]] : []);
+  await upsertTicket(cls, row, orgIdToCustomerId);
 }
 
 /**

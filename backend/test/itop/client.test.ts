@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { Server } from "node:http";
 import { createItopClient } from "../../src/lib/itop/client.js";
 import type { ItopTicketFields } from "../../src/lib/itop/types.js";
-import { createEmptyState, createFakeItop, seedFakeItop, type FakeItopState, type TicketRecord } from "./fakeItop.js";
+import { createEmptyState, createFakeItop, seedFakeItop, type FakeItopState, type TicketRecord, FAKE_ITOP_TOKENS } from "./fakeItop.js";
 
 async function startFake(state: FakeItopState) {
   const { listen } = createFakeItop(state);
@@ -140,7 +140,7 @@ describe("createItopClient against the fake iTop", () => {
     const started = await startFake(state);
     server = started.server;
 
-    const client = createItopClient({ baseUrl: started.baseUrl, token: "app-token-readonly" });
+    const client = createItopClient({ baseUrl: started.baseUrl, token: FAKE_ITOP_TOKENS.app });
     const results = await client.probe();
 
     expect(results).toHaveLength(6);
