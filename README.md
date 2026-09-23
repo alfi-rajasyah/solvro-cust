@@ -247,3 +247,5 @@ Work branches off `develop` and merges back by pull request; `develop` is the in
 ## Roadmap
 
 - **Utilization** (`/utilization`) — hours per customer per week, drawn from iTop's Time Tracking extension once an admin connects iTop (Admin > iTop). Every TAM sees their own hours; holders of the Executive-report permission also get "By TAM" and "By customer" views. The old `/work-logs` URL redirects here. A customer's iTop tickets also appear on that customer's page, in its Tickets tab.
+- **Task ↔ ticket link** — a task's panel can pin one iTop ticket by reference, showing its live status and an "Open in iTop" link once the ticket is in the local snapshot.
+- **iTop webhook** — an optional per-install secret lets iTop's own "on ticket update" trigger nudge Solvro into an immediate sync, for near-real-time ticket status instead of waiting for the next scheduled pull.

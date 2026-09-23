@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-09-23 — iTop webhook and task ticket links
+
+- **Webhook nudge** — `POST /webhook/itop` (**`backend/src/routes/webhook.ts`**) lets iTop's Webhook integration tell Solvro that a ticket changed, so the next pull starts within seconds instead of at the next scheduled interval. The route is unauthenticated by design but gated by a per-install secret sent in the `X-Solvro-Webhook-Secret` header (compared in constant time), answers 404 until a secret exists, ignores the request body, accepts at most 6 nudges per minute and answers at most 60 calls per minute in total. Admins generate, rotate or remove the secret under Admin › iTop (`POST`/`DELETE /admin/itop/webhook-secret`); it is shown once.
+- **Task ↔ ticket link** — a task can pin one iTop ticket by reference: `tasks.itop_ticket_ref` (migration `20260923024304_task_itop_ticket_ref`), accepted by `PATCH /tasks/:id` (`R-004512` style, or `null` to clear) and returned with every task payload. `GET /itop/tickets/by-ref/:ref` (**`backend/src/routes/itop.ts`**) resolves a reference to the snapshot row with the usual customer visibility.
+- **iTop ticket field on the task panel** — **`frontend/src/components/itop/TaskTicketField.tsx`** adds an "iTop ticket" row to the task panel once iTop is connected: paste a ref such as `R-004512` to pin it, see its status chip and an "Open in iTop" link when the ticket is in the snapshot ("not in snapshot" otherwise), and change or clear it at any time. Playwright spec: `e2e/tests/itop-task-ref.spec.ts`.
+
 ### Added — 2026-09-22 — Utilization from iTop time tracking
 
 - **Time entries in the iTop sync** — the sync now also pulls logged time (iTop's Time Tracking extension, `TimeSpent`) for every user matched to an iTop account, into a new `itop_time_entries` table (migrations `20260922182346_itop_time_entries` and `20260922185807_itop_time_entry_indexes`, which also replace the `itop_tickets` status and customer indexes with one customer + status index). Each entry links to the user, the customer and the originating ticket where known; entries iTop no longer reports, or that belong to a user who is no longer matched, are removed on the daily full pass. Durations are read as seconds (**`backend/src/lib/itop/types.ts`** holds the switch if an install reports minutes).

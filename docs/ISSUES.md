@@ -1969,3 +1969,55 @@ entry). No fix now; each is a Phase 2/3 follow-up per
   being dropped. Fix direction: stamp rows with a `syncRunId`/`seenAt` during
   the upsert and delete with `WHERE seenAt < runStart` instead of `notIn`,
   which needs no per-row parameter regardless of row count.
+
+---
+
+## iTop integration Phase 4 — deferred findings (2026-09-23)
+
+User-deferred findings from Phase 4 (branch `feat/itop-p4-webhook-taskref` —
+see `CHANGELOG.md`'s "iTop webhook and task ticket links" entry). No fix now;
+each is a follow-up decision.
+
+- **Duplicating a task or section drops its pinned iTop ticket ref.**
+  `backend/src/lib/duplicate.ts`'s `TASK_SELECT` (lines 17-31) does not
+  select `itopTicketRef`, and `copyOne`'s `data` object (lines 42-63) never
+  sets it, so every copy made by `POST /tasks/:id/duplicate` or
+  `POST /sections/:id/duplicate` gets no ref, even when its source task had
+  one pinned. This matches the module's existing "carry verbatim, but reset
+  anything that shouldn't point at the same external state twice" pattern
+  (status resets to `TODO`, baseline dates clear, dependencies and comments
+  never copy) but was never an explicit decision for this field. Decide:
+  should a duplicated task keep pointing at the same ticket, or is dropping
+  the ref (current behaviour) correct — two Solvro tasks pointing at one
+  iTop ticket may itself be undesirable.
+- **A task cannot be created with an iTop ticket ref pre-set.**
+  `createTaskSchema` in `backend/src/routes/projects.ts`
+  (`POST /projects/:id/tasks`, lines 85-103) was not extended with
+  `itopTicketRef` — only the PATCH schema in `backend/src/routes/tasks.ts`
+  (line 48) accepts it. A ref can only be attached after the task exists,
+  via a follow-up `PATCH /tasks/:id`. Decide whether create-time pinning
+  (e.g. from a "Create iTop ticket" flow in a later phase) is worth adding,
+  or whether PATCH-only is fine indefinitely.
+- **Focus treatment sweep needed (codebase-wide, not a Phase 4 regression).**
+  `docs/DESIGN.md` §4 names the one app-wide focus treatment as
+  `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30`
+  and explicitly excludes `focus-visible:border-primary`, yet the older,
+  fuller `focus:border-primary focus:outline-hidden` pattern still appears
+  at roughly 55-58 sites across the frontend — including two new ones this
+  phase added: `frontend/src/components/admin/ItopTab.tsx` (5 sites) and
+  `frontend/src/components/itop/TaskTicketField.tsx:14`, alongside
+  pre-existing ones such as `frontend/src/components/TaskPanel.tsx:466,586`.
+  This is a pre-existing, spreading inconsistency, not something to fix
+  per-PR — file as a one-shot design-system sweep task to align every site
+  to the DESIGN.md-documented form in one pass, rather than drifting further
+  one component at a time.
+- **Export: the Gantt Excel export has no "iTop ticket" column.**
+  `frontend/src/lib/gantt/exportExcel.ts`'s `buildTasksSheet` (columns at
+  lines 72-82) builds Section/Title/Status/Priority/(Critical
+  Path)/Start/Due — no column carries a task's pinned `itopTicketRef`, even
+  though it would be a customer-facing-safe field (the ref is the
+  customer's own iTop reference, not internal Solvro data) and could be
+  useful on a customer-facing export. Adding it needs the field threaded
+  through the Gantt row adapter that produces `Row` (`t.itopTicketRef` isn't
+  currently carried onto the row alongside `t.status`/`t.priority`). Decision
+  item — whether this export should show it — not a bug.
