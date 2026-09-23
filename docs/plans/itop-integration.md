@@ -30,6 +30,7 @@ All 8 spec defaults accepted: read-only app token; 5-minute snapshot + Refresh; 
 6. **Webhook**: the cancelled standing decision covers `POST /webhook/blueprint` (SA-blueprint ingestion) only. `POST /webhook/itop` is a sync nudge with no payload trust: it triggers a normal pull. It is the first unauthenticated non-health route; it carries a shared secret and a rate limit.
 7. **Scheduler is in-process** (`setInterval` started from `index.ts`), guarded by a Postgres advisory lock so a second backend instance cannot double-sync. `setup.sh` deploys one backend container; this is enough.
 8. **Snapshot freshness**: incremental pull by `last_update` every N minutes; a full pull per org once per 24 h and on manual Refresh, which also drops tickets iTop no longer returns.
+9. **Utilization API is its own router** (`backend/src/routes/utilization.ts`, mounted at `/utilization`) rather than a route in `routes/itop.ts`, for the same reason as deviation 4. "Today"/"this week" windows on external iTop instants follow the viewer's local day via a `utcOffsetMinutes` query param (user decision 2026-09-22); the Solvro-picked `date`/`week` strings still follow the UTC-midnight date contract.
 
 ## 3. Architecture
 

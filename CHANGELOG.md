@@ -15,6 +15,20 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-09-22 — Utilization from iTop time tracking
+
+- **Time entries in the iTop sync** — the sync now also pulls logged time (iTop's Time Tracking extension, `TimeSpent`) for every user matched to an iTop account, into a new `itop_time_entries` table (migrations `20260922182346_itop_time_entries` and `20260922185807_itop_time_entry_indexes`, which also replace the `itop_tickets` status and customer indexes with one customer + status index). Each entry links to the user, the customer and the originating ticket where known; entries iTop no longer reports, or that belong to a user who is no longer matched, are removed on the daily full pass. Durations are read as seconds (**`backend/src/lib/itop/types.ts`** holds the switch if an install reports minutes).
+- **Utilization page** — **`frontend/src/pages/Utilization.tsx`** at `/utilization` shows hours per customer per day for an ISO week: a week switcher, three tiles (hours logged against the weekly capacity with a utilisation bar, customers touched, hours not tied to any customer) and a Customer × Mon–Sun matrix with totals and the ticket refs the hours came from. Every TAM sees their own hours; holders of the Executive-report permission also get "By TAM" and "By customer". No cell is editable — corrections happen in iTop. Playwright spec: `e2e/tests/utilization.spec.ts`.
+- **Utilization API** — `GET /utilization?week=&scope=&utcOffsetMinutes=` in **`backend/src/routes/utilization.ts`** turns the synced time entries into the weekly matrix: the caller's own hours by customer, or, for holders of the Executive-report permission, hours by customer or by team member, with capacity, unassigned hours and touched/assigned customer counts. Days follow the viewer's local week.
+
+### Changed — 2026-09-22
+
+- **Work Logs is now Utilization.** The placeholder at `/work-logs` became the Utilization page; the old URL redirects to `/utilization`, and the sidebar entry "Utilization" sits after Weekly Sync (**`frontend/src/lib/navCommands.ts`**).
+
+### Fixed — 2026-09-22
+
+- **Stale iTop user link after an email change.** When a user's email stopped matching any iTop person, the sync cleared the person link but kept the iTop user-account link, so time entries could stay attributed to the old identity. Both links are now cleared together (**`backend/src/lib/itop/sync.ts`**).
+
 ### Added — 2026-09-22 — iTop tickets on the Daily Review page
 
 - **Daily ticket digest API** — `GET /itop/daily?date=YYYY-MM-DD` in **`backend/src/routes/itop.ts`** returns, for every visible customer mapped to an iTop organisation, the day's counts (opened today, resolved today, still open, SLA breached) and the 3 most recently updated tickets per customer. "Today" is the viewer's local day: the browser sends its UTC offset (`utcOffsetMinutes`) and the API brackets that 24-hour window, so a ticket opened at 01:00 local counts as today.
