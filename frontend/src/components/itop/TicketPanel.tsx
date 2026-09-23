@@ -27,7 +27,7 @@ import {
 } from "@/lib/queries";
 import { ActionSheet, type ActionSheetMode } from "./ActionSheet";
 import { TicketLog } from "./TicketLog";
-import { actionLabel, availableActions } from "./ticketActions";
+import { actionLabel, availableActions, teamsFromError } from "./ticketActions";
 import { ageLabel, itopTicketUrl, slaLabel, statusLabel, statusTone } from "./ticketPresentation";
 
 const CLASS_LABEL: Record<string, string> = {
@@ -98,14 +98,10 @@ export function TicketPanel({
           }
         },
         onError: (err) => {
-          if (err instanceof ApiError && err.status === 409) {
-            const body = err.body as
-              | { code?: string; details?: { teams?: ItopTicketTeamOption[] } }
-              | null;
-            if (body?.code === "itop_team_required" && body.details?.teams) {
-              setActionSheet({ mode: "team", action, teams: body.details.teams });
-              return;
-            }
+          const teams = teamsFromError(err);
+          if (teams) {
+            setActionSheet({ mode: "team", action, teams });
+            return;
           }
           setActionError(err instanceof ApiError ? err.message : "Action failed.");
         },

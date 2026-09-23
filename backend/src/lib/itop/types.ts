@@ -97,6 +97,20 @@ export interface ItopPersonalTokenFields {
   expiration_date: string;
 }
 
+/**
+ * `Service` fields for the "New ticket" picklist (Task 6.2, `GET
+ * /itop/services`) — read with the APPLICATION client since it's a read, not
+ * scoped to any one customer (a service is offered org-wide, not per
+ * caller). `org_id_friendlyname` becomes the response's `providerName`.
+ */
+export const ITOP_SERVICE_OUTPUT_FIELDS = "name,org_id,org_id_friendlyname";
+
+export interface ItopServiceFields {
+  name: string;
+  org_id: string;
+  org_id_friendlyname: string;
+}
+
 export const ITOP_ORGANIZATION_OUTPUT_FIELDS = "id,name";
 
 export interface ItopOrganizationFields {

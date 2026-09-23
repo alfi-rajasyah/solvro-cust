@@ -1,8 +1,9 @@
 // Tickets API for the iTop integration: connection status for the frontend's
 // "Open in iTop" links, a customer's ticket list + counts for the Tickets
 // tab, single-ticket lookup, a debounced manual Refresh trigger, the Daily
-// Review strip's per-day, per-customer digest (GET /daily), and — Phase 5 —
-// the write path: lifecycle actions and case-log entries under the ACTING
+// Review strip's per-day, per-customer digest (GET /daily), — Phase 5 — the
+// write path: lifecycle actions and case-log entries, and — Phase 6 — the
+// "New ticket" sheet's picklists and creation route, all under the ACTING
 // USER'S OWN personal token, never the application token and never another
 // user's (docs/plans/itop-integration.md §1 decision 8). All routes are
 // authed (no admin gate — any authed user with visibility into the customer
@@ -12,7 +13,7 @@
 // so a customer hidden from the caller 404s (or is silently excluded from a
 // list) the same way every other customer-nested route does. Mounted at
 // /itop in src/app.ts. See docs/archive/plans/itop-integration.md Tasks 1.7,
-// 2.1, 5.3.
+// 2.1, 5.3, 6.2.
 import { Router } from "express";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
@@ -21,18 +22,22 @@ import { logger } from "../logger.js";
 import { requireAuth, type JwtPayload } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
-import { ensureCustomerVisible, customerVisibilityFilter } from "../lib/visibility.js";
+import { ensureCustomerVisible, customerVisibilityFilter, isCustomerVisible } from "../lib/visibility.js";
 import { getItopAppClient, getItopConfig, isItopConfigured, makeItopClient } from "../lib/itop/config.js";
 import { requestSync } from "../lib/itop/scheduler.js";
 import { open, SecretBoxError } from "../lib/secretBox.js";
-import { ItopError, type ItopGetResult } from "../lib/itop/client.js";
+import { ItopError, type ItopGetResult, type ItopObjectRow } from "../lib/itop/client.js";
 import { upsertTicketFromItop } from "../lib/itop/sync.js";
 import {
   ITOP_LNK_PERSON_TO_TEAM_OUTPUT_FIELDS,
+  ITOP_PERSON_OUTPUT_FIELDS,
+  ITOP_SERVICE_OUTPUT_FIELDS,
   ITOP_TICKET_CLASSES,
   ITOP_TICKET_OUTPUT_FIELDS,
   type ItopCaseLogEntry,
   type ItopLnkPersonToTeamFields,
+  type ItopPersonFields,
+  type ItopServiceFields,
   type ItopTicketClass,
   type ItopTicketFields,
 } from "../lib/itop/types.js";
@@ -810,5 +815,278 @@ itopRouter.post(
       "iTop ticket log entry added",
     );
     res.json({ ...toTicketRow(updated, myItopPersonId, { withLogs: true }), staleAfterWrite });
+  },
+);
+
+// ---- Phase 6: "New ticket" sheet — picklists + creation ----------------------
+//
+// GET /services and GET /customers/:id/contacts are reads (APPLICATION
+// client, like every other GET in this file) feeding the sheet's dropdowns.
+// POST /tickets is the one write here and follows the same preconditions as
+// the Phase 5 action/log routes above (actionsEnabled, visibility, the
+// caller's own decryptable token) — it just has no existing ticket row to
+// load, so it checks the CUSTOMER's mapping instead of an ItopTicket's. The
+// caller must belong to the customer's iTop organisation (checked with the
+// read-only application client, since that's just a fact about iTop's own
+// data — not itself a write) before the create is attempted with the user's
+// token. See docs/archive/plans/itop-integration.md Task 6.2.
+
+/** Maps a read-only iTop failure (GET /services, GET /customers/:id/contacts, and the caller-in-org check below) to a 502 — these never surface iTop's error as a 409 since there's no "refusal" concept for a plain read. */
+function mapItopReadError(err: unknown): never {
+  if (err instanceof ItopError) {
+    throw new HttpError(502, "itop_unreachable", err.message);
+  }
+  throw err;
+}
+
+interface ServiceOption {
+  id: number;
+  name: string;
+  providerName: string | null;
+}
+
+/** In-process, 5-minute TTL — the service catalogue changes rarely and every "New ticket" sheet open would otherwise re-fetch it. Mirrors lib/itop/config.ts's ItopConfig cache shape. Module-level (not per-request), so it's shared across callers; there's no per-customer variation to key on. */
+const SERVICES_CACHE_TTL_MS = 5 * 60_000;
+let servicesCache: { value: ServiceOption[]; expiresAt: number } | null = null;
+
+/**
+ * Busts the `GET /services` cache. iTop's own service catalogue and org
+ * names are admin-side data — `routes/itopAdmin.ts` calls this alongside
+ * every `bustItopConfigCache()` (settings PATCH, token change, manual sync)
+ * so a base-URL/token change or a sync-driven org rename doesn't leave a
+ * stale service list cached for up to 5 more minutes. Exported (not
+ * automatic on every config bust) because this cache lives in this route
+ * file, not lib/itop/config.ts — same reasoning as that module's own
+ * `bustItopConfigCache` export.
+ */
+export function bustItopServicesCache(): void {
+  servicesCache = null;
+}
+
+itopRouter.get("/services", async (_req, res) => {
+  const now = Date.now();
+  if (servicesCache && servicesCache.expiresAt > now) {
+    res.json(servicesCache.value);
+    return;
+  }
+
+  // Throws 409 itop_not_configured itself when the admin hasn't connected
+  // iTop yet — no separate isItopConfigured check needed here.
+  const client = await getItopAppClient();
+
+  let result: ItopGetResult<ItopServiceFields>;
+  try {
+    result = await client.get<ItopServiceFields>("Service", "SELECT Service", ITOP_SERVICE_OUTPUT_FIELDS);
+  } catch (err) {
+    mapItopReadError(err);
+  }
+
+  const rows: ServiceOption[] = result.objects
+    .map((row) => ({ id: row.key, name: row.fields.name, providerName: row.fields.org_id_friendlyname || null }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  servicesCache = { value: rows, expiresAt: now + SERVICES_CACHE_TTL_MS };
+  res.json(rows);
+});
+
+// ---- GET /customers/:id/contacts ---------------------------------------------
+
+itopRouter.get(
+  "/customers/:id/contacts",
+  validate("params", customerIdParamSchema),
+  async (req, res) => {
+    const { id } = req.params as unknown as z.infer<typeof customerIdParamSchema>;
+
+    await ensureCustomerVisible(req.user!, id);
+
+    const customer = await prisma.customer.findUnique({ where: { id }, select: { itopOrgId: true } });
+    if (!customer) throw new HttpError(404, "customer_not_found", "Customer not found");
+
+    if (customer.itopOrgId === null) {
+      res.json([]);
+      return;
+    }
+
+    const client = await getItopAppClient();
+    let result: ItopGetResult<ItopPersonFields>;
+    try {
+      result = await client.get<ItopPersonFields>(
+        "Person",
+        `SELECT Person WHERE org_id = ${customer.itopOrgId}`,
+        ITOP_PERSON_OUTPUT_FIELDS,
+      );
+    } catch (err) {
+      mapItopReadError(err);
+    }
+
+    const rows = result.objects
+      .map((row) => ({ id: row.key, name: row.fields.friendlyname, email: row.fields.email }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    res.json(rows);
+  },
+);
+
+// ---- POST /tickets -------------------------------------------------------------
+
+interface WritableCustomerContext {
+  itopOrgId: number;
+  token: string;
+  myItopPersonId: number | null;
+  baseUrl: string;
+}
+
+/**
+ * Shared preconditions for `POST /tickets`, mirroring `loadWritableTicket`'s
+ * order (write switch → visibility → the caller's own token) but checking a
+ * CUSTOMER's org mapping instead of an existing ticket's customer link,
+ * since there is no ticket yet. `customerId` here is a BODY field (like
+ * `POST /projects`), not an id-keyed URL param — per backend/CLAUDE.md this
+ * uses `isCustomerVisible` + 400 `customer_not_found`, NOT
+ * `ensureCustomerVisible`'s 404 (that 404 is reserved for id-keyed routes,
+ * e.g. `GET /customers/:id/contacts` above).
+ */
+async function loadWritableCustomerContext(
+  userSub: number,
+  customerId: number,
+  user: JwtPayload,
+): Promise<WritableCustomerContext> {
+  const config = await getItopConfig();
+  if (!config.actionsEnabled) {
+    throw new HttpError(404, "not_found", "Not found");
+  }
+
+  if (!(await isCustomerVisible(user, customerId))) {
+    throw new HttpError(400, "customer_not_found", "Customer not found");
+  }
+
+  const customer = await prisma.customer.findUnique({ where: { id: customerId }, select: { itopOrgId: true } });
+  if (!customer || customer.itopOrgId === null) {
+    throw new HttpError(400, "customer_not_mapped", "This customer isn't mapped to an iTop organisation.");
+  }
+
+  const me = await prisma.user.findUnique({
+    where: { id: userSub },
+    select: { itopTokenEnc: true, itopPersonId: true },
+  });
+  if (!me?.itopTokenEnc) {
+    throw new HttpError(403, "itop_token_missing", "Add your personal iTop token in Settings");
+  }
+
+  let token: string;
+  try {
+    token = open(me.itopTokenEnc);
+  } catch (err) {
+    if (err instanceof SecretBoxError) {
+      throw new HttpError(
+        403,
+        "itop_token_unreadable",
+        "Your saved iTop token could not be decrypted (SECRETS_KEY changed?) — enter it again in Settings.",
+      );
+    }
+    throw err;
+  }
+
+  if (!config.baseUrl) {
+    throw new HttpError(409, "itop_not_configured", "iTop is not connected. An admin must set the iTop URL first.");
+  }
+
+  return { itopOrgId: customer.itopOrgId, token, myItopPersonId: me.itopPersonId, baseUrl: config.baseUrl };
+}
+
+/**
+ * Re-reads a just-created ticket with the read-only APPLICATION client and
+ * upserts it into the snapshot, same spirit as `reReadAfterWrite` above — but
+ * for a ticket that has no PRE-write snapshot row to fall back to (it didn't
+ * exist before this request). On failure there is nothing to answer with
+ * except the bare fact that iTop accepted the create, so the caller gets
+ * `null` and the route answers 202 instead of 201.
+ */
+async function readAndUpsertNewTicket(cls: string, id: number): Promise<ItopTicket | null> {
+  try {
+    return await reReadAndUpsertTicket(cls, id);
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : String(err), ticketId: id, cls },
+      "iTop re-read after a successful ticket create failed — the ticket exists in iTop but not yet in the snapshot",
+    );
+    return null;
+  }
+}
+
+const createTicketBodySchema = z.object({
+  customerId: z.number().int().positive(),
+  class: z.enum([...ITOP_TICKET_CLASSES] as [ItopTicketClass, ...ItopTicketClass[]]),
+  title: z.string().min(1).max(255),
+  description: z.string().min(1).max(4000),
+  callerId: z.number().int().positive(),
+  serviceId: z.number().int().positive().optional(),
+});
+
+itopRouter.post(
+  "/tickets",
+  validate("body", createTicketBodySchema),
+  async (req, res) => {
+    const body = req.body as z.infer<typeof createTicketBodySchema>;
+
+    const { itopOrgId, token, myItopPersonId, baseUrl } = await loadWritableCustomerContext(
+      req.user!.sub,
+      body.customerId,
+      req.user!,
+    );
+
+    // The caller must actually belong to the customer's iTop organisation —
+    // checked with the read-only application client (a fact about iTop's
+    // own data, not a write) before spending the user's own token on a
+    // create that iTop would refuse anyway.
+    const appClient = await getItopAppClient();
+    let callerCheck: ItopGetResult<ItopPersonFields>;
+    try {
+      callerCheck = await appClient.get<ItopPersonFields>(
+        "Person",
+        `SELECT Person WHERE id = ${body.callerId} AND org_id = ${itopOrgId}`,
+        ITOP_PERSON_OUTPUT_FIELDS,
+      );
+    } catch (err) {
+      mapItopReadError(err);
+    }
+    if (callerCheck.objects.length !== 1) {
+      throw new HttpError(
+        400,
+        "itop_caller_not_in_org",
+        "That caller doesn't belong to the customer's organisation in iTop.",
+      );
+    }
+
+    const client = makeItopClient(baseUrl, token);
+    const createFields: Record<string, unknown> = {
+      org_id: itopOrgId,
+      caller_id: body.callerId,
+      title: body.title,
+      description: body.description,
+    };
+    if (body.serviceId !== undefined) createFields.service_id = body.serviceId;
+
+    let created: ItopObjectRow<ItopTicketFields> | undefined;
+    try {
+      created = await client.create<ItopTicketFields>(body.class, createFields, "Created from Solvro");
+    } catch (err) {
+      mapItopWriteError(err);
+    }
+    if (!created) {
+      throw new HttpError(502, "itop_unreachable", "iTop did not confirm the new ticket");
+    }
+
+    logger.info(
+      { userId: req.user!.sub, customerId: body.customerId, class: body.class, itopId: created.key },
+      "iTop ticket created from Solvro",
+    );
+
+    const newTicket = await readAndUpsertNewTicket(created.class, created.key);
+    if (!newTicket) {
+      res.status(202).json({ created: true, id: created.key, staleAfterWrite: true });
+      return;
+    }
+
+    res.status(201).json(toTicketRow(newTicket, myItopPersonId, { withLogs: true }));
   },
 );

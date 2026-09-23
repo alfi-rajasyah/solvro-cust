@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { actionLabel, availableActions, RESOLUTION_CODES } from "./ticketActions";
+import { ApiError } from "@/lib/api";
+import { actionLabel, availableActions, RESOLUTION_CODES, teamsFromError } from "./ticketActions";
 
 describe("availableActions", () => {
   it("offers Assign to me on a new ticket", () => {
@@ -10,8 +11,8 @@ describe("availableActions", () => {
     expect(availableActions("assigned")).toEqual(["pending", "resolve"]);
   });
 
-  it("offers Resolve and Assign to me on a pending ticket", () => {
-    expect(availableActions("pending")).toEqual(["resolve", "assign_to_me"]);
+  it("offers only Resolve on a pending ticket — iTop's default lifecycle has no ev_assign from pending", () => {
+    expect(availableActions("pending")).toEqual(["resolve"]);
   });
 
   it("offers Close and Reopen on a resolved ticket", () => {
@@ -39,6 +40,36 @@ describe("actionLabel", () => {
     expect(actionLabel("resolve")).toBe("Resolve");
     expect(actionLabel("close")).toBe("Close");
     expect(actionLabel("reopen")).toBe("Reopen");
+  });
+});
+
+describe("teamsFromError", () => {
+  it("extracts teams from a 409 itop_team_required refusal", () => {
+    const teams = [{ id: 1, name: "Service Desk" }, { id: 2, name: "NOC" }];
+    const err = new ApiError(409, "iTop needs a team.", {
+      code: "itop_team_required",
+      details: { teams },
+    });
+    expect(teamsFromError(err)).toEqual(teams);
+  });
+
+  it("is null for a 409 with a different code", () => {
+    const err = new ApiError(409, "conflict", { code: "itop_refused" });
+    expect(teamsFromError(err)).toBeNull();
+  });
+
+  it("is null for a non-409 ApiError", () => {
+    const err = new ApiError(500, "boom", null);
+    expect(teamsFromError(err)).toBeNull();
+  });
+
+  it("is null for a 409 missing the teams detail", () => {
+    const err = new ApiError(409, "iTop needs a team.", { code: "itop_team_required" });
+    expect(teamsFromError(err)).toBeNull();
+  });
+
+  it("is null for a non-ApiError throw", () => {
+    expect(teamsFromError(new Error("network down"))).toBeNull();
   });
 });
 

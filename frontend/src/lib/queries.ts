@@ -577,6 +577,11 @@ export const queryKeys = {
   // by the viewer's UTC offset too, same rationale as `itopDaily` above.
   utilization: (week: string, scope: UtilizationScope, utcOffsetMinutes: number) =>
     ["itop", "utilization", week, scope, utcOffsetMinutes] as const,
+  // New ticket sheet (Task 6.2, docs/archive/plans/itop-integration.md):
+  // services are a global iTop catalogue (not customer-scoped); contacts are
+  // the org's callers for one customer, so keyed by customer id.
+  itopServices: ["itop", "services"] as const,
+  itopContacts: (customerId: number) => ["itop", "customers", customerId, "contacts"] as const,
 };
 
 export function useOverview() {
@@ -2298,24 +2303,51 @@ export function useItopTicket(id: number | null) {
 // (TicketPanel.tsx) reads `staleAfterWrite` off its own per-call `onSuccess`
 // (React Query runs the hook's `onSuccess` first, then the mutate-call's) to
 // show the "refreshes on next sync" notice.
-export function useTicketAction(ticketId: number, customerId: number) {
+//
+// `ticketId` is a per-MUTATE-CALL argument here, not a per-hook-instantiation
+// one (fix round, phase review) — `TicketBoard.tsx` (Task 6.1) can act on
+// whichever card a drag or "Assign to me" click targets, and the Rules of
+// Hooks forbid calling a differently-parameterized hook per drop event. This
+// is the single write path both the board and `useTicketAction` below (a
+// thin per-ticket wrapper for callers that always act on one known ticket —
+// the panel, the daily strip) route through.
+export function useTicketActionFor(customerId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: ItopTicketActionInput) =>
+    mutationFn: ({
+      ticketId,
+      action,
+      fields,
+    }: {
+      ticketId: number;
+      action: ItopTicketActionName;
+      fields?: Record<string, string | number>;
+    }) =>
       apiRequest<ItopTicketWriteResult>(`/itop/tickets/${ticketId}/actions`, {
         method: "POST",
-        body: input,
+        body: { action, fields },
       }),
-    onSuccess: (fresh) => {
+    onSuccess: (fresh, variables) => {
       if (fresh.staleAfterWrite) {
-        qc.invalidateQueries({ queryKey: queryKeys.itopTicket(ticketId) });
+        qc.invalidateQueries({ queryKey: queryKeys.itopTicket(variables.ticketId) });
       } else {
-        qc.setQueryData(queryKeys.itopTicket(ticketId), fresh);
+        qc.setQueryData(queryKeys.itopTicket(variables.ticketId), fresh);
       }
       qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(customerId) });
       qc.invalidateQueries({ queryKey: queryKeys.itopDailyRoot });
     },
   });
+}
+
+/** Thin wrapper over `useTicketActionFor` fixing `ticketId` — same call
+ * shape as before (`.mutate({ action, fields })`), no call-site churn for
+ * `TicketPanel.tsx`/`DailyItopStrip.tsx`. */
+export function useTicketAction(ticketId: number, customerId: number) {
+  const mutation = useTicketActionFor(customerId);
+  function mutate(input: ItopTicketActionInput, options?: Parameters<typeof mutation.mutate>[1]) {
+    return mutation.mutate({ ticketId, ...input }, options);
+  }
+  return { ...mutation, mutate };
 }
 
 export function useAddTicketLog(ticketId: number, customerId: number) {
@@ -2331,6 +2363,90 @@ export function useAddTicketLog(ticketId: number, customerId: number) {
         qc.invalidateQueries({ queryKey: queryKeys.itopTicket(ticketId) });
       } else {
         qc.setQueryData(queryKeys.itopTicket(ticketId), fresh);
+      }
+      qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(customerId) });
+      qc.invalidateQueries({ queryKey: queryKeys.itopDailyRoot });
+    },
+  });
+}
+
+// ---- New ticket sheet (Task 6.2, docs/archive/plans/itop-integration.md) --
+// Backend: GET /itop/services (global catalogue), GET
+// /itop/customers/:id/contacts (the org's callers, [] when unmapped), POST
+// /itop/tickets (creates under the customer's org with the caller's own
+// token). No optimistic writes — same "no queued or optimistic writes" rule
+// as the ticket panel above.
+export interface ItopServiceOption {
+  id: number;
+  name: string;
+  providerName: string | null;
+}
+
+export interface ItopContactOption {
+  id: number;
+  name: string;
+  email: string;
+}
+
+export function useItopServices() {
+  return useQuery({
+    queryKey: queryKeys.itopServices,
+    queryFn: ({ signal }) => apiRequest<ItopServiceOption[]>("/itop/services", { signal }),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useItopContacts(customerId: number) {
+  return useQuery({
+    queryKey: queryKeys.itopContacts(customerId),
+    queryFn: ({ signal }) =>
+      apiRequest<ItopContactOption[]>(`/itop/customers/${customerId}/contacts`, { signal }),
+    staleTime: 60_000,
+  });
+}
+
+export interface CreateTicketInput {
+  customerId: number;
+  class: ItopTicketClass;
+  title: string;
+  description: string;
+  callerId: number;
+  serviceId?: number;
+}
+
+// 201: the created ticket, read back from iTop (same shape as GET
+// /itop/tickets/:id). 202: iTop accepted the create but the follow-up read
+// failed — `staleAfterWrite` tells the caller the id exists but its fields
+// aren't available yet (NewTicketSheet.tsx shows "appears after the next
+// sync" rather than opening a panel it can't populate).
+export interface ItopTicketCreateStale {
+  created: true;
+  id: number;
+  staleAfterWrite: true;
+}
+
+export type ItopTicketCreateResult = ItopTicketDetail | ItopTicketCreateStale;
+
+/** True for the 202 shape — the created ticket has no `ref`/`title`/etc. yet. */
+export function isStaleTicketCreate(
+  result: ItopTicketCreateResult,
+): result is ItopTicketCreateStale {
+  return "created" in result && result.created === true;
+}
+
+export function useCreateTicket(customerId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateTicketInput) =>
+      apiRequest<ItopTicketCreateResult>("/itop/tickets", { method: "POST", body: input }),
+    onSuccess: (result) => {
+      // 201 only — a 202 stale create's shape has no ticket fields to seed
+      // the cache with yet (see `ItopTicketCreateStale`). Seeding this
+      // BEFORE `NewTicketSheet.tsx` opens the panel on the new id avoids a
+      // redundant loading flash there (`useItopTicket` finds the row
+      // already cached).
+      if (!isStaleTicketCreate(result)) {
+        qc.setQueryData(queryKeys.itopTicket(result.id), result);
       }
       qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(customerId) });
       qc.invalidateQueries({ queryKey: queryKeys.itopDailyRoot });

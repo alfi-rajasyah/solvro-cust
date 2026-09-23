@@ -15,6 +15,11 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-09-23 — iTop board view and new tickets from Solvro
+
+- **Create a ticket in iTop** — `POST /itop/tickets` (**`backend/src/routes/itop.ts`**) creates a User Request or Incident under the customer's iTop organisation with the acting user's own token, after checking the chosen caller belongs to that organisation; `GET /itop/services` and `GET /itop/customers/:id/contacts` feed the pick-lists from iTop's own data. The new ticket appears in the customer's list with iTop's reference; if the follow-up read fails, the response says the ticket was created and will appear after the next sync.
+- **Board view on the Tickets tab** — a Table / Board switch (`?view=board`, **`frontend/src/components/itop/board/TicketBoard.tsx`** on the vendored ReUI Kanban engine) groups a customer's tickets into iTop's own columns — New, Assigned, Pending, Resolved, Closed; escalations show as a chip inside their column. Dragging a card sends the matching lifecycle step to iTop (Resolve asks for its required fields first); a step iTop's lifecycle does not allow is refused before anything is sent, and a refused move leaves the card where it was — nothing moves until iTop has answered. A "New ticket" button opens a form (type, title, caller, optional service, description) that creates the ticket in iTop and opens its details. The Daily Review strip's rows gain "Assign to me" and "Resolve". All of this stays read-only until actions are on and the user has a personal token. Playwright spec: `e2e/tests/itop-board.spec.ts`.
+
 ### Added — 2026-09-23 — iTop actions from Solvro (personal tokens)
 
 - **Personal iTop tokens** — each user can save, check and remove their own iTop personal token under Settings › iTop (`/itop/me/token`, **`backend/src/routes/itopUser.ts`**). Solvro accepts a token only when it belongs to the iTop person with the same email as the user, stores it encrypted, and reads back the expiry when iTop reports one. The application token never writes.

@@ -8,11 +8,39 @@
 // customer actually has a slice in GET /itop/daily (mapped to an iTop org
 // and visible to the caller); this component itself assumes `itop` is
 // present.
+//
+// Task 6.3 (docs/archive/plans/itop-integration.md): rows gain "Assign to
+// me"/"Resolve" quick actions, reusing Phase 5's `useTicketAction` mutation
+// and `ActionSheet` — each row is its own component instance keyed by
+// `ticket.id` (the parent's `.map` below), so calling
+// `useTicketAction(ticket.id, customerId)` directly in the row is exactly
+// the same shape TicketPanel.tsx already uses (one fixed ticket per
+// component instance), unlike the Board (Task 6.1), where a single instance
+// must act on whichever card a drag targets.
+//
+// Fix round (phase review): buttons are derived from `ticketActions.ts`'s
+// own `availableActions(status)` rather than a hand-rolled status set, so
+// this strip automatically tracks any future change to which actions a
+// status offers (e.g. `pending` losing `assign_to_me`) without a second
+// edit here. `assign_to_me` can also come back 409 `itop_team_required`
+// (iTop needs a team alongside the agent) — `teamsFromError` opens the same
+// team `ActionSheet` the panel and the board use, rather than a dead-end
+// error.
+import { useState } from "react";
 import { Chip } from "@/components/StatusChip";
-import type { DailyItopCustomer, ItopTicketRow } from "@/lib/queries";
-import { useItopStatus } from "@/lib/queries";
+import { ApiError } from "@/lib/api";
+import type { DailyItopCustomer, ItopTicketActionName, ItopTicketRow, ItopTicketTeamOption } from "@/lib/queries";
+import { useItopStatus, useMyItopToken, useTicketAction } from "@/lib/queries";
+import { ActionSheet, type ActionSheetMode } from "./ActionSheet";
 import { newTodayChip, resolvedTodayChip, slaBreachedChip } from "./dailyStripPresentation";
+import { availableActions, teamsFromError } from "./ticketActions";
 import { itopTicketUrl, statusLabel, statusTone } from "./ticketPresentation";
+
+interface StripActionSheetState {
+  mode: ActionSheetMode;
+  action: ItopTicketActionName;
+  teams?: ItopTicketTeamOption[];
+}
 
 export interface DailyItopStripProps {
   itop: DailyItopCustomer;
@@ -35,7 +63,9 @@ function syncedAtLabel(syncedAt: string | null): string | null {
 
 export function DailyItopStrip({ itop, onAddToNote }: DailyItopStripProps) {
   const { data: status } = useItopStatus();
+  const { data: myToken } = useMyItopToken();
   const baseUrl = status?.baseUrl ?? null;
+  const canAct = (status?.actionsEnabled ?? false) && (myToken?.set ?? false);
 
   const newChip = newTodayChip(itop.counts.newToday);
   const resolvedChip = resolvedTodayChip(itop.counts.resolvedToday);
@@ -71,7 +101,10 @@ export function DailyItopStrip({ itop, onAddToNote }: DailyItopStripProps) {
             <DailyItopStripRow
               key={ticket.id}
               ticket={ticket}
+              customerId={itop.customerId}
               baseUrl={baseUrl}
+              canAct={canAct}
+              personName={myToken?.personName ?? null}
               onAddToNote={onAddToNote}
             />
           ))}
@@ -83,14 +116,46 @@ export function DailyItopStrip({ itop, onAddToNote }: DailyItopStripProps) {
 
 function DailyItopStripRow({
   ticket,
+  customerId,
   baseUrl,
+  canAct,
+  personName,
   onAddToNote,
 }: {
   ticket: ItopTicketRow;
+  customerId: number;
   baseUrl: string | null;
+  /** `actionsEnabled && token.set` — gates whether the quick-action buttons render at all. */
+  canAct: boolean;
+  personName: string | null;
   onAddToNote?: (text: string) => void;
 }) {
   const url = baseUrl ? itopTicketUrl(baseUrl, ticket) : null;
+  const actionMutation = useTicketAction(ticket.id, customerId);
+  const [actionSheet, setActionSheet] = useState<StripActionSheetState | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const actions = availableActions(ticket.status);
+  const canAssign = canAct && actions.includes("assign_to_me");
+  const canResolve = canAct && actions.includes("resolve");
+
+  function runAction(action: ItopTicketActionName, fields?: Record<string, string | number>) {
+    setActionError(null);
+    actionMutation.mutate(
+      { action, fields },
+      {
+        onSuccess: () => setActionSheet(null),
+        onError: (err) => {
+          const teams = teamsFromError(err);
+          if (teams) {
+            setActionSheet({ mode: "team", action, teams });
+            return;
+          }
+          setActionError(err instanceof ApiError ? err.message : "Action failed.");
+        },
+      },
+    );
+  }
 
   return (
     <li
@@ -116,6 +181,26 @@ function DailyItopStripRow({
         </span>
       )}
       <Chip tone={statusTone(ticket)}>{statusLabel(ticket.status)}</Chip>
+      {canAssign && (
+        <button
+          type="button"
+          onClick={() => runAction("assign_to_me")}
+          disabled={actionMutation.isPending}
+          className="shrink-0 text-[11px] font-semibold text-primary hover:underline disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        >
+          Assign to me
+        </button>
+      )}
+      {canResolve && (
+        <button
+          type="button"
+          onClick={() => setActionSheet({ mode: "resolve", action: "resolve" })}
+          disabled={actionMutation.isPending}
+          className="shrink-0 text-[11px] font-semibold text-primary hover:underline disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        >
+          Resolve
+        </button>
+      )}
       {onAddToNote && (
         <button
           type="button"
@@ -125,6 +210,24 @@ function DailyItopStripRow({
         >
           Add to note
         </button>
+      )}
+
+      {actionSheet && (
+        <ActionSheet
+          open
+          onClose={() => {
+            setActionSheet(null);
+            setActionError(null);
+          }}
+          mode={actionSheet.mode}
+          ticketRef={ticket.ref}
+          ticketTitle={ticket.title}
+          personName={personName}
+          teams={actionSheet.teams}
+          busy={actionMutation.isPending}
+          error={actionError}
+          onConfirm={(fields) => runAction(actionSheet.action, fields)}
+        />
       )}
     </li>
   );
