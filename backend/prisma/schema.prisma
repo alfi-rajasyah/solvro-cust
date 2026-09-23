@@ -111,6 +111,14 @@ model User {
   itopPersonId           Int?                  @unique @map("itop_person_id")
   itopUserId             Int?                  @unique @map("itop_user_id")
   itopTimeEntries        ItopTimeEntry[]
+  // Personal iTop token (Phase 5 write path, backend/src/routes/itopUser.ts).
+  // Sealed at rest (lib/secretBox.ts) — never the plaintext token. Writes to
+  // iTop always use this token for the acting user; the application token
+  // (ItopConfig.appTokenEnc) is read-only and never used for a write.
+  itopTokenEnc           String?               @map("itop_token_enc")
+  itopTokenCheckedAt     DateTime?             @map("itop_token_checked_at")
+  itopTokenPersonName    String?               @map("itop_token_person_name")
+  itopTokenExpiresAt     DateTime?             @map("itop_token_expires_at")
 
   @@index([roleId])
   @@map("users")
@@ -569,6 +577,13 @@ model ItopTicket {
   slaTtoPassed      Boolean   @default(false) @map("sla_tto_passed")
   slaTtrPassed      Boolean   @default(false) @map("sla_ttr_passed")
   resolutionDate    DateTime? @map("resolution_date")
+  // Case log entries (Phase 5, backend/src/lib/itop/sync.ts). Normalised
+  // JSON array `Array<{ date: string|null (ISO), author: string|null,
+  // message: string }>` capped at the last 50 entries, newest last — never
+  // the raw iTop `{ entries: [...] }` shape. `withLogs` on toTicketRow
+  // (routes/itop.ts) gates whether these reach a response.
+  publicLog         Json?     @map("public_log")
+  privateLog        Json?     @map("private_log")
   syncedAt          DateTime  @map("synced_at")
   itopTimeEntries   ItopTimeEntry[]
 

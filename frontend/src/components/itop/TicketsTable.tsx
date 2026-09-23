@@ -5,6 +5,11 @@
 // trailing action anchor exposes — the anchor stays the focusable element
 // (frontend/CLAUDE.md's app-wide focus ring), the row click is a mouse-only
 // convenience layered on top via `stopPropagation` on the anchor itself.
+//
+// Task 5.4 (docs/archive/plans/itop-integration.md): the row/card click now
+// opens the ticket panel (`onOpen`) instead of navigating straight to iTop —
+// the trailing "Open in iTop" anchor stays exactly as described above, an
+// explicit, separately-clickable escape hatch.
 import { Chip } from "@/components/StatusChip";
 import type { ItopTicketRow, ItopTicketScope } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -28,14 +33,25 @@ const EMPTY_MESSAGE: Record<ItopTicketScope, string> = {
 const OPEN_LINK_CLASS =
   "font-display text-[12px] font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
+// The ref cell/span is the keyboard-reachable control that opens the panel —
+// before this, the row/card's onClick (mouse-only) left the trailing "Open
+// in iTop" anchor as the only focusable element, so a keyboard user could
+// never reach the panel at all. `stopPropagation` avoids a double `onOpen`
+// call when the row's own onClick also fires for a mouse click.
+const REF_BUTTON_CLASS =
+  "rounded-sm font-mono text-[13px] text-on-surface hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+
 export function TicketsTable({
   tickets,
   baseUrl,
   scope,
+  onOpen,
 }: {
   tickets: ItopTicketRow[];
   baseUrl: string | null;
   scope: ItopTicketScope;
+  /** Opens the ticket panel for the clicked row/card (Task 5.4). */
+  onOpen: (ticket: ItopTicketRow) => void;
 }) {
   if (tickets.length === 0) {
     return (
@@ -83,15 +99,23 @@ export function TicketsTable({
                 key={t.id}
                 data-testid="itop-ticket-row"
                 data-ref={t.ref}
-                onClick={() => {
-                  if (url) window.open(url, "_blank", "noopener,noreferrer");
-                }}
+                onClick={() => onOpen(t)}
                 className={cn(
-                  "border-b border-outline-variant/60 last:border-b-0",
-                  url && "cursor-pointer hover:bg-surface-container-low",
+                  "cursor-pointer border-b border-outline-variant/60 last:border-b-0 hover:bg-surface-container-low",
                 )}
               >
-                <td className="py-2 pl-3 pr-2 font-mono text-[13px] text-on-surface">{t.ref}</td>
+                <td className="py-2 pl-3 pr-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpen(t);
+                    }}
+                    className={REF_BUTTON_CLASS}
+                  >
+                    {t.ref}
+                  </button>
+                </td>
                 <td className="max-w-[280px] truncate py-2 pr-2 text-on-surface" title={t.title}>
                   {t.title}
                 </td>
@@ -134,9 +158,24 @@ export function TicketsTable({
         {tickets.map((t) => {
           const url = baseUrl ? itopTicketUrl(baseUrl, t) : null;
           return (
-            <li key={t.id} data-testid="itop-ticket-row" data-ref={t.ref} className="p-3">
+            <li
+              key={t.id}
+              data-testid="itop-ticket-row"
+              data-ref={t.ref}
+              onClick={() => onOpen(t)}
+              className="cursor-pointer p-3"
+            >
               <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-[13px] text-on-surface">{t.ref}</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpen(t);
+                  }}
+                  className={REF_BUTTON_CLASS}
+                >
+                  {t.ref}
+                </button>
                 <Chip tone={statusTone(t)}>{statusLabel(t.status)}</Chip>
               </div>
               <p className="mt-1 truncate text-sm text-on-surface">{t.title}</p>
@@ -150,6 +189,7 @@ export function TicketsTable({
                     target="_blank"
                     rel="noopener noreferrer"
                     data-testid="itop-open-link"
+                    onClick={(e) => e.stopPropagation()}
                     className={OPEN_LINK_CLASS}
                   >
                     Open in iTop ↗

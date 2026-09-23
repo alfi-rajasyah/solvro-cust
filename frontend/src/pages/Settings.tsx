@@ -3,7 +3,12 @@ import { Alert, AlertDescription } from "@/components/reui/alert";
 import { ServiceCatalogueManager } from "@/components/services/ServiceCatalogueManager";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
-import { useChangeMyPassword } from "@/lib/queries";
+import {
+  useChangeMyPassword,
+  useMyItopToken,
+  useRemoveMyItopToken,
+  useSaveMyItopToken,
+} from "@/lib/queries";
 import { useTheme, type ThemeChoice } from "@/lib/theme";
 
 export function Settings() {
@@ -78,6 +83,8 @@ export function Settings() {
         </p>
       </section>
 
+      <ItopTokenSection />
+
       {hasPermission(user, "project:write") && (
         <section className="rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
           <h2 className="mb-3 font-display text-[13px] font-bold uppercase tracking-wider text-on-surface">
@@ -151,6 +158,152 @@ export function Settings() {
         </form>
       </section>
     </div>
+  );
+}
+
+// Same shape/rationale as ItopTab.tsx's own local `relativeTime` — no shared
+// export exists for this and each call site stays small and self-contained.
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  const diffMs = Date.now() - then;
+  const diffMin = Math.round(diffMs / 60_000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.round(diffHr / 24);
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+// "iTop" section (Task 5.2, docs/archive/plans/itop-integration.md): each
+// TAM pastes their own personal token (scope REST/JSON) so ticket actions
+// (Task 5.3/5.4) are written under their own name, never the shared
+// application token. Rendered only when GET /itop/me/token reports
+// `configured` — an install with no iTop connection at all never sees this
+// section, per the dispatch contract. Same password-input + Save/Remove
+// shape as the "Change password" section below.
+function ItopTokenSection() {
+  const { data: token, isLoading } = useMyItopToken();
+  const save = useSaveMyItopToken();
+  const remove = useRemoveMyItopToken();
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+
+  if (isLoading || !token || !token.configured) return null;
+
+  async function handleSave(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+    try {
+      await save.mutateAsync({ token: trimmed });
+      setDraft("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save the token.");
+    }
+  }
+
+  async function handleRemove() {
+    setError(null);
+    try {
+      await remove.mutateAsync();
+      setConfirmingRemove(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not remove the token.");
+      setConfirmingRemove(false);
+    }
+  }
+
+  return (
+    <section className="rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
+      <h2 className="mb-3 font-display text-[13px] font-bold uppercase tracking-wider text-on-surface">
+        iTop
+      </h2>
+
+      {token.unreadable ? (
+        <Alert variant="destructive" className="mb-3">
+          <AlertDescription>
+            Your stored token can no longer be read — enter it again.
+          </AlertDescription>
+        </Alert>
+      ) : (
+        token.set && (
+          <p className="mb-3 flex items-center gap-1 text-sm text-on-surface">
+            <span className="material-symbols-outlined text-[16px] text-chip-emerald-text">
+              check_circle
+            </span>
+            Valid · {token.personName ?? "—"}
+            {token.checkedAt && ` · checked ${relativeTime(token.checkedAt)}`}
+            {token.expiresAt && ` · expires ${new Date(token.expiresAt).toLocaleDateString()}`}
+          </p>
+        )
+      )}
+
+      {error && (
+        <Alert variant="destructive" className="mb-3">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      <form onSubmit={handleSave} className="space-y-3">
+        <Field label="My personal token">
+          <input
+            type="password"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={token.set ? "•••••••• (set)" : "scope REST/JSON"}
+            spellCheck={false}
+            autoComplete="off"
+            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/20"
+          />
+        </Field>
+        <p className="text-[12px] text-on-surface-variant">
+          Create it in iTop under My Account › Personal tokens. Without a token, tickets are
+          read-only for you; the application token never writes.
+        </p>
+        <div className="flex items-center justify-end gap-2">
+          {token.set &&
+            (confirmingRemove ? (
+              <span className="flex items-center gap-2 text-[12px] text-on-surface-variant">
+                Remove your token?
+                <button
+                  type="button"
+                  onClick={() => void handleRemove()}
+                  disabled={remove.isPending}
+                  className="font-display text-[12px] font-bold text-error underline disabled:opacity-50"
+                >
+                  {remove.isPending ? "Removing…" : "Confirm"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingRemove(false)}
+                  className="font-display text-[12px] font-bold text-on-surface-variant underline"
+                >
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmingRemove(true)}
+                className="rounded-sm border border-outline-variant px-4 py-1.5 font-display text-xs font-bold uppercase tracking-wider text-on-surface-variant hover:bg-surface-container"
+              >
+                Remove
+              </button>
+            ))}
+          <button
+            type="submit"
+            disabled={save.isPending || !draft.trim()}
+            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-bold uppercase tracking-wider text-on-primary hover:bg-primary-container disabled:opacity-60"
+          >
+            {save.isPending ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </form>
+    </section>
   );
 }
 

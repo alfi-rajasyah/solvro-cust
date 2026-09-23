@@ -21,7 +21,8 @@ export const ITOP_TICKET_CLASSES: readonly ItopTicketClass[] = [
 export const ITOP_TICKET_OUTPUT_FIELDS =
   "ref,title,status,operational_status,priority,agent_id,agent_id_friendlyname," +
   "team_id_friendlyname,service_id_friendlyname,caller_id_friendlyname,org_id," +
-  "start_date,last_update,tto,ttr,sla_tto_passed,sla_ttr_passed,resolution_date";
+  "start_date,last_update,tto,ttr,sla_tto_passed,sla_ttr_passed,resolution_date," +
+  "public_log,private_log";
 
 /** Row shape for `output_fields: ITOP_TICKET_OUTPUT_FIELDS` on a ticket class. */
 export interface ItopTicketFields {
@@ -43,6 +44,57 @@ export interface ItopTicketFields {
   sla_tto_passed: string;
   sla_ttr_passed: string;
   resolution_date: string;
+  public_log?: ItopCaseLogRaw;
+  private_log?: ItopCaseLogRaw;
+}
+
+/**
+ * iTop's case-log ("public_log"/"private_log") attribute shape. Newer
+ * versions answer `{ entries: [...] }`; older versions may answer a plain
+ * (HTML/text) string with no structured entries — `sync.ts#normalizeCaseLog`
+ * handles both, collapsing a bare string into one entry with no author.
+ */
+export interface ItopCaseLogRawEntry {
+  date?: string;
+  user_login?: string;
+  user_id?: string;
+  message?: string;
+  message_html?: string;
+  format?: "text" | "html";
+}
+
+export type ItopCaseLogRaw = string | { entries?: ItopCaseLogRawEntry[] } | null | undefined;
+
+/** Normalised shape `ItopTicket.publicLog`/`privateLog` are stored as. */
+export interface ItopCaseLogEntry {
+  date: string | null;
+  author: string | null;
+  message: string;
+}
+
+/**
+ * `lnkPersonToTeam` fields used to resolve which team(s) a person belongs to
+ * for `assign_to_me`'s `ev_assign` stimulus (`team_id` is mandatory on that
+ * install's DEFAULT lifecycle per plan §1 decision 9). Read with the acting
+ * TAM's own token, never the application token.
+ */
+export const ITOP_LNK_PERSON_TO_TEAM_OUTPUT_FIELDS = "team_id,team_id_friendlyname";
+
+export interface ItopLnkPersonToTeamFields {
+  team_id: string;
+  team_id_friendlyname: string;
+}
+
+/**
+ * `PersonalToken` fields for the best-effort expiry read in
+ * `routes/itopUser.ts` (`PUT /itop/me/token`). Real installs may refuse this
+ * class to a non-admin token — callers treat any failure here as "expiry
+ * unknown", never as a reason to reject the token itself.
+ */
+export const ITOP_PERSONAL_TOKEN_OUTPUT_FIELDS = "expiration_date";
+
+export interface ItopPersonalTokenFields {
+  expiration_date: string;
 }
 
 export const ITOP_ORGANIZATION_OUTPUT_FIELDS = "id,name";

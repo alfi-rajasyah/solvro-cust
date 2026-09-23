@@ -11,7 +11,7 @@ import { seal } from "../../src/lib/secretBox.js";
 import { bustItopConfigCache } from "../../src/lib/itop/config.js";
 import { parseItopDate, syncTickets, syncTimeEntries, syncUsers } from "../../src/lib/itop/sync.js";
 import { seedRoles, createUserWithRole } from "../testAuth.js";
-import { createFakeItop, seedFakeItop, type FakeItopState, type TicketRecord } from "./fakeItop.js";
+import { createFakeItop, seedFakeItop, type FakeItopState, type TicketRecord, FAKE_ITOP_TOKENS } from "./fakeItop.js";
 
 let fakeServer: Server | undefined;
 
@@ -160,7 +160,7 @@ describe("syncTickets", () => {
     state.tickets.set(unmappedId, extraTicket({ id: unmappedId, ref: "R-UNMAPPED-1", org_id: "3" }));
 
     const { baseUrl } = await startFake(state);
-    await configureItop(baseUrl, "app-token-readonly");
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
 
     const customer1 = await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
     const customer2 = await createMappedCustomer(2, "PT Sinar Logistik");
@@ -195,7 +195,7 @@ describe("syncTickets", () => {
   it("incremental sync only updates a ticket whose last_update moved past the cutoff", async () => {
     const state = seedFakeItop();
     const { baseUrl } = await startFake(state);
-    await configureItop(baseUrl, "app-token-readonly");
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
     await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
     await createMappedCustomer(2, "PT Sinar Logistik");
 
@@ -235,7 +235,7 @@ describe("syncTickets", () => {
   it("a full sync drops a ticket iTop no longer returns", async () => {
     const state = seedFakeItop();
     const { baseUrl } = await startFake(state);
-    await configureItop(baseUrl, "app-token-readonly");
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
     await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
     await createMappedCustomer(2, "PT Sinar Logistik");
 
@@ -257,7 +257,7 @@ describe("syncTickets", () => {
   it("unmapping a customer purges its tickets on the next full sync, not just a stale customerId", async () => {
     const state = seedFakeItop();
     const { baseUrl } = await startFake(state);
-    await configureItop(baseUrl, "app-token-readonly");
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
     const customer1 = await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
     await createMappedCustomer(2, "PT Sinar Logistik");
 
@@ -286,7 +286,7 @@ describe("syncTickets", () => {
   it("two concurrent syncTickets() calls result in exactly one ran:true", async () => {
     const state = seedFakeItop();
     const { baseUrl } = await startFake(state);
-    await configureItop(baseUrl, "app-token-readonly");
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
     await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
     await createMappedCustomer(2, "PT Sinar Logistik");
 
@@ -320,7 +320,7 @@ describe("syncTickets", () => {
   it("a failed run never advances lastSyncAt — a ticket updated during the outage is still picked up once iTop is reachable again", async () => {
     const state = seedFakeItop();
     const { baseUrl } = await startFake(state);
-    await configureItop(baseUrl, "app-token-readonly");
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
     await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
     await createMappedCustomer(2, "PT Sinar Logistik");
 
@@ -365,7 +365,7 @@ describe("syncTickets", () => {
     // Outage over — the next incremental run's cutoff is still anchored to
     // the last *successful* sync, so it must pick up the change that
     // happened while iTop was unreachable.
-    await setAppToken("app-token-readonly");
+    await setAppToken(FAKE_ITOP_TOKENS.app);
     const recovered = await syncTickets();
 
     expect(recovered.ran).toBe(true);
@@ -381,7 +381,7 @@ describe("syncUsers", () => {
   it("maps a user whose email matches a seeded Person (and its User), leaves an unmatched user null", async () => {
     const state = seedFakeItop();
     const { baseUrl } = await startFake(state);
-    await configureItop(baseUrl, "app-token-readonly");
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
 
     const matched = await createUserWithRole("TAM");
     const unmatched = await createUserWithRole("TAM");
@@ -402,7 +402,7 @@ describe("syncUsers", () => {
   it("does not clear an existing mapping when the iTop lookup itself fails", async () => {
     const state = seedFakeItop();
     const { baseUrl } = await startFake(state);
-    await configureItop(baseUrl, "app-token-readonly");
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
 
     const user = await createUserWithRole("TAM");
     await prisma.user.update({
@@ -422,7 +422,7 @@ describe("syncUsers", () => {
   it("clears itopUserId (not just itopPersonId) once a previously-matched user's Person disappears from iTop", async () => {
     const state = seedFakeItop();
     const { baseUrl } = await startFake(state);
-    await configureItop(baseUrl, "app-token-readonly");
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
 
     const user = await createUserWithRole("TAM");
     await prisma.user.update({ where: { id: user.userId }, data: { email: "rina.s@example.co.id" } });
@@ -451,7 +451,7 @@ describe("syncTimeEntries", () => {
   it("first pull sets userId/customerId/ticketId when mapped, and null for an org-less entry", async () => {
     const state = seedFakeItop();
     const { baseUrl } = await startFake(state);
-    await configureItop(baseUrl, "app-token-readonly");
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
 
     const customer1 = await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
     await createMappedCustomer(2, "PT Sinar Logistik");
@@ -512,7 +512,7 @@ describe("syncTimeEntries", () => {
   it("converts iTop's TimeSpent.duration from seconds to whole minutes", async () => {
     const state = seedFakeItop();
     const { baseUrl } = await startFake(state);
-    await configureItop(baseUrl, "app-token-readonly");
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
 
     const userA = await createUserWithRole("TAM");
     await prisma.user.update({ where: { id: userA.userId }, data: { email: "rina.s@example.co.id" } });
@@ -534,7 +534,7 @@ describe("syncTimeEntries", () => {
   it("a full sync drops an entry iTop no longer returns, within the pull window", async () => {
     const state = seedFakeItop();
     const { baseUrl } = await startFake(state);
-    await configureItop(baseUrl, "app-token-readonly");
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
 
     const userA = await createUserWithRole("TAM");
     await prisma.user.update({ where: { id: userA.userId }, data: { email: "rina.s@example.co.id" } });
@@ -561,7 +561,7 @@ describe("syncTimeEntries", () => {
   it("dropping a user's iTop mapping removes their in-window entries on the next full sync, but never touches history older than the pull window", async () => {
     const state = seedFakeItop();
     const { baseUrl } = await startFake(state);
-    await configureItop(baseUrl, "app-token-readonly");
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
 
     const userB = await createUserWithRole("TAM");
     await prisma.user.update({ where: { id: userB.userId }, data: { email: "dedi.p@example.co.id" } });
@@ -615,7 +615,7 @@ describe("syncTickets + syncTimeEntries combined", () => {
   it("syncTickets's full pass also syncs time entries and reports their counts on SyncSummary", async () => {
     const state = seedFakeItop();
     const { baseUrl } = await startFake(state);
-    await configureItop(baseUrl, "app-token-readonly");
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
     await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
     await createMappedCustomer(2, "PT Sinar Logistik");
 

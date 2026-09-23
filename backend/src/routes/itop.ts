@@ -1,24 +1,41 @@
-// Read-side Tickets API for the iTop integration: connection status for the
-// frontend's "Open in iTop" links, a customer's ticket list + counts for the
-// Tickets tab, single-ticket lookup, a debounced manual Refresh trigger, and
-// the Daily Review strip's per-day, per-customer digest (GET /daily). All
-// routes are authed (no admin gate — any authed user with visibility into
-// the customer can read its tickets). Visibility reuses lib/visibility.ts's
+// Tickets API for the iTop integration: connection status for the frontend's
+// "Open in iTop" links, a customer's ticket list + counts for the Tickets
+// tab, single-ticket lookup, a debounced manual Refresh trigger, the Daily
+// Review strip's per-day, per-customer digest (GET /daily), and — Phase 5 —
+// the write path: lifecycle actions and case-log entries under the ACTING
+// USER'S OWN personal token, never the application token and never another
+// user's (docs/plans/itop-integration.md §1 decision 8). All routes are
+// authed (no admin gate — any authed user with visibility into the customer
+// can read its tickets; write routes additionally require their own token
+// and `ItopConfig.actionsEnabled`). Visibility reuses lib/visibility.ts's
 // ensureCustomerVisible/customerVisibilityFilter — never re-derived here —
 // so a customer hidden from the caller 404s (or is silently excluded from a
 // list) the same way every other customer-nested route does. Mounted at
-// /itop in src/app.ts. See docs/archive/plans/itop-integration.md Tasks 1.7, 2.1.
+// /itop in src/app.ts. See docs/archive/plans/itop-integration.md Tasks 1.7,
+// 2.1, 5.3.
 import { Router } from "express";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
-import { requireAuth } from "../http/auth.js";
+import { logger } from "../logger.js";
+import { requireAuth, type JwtPayload } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { ensureCustomerVisible, customerVisibilityFilter } from "../lib/visibility.js";
-import { getItopConfig, isItopConfigured } from "../lib/itop/config.js";
+import { getItopAppClient, getItopConfig, isItopConfigured, makeItopClient } from "../lib/itop/config.js";
 import { requestSync } from "../lib/itop/scheduler.js";
-import { ITOP_TICKET_CLASSES, type ItopTicketClass } from "../lib/itop/types.js";
+import { open, SecretBoxError } from "../lib/secretBox.js";
+import { ItopError, type ItopGetResult } from "../lib/itop/client.js";
+import { upsertTicketFromItop } from "../lib/itop/sync.js";
+import {
+  ITOP_LNK_PERSON_TO_TEAM_OUTPUT_FIELDS,
+  ITOP_TICKET_CLASSES,
+  ITOP_TICKET_OUTPUT_FIELDS,
+  type ItopCaseLogEntry,
+  type ItopLnkPersonToTeamFields,
+  type ItopTicketClass,
+  type ItopTicketFields,
+} from "../lib/itop/types.js";
 import { weekKeyOf, parseWeekKey } from "../lib/isoWeek.js";
 import { isValidDayString, utcMidnightOfDayString } from "../lib/dateBoundary.js";
 import type { ItopTicket } from "@prisma/client";
@@ -41,7 +58,57 @@ function currentIsoWeekStart(): Date {
   return utcMidnightOfDayString(week.start);
 }
 
-function toTicketRow(ticket: ItopTicket, myItopPersonId: number | null) {
+/** `[]` (never `null`) when there's nothing stored — Phase 5 case-log entries, normalised by `lib/itop/sync.ts#normalizeCaseLog` at sync/write time. */
+function caseLogRows(value: Prisma.JsonValue | null | undefined): ItopCaseLogEntry[] {
+  return (value as unknown as ItopCaseLogEntry[] | null) ?? [];
+}
+
+/**
+ * The columns `toTicketRow` reads when NOT asked for logs. Used as an
+ * explicit Prisma `select` on the list route below, which can return up to
+ * 500 rows per request and polls every 60s — pulling `publicLog`/
+ * `privateLog` (unbounded JSONB, never used by that response) for every row
+ * of every poll wasted bandwidth and DB work for nothing the caller reads.
+ * `omit` (Prisma 5.22, `omitApi` preview) isn't enabled in schema.prisma's
+ * generator block, so this is an explicit `select` instead.
+ */
+const TICKET_ROW_SELECT = {
+  id: true,
+  class: true,
+  ref: true,
+  title: true,
+  status: true,
+  operationalStatus: true,
+  priority: true,
+  agentPersonId: true,
+  agentName: true,
+  teamName: true,
+  serviceName: true,
+  callerName: true,
+  startDate: true,
+  lastUpdate: true,
+  tto: true,
+  ttr: true,
+  slaTtoPassed: true,
+  slaTtrPassed: true,
+  resolutionDate: true,
+} satisfies Prisma.ItopTicketSelect;
+
+/** Structural shape `toTicketRow` needs — satisfied by a full `ItopTicket` row (the single-ticket and write routes, which pass `withLogs: true`) as well as by the `TICKET_ROW_SELECT`-shaped partial rows the list/daily routes fetch (which never do). */
+type TicketRowSource = Pick<ItopTicket, keyof typeof TICKET_ROW_SELECT> & {
+  publicLog?: Prisma.JsonValue | null;
+  privateLog?: Prisma.JsonValue | null;
+};
+
+/**
+ * `withLogs` gates `publicLog`/`privateLog` on the response — deliberately
+ * off by default. List/daily payloads can return hundreds of tickets at
+ * once; case logs are unbounded text and only ever needed one ticket at a
+ * time (the single-ticket routes and the Phase 5 write routes, which all
+ * pass `{ withLogs: true }` explicitly, and fetch the full row so the log
+ * columns are actually there to read).
+ */
+function toTicketRow(ticket: TicketRowSource, myItopPersonId: number | null, options: { withLogs?: boolean } = {}) {
   return {
     id: ticket.id,
     class: ticket.class,
@@ -63,6 +130,9 @@ function toTicketRow(ticket: ItopTicket, myItopPersonId: number | null) {
     slaTtrPassed: ticket.slaTtrPassed,
     resolutionDate: ticket.resolutionDate,
     isMine: myItopPersonId !== null && ticket.agentPersonId === myItopPersonId,
+    ...(options.withLogs
+      ? { publicLog: caseLogRows(ticket.publicLog), privateLog: caseLogRows(ticket.privateLog) }
+      : {}),
   };
 }
 
@@ -86,6 +156,7 @@ itopRouter.get("/status", async (_req, res) => {
     lastSyncAt: config.lastSyncAt,
     lastSyncOk: config.lastSyncOk,
     refreshMinutes: config.refreshMinutes,
+    actionsEnabled: config.actionsEnabled,
   });
 });
 
@@ -161,6 +232,7 @@ itopRouter.get(
         where,
         orderBy: [{ slaTtrPassed: "desc" }, { lastUpdate: "desc" }],
         take: 500,
+        select: TICKET_ROW_SELECT,
       }),
       prisma.itopTicket.aggregate({ where: { customerId: id }, _max: { syncedAt: true } }),
     ]);
@@ -199,7 +271,7 @@ itopRouter.get(
     await ensureCustomerVisible(req.user!, ticket.customerId);
 
     const myItopPersonId = await getMyItopPersonId(req.user!.sub);
-    res.json(toTicketRow(ticket, myItopPersonId));
+    res.json(toTicketRow(ticket, myItopPersonId, { withLogs: true }));
   },
 );
 
@@ -228,7 +300,7 @@ itopRouter.get(
     await ensureCustomerVisible(req.user!, ticket.customerId);
 
     const myItopPersonId = await getMyItopPersonId(req.user!.sub);
-    res.json(toTicketRow(ticket, myItopPersonId));
+    res.json(toTicketRow(ticket, myItopPersonId, { withLogs: true }));
   },
 );
 
@@ -446,5 +518,297 @@ itopRouter.get(
         syncedAt: syncedAtMap.get(c.id) ?? config.lastSyncAt,
       })),
     });
+  },
+);
+
+// ---- Phase 5 write path: actions + case-log entries -------------------------
+//
+// Every write below runs under the ACTING USER'S OWN personal token
+// (backend/src/routes/itopUser.ts, `User.itopTokenEnc`) — never
+// `ItopConfig.appTokenEnc` (read-only, lib/itop/config.ts#getItopAppClient)
+// and never another user's token. iTop's own rights on that token/person
+// apply as-is; Solvro adds no permission of its own for tickets (plan §3
+// "Security"). After a write succeeds, the ticket is re-read with the
+// APPLICATION client (read-only is enough for a read) and upserted into the
+// snapshot, so the response always reflects iTop's own answer — never a
+// client-side guess of the new status. See
+// docs/archive/plans/itop-integration.md Task 5.3.
+
+const TRANSPORT_ITOP_ERROR_CODES = new Set<unknown>(["http", "timeout", "network", "parse"]);
+
+/**
+ * Maps an iTop write failure to the HTTP shape Task 5.3 promises: a
+ * transport failure is a 502, a rejected/invalid token is a 403, and any
+ * other application-level refusal (a lifecycle rule, a missing mandatory
+ * field, ...) is a 409 carrying iTop's own message VERBATIM — Solvro never
+ * rewrites it, since the admin's own install (plan §6 item 10) is the
+ * authority on what each stimulus requires.
+ */
+function mapItopWriteError(err: unknown): never {
+  if (err instanceof ItopError) {
+    if (TRANSPORT_ITOP_ERROR_CODES.has(err.code)) {
+      throw new HttpError(502, "itop_unreachable", err.message);
+    }
+    if (err.code === 1) {
+      throw new HttpError(403, "itop_token_invalid", err.message);
+    }
+    throw new HttpError(409, "itop_refused", err.message);
+  }
+  throw err;
+}
+
+interface WritableTicketContext {
+  ticket: ItopTicket;
+  token: string;
+  myItopPersonId: number | null;
+  baseUrl: string;
+}
+
+/**
+ * Shared preconditions for every Phase 5 write route, checked in this exact
+ * order (Task 5.3): the integration's write switch, then the ticket's own
+ * visibility (404 either way, same as the read routes — never reveal a
+ * hidden ticket exists), then that the caller has a personal token at all,
+ * then that it can actually be decrypted.
+ */
+async function loadWritableTicket(userSub: number, ticketId: number, user: JwtPayload): Promise<WritableTicketContext> {
+  const config = await getItopConfig();
+  if (!config.actionsEnabled) {
+    throw new HttpError(404, "not_found", "Not found");
+  }
+
+  const ticket = await prisma.itopTicket.findUnique({ where: { id: ticketId } });
+  if (!ticket || ticket.customerId === null) {
+    throw new HttpError(404, "not_found", "Ticket not found");
+  }
+  await ensureCustomerVisible(user, ticket.customerId);
+
+  const me = await prisma.user.findUnique({
+    where: { id: userSub },
+    select: { itopTokenEnc: true, itopPersonId: true },
+  });
+  if (!me?.itopTokenEnc) {
+    throw new HttpError(403, "itop_token_missing", "Add your personal iTop token in Settings");
+  }
+
+  let token: string;
+  try {
+    token = open(me.itopTokenEnc);
+  } catch (err) {
+    if (err instanceof SecretBoxError) {
+      throw new HttpError(
+        403,
+        "itop_token_unreadable",
+        "Your saved iTop token could not be decrypted (SECRETS_KEY changed?) — enter it again in Settings.",
+      );
+    }
+    throw err;
+  }
+
+  if (!config.baseUrl) {
+    throw new HttpError(409, "itop_not_configured", "iTop is not connected. An admin must set the iTop URL first.");
+  }
+
+  return { ticket, token, myItopPersonId: me.itopPersonId, baseUrl: config.baseUrl };
+}
+
+/**
+ * Re-reads a ticket from iTop with the read-only APPLICATION client after a
+ * write under the user's token succeeded, and upserts it into the snapshot —
+ * the single place every Phase 5 write route gets its "iTop's own answer"
+ * from. Falls back to the pre-write snapshot row (never throws) if iTop no
+ * longer returns the ticket, which a write itself succeeding makes very
+ * unlikely but not impossible (e.g. deleted concurrently). Throws on any
+ * OTHER re-read failure — `reReadAfterWrite` below is the one every write
+ * route actually calls, and turns that throw into a safe fallback instead
+ * of a 500.
+ */
+async function reReadAndUpsertTicket(cls: string, ticketId: number): Promise<ItopTicket> {
+  const appClient = await getItopAppClient();
+  const result = await appClient.get<ItopTicketFields>(cls, ticketId, ITOP_TICKET_OUTPUT_FIELDS);
+  const row = result.objects[0];
+  if (row) {
+    await upsertTicketFromItop(cls, { key: ticketId, class: cls, fields: row.fields });
+  }
+  return prisma.itopTicket.findUniqueOrThrow({ where: { id: ticketId } });
+}
+
+/**
+ * The write itself (`apply_stimulus`/`update` under the user's own token)
+ * has ALREADY SUCCEEDED by the time this runs — a failure here (app token
+ * unreadable, iTop briefly unreachable, ...) must never surface as a 500
+ * that invites a client retry, since retrying would re-fire the stimulus or
+ * double-append the log entry. On failure: log a warning and answer with
+ * the PRE-write snapshot row (`fallback`) plus `staleAfterWrite: true`, so
+ * the caller knows the write took but the displayed row may be one write
+ * behind until the next sync.
+ */
+async function reReadAfterWrite(
+  cls: string,
+  ticketId: number,
+  fallback: ItopTicket,
+): Promise<{ ticket: ItopTicket; staleAfterWrite: boolean }> {
+  try {
+    const ticket = await reReadAndUpsertTicket(cls, ticketId);
+    return { ticket, staleAfterWrite: false };
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : String(err), ticketId, cls },
+      "iTop re-read after a successful write failed — answering with the pre-write snapshot; the write itself already succeeded and must not be retried",
+    );
+    return { ticket: fallback, staleAfterWrite: true };
+  }
+}
+
+// ---- POST /tickets/:id/actions -----------------------------------------------
+
+const actionBodySchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("assign_to_me"),
+    fields: z.object({ team_id: z.coerce.number().int().positive().optional() }).optional(),
+  }),
+  z.object({
+    action: z.literal("pending"),
+    fields: z.object({ pending_reason: z.union([z.string(), z.number()]).optional() }).optional(),
+  }),
+  z.object({
+    action: z.literal("resolve"),
+    fields: z.object({ resolution_code: z.string().min(1), solution: z.string().min(1) }),
+  }),
+  // ev_close/ev_reopen take no fields on the DEFAULT lifecycle (plan §1
+  // decision 9) — `.strict()` rejects anything smuggled in rather than
+  // silently accepting and discarding it.
+  z.object({ action: z.literal("close"), fields: z.object({}).strict().optional() }),
+  z.object({ action: z.literal("reopen"), fields: z.object({}).strict().optional() }),
+]);
+
+itopRouter.post(
+  "/tickets/:id/actions",
+  validate("params", ticketIdParamSchema),
+  validate("body", actionBodySchema),
+  async (req, res) => {
+    const { id } = req.params as unknown as z.infer<typeof ticketIdParamSchema>;
+    const body = req.body as z.infer<typeof actionBodySchema>;
+
+    const { ticket, token, myItopPersonId, baseUrl } = await loadWritableTicket(req.user!.sub, id, req.user!);
+    const client = makeItopClient(baseUrl, token);
+
+    let stimulus: string;
+    let stimulusFields: Record<string, unknown> = {};
+
+    if (body.action === "assign_to_me") {
+      if (myItopPersonId === null) {
+        throw new HttpError(
+          403,
+          "itop_person_unmatched",
+          "Your Solvro account isn't matched to an iTop person yet — save your personal token in Settings first.",
+        );
+      }
+
+      // Always resolved from iTop, even when the caller supplied a team_id —
+      // a caller-supplied id is corroborated against the caller's OWN teams
+      // rather than trusted outright, so a request can't assign a ticket to
+      // a team its author isn't actually a member of.
+      let teamsResult: ItopGetResult<ItopLnkPersonToTeamFields>;
+      try {
+        teamsResult = await client.get<ItopLnkPersonToTeamFields>(
+          "lnkPersonToTeam",
+          `SELECT lnkPersonToTeam WHERE person_id = ${myItopPersonId}`,
+          ITOP_LNK_PERSON_TO_TEAM_OUTPUT_FIELDS,
+        );
+      } catch (err) {
+        mapItopWriteError(err);
+      }
+      const teams = new Map<number, string>();
+      for (const row of teamsResult.objects) {
+        teams.set(Number(row.fields.team_id), row.fields.team_id_friendlyname);
+      }
+      const teamOptions = () => [...teams.entries()].map(([teamIdOption, name]) => ({ id: teamIdOption, name }));
+
+      let teamId = body.fields?.team_id;
+      if (teams.size === 0) {
+        throw new HttpError(409, "itop_no_team", "You are not a member of any iTop team.");
+      }
+      if (teamId !== undefined) {
+        if (!teams.has(teamId)) {
+          throw new HttpError(
+            409,
+            "itop_team_required",
+            "That team isn't one of your iTop teams — pick one of your own.",
+            { teams: teamOptions() },
+          );
+        }
+      } else {
+        if (teams.size > 1) {
+          throw new HttpError(409, "itop_team_required", "Pick a team to assign this ticket to.", {
+            teams: teamOptions(),
+          });
+        }
+        teamId = [...teams.keys()][0];
+      }
+
+      stimulus = "ev_assign";
+      stimulusFields = { team_id: teamId, agent_id: myItopPersonId };
+    } else if (body.action === "pending") {
+      stimulus = "ev_pending";
+      const pendingReason = body.fields?.pending_reason;
+      if (pendingReason !== undefined) {
+        stimulusFields = { pending_reason: pendingReason };
+      }
+    } else if (body.action === "resolve") {
+      stimulus = "ev_resolve";
+      stimulusFields = { resolution_code: body.fields.resolution_code, solution: body.fields.solution };
+    } else if (body.action === "close") {
+      stimulus = "ev_close";
+    } else {
+      stimulus = "ev_reopen";
+    }
+
+    try {
+      await client.applyStimulus(ticket.class, ticket.id, stimulus, stimulusFields);
+    } catch (err) {
+      mapItopWriteError(err);
+    }
+
+    const { ticket: updated, staleAfterWrite } = await reReadAfterWrite(ticket.class, ticket.id, ticket);
+    logger.info(
+      { userId: req.user!.sub, ticketId: ticket.id, action: body.action, staleAfterWrite },
+      "iTop ticket action applied",
+    );
+    res.json({ ...toTicketRow(updated, myItopPersonId, { withLogs: true }), staleAfterWrite });
+  },
+);
+
+// ---- POST /tickets/:id/log ----------------------------------------------------
+
+const logBodySchema = z.object({
+  visibility: z.enum(["public", "private"]),
+  text: z.string().min(1).max(4000),
+});
+
+itopRouter.post(
+  "/tickets/:id/log",
+  validate("params", ticketIdParamSchema),
+  validate("body", logBodySchema),
+  async (req, res) => {
+    const { id } = req.params as unknown as z.infer<typeof ticketIdParamSchema>;
+    const { visibility, text } = req.body as z.infer<typeof logBodySchema>;
+
+    const { ticket, token, myItopPersonId, baseUrl } = await loadWritableTicket(req.user!.sub, id, req.user!);
+    const client = makeItopClient(baseUrl, token);
+
+    const field = visibility === "public" ? "public_log" : "private_log";
+    try {
+      await client.update(ticket.class, ticket.id, { [field]: text });
+    } catch (err) {
+      mapItopWriteError(err);
+    }
+
+    const { ticket: updated, staleAfterWrite } = await reReadAfterWrite(ticket.class, ticket.id, ticket);
+    logger.info(
+      { userId: req.user!.sub, ticketId: ticket.id, action: "log", visibility, staleAfterWrite },
+      "iTop ticket log entry added",
+    );
+    res.json({ ...toTicketRow(updated, myItopPersonId, { withLogs: true }), staleAfterWrite });
   },
 );

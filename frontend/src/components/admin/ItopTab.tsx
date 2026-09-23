@@ -35,6 +35,7 @@ import {
   type ItopSettingsFormState,
 } from "./itopSettingsDiff";
 import { Chip } from "@/components/StatusChip";
+import { Switch } from "@/components/ui/switch";
 
 const OUTLINE_BUTTON_CLASS =
   "rounded-sm border border-outline-variant px-3 py-1 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface-variant hover:bg-surface-container disabled:opacity-50";
@@ -345,10 +346,17 @@ function ConnectionCard() {
             Actions from Solvro
           </span>
           <p className="mt-0.5 text-xs text-on-surface-variant">
-            Available with the write-path release.
+            Each TAM needs a personal token (Settings › iTop). The application token never
+            writes.
           </p>
         </div>
-        <DisabledSwitch checked={form.actionsEnabled} />
+        <Switch
+          checked={form.actionsEnabled}
+          onCheckedChange={(checked) =>
+            setForm((f) => (f ? { ...f, actionsEnabled: checked } : f))
+          }
+          aria-label="Actions from Solvro"
+        />
       </div>
 
       {saveError && <p className="mt-3 text-sm text-error">{saveError}</p>}
@@ -630,32 +638,6 @@ function CopyRow({
         <p className="mt-0.5 text-[11px] text-chip-emerald-text">Copied</p>
       )}
     </div>
-  );
-}
-
-// Inert visual affordance only — no `ui/switch` primitive exists in this
-// codebase yet, and adding one via the shadcn CLI risks the interactive
-// radix-ui prompt frontend/CLAUDE.md warns against for a control that does
-// nothing until the write-path release anyway.
-function DisabledSwitch({ checked }: { checked: boolean }) {
-  return (
-    <span
-      role="switch"
-      aria-checked={checked}
-      aria-disabled="true"
-      title="Available with the write-path release"
-      className={[
-        "relative inline-flex h-5 w-9 shrink-0 cursor-not-allowed items-center rounded-full opacity-60 transition-colors",
-        checked ? "bg-primary/40" : "bg-surface-container-high",
-      ].join(" ")}
-    >
-      <span
-        className={[
-          "inline-block h-4 w-4 translate-x-0.5 rounded-full bg-surface-bright transition-transform",
-          checked ? "translate-x-[18px]" : "translate-x-0.5",
-        ].join(" ")}
-      />
-    </span>
   );
 }
 

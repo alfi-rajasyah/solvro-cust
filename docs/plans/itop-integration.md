@@ -17,6 +17,8 @@ Branches: one per phase, off up-to-date `origin/develop`: `feat/itop-p1-tickets`
 | 7 | Ticket classes | **UserRequest + Incident only.** |
 | 8 | Write identity | **Per TAM**, personal token in Settings (spec default 6). |
 | 9 | Project tasks | **Stay in Solvro** (spec default 8). A task may pin one ticket ref and may create a ticket. |
+| 10 | Lifecycle rules (spec item 10) | **iTop defaults** (user, 2026-09-23): assign needs team + agent; pending needs nothing; resolve needs resolution code + solution; close and reopen need nothing. |
+| 11 | Token ownership | **Writes only under the acting user's own token** (user, 2026-09-23): a pasted personal token is accepted only when it resolves to the iTop person with the same email as the Solvro user; no fallback to the application token or another user's token, ever. |
 
 All 8 spec defaults accepted: read-only app token; 5-minute snapshot + Refresh; Work Logs → Utilization after Weekly Sync; tickets on the customer, not the project; 40 h/week capacity, one Admin number; per-TAM tokens; no optimistic writes, nothing queued; tasks never become tickets.
 

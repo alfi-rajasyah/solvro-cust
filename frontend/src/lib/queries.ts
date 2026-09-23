@@ -543,6 +543,13 @@ export const queryKeys = {
   // every scope/class bucket for that customer refreshes, not just the one
   // a caller happens to be viewing).
   itopStatus: ["itop", "status"] as const,
+  // Personal iTop token (Task 5.2, docs/archive/plans/itop-integration.md) —
+  // one row per viewer; no user id in the key since GET /itop/me/token is
+  // already scoped to the caller server-side.
+  myItopToken: ["itop", "me", "token"] as const,
+  // Single ticket + its public/private log (Task 5.4) — distinct subtree
+  // from `itopTicketByRef` below (keyed by id, not ref).
+  itopTicket: (id: number) => ["itop", "tickets", id] as const,
   // Task ticket ref lookup (Task 4.2) — one entry per ref rather than a
   // customer-scoped key: a task's pinned ref may belong to a customer the
   // viewer hasn't opened, and `GET /itop/tickets/by-ref/:ref` does its own
@@ -562,8 +569,9 @@ export const queryKeys = {
   // viewer's local day (user decision), so a DST transition or a traveling
   // viewer changing offsets must refetch rather than keep serving the
   // previous offset's bucketing.
+  itopDailyRoot: ["itop", "daily"] as const,
   itopDaily: (date: string, utcOffsetMinutes: number) =>
-    ["itop", "daily", date, utcOffsetMinutes] as const,
+    [...queryKeys.itopDailyRoot, date, utcOffsetMinutes] as const,
   // Utilization page (Task 3.3) — `scope` is part of the key so switching
   // Me/By TAM/By customer never serves another scope's cached rows. Keyed
   // by the viewer's UTC offset too, same rationale as `itopDaily` above.
@@ -2035,6 +2043,11 @@ export interface ItopStatus {
   // /admin/itop/settings for that). Non-admin callers only learn
   // "did the last sync fail", not why.
   refreshMinutes: number;
+  // Whether Admin has switched on the write path at all (Task 5.2) — gates
+  // whether TicketPanel.tsx shows any action affordance regardless of
+  // whether *this* viewer has a personal token (see `MyItopTokenStatus.set`
+  // for that half of the gate).
+  actionsEnabled: boolean;
 }
 
 export interface ItopTicketRow {
@@ -2086,6 +2099,57 @@ export function useItopStatus() {
     queryKey: queryKeys.itopStatus,
     queryFn: ({ signal }) => apiRequest<ItopStatus>("/itop/status", { signal }),
     staleTime: 60_000,
+  });
+}
+
+// ---- Personal iTop token (Task 5.2) ------------------------------------
+// Settings.tsx's "iTop" section: each TAM pastes their own personal token
+// (scope REST/JSON) so ticket actions (Task 5.3/5.4) are written under their
+// own name. Backend: PUT/GET/DELETE /itop/me/token, routes/itop.ts.
+// `configured` mirrors `ItopStatus.configured` (the app-wide connection) —
+// Settings.tsx gates the whole section on it, per the dispatch contract,
+// rather than a second `useItopStatus()` call.
+export interface MyItopTokenStatus {
+  set: boolean;
+  personName: string | null;
+  checkedAt: string | null;
+  expiresAt: string | null;
+  actionsEnabled: boolean;
+  configured: boolean;
+  // Present and true only when a token is stored but can no longer be
+  // decrypted (e.g. a `SECRETS_KEY` rotation) — Settings.tsx shows a
+  // "enter it again" prompt instead of a stale "Valid" status line.
+  unreadable?: boolean;
+}
+
+export function useMyItopToken() {
+  return useQuery({
+    queryKey: queryKeys.myItopToken,
+    queryFn: ({ signal }) => apiRequest<MyItopTokenStatus>("/itop/me/token", { signal }),
+    staleTime: 60_000,
+  });
+}
+
+export function useSaveMyItopToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { token: string }) =>
+      apiRequest<MyItopTokenStatus>("/itop/me/token", { method: "PUT", body: input }),
+    onSuccess: (fresh) => {
+      qc.setQueryData(queryKeys.myItopToken, fresh);
+      qc.invalidateQueries({ queryKey: queryKeys.itopStatus });
+    },
+  });
+}
+
+export function useRemoveMyItopToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiRequest<void>("/itop/me/token", { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.myItopToken });
+      qc.invalidateQueries({ queryKey: queryKeys.itopStatus });
+    },
   });
 }
 
@@ -2172,6 +2236,105 @@ export function useItopTicketByRef(ref: string | null) {
     enabled: !!ref,
     retry: false,
     staleTime: 60_000,
+  });
+}
+
+// ---- Ticket panel: detail, actions, log (Task 5.4) ---------------------
+// Backend: GET /itop/tickets/:id (row + publicLog/privateLog), POST
+// /itop/tickets/:id/actions (lifecycle stimuli), POST /itop/tickets/:id/log
+// (append a log entry) — all routes/itop.ts. No optimistic writes anywhere
+// here (plan decision — "no queued or optimistic writes"): both mutations
+// below have no `onMutate`; the panel only ever shows what iTop's own
+// `core/get` answer (returned by the action/log endpoint) says.
+export interface ItopTicketLogEntry {
+  date: string | null;
+  author: string | null;
+  message: string;
+}
+
+export interface ItopTicketDetail extends ItopTicketRow {
+  publicLog: ItopTicketLogEntry[];
+  privateLog: ItopTicketLogEntry[];
+}
+
+// Response shape for the two write endpoints only (GET /itop/tickets/:id
+// never sets this). iTop can accept a write and then have the immediate
+// follow-up `core/get` fail (a blip, a slow instance) — `staleAfterWrite:
+// true` means the write went through but the ticket fields on THIS response
+// are the PRE-write snapshot, not what iTop just applied. Callers must not
+// cache this row as current.
+export interface ItopTicketWriteResult extends ItopTicketDetail {
+  staleAfterWrite?: boolean;
+}
+
+export type ItopTicketActionName = "assign_to_me" | "pending" | "resolve" | "close" | "reopen";
+
+export interface ItopTicketActionInput {
+  action: ItopTicketActionName;
+  fields?: Record<string, string | number>;
+}
+
+// Shape of `ApiError.body.details.teams` on a 409 `itop_team_required`
+// refusal (assign_to_me when iTop demands a team alongside the agent) —
+// TicketPanel.tsx reads this off the caught error itself, not a query.
+export interface ItopTicketTeamOption {
+  id: number;
+  name: string;
+}
+
+export function useItopTicket(id: number | null) {
+  return useQuery({
+    queryKey: queryKeys.itopTicket(id ?? -1),
+    queryFn: ({ signal }) => apiRequest<ItopTicketDetail>(`/itop/tickets/${id}`, { signal }),
+    enabled: id !== null,
+    staleTime: 30_000,
+  });
+}
+
+// `onSuccess`'s cache write is deliberately conditional: a `staleAfterWrite`
+// response must never be cached as the current ticket (its fields are the
+// PRE-write snapshot) — invalidate instead so the next fetch (or manual
+// Refresh) picks up the real state once iTop's read succeeds. The caller
+// (TicketPanel.tsx) reads `staleAfterWrite` off its own per-call `onSuccess`
+// (React Query runs the hook's `onSuccess` first, then the mutate-call's) to
+// show the "refreshes on next sync" notice.
+export function useTicketAction(ticketId: number, customerId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ItopTicketActionInput) =>
+      apiRequest<ItopTicketWriteResult>(`/itop/tickets/${ticketId}/actions`, {
+        method: "POST",
+        body: input,
+      }),
+    onSuccess: (fresh) => {
+      if (fresh.staleAfterWrite) {
+        qc.invalidateQueries({ queryKey: queryKeys.itopTicket(ticketId) });
+      } else {
+        qc.setQueryData(queryKeys.itopTicket(ticketId), fresh);
+      }
+      qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(customerId) });
+      qc.invalidateQueries({ queryKey: queryKeys.itopDailyRoot });
+    },
+  });
+}
+
+export function useAddTicketLog(ticketId: number, customerId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { visibility: "public" | "private"; text: string }) =>
+      apiRequest<ItopTicketWriteResult>(`/itop/tickets/${ticketId}/log`, {
+        method: "POST",
+        body: input,
+      }),
+    onSuccess: (fresh) => {
+      if (fresh.staleAfterWrite) {
+        qc.invalidateQueries({ queryKey: queryKeys.itopTicket(ticketId) });
+      } else {
+        qc.setQueryData(queryKeys.itopTicket(ticketId), fresh);
+      }
+      qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(customerId) });
+      qc.invalidateQueries({ queryKey: queryKeys.itopDailyRoot });
+    },
   });
 }
 

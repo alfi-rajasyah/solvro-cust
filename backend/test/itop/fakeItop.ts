@@ -38,6 +38,27 @@ interface UserRecord {
   login: string;
 }
 
+/** A `lnkPersonToTeam` link row — Phase 5's `assign_to_me` resolves a person's team(s) through this class. */
+interface LnkPersonToTeamRecord {
+  id: number;
+  person_id: number;
+  team_id: number;
+  team_id_friendlyname: string;
+}
+
+/** Minimal `PersonalToken` row for the best-effort expiry read in `PUT /itop/me/token`. */
+interface PersonalTokenRecord {
+  id: number;
+  user_id: number;
+  expiration_date: string;
+}
+
+export interface FakeItopCaseLogEntry {
+  date: string;
+  user_login: string;
+  message: string;
+}
+
 export interface TicketRecord {
   id: number;
   class: ItopTicketClass;
@@ -59,6 +80,8 @@ export interface TicketRecord {
   sla_tto_passed: string;
   sla_ttr_passed: string;
   resolution_date: string;
+  public_log: { entries: FakeItopCaseLogEntry[] };
+  private_log: { entries: FakeItopCaseLogEntry[] };
 }
 
 interface TimeSpentRecord {
@@ -79,8 +102,20 @@ export interface FakeItopState {
   users: Map<number, UserRecord>;
   tickets: Map<number, TicketRecord>;
   timeSpent: Map<number, TimeSpentRecord>;
+  lnkPersonToTeam: Map<number, LnkPersonToTeamRecord>;
+  personalTokens: Map<number, PersonalTokenRecord>;
   /** Classes `core/get` refuses, to simulate a missing extension (e.g. Time Tracking). */
   disabledClasses: Set<string>;
+  /** Every write attempt (core/create|update|apply_stimulus), in order — asserts a route never writes with the application token. Recorded regardless of outcome (including a refusal), keyed by the raw Auth-Token header value. */
+  writeLog: Array<{ token: string; operation: string }>;
+  /**
+   * One-shot trap: the NEXT `core/get` made with exactly this token fails
+   * with `message`, then clears itself. Lets a test simulate "the read-only
+   * re-read after an already-successful write failed" (e.g. the app token
+   * becoming briefly unreachable) without reaching into the app's config
+   * mid-request — set this right before triggering the write.
+   */
+  failNextGetForToken: { token: string; message: string } | null;
   nextId: number;
 }
 
@@ -92,12 +127,40 @@ export function createEmptyState(): FakeItopState {
     users: new Map(),
     tickets: new Map(),
     timeSpent: new Map(),
+    lnkPersonToTeam: new Map(),
+    personalTokens: new Map(),
     disabledClasses: new Set(),
+    failNextGetForToken: null,
+    writeLog: [],
     nextId: 1,
   };
 }
 
-const SUPPORTED_CLASSES = ["Organization", "UserRequest", "Incident", "Person", "User", "TimeSpent"];
+/**
+ * Test-double credentials for the fake iTop. They are deliberately built from
+ * plain words (no entropy) and never accepted by anything but this in-memory
+ * fake, so secret scanners do not mistake them for real credentials. The app
+ * token is read-only; the three personal tokens map to seeded persons.
+ */
+const fakeItopToken = (who: string) => `fake-itop-token-for-${who}-not-a-secret`;
+export const FAKE_ITOP_TOKENS = {
+  app: "app-token-readonly",
+  rina: fakeItopToken("rina"),
+  dedi: fakeItopToken("dedi"),
+  imposter: fakeItopToken("imposter"),
+} as const;
+
+const SUPPORTED_CLASSES = [
+  "Organization",
+  "UserRequest",
+  "Incident",
+  "Person",
+  "User",
+  "TimeSpent",
+  "lnkPersonToTeam",
+  "PersonalToken",
+];
+const WRITE_OPERATIONS = new Set(["core/create", "core/update", "core/apply_stimulus"]);
 
 // ---------------------------------------------------------------------------
 // Seed data
@@ -128,9 +191,17 @@ function daysAgo(days: number, hours = 9): string {
 export function seedFakeItop(): FakeItopState {
   const state = createEmptyState();
 
-  state.tokens.set("app-token-readonly", { valid: true, canWrite: false });
-  state.tokens.set("tam-token-rina", { valid: true, canWrite: true, personId: 1 });
-  state.tokens.set("tam-token-dedi", { valid: true, canWrite: true, personId: 2 });
+  state.tokens.set(FAKE_ITOP_TOKENS.app, { valid: true, canWrite: false });
+  state.tokens.set(FAKE_ITOP_TOKENS.rina, { valid: true, canWrite: true, personId: 1 });
+  state.tokens.set(FAKE_ITOP_TOKENS.dedi, { valid: true, canWrite: true, personId: 2 });
+  // A SECOND token that also nominally belongs to person 2 (Dedi) — used by
+  // test/itop/itopToken.test.ts to prove that being able to read a Person
+  // by email (which ignores which token asked) isn't enough to save a
+  // token: the PersonalToken ownership check below only lets a token see
+  // ITS OWN user's PersonalToken row, so pasting this token for a Solvro
+  // account whose email resolves to a DIFFERENT person (Rina) still gets
+  // refused.
+  state.tokens.set(FAKE_ITOP_TOKENS.imposter, { valid: true, canWrite: true, personId: 2 });
 
   state.organizations.set(1, { id: 1, name: "Northwind Freight Sdn Bhd" });
   state.organizations.set(2, { id: 2, name: "PT Sinar Logistik" });
@@ -144,6 +215,19 @@ export function seedFakeItop(): FakeItopState {
   state.users.set(1, { id: 1, contactid: 1, contactid_friendlyname: "Rina S.", login: "rina.s" });
   state.users.set(2, { id: 2, contactid: 2, contactid_friendlyname: "Dedi P.", login: "dedi.p" });
   state.users.set(3, { id: 3, contactid: 3, contactid_friendlyname: "Budi H.", login: "budi.h" });
+
+  // Rina belongs to exactly one team (assign_to_me resolves it automatically);
+  // Dedi belongs to two (exercises the 409 itop_team_required "pick one" path).
+  state.lnkPersonToTeam.set(1, { id: 1, person_id: 1, team_id: 10, team_id_friendlyname: "TAM Team" });
+  state.lnkPersonToTeam.set(2, { id: 2, person_id: 2, team_id: 10, team_id_friendlyname: "TAM Team" });
+  state.lnkPersonToTeam.set(3, { id: 3, person_id: 2, team_id: 11, team_id_friendlyname: "Escalation Team" });
+
+  // Minimal PersonalToken rows, one per real personal-token holder — each
+  // token can only see ITS OWN user's row here (see the ownership filter in
+  // `collectionFor`'s "PersonalToken" case below), mirroring real iTop's
+  // per-user scoping of this class.
+  state.personalTokens.set(1, { id: 1, user_id: 1, expiration_date: daysAgo(-90) });
+  state.personalTokens.set(2, { id: 2, user_id: 2, expiration_date: daysAgo(-60) });
 
   const ticketSeeds: Array<Omit<TicketRecord, "id">> = [
     mkTicket({ class: "Incident", ref: "R-004512", title: "Branch 5 VPN tunnel flapping", status: "assigned", agentId: 1, orgId: 1, ageDays: 2, ttrPassed: true }),
@@ -235,6 +319,8 @@ function mkTicket(opts: {
     sla_tto_passed: "0",
     sla_ttr_passed: opts.ttrPassed ? "1" : "0",
     resolution_date: opts.status === "resolved" || opts.status === "closed" ? daysAgo(Math.max(opts.ageDays - 1, 0)) : "",
+    public_log: { entries: [] },
+    private_log: { entries: [] },
   };
 }
 
@@ -286,10 +372,10 @@ function parseOql(oql: string): { className: string; conditions: OqlCondition[] 
   return { className, conditions };
 }
 
-function matchesConditions(fields: Record<string, string>, conditions: OqlCondition[]): boolean {
+function matchesConditions(fields: Record<string, unknown>, conditions: OqlCondition[]): boolean {
   return conditions.every((cond) => {
     const actual = fields[cond.field];
-    if (actual === undefined) return false;
+    if (typeof actual !== "string") return false;
     if (cond.op === "IN") return cond.value.includes(actual);
     if (cond.op === "=") return actual === cond.value;
     if (cond.op === ">") return actual > cond.value;
@@ -300,25 +386,25 @@ function matchesConditions(fields: Record<string, string>, conditions: OqlCondit
 // ---------------------------------------------------------------------------
 // Field projection
 
-function filterFields(fields: Record<string, string>, outputFields: string): Record<string, string> {
+function filterFields(fields: Record<string, unknown>, outputFields: string): Record<string, unknown> {
   const wanted = outputFields
     .split(",")
     .map((f) => f.trim())
     .filter(Boolean);
   if (wanted.length === 0 || wanted.includes("*")) return { ...fields };
-  const result: Record<string, string> = {};
+  const result: Record<string, unknown> = {};
   for (const key of wanted) {
     if (key in fields) result[key] = fields[key];
   }
   return result;
 }
 
-function ticketFields(ticket: TicketRecord): Record<string, string> {
+function ticketFields(ticket: TicketRecord): Record<string, unknown> {
   const { id: _id, class: _class, ...rest } = ticket;
   return { id: String(ticket.id), ...rest };
 }
 
-function timeSpentFields(entry: TimeSpentRecord): Record<string, string> {
+function timeSpentFields(entry: TimeSpentRecord): Record<string, unknown> {
   return {
     id: String(entry.id),
     user_id: entry.user_id,
@@ -331,15 +417,15 @@ function timeSpentFields(entry: TimeSpentRecord): Record<string, string> {
   };
 }
 
-function organizationFields(org: OrganizationRecord): Record<string, string> {
+function organizationFields(org: OrganizationRecord): Record<string, unknown> {
   return { id: String(org.id), name: org.name };
 }
 
-function personFields(person: PersonRecord): Record<string, string> {
+function personFields(person: PersonRecord): Record<string, unknown> {
   return { id: String(person.id), email: person.email, friendlyname: person.friendlyname };
 }
 
-function userFields(user: UserRecord): Record<string, string> {
+function userFields(user: UserRecord): Record<string, unknown> {
   return {
     id: String(user.id),
     contactid: String(user.contactid),
@@ -348,7 +434,31 @@ function userFields(user: UserRecord): Record<string, string> {
   };
 }
 
-function collectionFor(state: FakeItopState, className: string): Array<{ id: number; fields: Record<string, string> }> {
+function lnkPersonToTeamFields(link: LnkPersonToTeamRecord): Record<string, unknown> {
+  return {
+    id: String(link.id),
+    person_id: String(link.person_id),
+    team_id: String(link.team_id),
+    team_id_friendlyname: link.team_id_friendlyname,
+  };
+}
+
+function personalTokenFields(pt: PersonalTokenRecord): Record<string, unknown> {
+  return { id: String(pt.id), user_id: String(pt.user_id), expiration_date: pt.expiration_date };
+}
+
+/** The iTop `User.id` a token's own identity resolves to (via its `personId`'s `contactid` link), or `null` when it has none (e.g. the application token). */
+function tokenOwnUserId(state: FakeItopState, requestingToken: FakeItopToken): number | null {
+  if (requestingToken.personId === undefined) return null;
+  const user = [...state.users.values()].find((u) => u.contactid === requestingToken.personId);
+  return user ? user.id : null;
+}
+
+function collectionFor(
+  state: FakeItopState,
+  className: string,
+  requestingToken: FakeItopToken,
+): Array<{ id: number; fields: Record<string, unknown> }> {
   switch (className) {
     case "Organization":
       return [...state.organizations.values()].map((o) => ({ id: o.id, fields: organizationFields(o) }));
@@ -363,6 +473,20 @@ function collectionFor(state: FakeItopState, className: string): Array<{ id: num
         .map((t) => ({ id: t.id, fields: ticketFields(t) }));
     case "TimeSpent":
       return [...state.timeSpent.values()].map((e) => ({ id: e.id, fields: timeSpentFields(e) }));
+    case "lnkPersonToTeam":
+      return [...state.lnkPersonToTeam.values()].map((l) => ({ id: l.id, fields: lnkPersonToTeamFields(l) }));
+    case "PersonalToken": {
+      // Real iTop scopes a PersonalToken read to the querying token's OWN
+      // user — a token can see its own row, never another user's. This is
+      // what lets routes/itopUser.ts's ownership corroboration work: a
+      // token that can read Person-by-email (which ignores identity) but
+      // whose OWN PersonalToken scope excludes the resolved user's row
+      // gets back zero rows, not someone else's token.
+      const ownUserId = tokenOwnUserId(state, requestingToken);
+      return [...state.personalTokens.values()]
+        .filter((p) => ownUserId !== null && p.user_id === ownUserId)
+        .map((p) => ({ id: p.id, fields: personalTokenFields(p) }));
+    }
     default:
       return [];
   }
@@ -378,6 +502,18 @@ const TICKET_STIMULI: Record<string, { from: string[]; to: string; required?: st
   ev_close: { from: ["resolved"], to: "closed" },
   ev_reopen: { from: ["resolved"], to: "assigned" },
 };
+
+/** Appends one case-log entry, authored by the writing token's person — mirrors iTop's own append (never replace) semantics for `public_log`/`private_log`. */
+function appendCaseLogEntry(
+  state: FakeItopState,
+  ticket: TicketRecord,
+  field: "public_log" | "private_log",
+  token: FakeItopToken,
+  message: string,
+): void {
+  const author = token.personId !== undefined ? (state.persons.get(token.personId)?.friendlyname ?? "") : "";
+  ticket[field].entries.push({ date: formatDate(new Date()), user_login: author, message });
+}
 
 function applyTicketStimulus(
   state: FakeItopState,
@@ -450,6 +586,13 @@ export function createFakeItop(seed: FakeItopState = createEmptyState()): FakeIt
 
     const operation = payload.operation;
 
+    if (typeof operation === "string" && WRITE_OPERATIONS.has(operation)) {
+      // Recorded unconditionally — including a refusal further down — so a
+      // test asserting "the application token is never used for a write"
+      // can check this regardless of whether the write itself succeeded.
+      state.writeLog.push({ token: authToken ?? "", operation });
+    }
+
     if (operation === "list_operations") {
       sendEnvelope(res, {
         code: 0,
@@ -466,6 +609,13 @@ export function createFakeItop(seed: FakeItopState = createEmptyState()): FakeIt
     }
 
     if (operation === "core/get") {
+      if (state.failNextGetForToken && authToken === state.failNextGetForToken.token) {
+        const { message } = state.failNextGetForToken;
+        state.failNextGetForToken = null;
+        sendEnvelope(res, { code: 100, message });
+        return;
+      }
+
       const className = String(payload.class);
       const outputFields = String(payload.output_fields ?? "*");
       const key = payload.key;
@@ -475,8 +625,8 @@ export function createFakeItop(seed: FakeItopState = createEmptyState()): FakeIt
         return;
       }
 
-      const collection = collectionFor(state, className);
-      let matched: Array<{ id: number; fields: Record<string, string> }>;
+      const collection = collectionFor(state, className, token);
+      let matched: Array<{ id: number; fields: Record<string, unknown> }>;
       if (typeof key === "number" || (typeof key === "string" && /^\d+$/.test(key))) {
         const id = Number(key);
         matched = collection.filter((entry) => entry.id === id);
@@ -558,7 +708,17 @@ export function createFakeItop(seed: FakeItopState = createEmptyState()): FakeIt
           sendEnvelope(res, { code: 100, message: `Object not found: ${className}::${id}` });
           return;
         }
-        Object.assign(ticket, fields);
+        // public_log/private_log are case logs: iTop APPENDS a new entry
+        // (stamped with the writing token's person and now), it never
+        // replaces the whole log — every other field is a plain overwrite.
+        const { public_log: publicLogText, private_log: privateLogText, ...rest } = fields;
+        Object.assign(ticket, rest);
+        if (typeof publicLogText === "string" && publicLogText.length > 0) {
+          appendCaseLogEntry(state, ticket, "public_log", token, publicLogText);
+        }
+        if (typeof privateLogText === "string" && privateLogText.length > 0) {
+          appendCaseLogEntry(state, ticket, "private_log", token, privateLogText);
+        }
         ticket.last_update = formatDate(new Date());
         sendEnvelope(res, {
           code: 0,
@@ -600,6 +760,8 @@ export function createFakeItop(seed: FakeItopState = createEmptyState()): FakeIt
           sla_tto_passed: "0",
           sla_ttr_passed: "0",
           resolution_date: "",
+          public_log: { entries: [] },
+          private_log: { entries: [] },
         };
         state.tickets.set(id, ticket);
         sendEnvelope(res, {

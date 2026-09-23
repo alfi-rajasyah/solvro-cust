@@ -15,6 +15,7 @@ import { DataGridColumnHeader } from "@/components/reui/data-grid/data-grid-colu
 import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll-area";
 import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
 import { EmptyState } from "@/components/EmptyState";
+import { TicketPanel } from "@/components/itop/TicketPanel";
 import { TicketsTab } from "@/components/itop/TicketsTab";
 import { ServiceMappingList } from "@/components/services/ServiceMappingList";
 import { Chip, ProjectStatusChip } from "@/components/StatusChip";
@@ -114,6 +115,43 @@ export function CustomerDetail() {
       searchParams.set("tab", next);
     }
     setSearchParams(searchParams, { replace: true });
+  }
+
+  // Ticket panel is deep-linked via `?ticket=<id>` alongside `?tab=` (Task
+  // 5.4, docs/archive/plans/itop-integration.md) — same functional-updater
+  // pattern ProjectDetail.tsx uses for its own `?task=<id>` TaskPanel, which
+  // avoids the shared-URLSearchParams-object race TicketsTab.tsx's own file
+  // header warns about for its local scope/class state (that race is about
+  // two components mutating the same object; the functional updater form
+  // sidesteps it by always working off the latest params, not a captured one).
+  // `replace: true` (fix round, phase review) matches ProjectDetail.tsx's own
+  // `?task=` handling — opening/closing/re-targeting the panel is browsing
+  // within the same tab, not a distinct navigation the Back button should
+  // have to unwind one entry at a time.
+  const ticketParam = searchParams.get("ticket");
+  const parsedTicketId = ticketParam ? Number(ticketParam) : NaN;
+  const openTicketId = Number.isInteger(parsedTicketId) && parsedTicketId > 0 ? parsedTicketId : null;
+
+  function openTicketPanel(id: number) {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("ticket", String(id));
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
+  function closeTicketPanel() {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("ticket");
+        return next;
+      },
+      { replace: true },
+    );
   }
 
   if (isLoading) {
@@ -272,7 +310,9 @@ export function CustomerDetail() {
         {tab === "services" && (
           <ServicesTab customer={customer} canMutate={canMutate} />
         )}
-        {tab === "tickets" && ticketsAvailable && <TicketsTab customerId={customer.id} />}
+        {tab === "tickets" && ticketsAvailable && (
+          <TicketsTab customerId={customer.id} onOpenTicket={openTicketPanel} />
+        )}
         {tab === "topology" && (
           <EmptyState
             icon="hub"
@@ -301,6 +341,14 @@ export function CustomerDetail() {
         onClose={() => setEditOpen(false)}
         customer={customer}
       />
+
+      {tab === "tickets" && ticketsAvailable && openTicketId !== null && (
+        <TicketPanel
+          customerId={customer.id}
+          ticketId={openTicketId}
+          onClose={closeTicketPanel}
+        />
+      )}
     </div>
   );
 }
