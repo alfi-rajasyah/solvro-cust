@@ -7,8 +7,10 @@
 // rather than splitting into separate component files.
 import { useEffect, useState } from "react";
 import { ApiError } from "@/lib/api";
+import { copyText } from "@/lib/clipboard";
 import {
   useAutomatchItopCustomers,
+  useGenerateItopWebhookSecret,
   useItopCustomers,
   useItopOrganizations,
   useItopPersons,
@@ -16,12 +18,14 @@ import {
   useItopSyncNow,
   useMapItopCustomer,
   useMatchItopPersons,
+  useRemoveItopWebhookSecret,
   useTestItopConnection,
   useUpdateItopSettings,
   type ItopCustomerMatch,
   type ItopCustomerRow,
   type ItopProbeResult,
   type ItopReadClass,
+  type ItopWebhookSecretResult,
 } from "@/lib/queries";
 import {
   buildItopSettingsPatch,
@@ -31,6 +35,9 @@ import {
   type ItopSettingsFormState,
 } from "./itopSettingsDiff";
 import { Chip } from "@/components/StatusChip";
+
+const OUTLINE_BUTTON_CLASS =
+  "rounded-sm border border-outline-variant px-3 py-1 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface-variant hover:bg-surface-container disabled:opacity-50";
 
 const READ_CLASS_LABEL: Record<ItopReadClass, string> = {
   UserRequest: "User requests",
@@ -72,6 +79,7 @@ export function ItopTab() {
   return (
     <div className="space-y-4">
       <ConnectionCard />
+      <WebhookCard />
       <CustomersCard />
       <PersonsCard />
     </div>
@@ -414,6 +422,214 @@ function ProbeList({ probes }: { probes: ItopProbeResult[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+// ---- Webhook card (Task 4.1) -------------------------------------------
+// Optional sync nudge: iTop POSTs to /webhook/itop with a shared secret on
+// "ticket update", collapsing the worst-case staleness from a full
+// `refreshMinutes` interval down to however long the nudge + resync takes.
+// The secret itself is returned exactly once, by POST — this component is
+// the only place in the app that ever holds the plaintext value, and only
+// for the current mount (kept in local state, never cached by TanStack
+// Query, never persisted). `webhookSecretSet` on ItopSettings is the only
+// trace that survives a remount or reload.
+function WebhookCard() {
+  const { data: settings } = useItopSettings();
+  const generateSecret = useGenerateItopWebhookSecret();
+  const removeSecret = useRemoveItopWebhookSecret();
+
+  const [revealed, setRevealed] = useState<ItopWebhookSecretResult | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
+
+  if (!settings) return null;
+
+  async function handleGenerate() {
+    setGenError(null);
+    try {
+      const result = await generateSecret.mutateAsync();
+      setRevealed(result);
+      setConfirmingRemove(false);
+    } catch (err) {
+      setGenError(errorMessage(err, "Could not generate a webhook secret."));
+    }
+  }
+
+  async function handleRemove() {
+    setRemoveError(null);
+    try {
+      await removeSecret.mutateAsync();
+      setRevealed(null);
+      setConfirmingRemove(false);
+    } catch (err) {
+      setRemoveError(errorMessage(err, "Could not remove the webhook secret."));
+    }
+  }
+
+  async function handleCopy(label: string, value: string) {
+    try {
+      await copyText(value);
+      setCopiedLabel(label);
+      setTimeout(() => setCopiedLabel((c) => (c === label ? null : c)), 1500);
+    } catch {
+      // Best-effort only — this app has no toast system to surface a
+      // clipboard-permission failure through, and the value stays on screen
+      // (selectable/readable) either way.
+    }
+  }
+
+  // URL/header are static per install (the path and header name never vary
+  // — only the secret itself is generated) and worth showing as soon as a
+  // secret exists at all, not just in the fresh one-time reveal. `revealed`
+  // (right after Generate/Rotate, before the DB round-trip that flips
+  // `webhookSecretSet` has settled) still counts as "exists" here too.
+  const showWebhookDetails = settings.webhookSecretSet || revealed !== null;
+  const webhookUrl = `${window.location.origin}${revealed?.path ?? "/api/webhook/itop"}`;
+  const webhookHeader = revealed?.header ?? "X-Solvro-Webhook-Secret";
+
+  return (
+    <section className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
+      <h2 className="font-display text-sm font-semibold text-on-surface">Webhook (optional)</h2>
+      <p className="mt-1 text-[13px] text-on-surface-variant">
+        Without it, tickets are at most {settings.refreshMinutes} minutes stale; with it, seconds.
+      </p>
+
+      {showWebhookDetails && (
+        <div className="mt-3 space-y-3 rounded-sm border border-outline-variant bg-surface p-3">
+          <CopyRow label="URL" value={webhookUrl} copiedLabel={copiedLabel} onCopy={handleCopy} />
+          <CopyRow
+            label="Header"
+            value={webhookHeader}
+            copiedLabel={copiedLabel}
+            onCopy={handleCopy}
+          />
+          {revealed && (
+            <>
+              <CopyRow
+                label="Secret"
+                value={revealed.secret}
+                copiedLabel={copiedLabel}
+                onCopy={handleCopy}
+              />
+              <p className="text-[12px] text-on-surface-variant">
+                Shown once. In iTop, add a Webhook integration with trigger "on ticket update"
+                that POSTs to this URL with this header.
+              </p>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setRevealed(null)}
+                  className={OUTLINE_BUTTON_CLASS}
+                >
+                  Done
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {settings.webhookSecretSet ? (
+          <>
+            <Chip tone="emerald">Configured</Chip>
+            <button
+              type="button"
+              onClick={() => void handleGenerate()}
+              disabled={generateSecret.isPending}
+              className={OUTLINE_BUTTON_CLASS}
+            >
+              {generateSecret.isPending ? "Rotating…" : "Rotate"}
+            </button>
+            {confirmingRemove ? (
+              <span className="flex items-center gap-2 text-[12px] text-on-surface-variant">
+                Remove the webhook secret?
+                <button
+                  type="button"
+                  onClick={() => void handleRemove()}
+                  disabled={removeSecret.isPending}
+                  className="font-display text-[12px] font-bold text-error underline disabled:opacity-50"
+                >
+                  {removeSecret.isPending ? "Removing…" : "Confirm"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingRemove(false)}
+                  className="font-display text-[12px] font-bold text-on-surface-variant underline"
+                >
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmingRemove(true)}
+                className={OUTLINE_BUTTON_CLASS}
+              >
+                Remove
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <Chip tone="gray">Not configured</Chip>
+            <button
+              type="button"
+              onClick={() => void handleGenerate()}
+              disabled={generateSecret.isPending}
+              className={OUTLINE_BUTTON_CLASS}
+            >
+              {generateSecret.isPending ? "Generating…" : "Generate secret"}
+            </button>
+          </>
+        )}
+      </div>
+
+      {genError && <p className="mt-2 text-sm text-error">{genError}</p>}
+      {removeError && <p className="mt-2 text-sm text-error">{removeError}</p>}
+    </section>
+  );
+}
+
+function CopyRow({
+  label,
+  value,
+  copiedLabel,
+  onCopy,
+}: {
+  label: string;
+  value: string;
+  copiedLabel: string | null;
+  onCopy: (label: string, value: string) => void;
+}) {
+  return (
+    <div>
+      <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+        {label}
+      </span>
+      <div className="flex items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 font-mono text-[12px] text-on-surface">
+          {value}
+        </code>
+        <button
+          type="button"
+          onClick={() => void onCopy(label, value)}
+          title="Copy to clipboard"
+          className="shrink-0 text-on-surface-variant hover:text-on-surface"
+        >
+          <span aria-hidden="true" className="material-symbols-outlined text-[14px]">
+            content_copy
+          </span>
+          <span className="sr-only">Copy {label.toLowerCase()}</span>
+        </button>
+      </div>
+      {copiedLabel === label && (
+        <p className="mt-0.5 text-[11px] text-chip-emerald-text">Copied</p>
+      )}
+    </div>
   );
 }
 
