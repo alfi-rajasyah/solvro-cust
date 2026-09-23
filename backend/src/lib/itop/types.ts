@@ -88,6 +88,17 @@ export const ITOP_TIME_SPENT_TICKET_REF_FIELD = "ticket_ref" as const;
 export const ITOP_TIME_SPENT_OUTPUT_FIELDS =
   `user_id,org_id,start_date,end_date,duration,title,${ITOP_TIME_SPENT_TICKET_REF_FIELD}`;
 
+/**
+ * Whether `TimeSpent.duration` is expressed in seconds (iTop core's own
+ * default unit for a duration attribute) rather than minutes. Task 3.1
+ * (`lib/itop/sync.ts`'s `syncTimeEntries`) assumes seconds and divides by 60
+ * when converting to `ItopTimeEntry.durationMinutes`. If the real install's
+ * Time Tracking extension reports `duration` in minutes instead, flip this
+ * one constant — `probe()`'s `TimeSpent` field dump (see client.ts) is the
+ * place to check before Phase 3 goes live against production iTop.
+ */
+export const ITOP_TIME_SPENT_DURATION_IN_SECONDS = true;
+
 export interface ItopTimeSpentFields {
   user_id: string;
   org_id: string;

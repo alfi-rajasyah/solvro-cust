@@ -9,7 +9,7 @@ import type { Server } from "node:http";
 import { prisma } from "../../src/prisma.js";
 import { seal } from "../../src/lib/secretBox.js";
 import { bustItopConfigCache } from "../../src/lib/itop/config.js";
-import { parseItopDate, syncTickets, syncUsers } from "../../src/lib/itop/sync.js";
+import { parseItopDate, syncTickets, syncTimeEntries, syncUsers } from "../../src/lib/itop/sync.js";
 import { seedRoles, createUserWithRole } from "../testAuth.js";
 import { createFakeItop, seedFakeItop, type FakeItopState, type TicketRecord } from "./fakeItop.js";
 
@@ -130,6 +130,9 @@ const ITOP_FIXTURE_EMAILS = [
 // Run BEFORE every test (not just after) so this file's very first test
 // starts clean regardless of what ran before it.
 async function resetItopTestState(): Promise<void> {
+  // itop_time_entries is exclusively this integration's table too (Task
+  // 3.1), same reasoning as itopTicket below — a full wipe is safe.
+  await prisma.itopTimeEntry.deleteMany();
   await prisma.itopTicket.deleteMany();
   await prisma.customer.deleteMany({ where: { itopOrgId: { not: null } } });
   await prisma.user.deleteMany({ where: { email: { in: ITOP_FIXTURE_EMAILS } } });
@@ -414,6 +417,221 @@ describe("syncUsers", () => {
     const row = await prisma.user.findUniqueOrThrow({ where: { id: user.userId } });
     expect(row.itopPersonId).toBe(999);
     expect(row.itopUserId).toBe(999);
+  });
+
+  it("clears itopUserId (not just itopPersonId) once a previously-matched user's Person disappears from iTop", async () => {
+    const state = seedFakeItop();
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, "app-token-readonly");
+
+    const user = await createUserWithRole("TAM");
+    await prisma.user.update({ where: { id: user.userId }, data: { email: "rina.s@example.co.id" } });
+
+    await syncUsers();
+    const mapped = await prisma.user.findUniqueOrThrow({ where: { id: user.userId } });
+    expect(mapped.itopPersonId).toBe(1);
+    expect(mapped.itopUserId).toBe(1);
+
+    // The Person this user matched is gone from iTop — the lookup still
+    // succeeds (unlike the "lookup itself fails" test above), it just no
+    // longer returns this email. Regression: this used to leave the stale
+    // itopUserId untouched because the second pass only revisits users who
+    // still matched a Person this run.
+    state.persons.delete(1);
+
+    await syncUsers();
+
+    const row = await prisma.user.findUniqueOrThrow({ where: { id: user.userId } });
+    expect(row.itopPersonId).toBeNull();
+    expect(row.itopUserId).toBeNull();
+  });
+});
+
+describe("syncTimeEntries", () => {
+  it("first pull sets userId/customerId/ticketId when mapped, and null for an org-less entry", async () => {
+    const state = seedFakeItop();
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, "app-token-readonly");
+
+    const customer1 = await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
+    await createMappedCustomer(2, "PT Sinar Logistik");
+
+    const userA = await createUserWithRole("TAM");
+    await prisma.user.update({ where: { id: userA.userId }, data: { email: "rina.s@example.co.id" } });
+    await syncUsers();
+    const mapped = await prisma.user.findUniqueOrThrow({ where: { id: userA.userId } });
+    expect(mapped.itopUserId).toBe(1);
+
+    // A snapshot ticket for the ref some of Rina's TimeSpent rows point at,
+    // so the ref -> ItopTicket lookup has something to find — independent
+    // of running a full ticket sync in this test.
+    const ticket = await prisma.itopTicket.create({
+      data: {
+        id: 900001,
+        class: "Incident",
+        ref: "R-004512",
+        title: "Branch 5 VPN tunnel flapping",
+        status: "assigned",
+        orgId: 1,
+        customerId: customer1,
+        lastUpdate: new Date(),
+        syncedAt: new Date(),
+      },
+    });
+
+    const summary = await syncTimeEntries({ full: true });
+    expect(summary.ran).toBe(true);
+    expect(summary.error).toBeUndefined();
+    // Rina (itopUserId 1) has 7 seeded rows within the 8-week pull window;
+    // Dedi and Budi are not mapped to any active Solvro user in this test.
+    expect(summary.upserted).toBe(7);
+
+    const rows = await prisma.itopTimeEntry.findMany({ where: { itopUserId: 1 } });
+    expect(rows).toHaveLength(7);
+    expect(rows.every((r) => r.userId === userA.userId)).toBe(true);
+
+    const withOrg = rows.filter((r) => r.orgId === 1);
+    expect(withOrg.length).toBeGreaterThan(0);
+    expect(withOrg.every((r) => r.customerId === customer1)).toBe(true);
+
+    // The seeded org_id: 0 row ("no organization" in iTop) must land with
+    // both orgId and customerId null — the Utilization "No customer" row.
+    const orgless = rows.filter((r) => r.orgId === null);
+    expect(orgless.length).toBeGreaterThan(0);
+    expect(orgless.every((r) => r.customerId === null)).toBe(true);
+    expect(orgless.every((r) => r.ticketId === null)).toBe(true);
+
+    const withTicket = rows.find((r) => r.ticketRef === "R-004512");
+    expect(withTicket?.ticketId).toBe(ticket.id);
+
+    // Dedi and Budi are not mapped — their TimeSpent rows never land.
+    const unmapped = await prisma.itopTimeEntry.findMany({ where: { itopUserId: { in: [2, 3] } } });
+    expect(unmapped).toHaveLength(0);
+  });
+
+  it("converts iTop's TimeSpent.duration from seconds to whole minutes", async () => {
+    const state = seedFakeItop();
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, "app-token-readonly");
+
+    const userA = await createUserWithRole("TAM");
+    await prisma.user.update({ where: { id: userA.userId }, data: { email: "rina.s@example.co.id" } });
+    await syncUsers();
+
+    await syncTimeEntries({ full: true });
+
+    // The fixture's two Rina/R-004512 rows are seeded as 5400s and 3000s
+    // (90 and 50 minutes) — asserting the stored values are minutes, not
+    // the raw seconds iTop returns, is what actually exercises the
+    // conversion (a no-op conversion would leave 5400/3000 here instead).
+    const rows = await prisma.itopTimeEntry.findMany({
+      where: { itopUserId: 1, ticketRef: "R-004512" },
+      orderBy: { durationMinutes: "asc" },
+    });
+    expect(rows.map((r) => r.durationMinutes)).toEqual([50, 90]);
+  });
+
+  it("a full sync drops an entry iTop no longer returns, within the pull window", async () => {
+    const state = seedFakeItop();
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, "app-token-readonly");
+
+    const userA = await createUserWithRole("TAM");
+    await prisma.user.update({ where: { id: userA.userId }, data: { email: "rina.s@example.co.id" } });
+    await syncUsers();
+
+    await syncTimeEntries({ full: true });
+    const before = await prisma.itopTimeEntry.count({ where: { itopUserId: 1 } });
+    expect(before).toBeGreaterThan(0);
+
+    // The Rina/R-004512/90-minute row, identified by its otherwise-unique
+    // duration among this fixture's seeds.
+    const [deletedId] = [...state.timeSpent.entries()].find(([, e]) => e.duration === String(90 * 60))!;
+    state.timeSpent.delete(deletedId);
+
+    const summary = await syncTimeEntries({ full: true });
+    expect(summary.ran).toBe(true);
+    expect(summary.error).toBeUndefined();
+    expect(summary.removed).toBeGreaterThanOrEqual(1);
+
+    const after = await prisma.itopTimeEntry.count({ where: { itopUserId: 1 } });
+    expect(after).toBe(before - 1);
+  });
+
+  it("dropping a user's iTop mapping removes their in-window entries on the next full sync, but never touches history older than the pull window", async () => {
+    const state = seedFakeItop();
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, "app-token-readonly");
+
+    const userB = await createUserWithRole("TAM");
+    await prisma.user.update({ where: { id: userB.userId }, data: { email: "dedi.p@example.co.id" } });
+    await syncUsers();
+    const mapped = await prisma.user.findUniqueOrThrow({ where: { id: userB.userId } });
+    expect(mapped.itopUserId).toBe(2);
+
+    await syncTimeEntries({ full: true });
+    const before = await prisma.itopTimeEntry.count({ where: { itopUserId: 2 } });
+    expect(before).toBeGreaterThan(0);
+
+    // A leftover row from further back than the 8-week pull window — never
+    // re-fetchable, so an unmap (or any other full-sync cleanup) must leave
+    // it alone rather than deleting history that can't be restored.
+    const outOfWindowStart = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000);
+    await prisma.itopTimeEntry.create({
+      data: {
+        id: 999999,
+        itopUserId: 2,
+        userId: userB.userId,
+        startDate: outOfWindowStart,
+        durationMinutes: 42,
+        syncedAt: outOfWindowStart,
+      },
+    });
+
+    // Simulates the mapping being dropped directly, independent of
+    // syncUsers (whose own email-mismatch -> itopUserId transition is
+    // exercised separately in the "syncUsers" describe block above) — this
+    // test is only about syncTimeEntries's own cleanup once itopUserId is
+    // no longer mapped.
+    await prisma.user.update({ where: { id: userB.userId }, data: { itopUserId: null } });
+
+    const summary = await syncTimeEntries({ full: true });
+    expect(summary.removed).toBeGreaterThanOrEqual(before);
+
+    const after = await prisma.itopTimeEntry.findMany({ where: { itopUserId: 2 } });
+    expect(after).toHaveLength(1);
+    expect(after[0]?.id).toBe(999999);
+  });
+
+  it("is a no-op when iTop is not configured", async () => {
+    const summary = await syncTimeEntries({ full: true });
+    expect(summary.ran).toBe(false);
+    expect(summary.upserted).toBe(0);
+    expect(summary.removed).toBe(0);
+  });
+});
+
+describe("syncTickets + syncTimeEntries combined", () => {
+  it("syncTickets's full pass also syncs time entries and reports their counts on SyncSummary", async () => {
+    const state = seedFakeItop();
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, "app-token-readonly");
+    await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
+    await createMappedCustomer(2, "PT Sinar Logistik");
+
+    const userA = await createUserWithRole("TAM");
+    await prisma.user.update({ where: { id: userA.userId }, data: { email: "rina.s@example.co.id" } });
+
+    const summary = await syncTickets({ full: true });
+    expect(summary.ran).toBe(true);
+    expect(summary.error).toBeUndefined();
+    // Tickets still sync as before this task (existing scenarios above cover
+    // that in detail) — this asserts the combined tick's new half.
+    expect(summary.upserted).toBeGreaterThan(0);
+    expect(summary.timeEntriesUpserted).toBeGreaterThan(0);
+
+    const rows = await prisma.itopTimeEntry.count({ where: { itopUserId: 1 } });
+    expect(rows).toBe(summary.timeEntriesUpserted);
   });
 });
 

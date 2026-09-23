@@ -110,6 +110,7 @@ model User {
   // iTop Person/User object keys this account is matched to (by email).
   itopPersonId           Int?                  @unique @map("itop_person_id")
   itopUserId             Int?                  @unique @map("itop_user_id")
+  itopTimeEntries        ItopTimeEntry[]
 
   @@index([roleId])
   @@map("users")
@@ -213,6 +214,7 @@ model Customer {
   itopOrgId         Int?              @unique @map("itop_org_id")
   itopOrgName       String?           @map("itop_org_name")
   itopTickets       ItopTicket[]
+  itopTimeEntries   ItopTimeEntry[]
 
   @@index([tamId])
   @@map("customers")
@@ -554,11 +556,42 @@ model ItopTicket {
   slaTtrPassed      Boolean   @default(false) @map("sla_ttr_passed")
   resolutionDate    DateTime? @map("resolution_date")
   syncedAt          DateTime  @map("synced_at")
+  itopTimeEntries   ItopTimeEntry[]
 
-  @@index([customerId])
-  @@index([status])
+  @@index([customerId, status])
   @@index([lastUpdate])
   @@index([agentPersonId])
   @@index([orgId])
   @@map("itop_tickets")
+}
+
+// Time-tracking snapshot rows pulled from iTop's TimeSpent (Time Tracking
+// extension), refreshed by the same sync as ItopTicket
+// (backend/src/lib/itop/sync.ts). `id` is the iTop object key, not a
+// Solvro-assigned autoincrement. Powers the Utilization page
+// (docs/plans/itop-integration.md Phase 3) — hours are read only from
+// TimeSpent, never a ticket's own time_spent/clock field (plan §3).
+model ItopTimeEntry {
+  id              Int         @id
+  itopUserId      Int         @map("itop_user_id")
+  userId          Int?        @map("user_id")
+  user            User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  orgId           Int?        @map("org_id")
+  customerId      Int?        @map("customer_id")
+  customer        Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  ticketId        Int?        @map("ticket_id")
+  ticket          ItopTicket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  ticketRef       String?     @map("ticket_ref")
+  startDate       DateTime    @map("start_date")
+  endDate         DateTime?   @map("end_date")
+  durationMinutes Int         @map("duration_minutes")
+  title           String?
+  syncedAt        DateTime    @map("synced_at")
+
+  @@index([userId, startDate])
+  @@index([customerId, startDate])
+  @@index([itopUserId])
+  @@index([ticketId])
+  @@index([startDate])
+  @@map("itop_time_entries")
 }

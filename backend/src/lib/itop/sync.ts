@@ -18,9 +18,13 @@ import {
 import {
   ITOP_PERSON_OUTPUT_FIELDS,
   ITOP_TICKET_OUTPUT_FIELDS,
+  ITOP_TIME_SPENT_DURATION_IN_SECONDS,
+  ITOP_TIME_SPENT_OUTPUT_FIELDS,
+  ITOP_TIME_SPENT_TICKET_REF_FIELD,
   ITOP_USER_OUTPUT_FIELDS,
   type ItopPersonFields,
   type ItopTicketFields,
+  type ItopTimeSpentFields,
   type ItopUserFields,
 } from "./types.js";
 
@@ -33,6 +37,18 @@ export interface SyncSummary {
   upserted: number;
   removed: number;
   usersMatched: number;
+  timeEntriesUpserted: number;
+  timeEntriesRemoved: number;
+  /** Set when the time-entry pass itself errored — kept separate from `error` since a ticket sync can succeed while the time-entry pass fails (e.g. TimeSpent missing on this install). Surfaceable later by the admin route. */
+  timeEntriesError?: string;
+  error?: string;
+}
+
+/** Return shape of `syncTimeEntries`, standalone-callable and also invoked by `syncTickets`. */
+export interface TimeEntrySyncResult {
+  ran: boolean;
+  upserted: number;
+  removed: number;
   error?: string;
 }
 
@@ -41,6 +57,8 @@ const USER_SYNC_MIN_INTERVAL_MS = 60 * 60 * 1000;
 const ADVISORY_LOCK_KEY = "itop_sync";
 const TX_TIMEOUT_MS = 10 * 60_000;
 const CHUNK_SIZE = 50;
+/** How far back `syncTimeEntries` pulls `TimeSpent` rows — plan §3/Task 3.1. */
+const TIME_ENTRY_WINDOW_MS = 8 * 7 * 24 * 60 * 60 * 1000;
 
 /** Module-level: last time `syncUsers()` ran as part of `syncTickets()`'s "at most once/hour" throttle. Reset on process restart — deliberately simple, per Task 1.4. */
 let lastUserSyncAt: Date | null = null;
@@ -107,9 +125,12 @@ function errorMessage(err: unknown): string {
  * `User.itopPersonId`, then that Person's `contactid` on iTop's `User` class
  * → `User.itopUserId`. A chunk whose iTop lookup itself fails (network/auth
  * error) is skipped entirely — existing mappings for that chunk's users are
- * left untouched. When iTop *does* answer and a user's email/contactid is
- * not among the results, the corresponding mapping is cleared (iTop
- * affirmatively told us it doesn't exist).
+ * left untouched. When iTop *does* answer and a user's email is not among
+ * the results, both `itopPersonId` and `itopUserId` are cleared together —
+ * with no Person there's no `contactid` to resolve a User from either.
+ * When the email still resolves to a Person but that Person's `contactid`
+ * isn't among the `User` results, only `itopUserId` is cleared. Either way,
+ * iTop affirmatively told us the mapping doesn't exist.
  */
 export async function syncUsers(): Promise<{ matched: number; unmatched: string[] }> {
   const config = await getItopConfig();
@@ -146,8 +167,14 @@ export async function syncUsers(): Promise<{ matched: number; unmatched: string[
         if (user.itopPersonId !== found.key) {
           await prisma.user.update({ where: { id: user.id }, data: { itopPersonId: found.key } });
         }
-      } else if (user.itopPersonId !== null) {
-        await prisma.user.update({ where: { id: user.id }, data: { itopPersonId: null } });
+      } else if (user.itopPersonId !== null || user.itopUserId !== null) {
+        // No Person at all this run means there's no contactid to resolve
+        // an iTop User from either — clear both together. (Bug fixed
+        // 2026-09-22: this branch used to null only itopPersonId, leaving
+        // itopUserId stale forever, because the second pass below only
+        // ever revisits users still present in personIdByUserId — a user
+        // who drops out of the Person match entirely never reaches it.)
+        await prisma.user.update({ where: { id: user.id }, data: { itopPersonId: null, itopUserId: null } });
       }
     }
   }
@@ -231,6 +258,177 @@ async function upsertTicket(
   });
 }
 
+/**
+ * `ticketIdByRef` is resolved once per chunk by the caller (a single
+ * `findMany({ ref: { in } })` over that chunk's distinct refs) rather than
+ * once per row here — this function used to run its own `findUnique` per
+ * `TimeSpent` row, an N+1 inside the advisory-lock-guarded transaction.
+ */
+async function upsertTimeEntry(
+  row: ItopObjectRow<ItopTimeSpentFields>,
+  itopUserIdToUserId: Map<number, number>,
+  orgIdToCustomerId: Map<number, number>,
+  ticketIdByRef: Map<string, number>,
+): Promise<void> {
+  const fields = row.fields;
+  const itopUserId = Number(fields.user_id);
+  const rawOrgId = fields.org_id ? Number(fields.org_id) : 0;
+  const orgId = rawOrgId > 0 ? rawOrgId : null;
+  const ticketRef = fields[ITOP_TIME_SPENT_TICKET_REF_FIELD] || null;
+  const ticketId = ticketRef ? (ticketIdByRef.get(ticketRef) ?? null) : null;
+
+  const durationSeconds = Number(fields.duration) || 0;
+  const durationMinutes = Math.round(durationSeconds / (ITOP_TIME_SPENT_DURATION_IN_SECONDS ? 60 : 1));
+
+  const data = {
+    itopUserId,
+    userId: itopUserIdToUserId.get(itopUserId) ?? null,
+    orgId,
+    // No org (orgId null, including iTop's 0/unset) has no customer either —
+    // Phase 3.2's "not tied to a customer" ("No customer") row relies on
+    // customerId being null here, not just absent from orgIdToCustomerId.
+    customerId: orgId !== null ? (orgIdToCustomerId.get(orgId) ?? null) : null,
+    ticketId,
+    ticketRef,
+    startDate: parseItopDate(fields.start_date) ?? new Date(),
+    endDate: parseItopDate(fields.end_date),
+    durationMinutes,
+    title: fields.title || null,
+    syncedAt: new Date(),
+  };
+
+  await prisma.itopTimeEntry.upsert({
+    where: { id: row.key },
+    create: { id: row.key, ...data },
+    update: data,
+  });
+}
+
+/**
+ * Pulls `TimeSpent` rows (Time Tracking extension) for every Solvro user
+ * mapped to an iTop `User` (`User.itopUserId`, active only), for the last 8
+ * weeks, upserting into `ItopTimeEntry`. Standalone-callable (own config/
+ * error handling, like `syncUsers`) and also invoked by `syncTickets` after
+ * its own ticket pass, inside the same advisory-lock-guarded call — the
+ * smaller change vs. a separate `syncAll` wrapper, since it means
+ * `POST /admin/itop/sync` and `POST /itop/refresh` (both of which call
+ * `syncTickets`/`requestSync`) pick up time-entry sync with no route changes.
+ * Hours come only from `TimeSpent` — never a ticket's own `time_spent`
+ * field, which is a clock, not logged effort (plan §3). iTop errors are
+ * caught and returned in `error`, never thrown.
+ */
+export async function syncTimeEntries(opts: { full?: boolean } = {}): Promise<TimeEntrySyncResult> {
+  const full = Boolean(opts.full);
+  let upserted = 0;
+  let removed = 0;
+
+  try {
+    const config = await getItopConfig();
+    if (!isItopConfigured(config)) {
+      logger.debug("iTop syncTimeEntries skipped: iTop is not configured");
+      return { ran: false, upserted: 0, removed: 0 };
+    }
+
+    const users = await prisma.user.findMany({
+      where: { active: true, itopUserId: { not: null } },
+      select: { id: true, itopUserId: true },
+    });
+    const itopUserIdToUserId = new Map<number, number>();
+    for (const user of users) {
+      if (user.itopUserId !== null) itopUserIdToUserId.set(user.itopUserId, user.id);
+    }
+    const mappedItopUserIds = [...itopUserIdToUserId.keys()];
+
+    const customers = await prisma.customer.findMany({
+      where: { itopOrgId: { not: null } },
+      select: { id: true, itopOrgId: true },
+    });
+    const orgIdToCustomerId = new Map(customers.map((c) => [c.itopOrgId as number, c.id]));
+
+    const cutoff = new Date(Date.now() - TIME_ENTRY_WINDOW_MS);
+    const seenIds = new Set<number>();
+    // Tracked across the whole run (not per chunk) so one real "the ref
+    // field name is wrong on this install" condition produces one warning,
+    // not one per chunk.
+    let rowsWithRef = 0;
+    let rowsWithResolvedRef = 0;
+
+    if (mappedItopUserIds.length > 0) {
+      const client = await getItopAppClient();
+      for (const idsChunk of chunk(mappedItopUserIds, CHUNK_SIZE)) {
+        const oql = `SELECT TimeSpent WHERE user_id IN (${idsChunk.join(",")}) AND start_date >= '${formatItopDate(cutoff)}'`;
+        const result = await client.getAll<ItopTimeSpentFields>("TimeSpent", oql, ITOP_TIME_SPENT_OUTPUT_FIELDS, {
+          pageSize: 100,
+        });
+
+        // Resolve this chunk's distinct ticket refs with one query instead
+        // of one `findUnique` per row (was an N+1 inside the
+        // advisory-lock-guarded transaction).
+        const refs = [
+          ...new Set(
+            result.objects
+              .map((row) => row.fields[ITOP_TIME_SPENT_TICKET_REF_FIELD])
+              .filter((ref): ref is string => Boolean(ref)),
+          ),
+        ];
+        const tickets =
+          refs.length > 0
+            ? await prisma.itopTicket.findMany({ where: { ref: { in: refs } }, select: { id: true, ref: true } })
+            : [];
+        const ticketIdByRef = new Map(tickets.map((t) => [t.ref, t.id]));
+
+        for (const row of result.objects) {
+          seenIds.add(row.key);
+          const ref = row.fields[ITOP_TIME_SPENT_TICKET_REF_FIELD];
+          if (ref) {
+            rowsWithRef += 1;
+            if (ticketIdByRef.has(ref)) rowsWithResolvedRef += 1;
+          }
+          await upsertTimeEntry(row, itopUserIdToUserId, orgIdToCustomerId, ticketIdByRef);
+          upserted += 1;
+        }
+      }
+    }
+
+    if (rowsWithRef > 0 && rowsWithResolvedRef === 0) {
+      // Every row carried a ref, and not one matched a known ItopTicket —
+      // more likely the real install's Time Tracking extension names the
+      // ticket-ref attribute differently than
+      // `ITOP_TIME_SPENT_TICKET_REF_FIELD` assumes than that all of them are
+      // genuinely orphaned (plan §5 risk: "Time Tracking schema differs").
+      logger.warn(
+        { rowsWithRef, field: ITOP_TIME_SPENT_TICKET_REF_FIELD },
+        "iTop syncTimeEntries: no TimeSpent row's ticket ref resolved to a known ticket — check ITOP_TIME_SPENT_TICKET_REF_FIELD against this install",
+      );
+    }
+
+    if (full) {
+      // Two independent reasons a snapshot row within the pull window no
+      // longer belongs: (a) its iTop user is no longer mapped to any active
+      // Solvro user at all, or (b) iTop didn't return it this run (edited/
+      // deleted upstream). Both are bounded to `startDate >= cutoff` — a
+      // transient unmapping (an email edit, a deactivation, iTop briefly
+      // dropping a Person) must not delete history *older* than the pull
+      // window, since that history can never be re-fetched to restore it.
+      const deleted = await prisma.itopTimeEntry.deleteMany({
+        where: {
+          AND: [
+            { startDate: { gte: cutoff } },
+            { OR: [{ itopUserId: { notIn: mappedItopUserIds } }, { id: { notIn: [...seenIds] } }] },
+          ],
+        },
+      });
+      removed = deleted.count;
+    }
+
+    return { ran: true, upserted, removed };
+  } catch (err) {
+    const message = errorMessage(err);
+    logger.warn({ err: message }, "iTop syncTimeEntries failed");
+    return { ran: true, upserted, removed, error: message };
+  }
+}
+
 async function writeConfigResult(
   startedAt: Date,
   ok: boolean,
@@ -283,6 +481,9 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
   let upserted = 0;
   let removed = 0;
   let usersMatched = 0;
+  let timeEntriesUpserted = 0;
+  let timeEntriesRemoved = 0;
+  let timeEntriesError: string | undefined;
   let runError: string | undefined;
 
   await prisma.$transaction(
@@ -366,9 +567,32 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
           removed = deleted.count;
         }
 
+        // Time entries after tickets, inside the same advisory-lock-guarded
+        // call — see syncTimeEntries's own doc comment for why this is the
+        // chosen wiring over a separate syncAll(). A time-entry-only failure
+        // (e.g. TimeSpent missing on this install) is logged but doesn't
+        // fail the ticket sync that already succeeded above.
+        const timeEntryResult = await syncTimeEntries({ full });
+        timeEntriesUpserted = timeEntryResult.upserted;
+        timeEntriesRemoved = timeEntryResult.removed;
+        timeEntriesError = timeEntryResult.error;
+        if (timeEntriesError) {
+          logger.warn({ err: timeEntriesError }, "iTop syncTimeEntries failed during the ticket sync tick");
+        }
+
         await writeConfigResult(startedAt, true, null, full);
         logger.info(
-          { full, orgs, upserted, removed, usersMatched, ms: Date.now() - startedAt.getTime() },
+          {
+            full,
+            orgs,
+            upserted,
+            removed,
+            usersMatched,
+            timeEntriesUpserted,
+            timeEntriesRemoved,
+            timeEntriesError,
+            ms: Date.now() - startedAt.getTime(),
+          },
           "iTop sync completed",
         );
       } catch (err) {
@@ -389,6 +613,9 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
     upserted,
     removed,
     usersMatched,
+    timeEntriesUpserted,
+    timeEntriesRemoved,
+    timeEntriesError,
     error: runError,
   };
 }
