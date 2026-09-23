@@ -2072,3 +2072,68 @@ each is a follow-up decision.
   reserves `full` for status chips and avatars, yet `frontend/src/components/itop/
   TicketFilters.tsx` and `TicketLog.tsx` use it on toggle buttons (count chips, log tabs).
   Decide once: sanction the pill-toggle pattern in DESIGN.md, or retire it in both files.
+
+---
+
+## iTop integration Phase 6 — deferred findings (2026-09-23)
+
+User-deferred findings from Phase 6 (branch `feat/itop-p6-board` — see
+`CHANGELOG.md`'s "iTop board view and new tickets from Solvro" entry). No fix
+now; each is a follow-up decision.
+
+- ~~**Scope chips stay visible but inert in Board view.**
+    `frontend/src/components/itop/TicketsTab.tsx` renders `TicketFilters`
+    (Ongoing / Resolved this week / Mine) above both the Table and the Board,
+    but only the Table's `useCustomerTickets(scope, cls, ...)` call reads
+    `scope` — `TicketBoard.tsx` always fetches its own fixed `ongoing` +
+    `resolved_week` scopes directly and ignores the `scope` state entirely (it
+    does still respect `cls`). Clicking a scope chip while the Board is active
+    changes nothing on screen, with no indication that the click was a no-op.
+    Fix direction: hide the scope chips (keep the class filter) when
+    `view === "board"` in `TicketFilters.tsx`/`TicketsTab.tsx`.~~ **Resolved 2026-09-23**: `TicketFilters.tsx` gained `showScope`; the Tickets tab hides the scope chips in Board view (class chips stay).
+
+- **The drop lifecycle graph assumes iTop's default stimuli.**
+  `frontend/src/components/itop/board/dropMapper.ts`'s `TRANSITIONS` table
+  hard-codes iTop's default UserRequest/Incident lifecycle (`ev_assign`,
+  `ev_pending`, `ev_resolve`, `ev_close`, `ev_reopen` — decision 10 in
+  `docs/archive/plans/itop-integration.md`). An install with custom states,
+  a narrower state machine, or `ev_reassign`-style semantics instead of plain
+  reassignment will either reject drags the admin actually wants to allow, or
+  let a drag through that `apply_stimulus` then refuses — surfaced only as
+  iTop's own refusal text (`409 itop_refused`), not a Solvro-authored
+  message. No per-install configuration exists for this graph; verify item
+  10 against the real install before relying on Board drag-and-drop there.
+- **Mobile board is a single stacked column with touch drag.**
+  `TicketBoard.tsx`'s `KanbanBoard` uses `grid gap-3 md:grid-cols-5` — below
+  the `md:` breakpoint the five columns stack vertically with drag-and-drop
+  still wired through the same dnd-kit-backed `reui/kanban` engine. This has
+  not been evaluated against real phone use (long stacked scroll to reach a
+  distant column, touch-drag precision across a tall single-column stack);
+  evaluate before treating it as the phone-usable form of the Board, same
+  caution flagged for `kanban-v2`'s task board mobile fallback.
+- **The services pick-list caches for 5 minutes in-process; the cache is now busted on every admin settings change.**
+  `backend/src/routes/itop.ts`'s `GET /services` handler caches
+  `servicesCache` in a module-level variable for `SERVICES_CACHE_TTL_MS` (5
+  minutes). Fixed this round: `bustItopServicesCache()` is called from
+  `routes/itopAdmin.ts` alongside every `bustItopConfigCache()` (settings
+  PATCH, webhook-secret generate/remove, manual sync), so a base-URL/token
+  change no longer leaves a stale or previous-instance service list cached
+  for up to 5 minutes — it re-fetches on the next `GET /services` call.
+- **`GET /itop/services` returns every organisation's services to any authenticated user, with no customer scoping.**
+  `backend/src/routes/itop.ts`'s `GET /services` handler runs `SELECT
+  Service` (no `WHERE`) with the read-only application token and returns
+  every service's `name` and `providerName` (the owning organisation's
+  friendly name) to any signed-in Solvro user, regardless of which
+  customers they can see — `ensureCustomerVisible`/`customerVisibilityFilter`
+  are not applied here, unlike every other `/itop` read. Two consequences:
+  (a) `NewTicketSheet.tsx`'s service picker offers services that don't
+  belong to the customer being ticketed — iTop's own `create` call refuses
+  an entitlement mismatch at submit time, so this is friction, not a write
+  bypass; (b) every iTop organisation name in the install becomes readable
+  through this endpoint by any Solvro user, independent of customer
+  visibility — a narrower information leak than a ticket/customer read, but
+  still not gated the way the rest of `/itop` is. Decision item before this
+  endpoint (or its picker) is reused elsewhere: filter services by the
+  target customer's organisation via iTop's service-entitlement link
+  (`lnkCustomerContractToService` or equivalent) once a `customerId` is
+  known, or accept and document the current organisation-wide visibility.
