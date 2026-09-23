@@ -25,6 +25,11 @@ import {
 } from "../lib/itop/config.js";
 import { ITOP_ORGANIZATION_OUTPUT_FIELDS, type ItopOrganizationFields } from "../lib/itop/types.js";
 import { syncTickets, syncUsers } from "../lib/itop/sync.js";
+// One-directional import (itop.ts never imports from this file) — busts
+// Task 6.2's GET /services cache alongside every place here that busts the
+// ItopConfig cache, so a base-URL/token change or a completed manual sync
+// doesn't leave a stale service list cached for up to 5 more minutes.
+import { bustItopServicesCache } from "./itop.js";
 
 export const itopAdminRouter = Router();
 
@@ -222,6 +227,7 @@ itopAdminRouter.patch(
     await getItopConfig(); // ensures the row exists before the update below
     await prisma.itopConfig.update({ where: { id: "default" }, data });
     bustItopConfigCache();
+    bustItopServicesCache();
 
     const row = await loadConfigWithUpdater();
     res.json(serializeConfig(row));
@@ -244,6 +250,7 @@ itopAdminRouter.post("/webhook-secret", async (req, res) => {
     data: { webhookSecretEnc: seal(secret), updatedById: req.user!.sub },
   });
   bustItopConfigCache();
+  bustItopServicesCache();
 
   res.json({ secret, path: "/api/webhook/itop", header: "X-Solvro-Webhook-Secret" });
 });
@@ -255,6 +262,7 @@ itopAdminRouter.delete("/webhook-secret", async (req, res) => {
     data: { webhookSecretEnc: null, updatedById: req.user!.sub },
   });
   bustItopConfigCache();
+  bustItopServicesCache();
 
   res.status(204).end();
 });
@@ -352,6 +360,10 @@ itopAdminRouter.post(
     syncInFlight = (async () => {
       try {
         await syncTickets({ full });
+        // A full sync can rename/relink orgs (Customer.itopOrgName), so the
+        // cached service list's providerName values could be stale — bust
+        // it here too, not just on a settings/token change.
+        bustItopServicesCache();
       } catch (err) {
         logger.warn({ err: err instanceof Error ? err.message : String(err) }, "iTop manual sync failed");
       } finally {

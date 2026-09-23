@@ -29,6 +29,15 @@ interface PersonRecord {
   id: number;
   email: string;
   friendlyname: string;
+  /** Task 6.2: `GET /itop/customers/:id/contacts` filters Person by this against the customer's mapped org — 0 means "no organization" (never matches a real org id). */
+  org_id: number;
+}
+
+/** Task 6.2's "New ticket" service picklist (`GET /itop/services`). */
+interface ServiceRecord {
+  id: number;
+  name: string;
+  org_id: number;
 }
 
 interface UserRecord {
@@ -100,6 +109,7 @@ export interface FakeItopState {
   organizations: Map<number, OrganizationRecord>;
   persons: Map<number, PersonRecord>;
   users: Map<number, UserRecord>;
+  services: Map<number, ServiceRecord>;
   tickets: Map<number, TicketRecord>;
   timeSpent: Map<number, TimeSpentRecord>;
   lnkPersonToTeam: Map<number, LnkPersonToTeamRecord>;
@@ -117,6 +127,8 @@ export interface FakeItopState {
    */
   failNextGetForToken: { token: string; message: string } | null;
   nextId: number;
+  /** Every request that reached `rest.php`, regardless of operation/outcome — lets a test prove a route's in-process cache (Task 6.2's `GET /itop/services`, 5-minute TTL) didn't re-hit the fake on a second call. */
+  requestCount: number;
 }
 
 export function createEmptyState(): FakeItopState {
@@ -125,6 +137,7 @@ export function createEmptyState(): FakeItopState {
     organizations: new Map(),
     persons: new Map(),
     users: new Map(),
+    services: new Map(),
     tickets: new Map(),
     timeSpent: new Map(),
     lnkPersonToTeam: new Map(),
@@ -133,6 +146,7 @@ export function createEmptyState(): FakeItopState {
     failNextGetForToken: null,
     writeLog: [],
     nextId: 1,
+    requestCount: 0,
   };
 }
 
@@ -156,6 +170,7 @@ const SUPPORTED_CLASSES = [
   "Incident",
   "Person",
   "User",
+  "Service",
   "TimeSpent",
   "lnkPersonToTeam",
   "PersonalToken",
@@ -206,11 +221,20 @@ export function seedFakeItop(): FakeItopState {
   state.organizations.set(1, { id: 1, name: "Northwind Freight Sdn Bhd" });
   state.organizations.set(2, { id: 2, name: "PT Sinar Logistik" });
 
-  state.persons.set(1, { id: 1, email: "rina.s@example.co.id", friendlyname: "Rina S." });
-  state.persons.set(2, { id: 2, email: "dedi.p@example.co.id", friendlyname: "Dedi P." });
-  state.persons.set(3, { id: 3, email: "budi.h@example.co.id", friendlyname: "Budi H." });
+  state.persons.set(1, { id: 1, email: "rina.s@example.co.id", friendlyname: "Rina S.", org_id: 1 });
+  state.persons.set(2, { id: 2, email: "dedi.p@example.co.id", friendlyname: "Dedi P.", org_id: 2 });
+  // Budi is a caller in org 1 (matches mkTicket's hardcoded caller_id_friendlyname
+  // below) — used by Task 6.2's contacts endpoint tests as a 2nd org-1 contact.
+  state.persons.set(3, { id: 3, email: "budi.h@example.co.id", friendlyname: "Budi H.", org_id: 1 });
   // Deliberately unmatched: no Solvro user is expected to have this email.
-  state.persons.set(4, { id: 4, email: "orphan.contact@example.co.id", friendlyname: "Orphan Contact" });
+  // org_id 0 ("no organization") so it never appears as a contact for org 1 or 2.
+  state.persons.set(4, { id: 4, email: "orphan.contact@example.co.id", friendlyname: "Orphan Contact", org_id: 0 });
+
+  // Task 6.2's "New ticket" service picklist — org_id is the providing
+  // organization, surfaced as `providerName` by GET /itop/services.
+  state.services.set(1, { id: 1, name: "Network / WAN", org_id: 1 });
+  state.services.set(2, { id: 2, name: "Service Desk", org_id: 2 });
+  state.services.set(3, { id: 3, name: "Backup", org_id: 1 });
 
   state.users.set(1, { id: 1, contactid: 1, contactid_friendlyname: "Rina S.", login: "rina.s" });
   state.users.set(2, { id: 2, contactid: 2, contactid_friendlyname: "Dedi P.", login: "dedi.p" });
@@ -422,7 +446,12 @@ function organizationFields(org: OrganizationRecord): Record<string, unknown> {
 }
 
 function personFields(person: PersonRecord): Record<string, unknown> {
-  return { id: String(person.id), email: person.email, friendlyname: person.friendlyname };
+  return { id: String(person.id), email: person.email, friendlyname: person.friendlyname, org_id: String(person.org_id) };
+}
+
+function serviceFields(state: FakeItopState, service: ServiceRecord): Record<string, unknown> {
+  const orgName = state.organizations.get(service.org_id)?.name ?? "";
+  return { id: String(service.id), name: service.name, org_id: String(service.org_id), org_id_friendlyname: orgName };
 }
 
 function userFields(user: UserRecord): Record<string, unknown> {
@@ -466,6 +495,8 @@ function collectionFor(
       return [...state.persons.values()].map((p) => ({ id: p.id, fields: personFields(p) }));
     case "User":
       return [...state.users.values()].map((u) => ({ id: u.id, fields: userFields(u) }));
+    case "Service":
+      return [...state.services.values()].map((s) => ({ id: s.id, fields: serviceFields(state, s) }));
     case "UserRequest":
     case "Incident":
       return [...state.tickets.values()]
@@ -567,6 +598,7 @@ export function createFakeItop(seed: FakeItopState = createEmptyState()): FakeIt
   app.use(express.json());
 
   app.post("/webservices/rest.php", (req, res) => {
+    state.requestCount += 1;
     let payload: Record<string, unknown>;
     try {
       const raw = req.body?.json_data ?? (typeof req.body === "object" ? JSON.stringify(req.body) : undefined);
@@ -738,21 +770,65 @@ export function createFakeItop(seed: FakeItopState = createEmptyState()): FakeIt
       const fields = (payload.fields as Record<string, unknown> | undefined) ?? {};
 
       if (className === "UserRequest" || className === "Incident") {
+        // Task 6.2 ("New ticket"): mirrors iTop's own mandatory-attribute
+        // refusal (code 100) for a stimulus-free core/create of a ticket —
+        // org_id, caller_id, title, description are all required, checked
+        // in that order so a request missing several gets a deterministic
+        // single message.
+        const missing = (value: unknown) => value === undefined || value === null || value === "";
+        const requiredFieldOrder: Array<[string, unknown]> = [
+          ["org_id", fields.org_id],
+          ["caller_id", fields.caller_id],
+          ["title", fields.title],
+          ["description", fields.description],
+        ];
+        const firstMissing = requiredFieldOrder.find(([, value]) => missing(value));
+        if (firstMissing) {
+          sendEnvelope(res, { code: 100, message: `Mandatory attribute '${firstMissing[0]}' is missing` });
+          return;
+        }
+
+        const orgId = Number(fields.org_id);
+        const callerId = Number(fields.caller_id);
+        const callerPerson = state.persons.get(callerId);
+        if (!callerPerson || callerPerson.org_id !== orgId) {
+          sendEnvelope(res, {
+            code: 100,
+            message: `Data integrity issue: caller ${callerId} does not belong to organization ${orgId}`,
+          });
+          return;
+        }
+
+        // An unknown service_id is a real iTop-style external-key refusal
+        // (unlike org_id/caller_id, this one is NOT re-validated by the
+        // Solvro route before the create — it's the case a test uses to
+        // exercise the "iTop's own refusal passes through verbatim" path).
+        let serviceName = "";
+        if (!missing(fields.service_id)) {
+          const service = state.services.get(Number(fields.service_id));
+          if (!service) {
+            sendEnvelope(res, { code: 100, message: `Object not found: Service::${String(fields.service_id)}` });
+            return;
+          }
+          serviceName = service.name;
+        }
+
         const id = state.nextId++;
+        const ref = `${className === "Incident" ? "I" : "R"}-${String(id).padStart(6, "0")}`;
         const ticket: TicketRecord = {
           id,
           class: className,
-          ref: String(fields.ref ?? `NEW-${id}`),
-          title: String(fields.title ?? ""),
+          ref,
+          title: String(fields.title),
           status: "new",
           operational_status: "normal",
-          priority: String(fields.priority ?? "medium"),
+          priority: "medium",
           agent_id: "0",
           agent_id_friendlyname: "",
           team_id_friendlyname: "",
-          service_id_friendlyname: String(fields.service_id_friendlyname ?? ""),
-          caller_id_friendlyname: String(fields.caller_id_friendlyname ?? ""),
-          org_id: String(fields.org_id ?? ""),
+          service_id_friendlyname: serviceName,
+          caller_id_friendlyname: callerPerson.friendlyname,
+          org_id: String(orgId),
           start_date: formatDate(new Date()),
           last_update: formatDate(new Date()),
           tto: "",
