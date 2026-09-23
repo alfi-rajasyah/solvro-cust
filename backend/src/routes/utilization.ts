@@ -6,9 +6,9 @@
 // lib/isoWeek.ts's parseWeekKey: `utcOffsetMinutes` (local minus UTC) moves
 // the window's position, never the underlying UTC-midnight arithmetic.
 // `scope=me` is open to anyone; `tam`/`customer` require `report:executive`
-// (plan decision: docs/plans/itop-integration.md §1 item 6 — no new
+// (plan decision: docs/archive/plans/itop-integration.md §1 item 6 — no new
 // permission string is introduced for this). Mounted at /utilization in
-// src/app.ts. See docs/plans/itop-integration.md Task 3.2.
+// src/app.ts. See docs/archive/plans/itop-integration.md Task 3.2.
 import { Router } from "express";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";

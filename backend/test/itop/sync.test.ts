@@ -2,7 +2,7 @@
 // a real (isolated) database: full/incremental ticket pulls, the full-sync
 // drop of tickets iTop no longer returns, user↔Person/User email matching,
 // the advisory-lock single-runner guarantee, and iTop-error handling. See
-// docs/plans/itop-integration.md Task 1.4.
+// docs/archive/plans/itop-integration.md Task 1.4.
 import "../env.js";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Server } from "node:http";
