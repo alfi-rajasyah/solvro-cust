@@ -349,7 +349,7 @@ function mkTicket(opts: {
 }
 
 // ---------------------------------------------------------------------------
-// OQL — a small regex-based subset, per docs/plans/itop-integration.md Task 1.3.
+// OQL — a small regex-based subset, per docs/archive/plans/itop-integration.md Task 1.3.
 
 type OqlCondition =
   | { field: string; op: "="; value: string }
@@ -850,16 +850,63 @@ export function createFakeItop(seed: FakeItopState = createEmptyState()): FakeIt
       }
 
       if (className === "TimeSpent") {
+        // Mirrors the UserRequest/Incident mandatory-attribute check above
+        // (Task 7.1's POST /itop/tickets/:id/time always sends all five, but
+        // the fake still refuses an incomplete create the same way real
+        // iTop would, so a route regression here fails loudly instead of
+        // silently defaulting).
+        const missing = (value: unknown) => value === undefined || value === null || value === "";
+        const requiredFieldOrder: Array<[string, unknown]> = [
+          ["user_id", fields.user_id],
+          ["org_id", fields.org_id],
+          ["start_date", fields.start_date],
+          ["end_date", fields.end_date],
+          ["duration", fields.duration],
+        ];
+        const firstMissing = requiredFieldOrder.find(([, value]) => missing(value));
+        if (firstMissing) {
+          sendEnvelope(res, { code: 100, message: `Mandatory attribute '${firstMissing[0]}' is missing` });
+          return;
+        }
+
+        // Lexicographic comparison is safe here — both are the fixed-width
+        // "YYYY-MM-DD HH:MM:SS" shape lib/itop/sync.ts#formatItopDate emits.
+        if (String(fields.end_date) <= String(fields.start_date)) {
+          sendEnvelope(res, { code: 100, message: "end_date must be after start_date" });
+          return;
+        }
+
+        // A Solvro-side stand-in for iTop's external-key resolution on
+        // `ticket_ref` (assumed to point back to the UserRequest/Incident it
+        // was logged against), pending the admin's confirmation that
+        // `TimeSpent.<ref field>` is actually a writable external key on the
+        // real install (plan §5 risk "Time Tracking schema differs") — same
+        // shape as the unknown-`service_id` check on ticket create above in
+        // the meantime. Solvro's own POST /itop/tickets/:id/time always
+        // sends the ref of a ticket it just loaded from its own snapshot, so
+        // this only fires when a test deliberately makes the fake and the
+        // snapshot disagree (see ticketTime.test.ts's "iTop refusal" case) —
+        // not reachable in normal operation.
+        const ticketRef = fields[ITOP_TIME_SPENT_TICKET_REF_FIELD];
+        if (!missing(ticketRef) && ![...state.tickets.values()].some((t) => t.ref === ticketRef)) {
+          sendEnvelope(res, { code: 100, message: `Object not found: ${String(ticketRef)}` });
+          return;
+        }
+
         const id = state.nextId++;
         const entry: TimeSpentRecord = {
           id,
-          user_id: String(fields.user_id ?? ""),
-          org_id: String(fields.org_id ?? ""),
-          start_date: String(fields.start_date ?? formatDate(new Date())),
-          end_date: String(fields.end_date ?? formatDate(new Date())),
-          duration: String(fields.duration ?? "0"),
+          user_id: String(fields.user_id),
+          org_id: String(fields.org_id),
+          start_date: String(fields.start_date),
+          end_date: String(fields.end_date),
+          duration: String(fields.duration),
           title: String(fields.title ?? ""),
-          ticketRef: String(fields[ITOP_TIME_SPENT_TICKET_REF_FIELD] ?? fields.title ?? ""),
+          // NOT falling back to `title` — the ref field must come from
+          // whatever the caller actually sent, so a route that forgets to
+          // set it produces a genuinely empty ref rather than a
+          // misleadingly-populated one that happens to equal the title.
+          ticketRef: String(fields[ITOP_TIME_SPENT_TICKET_REF_FIELD] ?? ""),
         };
         state.timeSpent.set(id, entry);
         sendEnvelope(res, {

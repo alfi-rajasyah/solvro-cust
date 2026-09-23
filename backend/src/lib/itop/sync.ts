@@ -2,7 +2,7 @@
 // resolves Solvro users to their iTop Person/User identities by email.
 // Called by lib/itop/scheduler.ts (interval + debounced Refresh/webhook) and
 // by the admin "Sync now" route (task 1.5). See
-// docs/plans/itop-integration.md §3 (join rules) and Task 1.4 for the
+// docs/archive/plans/itop-integration.md §3 (join rules) and Task 1.4 for the
 // contract this module implements.
 import { Prisma, type ItopConfig } from "@prisma/client";
 
@@ -59,8 +59,13 @@ const USER_SYNC_MIN_INTERVAL_MS = 60 * 60 * 1000;
 const ADVISORY_LOCK_KEY = "itop_sync";
 const TX_TIMEOUT_MS = 10 * 60_000;
 const CHUNK_SIZE = 50;
-/** How far back `syncTimeEntries` pulls `TimeSpent` rows — plan §3/Task 3.1. */
-const TIME_ENTRY_WINDOW_MS = 8 * 7 * 24 * 60 * 60 * 1000;
+/**
+ * How far back `syncTimeEntries` pulls `TimeSpent` rows — plan §3/Task 3.1.
+ * Exported so `routes/itop.ts`'s `POST /tickets/:id/time` (Task 7.1) rejects
+ * a `startedAt` older than this window with the same 8-week bound, rather
+ * than accepting an entry that syncing itself would never pull back.
+ */
+export const TIME_ENTRY_WINDOW_MS = 8 * 7 * 24 * 60 * 60 * 1000;
 
 /** Module-level: last time `syncUsers()` ran as part of `syncTickets()`'s "at most once/hour" throttle. Reset on process restart — deliberately simple, per Task 1.4. */
 let lastUserSyncAt: Date | null = null;
@@ -88,8 +93,16 @@ export function parseItopDate(value: string | null | undefined): Date | null {
   return new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s)));
 }
 
-/** Inverse of `parseItopDate` for building an OQL `last_update > '...'` cutoff. */
-function formatItopDate(date: Date): string {
+/**
+ * Inverse of `parseItopDate` for building an OQL `last_update > '...'`
+ * cutoff, and (Task 7.1) for formatting `start_date`/`end_date` on a
+ * `core/create TimeSpent` write — iTop's REST API takes plain
+ * "YYYY-MM-DD HH:MM:SS" with no timezone, so `routes/itop.ts`'s
+ * `POST /tickets/:id/time` sends the same UTC-assumed shape `parseItopDate`
+ * reads back, keeping the write and the read on one shared assumption.
+ * Exported for that route rather than re-derived there.
+ */
+export function formatItopDate(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return (
     `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ` +
@@ -416,6 +429,33 @@ async function upsertTimeEntry(
     create: { id: row.key, ...data },
     update: data,
   });
+}
+
+/**
+ * Upserts a single `TimeSpent` row already fetched from iTop (Task 7.1: the
+ * re-read after `POST /tickets/:id/time`'s own create, under the ACTING
+ * USER'S OWN token, succeeds) without requiring the caller to build the
+ * full user/org/ticket maps `syncTimeEntries` uses — resolves just this
+ * row's own `user_id`/`org_id`/ticket ref. Mirrors `upsertTicketFromItop`'s
+ * shape for the same reason: the write route re-reads with the read-only
+ * APPLICATION client and calls this so the snapshot reflects iTop's own
+ * answer, never a client-side guess of the stored duration/ticket link.
+ */
+export async function upsertTimeEntryFromItop(row: ItopObjectRow<ItopTimeSpentFields>): Promise<void> {
+  const itopUserId = Number(row.fields.user_id);
+  const user = await prisma.user.findUnique({ where: { itopUserId }, select: { id: true } });
+  const itopUserIdToUserId = new Map<number, number>(user ? [[itopUserId, user.id]] : []);
+
+  const rawOrgId = row.fields.org_id ? Number(row.fields.org_id) : 0;
+  const orgId = rawOrgId > 0 ? rawOrgId : null;
+  const customer = orgId !== null ? await prisma.customer.findUnique({ where: { itopOrgId: orgId }, select: { id: true } }) : null;
+  const orgIdToCustomerId = new Map<number, number>(orgId !== null && customer ? [[orgId, customer.id]] : []);
+
+  const ticketRef = row.fields[ITOP_TIME_SPENT_TICKET_REF_FIELD] || null;
+  const ticket = ticketRef ? await prisma.itopTicket.findUnique({ where: { ref: ticketRef }, select: { id: true } }) : null;
+  const ticketIdByRef = new Map<string, number>(ticketRef && ticket ? [[ticketRef, ticket.id]] : []);
+
+  await upsertTimeEntry(row, itopUserIdToUserId, orgIdToCustomerId, ticketIdByRef);
 }
 
 /**
