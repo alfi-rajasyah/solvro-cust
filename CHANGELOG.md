@@ -15,6 +15,13 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-09-23 — iTop actions from Solvro (personal tokens)
+
+- **Personal iTop tokens** — each user can save, check and remove their own iTop personal token under Settings › iTop (`/itop/me/token`, **`backend/src/routes/itopUser.ts`**). Solvro accepts a token only when it belongs to the iTop person with the same email as the user, stores it encrypted, and reads back the expiry when iTop reports one. The application token never writes.
+- **Ticket actions from Solvro** — once an admin turns on "Actions from Solvro" (Admin › iTop) a ticket can be assigned to me, set pending, resolved, closed or reopened, and public or private log entries can be added, all through `POST /itop/tickets/:id/actions` and `/log` (**`backend/src/routes/itop.ts`**). Every write goes to iTop under the acting user's own token; iTop's rights and default lifecycle rules apply as they do inside iTop, a refused step shows iTop's own message, and nothing is written optimistically or queued — the snapshot is updated from iTop's answer.
+- **Ticket panel** — clicking a row on the customer Tickets tab opens a right-side panel (`?ticket=<id>`, **`frontend/src/components/itop/TicketPanel.tsx`**) with the ticket's facts, its public and private case log (now pulled into the snapshot, migration `20260923035039_itop_write_path`), a log-entry form and the lifecycle actions. Resolving asks for iTop's resolution code and solution; assigning asks for a team when iTop needs one. Without a personal token, or while actions are off, the panel is read-only and says so. Playwright spec: `e2e/tests/itop-ticket-panel.spec.ts`.
+- **UI primitive** — **`frontend/src/components/ui/switch.tsx`**, a Base-UI switch, first used by the "Actions from Solvro" setting.
+
 ### Added — 2026-09-23 — iTop webhook and task ticket links
 
 - **Webhook nudge** — `POST /webhook/itop` (**`backend/src/routes/webhook.ts`**) lets iTop's Webhook integration tell Solvro that a ticket changed, so the next pull starts within seconds instead of at the next scheduled interval. The route is unauthenticated by design but gated by a per-install secret sent in the `X-Solvro-Webhook-Secret` header (compared in constant time), answers 404 until a secret exists, ignores the request body, accepts at most 6 nudges per minute and answers at most 60 calls per minute in total. Admins generate, rotate or remove the secret under Admin › iTop (`POST`/`DELETE /admin/itop/webhook-secret`); it is shown once.

@@ -2021,3 +2021,54 @@ each is a follow-up decision.
   through the Gantt row adapter that produces `Row` (`t.itopTicketRef` isn't
   currently carried onto the row alongside `t.status`/`t.priority`). Decision
   item — whether this export should show it — not a bug.
+
+---
+
+## iTop integration Phase 5 — deferred findings (2026-09-23)
+
+- **Personal-token expiry is best-effort, not guaranteed.** `PUT /itop/me/token`
+  (`backend/src/routes/itopUser.ts`) tries to read the token's expiry via
+  `core/get PersonalToken WHERE user_id = <resolved itopUserId>` using the
+  user's own freshly-saved token, and stores whatever comes back (`expiresAt`
+  left `null` on any failure — unresolved `itopUserId`, the class being
+  unreadable to that profile, or any other iTop error; see the `try/catch`
+  around the `PersonalToken` lookup). Whether an install exposes `PersonalToken`
+  to a plain personal-token holder varies with the profile granted. On an
+  install where it doesn't, `GET /itop/me/token` always reports `expiresAt:
+  null`, so the Settings page has no way to warn a TAM before their token
+  expires — the first sign of expiry is a saved token starting to fail on its
+  next use. No code change proposed; this is a documented limitation of the
+  "read it if iTop allows it" approach chosen for Task 5.1, not a bug to fix.
+- **A token's write capability can't be verified up front.** The same route's
+  write-capability probe calls `client.listOperations()` and checks whether
+  `core/apply_stimulus`/`core/update` appear — but `list_operations` reports
+  what the iTop *server* supports, not what the calling token's *profile* is
+  actually allowed to do, so the probe is logged only (`logger.debug`) and
+  never rejects the token. A TAM who saves a personal token without the
+  `Support Agent` / `Service Desk Agent` write profile therefore passes
+  token-save validation cleanly, and only discovers the gap when their first
+  real action (`POST /itop/tickets/:id/actions` or `/log`) comes back `403
+  itop_token_invalid` or `409 itop_refused` with iTop's own refusal text.
+  Working as designed per Task 5.1's "if you cannot detect rights, skip and
+  say so" rule — noted here so a future UX pass (e.g. a one-time trial
+  `apply_stimulus` dry run, if iTop ever supports one) has the context.
+- **Token-ownership check: residual risk on some iTop installs.** `PUT /itop/me/token`
+  (`backend/src/routes/itopUser.ts`) accepts a pasted personal token only when, used
+  with that token, `SELECT Person WHERE email = <user email>` returns exactly one person
+  AND — when the `PersonalToken` class is readable — `SELECT PersonalToken WHERE
+  user_id = <that person's iTop user>` returns at least one row (iTop scopes that class
+  to the token's own user, so a foreign token sees zero rows and is refused; proven by
+  the imposter test in `backend/test/itop/itopToken.test.ts`). iTop REST 1.3 has no
+  "whoami", so two gaps remain: (a) installs where `PersonalToken` is not readable by
+  the token's profile fall back to the email check alone, and a foreign token that can
+  read Persons would pass; (b) installs where the class is readable beyond the token's
+  own user (e.g. an admin-profile token) also pass. Some iTop versions answer a no-match
+  `core/get` with `code: 100` instead of an empty result; that path is treated as
+  "unreadable" (fail-open) — verify against the real install and record the answer
+  here. Mitigations: grant `PersonalToken` read to the TAM profile, or an iTop-side
+  whoami extension. This is impersonation with a stolen/foreign credential, not
+  privilege escalation: `itopPersonId` is always derived from the caller's own email.
+- **`rounded-full` on filter/tab pills vs DESIGN.md §"Radius".** `docs/DESIGN.md`
+  reserves `full` for status chips and avatars, yet `frontend/src/components/itop/
+  TicketFilters.tsx` and `TicketLog.tsx` use it on toggle buttons (count chips, log tabs).
+  Decide once: sanction the pill-toggle pattern in DESIGN.md, or retire it in both files.
