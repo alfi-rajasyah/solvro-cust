@@ -5,7 +5,7 @@
 // ever reflects iTop's re-read (never a client-side guess), and — the
 // central Phase 5 invariant — that every write happens under the ACTING
 // USER'S OWN personal token, never the application token. See
-// docs/plans/itop-integration.md Task 5.3.
+// docs/archive/plans/itop-integration.md Task 5.3.
 import "../env.js";
 import type { Server } from "node:http";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";

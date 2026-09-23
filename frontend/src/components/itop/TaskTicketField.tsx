@@ -1,14 +1,27 @@
 // "iTop ticket" row in TaskPanel.tsx's metadata grid (Task 4.2,
 // docs/archive/plans/itop-integration.md). Rendered only when
 // `useItopStatus().configured` is true — an install with no iTop connection
-// never sees this field at all. Owns no mutation of its own: saving goes
-// through the caller's `onSave`, which TaskPanel.tsx threads into its
-// existing `patch()` helper (useUpdateTask's optimistic-cache pattern
-// applies unchanged, same as every other editable row in the panel).
+// never sees this field at all. Owns no mutation of its own for the ref
+// itself: saving goes through the caller's `onSave`, which TaskPanel.tsx
+// threads into its existing `patch()` helper (useUpdateTask's optimistic-
+// cache pattern applies unchanged, same as every other editable row in the
+// panel).
+//
+// "Create in iTop" (Task 7.2) is the one exception — it owns the
+// `NewTicketSheet` it opens directly, since creating a ticket needs its own
+// form/mutation, not a value this row's own `onSave` can express. Success
+// still funnels back through `onSave(ref)`, so the created ticket is pinned
+// to the task exactly like a manually typed ref.
 import { useId, useRef, useState } from "react";
 import { Chip } from "@/components/StatusChip";
 import { ApiError } from "@/lib/api";
-import { useItopStatus, useItopTicketByRef } from "@/lib/queries";
+import {
+  useItopCustomerMapped,
+  useItopStatus,
+  useItopTicketByRef,
+  useMyItopToken,
+} from "@/lib/queries";
+import { NewTicketSheet } from "./NewTicketSheet";
 import { isItopRef, itopTicketUrl, statusLabel, statusTone } from "./ticketPresentation";
 
 const INPUT_CLASS =
@@ -23,19 +36,44 @@ const AFFORDANCE_CLASS =
 export function TaskTicketField({
   itopTicketRef,
   canEdit,
+  customerId,
+  taskTitle,
+  taskDescription,
   onSave,
 }: {
   itopTicketRef: string | null;
   canEdit: boolean;
+  /** The task's project's customer id, or null when the project has none —
+   * gates "Create in iTop" (Task 7.2): no customer, no organisation to
+   * create the ticket under. */
+  customerId: number | null;
+  taskTitle: string;
+  taskDescription: string | null;
   onSave: (ref: string | null) => void;
 }) {
   const { data: status } = useItopStatus();
+  const { data: myToken } = useMyItopToken();
   const ticketQuery = useItopTicketByRef(itopTicketRef);
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const errorId = useId();
+
+  // Cheap booleans first (no extra request) before the one that actually
+  // costs a fetch (`useItopCustomerMapped` hits `GET
+  // /itop/customers/:id/tickets` under the hood) — `enabled` below skips
+  // that fetch entirely once the task already has a ref, or nothing else
+  // about this row would show the button anyway.
+  const wantsCreateAffordance =
+    canEdit &&
+    !itopTicketRef &&
+    customerId !== null &&
+    (status?.actionsEnabled ?? false) &&
+    (myToken?.set ?? false);
+  const customerMapped = useItopCustomerMapped(customerId, { enabled: wantsCreateAffordance });
+  const canCreate = wantsCreateAffordance && customerMapped;
 
   // One edit settles exactly once — same rationale and same risk as
   // TaskPanel.tsx's own `renameSettledRef` (Enter and the blur that follows
@@ -99,30 +137,55 @@ export function TaskTicketField({
   if (showInput) {
     return (
       <div className="relative">
-        <input
-          key={editing ? "editing" : "empty"}
-          autoFocus={editing}
-          type="text"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commit();
-            if (e.key === "Escape" && editing) setEditing(false);
-          }}
-          onBlur={commit}
-          disabled={!canEdit}
-          placeholder="R-000000"
-          spellCheck={false}
-          autoComplete="off"
-          aria-label="iTop ticket"
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? errorId : undefined}
-          className={INPUT_CLASS}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            key={editing ? "editing" : "empty"}
+            autoFocus={editing}
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              if (e.key === "Escape" && editing) setEditing(false);
+            }}
+            onBlur={commit}
+            disabled={!canEdit}
+            placeholder="R-000000"
+            spellCheck={false}
+            autoComplete="off"
+            aria-label="iTop ticket"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
+            className={INPUT_CLASS}
+          />
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className={AFFORDANCE_CLASS}
+            >
+              Create in iTop
+            </button>
+          )}
+        </div>
         {error && (
           <p id={errorId} className="mt-1 text-[11px] text-error">
             {error}
           </p>
+        )}
+        {createOpen && customerId !== null && (
+          <NewTicketSheet
+            open
+            onClose={() => setCreateOpen(false)}
+            customerId={customerId}
+            initialTitle={taskTitle}
+            initialDescription={taskDescription ?? ""}
+            onCreated={(ticket) => {
+              setCreateOpen(false);
+              settledRef.current = true;
+              onSave(ticket.ref);
+            }}
+          />
         )}
       </div>
     );

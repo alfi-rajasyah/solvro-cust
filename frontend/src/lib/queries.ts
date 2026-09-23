@@ -575,8 +575,12 @@ export const queryKeys = {
   // Utilization page (Task 3.3) — `scope` is part of the key so switching
   // Me/By TAM/By customer never serves another scope's cached rows. Keyed
   // by the viewer's UTC offset too, same rationale as `itopDaily` above.
+  // `utilizationRoot` (Task 7.1) is the prefix `useLogTicketTimeFor`
+  // invalidates after logging time on a ticket — same one-root-covers-every-
+  // week/scope/offset-bucket rationale as `itopDailyRoot`/`customerTicketsRoot`.
+  utilizationRoot: ["itop", "utilization"] as const,
   utilization: (week: string, scope: UtilizationScope, utcOffsetMinutes: number) =>
-    ["itop", "utilization", week, scope, utcOffsetMinutes] as const,
+    [...queryKeys.utilizationRoot, week, scope, utcOffsetMinutes] as const,
   // New ticket sheet (Task 6.2, docs/archive/plans/itop-integration.md):
   // services are a global iTop catalogue (not customer-scoped); contacts are
   // the org's callers for one customer, so keyed by customer id.
@@ -2193,6 +2197,24 @@ export function useCustomerTickets(
   });
 }
 
+// Task 7.2, docs/archive/plans/itop-integration.md: gates `TaskTicketField`'s
+// "Create in iTop" affordance on the task's project's customer being mapped
+// to an org, WITHOUT a new backend endpoint — reuses the exact `mapped` flag
+// CustomerDetail.tsx already derives from `useCustomerTickets` for its own
+// Tickets-tab gate (see that file's `ticketsAvailable`). `poll: false` since
+// this is a one-shot gate check, not a live list.
+export function useItopCustomerMapped(
+  customerId: number | null,
+  { enabled = true }: { enabled?: boolean } = {},
+): boolean {
+  const query = useCustomerTickets(customerId ?? -1, {
+    scope: "ongoing",
+    enabled: enabled && customerId !== null,
+    poll: false,
+  });
+  return query.data?.mapped === true;
+}
+
 export function useRequestItopRefresh() {
   const qc = useQueryClient();
   return useMutation({
@@ -2260,6 +2282,16 @@ export interface ItopTicketLogEntry {
 export interface ItopTicketDetail extends ItopTicketRow {
   publicLog: ItopTicketLogEntry[];
   privateLog: ItopTicketLogEntry[];
+  // Task 7.1, docs/archive/plans/itop-integration.md: the caller's own
+  // logged minutes on THIS ticket, for the caller's local ISO week (backend
+  // buckets by `utcOffsetMinutes`, same contract as `/itop/daily` and
+  // `/utilization`). `TicketTimer.tsx` divides by 60 for the "N.N h this
+  // week" copy. Optional (fix round, phase review): only `GET
+  // /itop/tickets/:id` computes this — the action/log/create write
+  // endpoints' `core/get` echo doesn't, so `useTicketActionFor`/
+  // `useAddTicketLog`'s `setQueryData` below must merge in the PREVIOUS
+  // cached value rather than overwrite it with `undefined`.
+  myMinutesThisWeek?: number;
 }
 
 // Response shape for the two write endpoints only (GET /itop/tickets/:id
@@ -2288,12 +2320,122 @@ export interface ItopTicketTeamOption {
 }
 
 export function useItopTicket(id: number | null) {
+  // Local minus UTC, in minutes — same computation as `useItopDaily`/
+  // `useUtilization` (Task 7.1): the backend buckets `myMinutesThisWeek` by
+  // the CALLER's local ISO week. Deliberately NOT folded into the query key
+  // below (unlike those two hooks) — `queryKeys.itopTicket(id)` is also the
+  // exact key `useTicketActionFor`/`useAddTicketLog`/`useCreateTicket`/
+  // `useLogTicketTimeFor` read and write via `setQueryData`/`invalidateQueries`
+  // elsewhere in this file; splitting the cache entry by offset would break
+  // those cache writes for no real benefit (a viewer's UTC offset changing
+  // mid-session is a non-event this field can tolerate being briefly stale
+  // for, unlike a whole day/week bucket flipping).
+  const utcOffsetMinutes = -new Date().getTimezoneOffset();
   return useQuery({
     queryKey: queryKeys.itopTicket(id ?? -1),
-    queryFn: ({ signal }) => apiRequest<ItopTicketDetail>(`/itop/tickets/${id}`, { signal }),
+    queryFn: ({ signal }) =>
+      apiRequest<ItopTicketDetail>(
+        `/itop/tickets/${id}?utcOffsetMinutes=${utcOffsetMinutes}`,
+        { signal },
+      ),
     enabled: id !== null,
     staleTime: 30_000,
   });
+}
+
+// ---- Ticket timer (Task 7.1, docs/archive/plans/itop-integration.md) ---
+// `useTicketTimer`/`useRunningItopTimer` (components/itop/useTicketTimer.ts)
+// own the localStorage-persisted timer state and call this mutation only on
+// Stop. Backend: POST /itop/tickets/:id/time, routes/itop.ts — 201 with the
+// created entry, or 202 `staleAfterWrite` (iTop accepted the create but the
+// follow-up read failed).
+//
+// Backend contract note (fix round, phase review): the 201 body carries
+// `{ entry }` ONLY — no `myMinutesThisWeek` of its own (an earlier revision
+// of this endpoint returned a UTC-week-bucketed figure here, which this app
+// never trusted anyway since it doesn't match `GET /itop/tickets/:id?
+// utcOffsetMinutes=`'s local-week bucketing). `onSuccess` below only
+// invalidates, so the panel's "this week" figure always comes from the next
+// `useItopTicket` refetch.
+export interface ItopTimeLogEntry {
+  id: number;
+  startDate: string;
+  endDate: string;
+  durationMinutes: number;
+  title: string | null;
+  ticketRef: string;
+}
+
+export interface ItopTimeLogResult {
+  entry: ItopTimeLogEntry;
+}
+
+export interface ItopTimeLogStale {
+  created: true;
+  id: number;
+  staleAfterWrite: true;
+}
+
+export type ItopTimeLogWriteResult = ItopTimeLogResult | ItopTimeLogStale;
+
+/** True for the 202 shape — no `entry` in this response. */
+export function isStaleTimeLog(result: ItopTimeLogWriteResult): result is ItopTimeLogStale {
+  return "created" in result && result.created === true;
+}
+
+export interface LogTicketTimeInput {
+  ticketId: number;
+  customerId: number;
+  startedAt: string;
+  endedAt: string;
+  title?: string;
+}
+
+// `ticketId`/`customerId` are per-MUTATE-CALL arguments (not fixed at hook
+// instantiation), same rationale as `useTicketActionFor` above — kept as a
+// separate "For" mutation in case a future caller (e.g. a timer surfaced
+// from somewhere other than one fixed ticket panel) needs to act on
+// whichever ticket it's currently handling.
+export function useLogTicketTimeFor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ticketId, startedAt, endedAt, title }: LogTicketTimeInput) =>
+      apiRequest<ItopTimeLogWriteResult>(`/itop/tickets/${ticketId}/time`, {
+        method: "POST",
+        body: { startedAt, endedAt, ...(title ? { title } : {}) },
+      }),
+    onSuccess: (_result, variables) => {
+      // No `setQueryData` here (see the module comment above) — the ticket
+      // detail's `myMinutesThisWeek` is local-week bucketed and this
+      // response's isn't, so the ONLY correct way to refresh it is a refetch
+      // through `useItopTicket`'s own `utcOffsetMinutes` call. The panel's
+      // "this week" figure updates as soon as that refetch lands (it's an
+      // active query while the panel's open, so `invalidateQueries` fires it
+      // immediately) rather than from this mutation's own response.
+      qc.invalidateQueries({ queryKey: queryKeys.itopTicket(variables.ticketId) });
+      qc.invalidateQueries({ queryKey: queryKeys.utilizationRoot });
+      // Defensive, matching the sibling ticket-write mutations' own
+      // invalidation of the customer's ticket list — logging time doesn't
+      // change a ticket's status, but keeps this mutation's invalidation
+      // shape consistent with `useTicketActionFor`/`useAddTicketLog` in case
+      // an install's TimeSpent creation ever bumps the ticket's own
+      // `last_update`.
+      qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(variables.customerId) });
+    },
+  });
+}
+
+/** Thin wrapper over `useLogTicketTimeFor` fixing `ticketId`/`customerId` —
+ * `TicketTimer.tsx`'s only call site. */
+export function useLogTicketTime(ticketId: number, customerId: number) {
+  const mutation = useLogTicketTimeFor();
+  function mutate(
+    input: { startedAt: string; endedAt: string; title?: string },
+    options?: Parameters<typeof mutation.mutate>[1],
+  ) {
+    return mutation.mutate({ ticketId, customerId, ...input }, options);
+  }
+  return { ...mutation, mutate };
 }
 
 // `onSuccess`'s cache write is deliberately conditional: a `staleAfterWrite`
@@ -2331,7 +2473,18 @@ export function useTicketActionFor(customerId: number) {
       if (fresh.staleAfterWrite) {
         qc.invalidateQueries({ queryKey: queryKeys.itopTicket(variables.ticketId) });
       } else {
-        qc.setQueryData(queryKeys.itopTicket(variables.ticketId), fresh);
+        // The action route's `core/get` echo doesn't compute
+        // `myMinutesThisWeek` (fix round, phase review) — merging in the
+        // previous cache's value (falling back to 0 if there wasn't one)
+        // keeps the panel's "this week" figure from flashing to "0.0 h"
+        // after every action, until the next full refetch.
+        qc.setQueryData(
+          queryKeys.itopTicket(variables.ticketId),
+          (prev: ItopTicketDetail | undefined) => ({
+            ...fresh,
+            myMinutesThisWeek: fresh.myMinutesThisWeek ?? prev?.myMinutesThisWeek ?? 0,
+          }),
+        );
       }
       qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(customerId) });
       qc.invalidateQueries({ queryKey: queryKeys.itopDailyRoot });
@@ -2362,7 +2515,15 @@ export function useAddTicketLog(ticketId: number, customerId: number) {
       if (fresh.staleAfterWrite) {
         qc.invalidateQueries({ queryKey: queryKeys.itopTicket(ticketId) });
       } else {
-        qc.setQueryData(queryKeys.itopTicket(ticketId), fresh);
+        // Same merge rationale as `useTicketActionFor` above — the log
+        // route's echo doesn't carry `myMinutesThisWeek` either.
+        qc.setQueryData(
+          queryKeys.itopTicket(ticketId),
+          (prev: ItopTicketDetail | undefined) => ({
+            ...fresh,
+            myMinutesThisWeek: fresh.myMinutesThisWeek ?? prev?.myMinutesThisWeek ?? 0,
+          }),
+        );
       }
       qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(customerId) });
       qc.invalidateQueries({ queryKey: queryKeys.itopDailyRoot });
@@ -2446,7 +2607,13 @@ export function useCreateTicket(customerId: number) {
       // redundant loading flash there (`useItopTicket` finds the row
       // already cached).
       if (!isStaleTicketCreate(result)) {
-        qc.setQueryData(queryKeys.itopTicket(result.id), result);
+        // A brand-new ticket has no prior cache entry to merge a
+        // `myMinutesThisWeek` from (fix round, phase review) — 0 is simply
+        // right for a ticket nobody has logged time on yet.
+        qc.setQueryData(queryKeys.itopTicket(result.id), {
+          ...result,
+          myMinutesThisWeek: result.myMinutesThisWeek ?? 0,
+        });
       }
       qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(customerId) });
       qc.invalidateQueries({ queryKey: queryKeys.itopDailyRoot });

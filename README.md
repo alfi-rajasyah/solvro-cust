@@ -48,6 +48,15 @@ Seven tabs under `/projects/:id`: Overview, List, Kanban, Gantt, Timeline, Risks
 - **PWA & mobile** — installable, precached app shell, usable down to 375 px.
 - **Design system** — "Technical Precision": dark-first charcoal surfaces with a single green accent, light mode included, Source Sans 3 and Material Symbols.
 
+### iTop integration
+
+Solvro connects to an external [iTop](https://www.itophub.io/) ITSM instance, configured once at Admin > iTop:
+
+- **Tickets** — a customer's iTop tickets appear on that customer's page in a Tickets tab, with a Board view whose columns follow iTop's own lifecycle (New, Assigned, Pending, Resolved, Closed); dragging a card sends the matching lifecycle step to iTop, and a "New ticket" button creates a ticket directly in iTop. A task's panel can pin one iTop ticket by reference — showing its live status and an "Open in iTop" link once the ticket is in the local snapshot — or create a new ticket directly from the task, prefilled with its title and description.
+- **Time** — **Utilization** (`/utilization`, the old `/work-logs` URL redirects here) shows hours per customer per week drawn from iTop's Time Tracking extension; every TAM sees their own hours, and holders of the Executive-report permission also get "By TAM" and "By customer" views. A Start/Stop timer on the ticket panel — one running timer per user, shown as a compact pill in the top bar — logs a Time Tracking entry in iTop under the user's own identity the moment it's stopped.
+- **Live sync** — an optional per-install webhook secret lets iTop's own "on ticket update" trigger nudge Solvro into an immediate sync instead of waiting for the next scheduled pull.
+- **Actions from Solvro** — opt-in per install (Admin > iTop) and per TAM (a personal iTop token saved in Settings): once both are on, a ticket can be assigned, set pending, resolved, closed, reopened, or given a log entry straight from Solvro's ticket panel. Every write happens under the acting TAM's own iTop identity — iTop stays the owner of what a ticket can do and who can do it.
+
 ## Architecture
 
 ### Three tiers, one Docker network
@@ -243,11 +252,3 @@ The backend test setup refuses any database whose name does not end in `_test`, 
 ## Branches and releases
 
 Work branches off `develop` and merges back by pull request; `develop` is the integration branch. `main` is the release branch: a merge into `main` runs CI, and only a green run publishes the `latest` images that `setup.sh` pulls. `v*` tags publish versioned images directly.
-
-## Roadmap
-
-- **Utilization** (`/utilization`) — hours per customer per week, drawn from iTop's Time Tracking extension once an admin connects iTop (Admin > iTop). Every TAM sees their own hours; holders of the Executive-report permission also get "By TAM" and "By customer" views. The old `/work-logs` URL redirects here. A customer's iTop tickets also appear on that customer's page, in its Tickets tab.
-- **Task ↔ ticket link** — a task's panel can pin one iTop ticket by reference, showing its live status and an "Open in iTop" link once the ticket is in the local snapshot.
-- **iTop webhook** — an optional per-install secret lets iTop's own "on ticket update" trigger nudge Solvro into an immediate sync, for near-real-time ticket status instead of waiting for the next scheduled pull.
-- **Ticket actions from Solvro** — opt-in per install (Admin > iTop) and per TAM (a personal iTop token saved in Settings): once both are on, a ticket can be assigned, set pending, resolved, closed, reopened, or given a log entry straight from Solvro's ticket panel. Every write happens under the acting TAM's own iTop identity — iTop stays the owner of what a ticket can do and who can do it.
-- **Board view and new tickets** — the customer Tickets tab can switch to a Board view whose columns follow iTop's own lifecycle (New, Assigned, Pending, Resolved, Closed) rather than a Solvro task board; dragging a card sends the matching lifecycle step to iTop, and a "New ticket" button creates a ticket directly in iTop. Both need the same opt-in as ticket actions above (Actions from Solvro on, the acting TAM's own token saved).

@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-09-23 — Time tracking and task-to-ticket from Solvro
+
+- **Log time on a ticket** — `POST /itop/tickets/:id/time` (**`backend/src/routes/itop.ts`**) creates a Time Tracking entry in iTop under the acting user's own iTop account (the user must be matched to an iTop user), validates the window (1 minute to 24 hours, not in the future, within the last 8 weeks), stores the entry in the snapshot right away and reports it as stale if the follow-up read fails. `GET /itop/tickets/:id` now returns how many minutes the caller logged on that ticket in their local ISO week.
+- **Timer on the ticket panel** — **`frontend/src/components/itop/TicketTimer.tsx`** adds Start / Stop below the ticket's log: one running timer per user, kept across reloads, with a compact running-timer pill in the top bar on desktop that links back to the ticket. Stop logs the entry in iTop under the user's own identity; a stop under one minute offers Discard instead. The panel shows the hours logged on that ticket this week, refetched after each entry.
+- **Create a ticket from a task** — a task with no pinned ticket shows "Create in iTop" next to its iTop ticket field when the project's customer is mapped; the New-ticket sheet opens prefilled with the task's title and description, and the task pins the new ticket automatically (**`frontend/src/components/itop/TaskTicketField.tsx`**). Playwright specs: `e2e/tests/itop-timer.spec.ts`, `e2e/tests/itop-task-ref.spec.ts`.
+
 ### Added — 2026-09-23 — iTop board view and new tickets from Solvro
 
 - **Create a ticket in iTop** — `POST /itop/tickets` (**`backend/src/routes/itop.ts`**) creates a User Request or Incident under the customer's iTop organisation with the acting user's own token, after checking the chosen caller belongs to that organisation; `GET /itop/services` and `GET /itop/customers/:id/contacts` feed the pick-lists from iTop's own data. The new ticket appears in the customer's list with iTop's reference; if the follow-up read fails, the response says the ticket was created and will appear after the next sync.

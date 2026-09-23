@@ -4,7 +4,7 @@
 // Refresh button, the admin "Sync now" route, and the later webhook nudge.
 // Guarded by lib/itop/sync.ts's Postgres advisory lock, so a second backend
 // instance (or an overlapping tick/request) cannot double-sync — see
-// docs/plans/itop-integration.md §2 deviation 7 and Task 1.4.
+// docs/archive/plans/itop-integration.md §2 deviation 7 and Task 1.4.
 import { env } from "../../env.js";
 import { logger } from "../../logger.js";
 import { getItopConfig, isItopConfigured } from "./config.js";

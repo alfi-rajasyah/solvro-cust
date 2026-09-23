@@ -2,8 +2,8 @@
 // /itop/me). Exercises the email-match rule that lets a TAM save their own
 // personal token (never someone else's), the never-echo-the-token
 // invariant, DELETE, and the best-effort expiry read. See
-// docs/plans/itop-integration.md Task 5.1 and
-// docs/plans/itop-integration-spec.md "What one action looks like".
+// docs/archive/plans/itop-integration.md Task 5.1 and
+// docs/archive/plans/itop-integration-spec.md "What one action looks like".
 import "../env.js";
 import type { Server } from "node:http";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";

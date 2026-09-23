@@ -5,7 +5,7 @@
 // boundary, single-ticket lookup visibility, and the /refresh cooldown +
 // not-configured guard. Tickets are seeded directly via prisma — no fake
 // iTop server needed (that's sync.test.ts's job). See
-// docs/plans/itop-integration.md Task 1.7.
+// docs/archive/plans/itop-integration.md Task 1.7.
 import "../env.js";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";

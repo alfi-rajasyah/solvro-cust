@@ -7,7 +7,7 @@
 // ordering + the 6-item cap, and 1-decimal rounding. Time entries are seeded
 // directly via prisma — no fake iTop server needed (that's sync.test.ts's
 // job). Reuses test/itop/daily.test.ts's fixture + scoped-reset pattern. See
-// docs/plans/itop-integration.md Task 3.2.
+// docs/archive/plans/itop-integration.md Task 3.2.
 import "../env.js";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";

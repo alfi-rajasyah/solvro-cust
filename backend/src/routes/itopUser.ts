@@ -2,8 +2,8 @@
 // at /itop/me in src/app.ts, `requireAuth` only (no admin gate: every user
 // manages their own token). A pasted token is accepted only when it
 // belongs, in iTop, to the SAME PERSON as the Solvro account saving it
-// (matched by email) — user decision 2026-09-22 (docs/plans/itop-integration.md
-// §1 decision 8, docs/plans/itop-integration-spec.md "What one action looks
+// (matched by email) — user decision 2026-09-22 (docs/archive/plans/itop-integration.md
+// §1 decision 8, docs/archive/plans/itop-integration-spec.md "What one action looks
 // like" for the REST shapes this module builds on top of). Writes to iTop
 // (routes/itop.ts's action/log routes) always decrypt and use THIS token for
 // the acting user — never the application token (lib/itop/config.ts's

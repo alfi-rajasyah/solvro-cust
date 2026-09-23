@@ -1,7 +1,12 @@
 # iTop Integration — Plan
 
+**Shipped** across PRs #2–#8 on `develop`, 2026-09-22 → 2026-09-23. Decisions
+are in §1 below; deviations from the original proposal are in §2; deferred
+findings live in `docs/ISSUES.md` (the "iTop integration Phase N — deferred
+findings" sections).
+
 Status: **decisions confirmed 2026-09-22 (user)**; code starts after PR `feat/remove-pipeline-module` merges into `develop` (user sequencing decision, 2026-09-22).
-Source proposal: `docs/plans/itop-integration-spec.md` (extract of the "iTop in Solvro" artifact, v2, 2026-09-12).
+Source proposal: `docs/archive/plans/itop-integration-spec.md` (extract of the "iTop in Solvro" artifact, v2, 2026-09-12).
 Branches: one per phase, off up-to-date `origin/develop`: `feat/itop-p1-tickets`, `feat/itop-p2-daily-review`, `feat/itop-p3-utilization`, `feat/itop-p4-webhook-taskref`, `feat/itop-p5-write-path`, `feat/itop-p6-board`, `feat/itop-p7-timer`. Phase = branch = PR; task = commit.
 
 ## 1. Decisions (settled — do not re-litigate)

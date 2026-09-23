@@ -598,7 +598,7 @@ model ItopTicket {
 // extension), refreshed by the same sync as ItopTicket
 // (backend/src/lib/itop/sync.ts). `id` is the iTop object key, not a
 // Solvro-assigned autoincrement. Powers the Utilization page
-// (docs/plans/itop-integration.md Phase 3) — hours are read only from
+// (docs/archive/plans/itop-integration.md Phase 3) — hours are read only from
 // TimeSpent, never a ticket's own time_spent/clock field (plan §3).
 model ItopTimeEntry {
   id              Int         @id

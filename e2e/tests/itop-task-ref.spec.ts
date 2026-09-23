@@ -75,6 +75,76 @@ async function mockTicketByRef(page: Page, ref: string): Promise<void> {
   );
 }
 
+// "Create in iTop" from a task (Task 7.2, docs/archive/plans/
+// itop-integration.md) — additive mocks for the second describe block below.
+// `actionsEnabled: true` is the one difference from `mockItopStatus` above,
+// so it's a separate function rather than a param threaded through every
+// existing call site.
+async function mockItopStatusWithActions(page: Page): Promise<void> {
+  await page.route("**/api/itop/status", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        configured: true,
+        baseUrl: ITOP_BASE_URL,
+        lastSyncAt: new Date().toISOString(),
+        lastSyncOk: true,
+        refreshMinutes: 5,
+        actionsEnabled: true,
+      }),
+    }),
+  );
+}
+
+async function mockMyToken(page: Page): Promise<void> {
+  await page.route("**/api/itop/me/token", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        set: true,
+        personName: "QA Admin",
+        checkedAt: new Date().toISOString(),
+        expiresAt: null,
+        actionsEnabled: true,
+        configured: true,
+      }),
+    }),
+  );
+}
+
+/** `useItopCustomerMapped`'s underlying gate — same `mapped: true` shape
+ * `CustomerDetail.tsx`'s own Tickets-tab gate reads. */
+async function mockCustomerMapped(page: Page, customerId: number): Promise<void> {
+  await page.route(`**/api/itop/customers/${customerId}/tickets*`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        mapped: true,
+        orgName: "QA Fixture Org",
+        tickets: [],
+        counts: { ongoing: 0, resolvedWeek: 0, mine: 0, incidents: 0, requests: 0 },
+        syncedAt: new Date().toISOString(),
+      }),
+    }),
+  );
+}
+
+async function mockNewTicketSheetDeps(page: Page, customerId: number): Promise<void> {
+  await page.route("**/api/itop/services", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) }),
+  );
+  await page.route(`**/api/itop/customers/${customerId}/contacts`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([{ id: 42, name: "Jane Doe", email: "jane@fixture.test" }]),
+    }),
+  );
+}
+
 async function openTaskPanel(page: Page, projectId: number, taskId: number) {
   await page.goto(`/projects/${projectId}/list?task=${taskId}`, { waitUntil: "networkidle" });
   await page.waitForTimeout(800);
@@ -162,5 +232,97 @@ test.describe("TaskPanel iTop ticket field", () => {
     await patchRequest;
 
     await expect(panel.getByText("not in snapshot", { exact: true })).toBeVisible();
+  });
+});
+
+test.describe("TaskPanel Create in iTop", () => {
+  test.use({ serviceWorkers: "block" });
+
+  test("creates a ticket from the task and pins its ref", async ({ page, seededProject }, testInfo) => {
+    const base = apiBase(testInfo);
+    const { token, projectId, customerId } = seededProject;
+    const taskTitle = `Create ticket ${stamp()}`;
+    // `createTask`'s `CreateTaskInput` has no `description` field (nothing
+    // in this suite needed one before) — a raw POST here rather than
+    // widening that shared fixture helper for one spec's prefill assertion.
+    const taskRes = await fetch(`${base}/api/projects/${projectId}/tasks`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ title: taskTitle, description: "Repro steps for the ticket." }),
+    });
+    const task = (await taskRes.json()) as { id: number };
+
+    await mockItopStatusWithActions(page);
+    await mockMyToken(page);
+    await mockCustomerMapped(page, customerId);
+    await mockNewTicketSheetDeps(page, customerId);
+
+    const createdRef = "R-009001";
+    await page.route("**/api/itop/tickets", (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      return route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 9001,
+          class: "UserRequest",
+          ref: createdRef,
+          title: taskTitle,
+          status: "new",
+          operationalStatus: "ongoing",
+          priority: "3",
+          agentPersonId: null,
+          agentName: null,
+          teamName: null,
+          serviceName: null,
+          callerName: "Jane Doe",
+          startDate: new Date().toISOString(),
+          lastUpdate: new Date().toISOString(),
+          tto: null,
+          ttr: null,
+          slaTtoPassed: false,
+          slaTtrPassed: false,
+          resolutionDate: null,
+          isMine: false,
+          publicLog: [],
+          privateLog: [],
+          myMinutesThisWeek: 0,
+        }),
+      });
+    });
+    await mockTicketByRef(page, createdRef);
+
+    await loginViaUi(page);
+
+    const panel = await openTaskPanel(page, projectId, task.id);
+    const createButton = panel.getByRole("button", { name: "Create in iTop" });
+    await expect(createButton).toBeVisible();
+    await createButton.click();
+
+    const sheet = page.getByRole("dialog", { name: "New ticket" });
+    await expect(sheet).toBeVisible();
+    // Prefilled from the task (Task 7.2's acceptance: title + description).
+    await expect(sheet.locator("input[type='text']")).toHaveValue(taskTitle);
+    await expect(sheet.locator("textarea")).toHaveValue("Repro steps for the ticket.");
+
+    // Caller is required (`canSubmit` in NewTicketSheet.tsx) — the mocked
+    // contacts list has exactly one option.
+    await sheet.locator("select").nth(1).selectOption("42");
+
+    const createRequest = page.waitForRequest(
+      (req) => req.url().endsWith("/api/itop/tickets") && req.method() === "POST",
+    );
+    const patchRequest = page.waitForRequest(
+      (req) => req.method() === "PATCH" && req.url().includes(`/api/tasks/${task.id}`),
+    );
+    await sheet.getByRole("button", { name: "Create in iTop" }).click();
+
+    await createRequest;
+    const patch = await patchRequest;
+    expect(patch.postDataJSON()).toMatchObject({ itopTicketRef: createdRef });
+
+    await expect(sheet).toBeHidden();
+    await expect(panel.getByText(createdRef, { exact: true })).toBeVisible();
+    await expect(panel.getByText("Assigned", { exact: true })).toBeVisible();
   });
 });
