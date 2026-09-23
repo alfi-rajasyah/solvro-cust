@@ -27,6 +27,7 @@ import {
 } from "@/lib/queries";
 import { ActionSheet, type ActionSheetMode } from "./ActionSheet";
 import { TicketLog } from "./TicketLog";
+import { TicketTimer } from "./TicketTimer";
 import { actionLabel, availableActions, teamsFromError } from "./ticketActions";
 import { ageLabel, itopTicketUrl, slaLabel, statusLabel, statusTone } from "./ticketPresentation";
 
@@ -263,6 +264,14 @@ export function TicketPanel({
                   onAdd={handleAddLog}
                   adding={logMutation.isPending}
                   error={logError}
+                />
+              </div>
+
+              <div className="mt-5 border-t border-outline-variant pt-4">
+                <TicketTimer
+                  ticket={{ id: ticket.id, customerId, ref: ticket.ref }}
+                  myMinutesThisWeek={ticket.myMinutesThisWeek}
+                  canAct={canAct}
                 />
               </div>
             </>

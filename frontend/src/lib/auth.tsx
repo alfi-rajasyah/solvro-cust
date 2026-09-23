@@ -166,6 +166,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTokenState(null);
     setUser(null);
     setStatus("unauthenticated");
+    // A running iTop timer is user-scoped (components/itop/useTicketTimer.ts) and must not leak into the next login on this browser.
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith("solvro.itopTimer."))
+      .forEach((k) => localStorage.removeItem(k));
   }, []);
 
   const value = useMemo(

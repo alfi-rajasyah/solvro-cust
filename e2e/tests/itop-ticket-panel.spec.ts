@@ -125,17 +125,37 @@ interface TicketDetailOverrides {
   publicLog?: typeof PUBLIC_LOG_2;
 }
 
+// 90 minutes = "1.5 h this week on this ticket" — only `GET
+// /itop/tickets/:id` (routes/itop.ts) computes this figure at all; the
+// action/log/create write routes' `core/get` echo never includes it (fix
+// round, phase review). `ticketDetailBody` is the GET shape and carries it;
+// `actionResponseBody` is the write-route shape and deliberately omits it,
+// so specs below can assert the panel keeps showing the figure it already
+// had rather than flashing to "0.0 h" after a write.
+const MY_MINUTES_THIS_WEEK = 90;
+
 function ticketDetailBody(overrides: TicketDetailOverrides = {}) {
   return {
     ...ASSIGNED_TICKET,
     status: overrides.status ?? ASSIGNED_TICKET.status,
     publicLog: overrides.publicLog ?? PUBLIC_LOG_2,
     privateLog: [],
+    myMinutesThisWeek: MY_MINUTES_THIS_WEEK,
   };
 }
 
+function actionResponseBody(overrides: TicketDetailOverrides = {}) {
+  const { myMinutesThisWeek: _myMinutesThisWeek, ...rest } = ticketDetailBody(overrides);
+  return rest;
+}
+
 async function mockTicketDetail(page: Page, overrides: TicketDetailOverrides = {}): Promise<void> {
-  await page.route(`**/api/itop/tickets/${TICKET_ID}`, (route) => {
+  // Trailing `*` (Task 7.1, docs/archive/plans/itop-integration.md):
+  // `useItopTicket` (lib/queries.ts) now appends `?utcOffsetMinutes=` to
+  // this GET so the backend can bucket `myMinutesThisWeek` by the caller's
+  // local week — an exact-path route pattern with no wildcard for the query
+  // string no longer matches the real request URL.
+  await page.route(`**/api/itop/tickets/${TICKET_ID}*`, (route) => {
     if (route.request().method() !== "GET") return route.fallback();
     return route.fulfill({
       status: 200,
@@ -169,10 +189,15 @@ test.describe("Ticket panel", () => {
           body: JSON.stringify({ error: "Missing required fields." }),
         });
       }
+      // `actionResponseBody`, not `ticketDetailBody` — the real
+      // /actions route's `core/get` echo never carries `myMinutesThisWeek`
+      // (only the plain GET does); this is what exercises the panel's merge
+      // fix below rather than papering over it with a mock that's more
+      // complete than the real backend.
       return route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(ticketDetailBody({ status: "resolved" })),
+        body: JSON.stringify(actionResponseBody({ status: "resolved" })),
       });
     });
 
@@ -190,6 +215,8 @@ test.describe("Ticket panel", () => {
     await expect(panel).toBeVisible();
     await expect(panel.getByText("Please add both new hires.")).toBeVisible();
     await expect(panel.getByText("Working on it now.")).toBeVisible();
+    // Fetched from the (complete) GET before any action fires.
+    await expect(panel.getByText("1.5 h this week on this ticket")).toBeVisible();
 
     await panel.getByRole("button", { name: "Resolve" }).click();
 
@@ -212,6 +239,10 @@ test.describe("Ticket panel", () => {
 
     await expect(sheet).toBeHidden();
     await expect(panel.getByText("Resolved")).toBeVisible();
+    // The figure survives the action (fix round, phase review) — merged
+    // from the previous cache rather than overwritten with the write
+    // route's response, which has no `myMinutesThisWeek` of its own.
+    await expect(panel.getByText("1.5 h this week on this ticket")).toBeVisible();
   });
 
   test("shows a stale notice when iTop accepts a write but the follow-up read fails", async ({
@@ -291,8 +322,11 @@ test.describe("Ticket panel", () => {
       route.fulfill({
         status: 200,
         contentType: "application/json",
+        // `actionResponseBody`, not `ticketDetailBody` — see the "Resolve"
+        // test above for why: the /log route's echo carries no
+        // `myMinutesThisWeek` either.
         body: JSON.stringify(
-          ticketDetailBody({
+          actionResponseBody({
             publicLog: [
               ...PUBLIC_LOG_2,
               { date: new Date().toISOString(), author: "QA Admin", message: "Escalated to L2." },

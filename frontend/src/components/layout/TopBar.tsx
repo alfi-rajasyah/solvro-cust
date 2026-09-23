@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ProjectStatusChip } from "@/components/StatusChip";
+import { formatElapsed, useRunningItopTimer } from "@/components/itop/useTicketTimer";
 import { useAuth } from "@/lib/auth";
 import { useProject } from "@/lib/queries";
 import { useTheme } from "@/lib/theme";
@@ -20,6 +21,11 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  // Global "a timer is running somewhere" indicator (Task 7.1,
+  // docs/archive/plans/itop-integration.md) — read-only, no gate needed
+  // beyond "is one stored at all": a running timer implies whoever started
+  // it already passed TicketTimer.tsx's own canAct check.
+  const runningTimer = useRunningItopTimer();
 
   const segments = location.pathname.split("/").filter(Boolean);
   const projectId =
@@ -78,6 +84,18 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
       )}
 
       <div className="ml-auto flex items-center gap-3">
+        {runningTimer && (
+          <Link
+            to={`/customers/${runningTimer.timer.customerId}?tab=tickets&ticket=${runningTimer.timer.ticketId}`}
+            aria-label={`Timer running on ${runningTimer.timer.ref}`}
+            title={`Timer running on ${runningTimer.timer.ref}`}
+            className="hidden items-center gap-1 rounded-sm border border-outline-variant px-2 py-1 font-mono text-[11px] text-on-surface-variant hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:flex"
+          >
+            <span className="material-symbols-outlined text-[14px]">timer</span>
+            {formatElapsed(runningTimer.elapsedSeconds)}
+          </Link>
+        )}
+
         <button
           type="button"
           onClick={onOpenSearch}

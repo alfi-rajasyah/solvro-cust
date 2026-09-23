@@ -29,13 +29,25 @@ export function NewTicketSheet({
   onClose,
   customerId,
   onCreated,
+  initialTitle,
+  initialDescription,
 }: {
   open: boolean;
   onClose: () => void;
   customerId: number;
   /** Opens the ticket panel on the newly created ticket's id — 201 only; a
-   * 202 stale create has nothing to open yet (see the stale notice below). */
-  onCreated: (id: number) => void;
+   * 202 stale create has nothing to open yet (see the stale notice below).
+   * `ref` (Task 7.2, docs/archive/plans/itop-integration.md) lets
+   * `TaskTicketField.tsx` pin the new ticket to the task in the same round
+   * trip, without a second lookup by id. */
+  onCreated: (ticket: { id: number; ref: string }) => void;
+  /** Prefill for "Create ticket from a task" (Task 7.2) — the task's own
+   * title/description. Each caller mounts a fresh `NewTicketSheet` instance
+   * per open (see `TicketsTab.tsx`'s/`TaskTicketField.tsx`'s own
+   * `{open && <NewTicketSheet .../>}` guards), so these only need to seed
+   * `useState`'s initial value, not a `useEffect` sync. */
+  initialTitle?: string;
+  initialDescription?: string;
 }) {
   const { data: myToken } = useMyItopToken();
   const { data: contacts, isLoading: contactsLoading } = useItopContacts(customerId);
@@ -43,10 +55,10 @@ export function NewTicketSheet({
   const createTicket = useCreateTicket(customerId);
 
   const [ticketClass, setTicketClass] = useState<ItopTicketClass>("UserRequest");
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(initialTitle ?? "");
   const [callerId, setCallerId] = useState<number | "">("");
   const [serviceId, setServiceId] = useState<number | "">("");
-  const [description, setDescription] = useState("");
+  const [description, setDescription] = useState(initialDescription ?? "");
   const [error, setError] = useState<string | null>(null);
   const [staleNotice, setStaleNotice] = useState<string | null>(null);
 
@@ -54,10 +66,10 @@ export function NewTicketSheet({
 
   function reset() {
     setTicketClass("UserRequest");
-    setTitle("");
+    setTitle(initialTitle ?? "");
     setCallerId("");
     setServiceId("");
-    setDescription("");
+    setDescription(initialDescription ?? "");
     setError(null);
     setStaleNotice(null);
   }
@@ -91,10 +103,10 @@ export function NewTicketSheet({
             setStaleNotice(`Created in iTop as #${result.id} — it appears after the next sync.`);
             return;
           }
-          const createdId = result.id;
+          const created = { id: result.id, ref: result.ref };
           reset();
           onClose();
-          onCreated(createdId);
+          onCreated(created);
         },
         onError: (err) => {
           setError(err instanceof ApiError ? err.message : "Could not create the ticket.");

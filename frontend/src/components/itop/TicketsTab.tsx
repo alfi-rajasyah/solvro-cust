@@ -158,7 +158,7 @@ export function TicketsTab({
           open
           onClose={() => setNewTicketOpen(false)}
           customerId={customerId}
-          onCreated={onOpenTicket}
+          onCreated={(ticket) => onOpenTicket(ticket.id)}
         />
       )}
     </div>
