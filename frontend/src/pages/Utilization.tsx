@@ -42,20 +42,18 @@ function formatSyncedAt(iso: string | null): string {
 // `authResolved` gates that clamp: AuthGuard only waits for `status !==
 // "loading"`, and `status` flips to "authenticated" as soon as a token
 // exists — before `/auth/me` has confirmed the user's actual permissions
-// (auth.tsx's rehydrate effect), and even before a freshly-logged-in
-// session's `user` has been flushed to localStorage for a subsequent full
-// navigation to read back. In that gap `user` is still null, so
-// `hasPermission(null, …)` reads false for everyone. Without this gate, a
-// direct deep link like `/utilization?scope=customer` from an executive
-// would get permanently clamped to `?scope=me` (via the `replace` below)
-// before the real permission was known. Instead: don't clamp, don't rewrite
-// the URL, and don't fire the query until `user` is actually loaded — the
-// skeleton renders in that gap.
+// (auth.tsx's rehydrate effect). In that gap `user` is only the
+// localStorage copy, which can be missing (null) or stale (permissions
+// changed since). Without this gate, a direct deep link like
+// `/utilization?scope=customer` from an executive whose cached copy lacks
+// `report:executive` would get permanently clamped to `?scope=me` (via the
+// `replace` below) before the real permission was known. So auth counts as
+// resolved only once `useAuth().userVerified` is true — or earlier, when the
+// cached user already allows the requested scope (no clamp can happen, so
+// there is nothing to wait for). Until then: don't clamp, don't rewrite the
+// URL, and don't fire the query — the skeleton renders in that gap.
 export function Utilization() {
-  const { user } = useAuth();
-  const authResolved = user != null;
-  const canSeeOtherScopes = authResolved && hasPermission(user, "report:executive");
-  const isAdmin = authResolved && hasPermission(user, "*");
+  const { user, userVerified } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const weekParam = searchParams.get("week");
@@ -64,6 +62,12 @@ export function Utilization() {
   const scopeParam = searchParams.get("scope");
   const requestedScope: UtilizationScope =
     scopeParam === "tam" || scopeParam === "customer" ? scopeParam : "me";
+
+  const authResolved =
+    user != null &&
+    (userVerified || requestedScope === "me" || hasPermission(user, "report:executive"));
+  const canSeeOtherScopes = authResolved && hasPermission(user, "report:executive");
+  const isAdmin = authResolved && hasPermission(user, "*");
   const scope: UtilizationScope =
     !authResolved || requestedScope === "me" || canSeeOtherScopes ? requestedScope : "me";
 

@@ -15,6 +15,13 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-09-24 — Admin pages no longer bounce to Overview after sign-in
+
+- **Opening Admin or Executive right after signing in no longer redirects to Overview.** On a full page load the permission guards judged the copy of the user cached in the browser, which could be missing (a load right after sign-in) or out of date (permissions changed since), before the server had confirmed the user. The guards now show "Loading…" until the server answers and only then redirect a user who lacks access; sign-in also stores the user in the browser at the same moment as the session token (**`frontend/src/lib/auth.tsx`**, **`frontend/src/components/AdminGuard.tsx`**, **`frontend/src/components/ExecutiveGuard.tsx`**).
+- **A stalled user check no longer leaves those pages loading forever.** The start-up user check now gives up after 15 seconds and signs the user out cleanly, as any other failed check already did.
+- **Utilization deep links wait for the confirmed user too.** A link such as `/utilization?scope=customer` from a user whose cached permissions are out of date is no longer rewritten to the "Me" tab before the server has answered (**`frontend/src/pages/Utilization.tsx`**).
+- Two end-to-end tests cover opening an admin page right after sign-in and with no cached user (**`e2e/tests/auth.spec.ts`**).
+
 ### Fixed — 2026-09-24 — iTop timestamps in the iTop server's timezone
 
 - **iTop times are read in the iTop server's timezone.** iTop sends date-times as wall-clock values in its own configured zone, but Solvro read them as UTC, so ticket and time-entry times were off by the zone's offset (two hours for a Europe/Paris install), incremental syncs used the wrong cutoff, and timer entries were written at the wrong time. All reads and writes now convert through the configured zone, correct across daylight-saving changes (**`backend/src/lib/itop/timezone.ts`**, **`backend/src/lib/itop/sync.ts`**, **`backend/src/routes/itop.ts`**).
