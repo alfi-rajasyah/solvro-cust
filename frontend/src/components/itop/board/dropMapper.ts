@@ -16,26 +16,32 @@ import type { ItopTicketActionName } from "@/lib/queries";
 
 export interface DropMapping {
   action: ItopTicketActionName;
-  /** "resolve" when iTop demands mandatory fields (resolution code +
-   * solution) before this step can go through — the caller must open the
-   * shared `ActionSheet` instead of firing the action directly. */
-  needsSheet: "resolve" | null;
+  /** "resolve"/"pending" when iTop demands mandatory fields (resolution code
+   * + solution, or a reason) before this step can go through — the caller
+   * must open the shared `ActionSheet` instead of firing the action
+   * directly. */
+  needsSheet: "resolve" | "pending" | null;
 }
 
 // Keyed "from>to" — every entry is one iTop stimulus a drag can trigger.
 // Anything not listed here (including any same-column "move") is forbidden.
 //
-// `pending>assigned` is deliberately ABSENT (Phase 6 fix round, 2026-09-23):
-// iTop's default lifecycle only wires `ev_assign` (assign_to_me) from `new`,
-// never from `pending` — the user's own decision (docs/archive/plans/
-// itop-integration.md §1 item 10) is "iTop defaults", and the fake iTop the
-// test suite runs against only accepts `ev_assign` from `new`. A `pending`
-// ticket can only move on by `resolve`. `ticketActions.ts`'s
-// `AVAILABLE_BY_STATUS.pending` drops `assign_to_me` for the same reason.
+// `pending>assigned` is RESTORED (fix round, 2026-09-24, against a real iTop
+// 3.2.2 install): the Phase 6 assumption that iTop's default lifecycle only
+// wires `ev_assign` from `new` was wrong — `ev_assign` (assign_to_me) is
+// valid from `new` AND `pending` there. `ticketActions.ts`'s
+// `AVAILABLE_BY_STATUS.pending` restores `assign_to_me` for the same reason.
+//
+// `assigned>pending` now needs the reason sheet (same ground truth check):
+// `POST .../actions { action: "pending" }` 400s on a real install without
+// `fields.pending_reason` — the plan's original "pending needs nothing"
+// (docs/archive/plans/itop-integration.md §1 decision 10) undershot the
+// real install's requirement.
 const TRANSITIONS: Partial<Record<string, DropMapping>> = {
   "new>assigned": { action: "assign_to_me", needsSheet: null },
-  "assigned>pending": { action: "pending", needsSheet: null },
+  "assigned>pending": { action: "pending", needsSheet: "pending" },
   "assigned>resolved": { action: "resolve", needsSheet: "resolve" },
+  "pending>assigned": { action: "assign_to_me", needsSheet: null },
   "pending>resolved": { action: "resolve", needsSheet: "resolve" },
   "resolved>closed": { action: "close", needsSheet: null },
   "resolved>assigned": { action: "reopen", needsSheet: null },

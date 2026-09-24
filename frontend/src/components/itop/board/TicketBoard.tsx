@@ -166,8 +166,8 @@ export function TicketBoard({
       return;
     }
 
-    if (mapping.needsSheet === "resolve") {
-      setActionSheet({ mode: "resolve", ticket, action: mapping.action });
+    if (mapping.needsSheet) {
+      setActionSheet({ mode: mapping.needsSheet, ticket, action: mapping.action });
       return;
     }
     runAction(ticket, mapping.action);

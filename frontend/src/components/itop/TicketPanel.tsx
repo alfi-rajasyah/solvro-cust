@@ -29,7 +29,14 @@ import { ActionSheet, type ActionSheetMode } from "./ActionSheet";
 import { TicketLog } from "./TicketLog";
 import { TicketTimer } from "./TicketTimer";
 import { actionLabel, availableActions, teamsFromError } from "./ticketActions";
-import { ageLabel, itopTicketUrl, slaLabel, statusLabel, statusTone } from "./ticketPresentation";
+import {
+  ageLabel,
+  itopTicketUrl,
+  priorityLabel,
+  slaLabel,
+  statusLabel,
+  statusTone,
+} from "./ticketPresentation";
 
 const CLASS_LABEL: Record<string, string> = {
   UserRequest: "User request",
@@ -113,6 +120,14 @@ export function TicketPanel({
   function handleAction(action: ItopTicketActionName) {
     if (action === "resolve") {
       setActionSheet({ mode: "resolve", action: "resolve" });
+      return;
+    }
+    // Pending needs a reason on a real iTop install (ground truth confirmed
+    // 2026-09-24: `POST /itop/tickets/:id/actions` 400s without
+    // `fields.pending_reason`) — same "open the sheet instead of firing
+    // directly" pattern as Resolve.
+    if (action === "pending") {
+      setActionSheet({ mode: "pending", action: "pending" });
       return;
     }
     runAction(action);
@@ -247,7 +262,7 @@ export function TicketPanel({
                 <Fact label="Service" value={ticket.serviceName ?? "—"} />
                 <Fact label="Team" value={ticket.teamName ?? "—"} />
                 <Fact label="Agent" value={ticket.agentName ?? "Unassigned"} />
-                <Fact label="Priority" value={ticket.priority ?? "—"} />
+                <Fact label="Priority" value={ticket.priority ? priorityLabel(ticket.priority) : "—"} />
                 <Fact label="TTO/TTR" value={slaLabel(ticket)} />
                 <Fact
                   label="Started"

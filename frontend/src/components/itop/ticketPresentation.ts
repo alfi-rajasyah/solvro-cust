@@ -109,6 +109,23 @@ export function slaLabel(ticket: SlaTicket, now: Date = new Date()): string {
   return `TTR ${durationLeft(diffMs)} left`;
 }
 
+const PRIORITY_LABEL: Record<string, string> = {
+  "1": "Critical",
+  "2": "High",
+  "3": "Medium",
+  "4": "Low",
+};
+
+/**
+ * Humanizes an iTop priority code ("1".."4" on a real install — verified
+ * against a real iTop 3.2.2, 2026-09-24). Unknown values (a custom priority
+ * level, or a raw non-code string) fall back to the raw value rather than
+ * throwing, matching `statusLabel`'s degrade-gracefully convention.
+ */
+export function priorityLabel(code: string): string {
+  return PRIORITY_LABEL[code] ?? code;
+}
+
 type UrlTicket = Pick<ItopTicketRow, "id" | "class">;
 
 /** Builds the "Open in iTop ↗" deep link. Trailing slash(es) on `baseUrl`

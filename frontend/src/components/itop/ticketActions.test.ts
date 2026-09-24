@@ -11,8 +11,8 @@ describe("availableActions", () => {
     expect(availableActions("assigned")).toEqual(["pending", "resolve"]);
   });
 
-  it("offers only Resolve on a pending ticket — iTop's default lifecycle has no ev_assign from pending", () => {
-    expect(availableActions("pending")).toEqual(["resolve"]);
+  it("offers Assign to me and Resolve on a pending ticket — ev_assign is also valid from pending on a real iTop install", () => {
+    expect(availableActions("pending")).toEqual(["assign_to_me", "resolve"]);
   });
 
   it("offers Close and Reopen on a resolved ticket", () => {

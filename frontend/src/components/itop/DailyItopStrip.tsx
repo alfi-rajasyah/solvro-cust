@@ -21,8 +21,8 @@
 // Fix round (phase review): buttons are derived from `ticketActions.ts`'s
 // own `availableActions(status)` rather than a hand-rolled status set, so
 // this strip automatically tracks any future change to which actions a
-// status offers (e.g. `pending` losing `assign_to_me`) without a second
-// edit here. `assign_to_me` can also come back 409 `itop_team_required`
+// status offers (e.g. a status gaining or losing `assign_to_me`) without a
+// second edit here. `assign_to_me` can also come back 409 `itop_team_required`
 // (iTop needs a team alongside the agent) — `teamsFromError` opens the same
 // team `ActionSheet` the panel and the board use, rather than a dead-end
 // error.

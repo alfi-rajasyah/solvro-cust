@@ -41,20 +41,18 @@ export function actionLabel(action: ItopTicketActionName): string {
 // display flavor of `assigned`, not a distinct lifecycle state — so they
 // carry the same action set as `assigned` (fix round, phase review).
 //
-// `pending` no longer offers `assign_to_me` (Phase 6 fix round, 2026-09-23):
-// iTop's default lifecycle has no `ev_assign` stimulus from `pending` (only
-// from `new`) — the user's own decision (docs/archive/plans/
-// itop-integration.md §1 item 10) is "iTop defaults", and the fake iTop
-// backing the test suite only wires `ev_assign` from `new`. A `pending`
-// ticket must go through `resolve` or wait; `dropMapper.ts`'s board-column
-// graph drops the matching `pending -> assigned` transition for the same
-// reason.
+// `pending` offers `assign_to_me` again (fix round, 2026-09-24, against a
+// real iTop 3.2.2 install): the Phase 6 assumption that iTop's default
+// lifecycle only wires `ev_assign` from `new` (2026-09-23) was wrong — a real
+// install confirmed `ev_assign` is also valid from `pending`. The plan's
+// deviation 11 is corrected accordingly; `dropMapper.ts`'s board-column
+// graph restores the matching `pending -> assigned` transition.
 const AVAILABLE_BY_STATUS: Record<string, ItopTicketActionName[]> = {
   new: ["assign_to_me"],
   assigned: ["pending", "resolve"],
   escalated_tto: ["pending", "resolve"],
   escalated_ttr: ["pending", "resolve"],
-  pending: ["resolve"],
+  pending: ["assign_to_me", "resolve"],
   resolved: ["close", "reopen"],
   closed: [],
 };
