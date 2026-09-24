@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-09-24 — Help page
+
+- **A Help page explains how to use Solvro.** `/help` walks through every page and feature a user can reach: getting started, Overview, projects and their views, tasks, risks, customers and services, Daily Review, Weekly Sync, iTop tickets, Utilization, Settings, and keyboard shortcuts. The Executive and Admin topics show only to users with that access, using the same permission rule as the sidebar. A search box narrows the topics, and `/help#<topic>` links straight to one (**`frontend/src/pages/Help.tsx`**, **`frontend/src/App.tsx`**).
+- **The help content is a typed module.** Topics live in **`frontend/src/lib/helpContent.ts`** with a pure `filterHelpTopics` function; unit tests pin the permission filter and check that each topic's gate matches its sidebar page (**`frontend/src/lib/helpContent.test.ts`**).
+- **A help button in the top bar opens the page.** The question-mark button sits next to the theme toggle on desktop and phone; the page has no sidebar or ⌘K entry (**`frontend/src/components/layout/TopBar.tsx`**). Covered by **`e2e/tests/help.spec.ts`**.
+
 ### Fixed — 2026-09-24 — Admin pages no longer bounce to Overview after sign-in
 
 - **Opening Admin or Executive right after signing in no longer redirects to Overview.** On a full page load the permission guards judged the copy of the user cached in the browser, which could be missing (a load right after sign-in) or out of date (permissions changed since), before the server had confirmed the user. The guards now show "Loading…" until the server answers and only then redirect a user who lacks access; sign-in also stores the user in the browser at the same moment as the session token (**`frontend/src/lib/auth.tsx`**, **`frontend/src/components/AdminGuard.tsx`**, **`frontend/src/components/ExecutiveGuard.tsx`**).

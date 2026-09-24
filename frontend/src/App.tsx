@@ -8,6 +8,7 @@ import { CustomerDetail } from "@/pages/CustomerDetail";
 import { Customers } from "@/pages/Customers";
 import { DailyReview } from "@/pages/DailyReview";
 import { Executive } from "@/pages/Executive";
+import { Help } from "@/pages/Help";
 import { Login } from "@/pages/Login";
 import { Overview } from "@/pages/Overview";
 import { ProjectDetail } from "@/pages/ProjectDetail";
@@ -65,6 +66,7 @@ export function App() {
           }
         />
         <Route path="settings" element={<Settings />} />
+        <Route path="help" element={<Help />} />
         <Route
           path="admin"
           element={

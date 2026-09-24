@@ -12,6 +12,7 @@ const PAGE_TITLES: Record<string, string> = {
   projects: "My Projects",
   customers: "Customers",
   tasks: "Tasks",
+  help: "Help",
 };
 
 export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
@@ -121,6 +122,15 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
         >
           <span className="material-symbols-outlined text-[20px]">search</span>
         </button>
+
+        <Link
+          to="/help"
+          aria-label="Help"
+          title="Help"
+          className="flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        >
+          <span className="material-symbols-outlined text-[20px]">help</span>
+        </Link>
 
         <button
           type="button"
