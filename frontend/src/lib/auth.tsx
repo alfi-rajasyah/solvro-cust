@@ -71,12 +71,28 @@ interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
   status: "loading" | "authenticated" | "unauthenticated";
+  /**
+   * True once `user` came from the server in this page load (a login
+   * response or the boot-time `/auth/me`), false while it is only the
+   * localStorage copy — which can be missing (a reload right after login) or
+   * stale (permissions changed since). Permission guards must not redirect
+   * away on a denial until this is true.
+   */
+  userVerified: boolean;
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: (idToken: string) => Promise<void>;
   logout: () => void;
 }
 
 const USER_STORAGE_KEY = "solvro.user";
+
+// Written synchronously on login (not only from the effect below), so a
+// full page load immediately after login already finds the cached user
+// next to the token that `setToken` stored synchronously.
+function persistUser(user: AuthUser | null) {
+  if (user) localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+  else localStorage.removeItem(USER_STORAGE_KEY);
+}
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -94,10 +110,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthContextValue["status"]>(
     token ? "authenticated" : "unauthenticated",
   );
+  const [userVerified, setUserVerified] = useState(false);
 
   useEffect(() => {
-    if (user) localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-    else localStorage.removeItem(USER_STORAGE_KEY);
+    persistUser(user);
   }, [user]);
 
   // Rehydrate from /auth/me on boot when we have a token. This refreshes the
@@ -107,10 +123,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    apiRequest<AuthUser>("/auth/me")
+    // Timed out so a request that never settles ends in the catch below
+    // (clean logout → /login) instead of leaving the permission guards on
+    // "Loading…" forever.
+    apiRequest<AuthUser>("/auth/me", { signal: AbortSignal.timeout(15_000) })
       .then((fresh) => {
         if (cancelled) return;
         setUser(fresh);
+        setUserVerified(true);
         setStatus("authenticated");
       })
       .catch(() => {
@@ -118,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(null);
         setTokenState(null);
         setUser(null);
+        setUserVerified(false);
         setStatus("unauthenticated");
       });
     return () => {
@@ -134,8 +155,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         auth: false,
       });
       setToken(res.token);
+      persistUser(res.user);
       setTokenState(res.token);
       setUser(res.user);
+      setUserVerified(true);
       setStatus("authenticated");
     } catch (err) {
       setStatus("unauthenticated");
@@ -152,8 +175,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         auth: false,
       });
       setToken(res.token);
+      persistUser(res.user);
       setTokenState(res.token);
       setUser(res.user);
+      setUserVerified(true);
       setStatus("authenticated");
     } catch (err) {
       setStatus("unauthenticated");
@@ -165,6 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setTokenState(null);
     setUser(null);
+    setUserVerified(false);
     setStatus("unauthenticated");
     // A running iTop timer is user-scoped (components/itop/useTicketTimer.ts) and must not leak into the next login on this browser.
     Object.keys(localStorage)
@@ -173,8 +199,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, token, status, login, loginWithGoogle, logout }),
-    [user, token, status, login, loginWithGoogle, logout],
+    () => ({ user, token, status, userVerified, login, loginWithGoogle, logout }),
+    [user, token, status, userVerified, login, loginWithGoogle, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
