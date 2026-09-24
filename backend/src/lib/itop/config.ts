@@ -1,8 +1,10 @@
 import { Prisma, type ItopConfig } from "@prisma/client";
 import { prisma } from "../../prisma.js";
+import { logger } from "../../logger.js";
 import { HttpError } from "../../http/errors.js";
 import { open, seal } from "../secretBox.js";
 import { createItopClient, type ItopClient } from "./client.js";
+import { isValidTimeZone } from "./timezone.js";
 
 // In-process cache for the ItopConfig singleton, mirroring authConfig.ts.
 // The row is admin-edited and read on every sync tick and every /itop request;
@@ -55,6 +57,26 @@ export function isItopConfigured(config: Pick<ItopConfig, "baseUrl" | "appTokenE
 /** Store the application token encrypted; `null` clears it. */
 export function sealAppToken(plain: string | null): string | null {
   return plain === null ? null : seal(plain);
+}
+
+/**
+ * The zone every date-parsing/formatting call site should actually use —
+ * NEVER read `config.timezone` directly for that purpose. `PATCH
+ * /admin/itop/settings` already validates a new value with
+ * `isValidTimeZone` before writing it, so this should normally just be an
+ * echo of the stored column, but a stored value can still go bad (the
+ * column edited directly, a rare Node/ICU version dropping a zone name) —
+ * an unattended sync tick must never abort over it. Falls back to `"UTC"`
+ * and logs a warning rather than letting `zonedWallTimeToUtc`/
+ * `utcToZonedWallTime` throw deep inside a sync run.
+ */
+export function resolveConfiguredTimezone(config: Pick<ItopConfig, "timezone">): string {
+  if (isValidTimeZone(config.timezone)) return config.timezone;
+  logger.warn(
+    { timezone: config.timezone },
+    "ItopConfig.timezone is not a recognized IANA timezone — falling back to UTC for this run",
+  );
+  return "UTC";
 }
 
 /**

@@ -14,7 +14,9 @@ import {
   getItopAppClient,
   getItopConfig,
   isItopConfigured,
+  resolveConfiguredTimezone,
 } from "./config.js";
+import { utcToZonedWallTime, zonedWallTimeToUtc } from "./timezone.js";
 import {
   ITOP_PERSON_OUTPUT_FIELDS,
   ITOP_TICKET_OUTPUT_FIELDS,
@@ -78,6 +80,19 @@ const CHUNK_SIZE = 50;
  */
 export const TIME_ENTRY_WINDOW_MS = 8 * 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * Largest UTC offset any real-world timezone uses (UTC+14, e.g. Kiribati) —
+ * the maximum possible disagreement between the fetch cutoff WE compute
+ * (`Date.now() - TIME_ENTRY_WINDOW_MS`, formatted into the server's zone)
+ * and how iTop's own MySQL backend actually resolves that string against
+ * its stored `start_date` near a zone/DST edge. Used to keep the full-sync
+ * DELETE bound strictly inside the fetch bound (see `syncTimeEntries`'s
+ * cleanup below) — a boundary row iTop happens not to return this tick
+ * (a rounding disagreement, not a real deletion upstream) must never be
+ * mistaken for "iTop no longer has this" and purged irreversibly.
+ */
+const MAX_ZONE_OFFSET_MS = 14 * 60 * 60 * 1000;
+
 /** Module-level: last time `syncUsers()` ran as part of `syncTickets()`'s "at most once/hour" throttle. Reset on process restart — deliberately simple, per Task 1.4. */
 let lastUserSyncAt: Date | null = null;
 
@@ -97,12 +112,19 @@ const ITOP_DATE_RE = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
  * throwing (`value.trim is not a function`), so one unexpected field shape
  * degrades gracefully instead of crashing the whole sync run.
  *
- * TODO(timezone): iTop's REST API does not include a timezone in this
- * format. We assume the value is UTC (i.e. the reference install's server
- * timezone). If a later phase adds a per-install timezone setting, this
- * assumption should be revisited.
+ * `tz` is the iTop SERVER's own configured IANA timezone
+ * (`ItopConfig.timezone`, confirmed on the reference install: `'timezone' =>
+ * 'Europe/Paris'`) — iTop's REST API returns this wall-clock string in that
+ * zone, never UTC and never with an offset suffix. Required (no default) so
+ * a call site can never silently fall back to UTC by omission — every
+ * caller must explicitly decide the zone, even a pure unit test (pass
+ * `"UTC"` there). Real call sites read `config.timezone` via
+ * `lib/itop/config.ts#resolveConfiguredTimezone`, never the raw column,
+ * so a corrupted/unrecognized stored value degrades to UTC with a warning
+ * instead of throwing here. See `lib/itop/timezone.ts` for the actual
+ * conversion and its DST rule.
  */
-export function parseItopDate(value: unknown): Date | null {
+export function parseItopDate(value: unknown, tz: string): Date | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed || trimmed === "0000-00-00 00:00:00") return null;
@@ -112,24 +134,21 @@ export function parseItopDate(value: unknown): Date | null {
     return null;
   }
   const [, y, mo, d, h, mi, s] = match;
-  return new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s)));
+  return zonedWallTimeToUtc(Number(y), Number(mo), Number(d), Number(h), Number(mi), Number(s), tz);
 }
 
 /**
  * Inverse of `parseItopDate` for building an OQL `last_update > '...'`
  * cutoff, and (Task 7.1) for formatting `start_date`/`end_date` on a
  * `core/create TimeSpent` write — iTop's REST API takes plain
- * "YYYY-MM-DD HH:MM:SS" with no timezone, so `routes/itop.ts`'s
- * `POST /tickets/:id/time` sends the same UTC-assumed shape `parseItopDate`
- * reads back, keeping the write and the read on one shared assumption.
- * Exported for that route rather than re-derived there.
+ * "YYYY-MM-DD HH:MM:SS" in the SERVER's own zone (`tz`, same contract as
+ * `parseItopDate`), so `routes/itop.ts`'s `POST /tickets/:id/time` sends the
+ * same zoned shape `parseItopDate` reads back, keeping the write and the
+ * read on one shared assumption. Exported for that route rather than
+ * re-derived there. `tz` is required — see `parseItopDate`'s doc comment.
  */
-export function formatItopDate(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return (
-    `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ` +
-    `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`
-  );
+export function formatItopDate(date: Date, tz: string): string {
+  return utcToZonedWallTime(date, tz);
 }
 
 /**
@@ -350,7 +369,7 @@ function sortCaseLogEntries(entries: ItopCaseLogEntry[]): ItopCaseLogEntry[] {
  * `MAX_CASE_LOG_ENTRIES` after sorting ("newest last" per the field's own
  * doc comment in types.ts).
  */
-export function normalizeCaseLog(raw: ItopCaseLogRaw): ItopCaseLogEntry[] {
+export function normalizeCaseLog(raw: ItopCaseLogRaw, tz: string): ItopCaseLogEntry[] {
   if (!raw) return [];
   if (typeof raw === "string") {
     const message = raw.trim();
@@ -359,7 +378,7 @@ export function normalizeCaseLog(raw: ItopCaseLogRaw): ItopCaseLogEntry[] {
   const entries = raw.entries ?? [];
   const normalized = entries.map(
     (entry): ItopCaseLogEntry => ({
-      date: parseItopDate(entry.date)?.toISOString() ?? null,
+      date: parseItopDate(entry.date, tz)?.toISOString() ?? null,
       author: entry.user_login ?? null,
       message: entry.message ?? (entry.message_html ? htmlCaseLogToPlainText(entry.message_html) : ""),
     }),
@@ -369,8 +388,8 @@ export function normalizeCaseLog(raw: ItopCaseLogRaw): ItopCaseLogEntry[] {
 }
 
 /** `Prisma.JsonNull` when there's nothing to store, else the normalised entries — kept as its own step so `upsertTicket` never stores an empty array. */
-function caseLogJson(raw: ItopCaseLogRaw) {
-  const entries = normalizeCaseLog(raw);
+function caseLogJson(raw: ItopCaseLogRaw, tz: string) {
+  const entries = normalizeCaseLog(raw, tz);
   return entries.length > 0 ? (entries as unknown as Prisma.InputJsonValue) : Prisma.JsonNull;
 }
 
@@ -378,6 +397,7 @@ async function upsertTicket(
   cls: string,
   row: ItopObjectRow<ItopTicketFields>,
   orgIdToCustomerId: Map<number, number>,
+  timezone: string,
 ): Promise<void> {
   const fields = row.fields;
   const orgId = parseItopInt(fields.org_id);
@@ -405,10 +425,10 @@ async function upsertTicket(
     callerName: fields.caller_id_friendlyname || null,
     orgId,
     customerId: orgIdToCustomerId.get(orgId) ?? null,
-    startDate: parseItopDate(fields.start_date),
+    startDate: parseItopDate(fields.start_date, timezone),
     // lastUpdate is non-nullable on the model; fall back to "now" in the
     // (unexpected) case iTop returns an unparseable value for it.
-    lastUpdate: parseItopDate(fields.last_update) ?? new Date(),
+    lastUpdate: parseItopDate(fields.last_update, timezone) ?? new Date(),
     // `tto`/`ttr` store the escalation DEADLINE (a point in time), read from
     // `tto_escalation_deadline`/`ttr_escalation_deadline` — confirmed
     // against a real iTop 3.2.2 install that the bare `tto`/`ttr` attributes
@@ -416,13 +436,13 @@ async function upsertTicket(
     // those through parseItopDate used to crash the whole sync
     // (`value.trim is not a function`). See types.ts's
     // ITOP_TICKET_OUTPUT_FIELDS doc comment.
-    tto: parseItopDate(fields.tto_escalation_deadline),
-    ttr: parseItopDate(fields.ttr_escalation_deadline),
+    tto: parseItopDate(fields.tto_escalation_deadline, timezone),
+    ttr: parseItopDate(fields.ttr_escalation_deadline, timezone),
     slaTtoPassed: parseItopBoolean(fields.sla_tto_passed),
     slaTtrPassed: parseItopBoolean(fields.sla_ttr_passed),
-    resolutionDate: parseItopDate(fields.resolution_date),
-    publicLog: caseLogJson(fields.public_log),
-    privateLog: caseLogJson(fields.private_log),
+    resolutionDate: parseItopDate(fields.resolution_date, timezone),
+    publicLog: caseLogJson(fields.public_log, timezone),
+    privateLog: caseLogJson(fields.private_log, timezone),
     syncedAt: new Date(),
   };
 
@@ -439,16 +459,20 @@ async function upsertTicket(
  * full org→customer map `syncTickets` uses — resolves just this row's org.
  * Exported for `routes/itop.ts`'s action/log routes: after a write succeeds,
  * they re-read the ticket with the APPLICATION client and call this so the
- * snapshot reflects iTop's own answer, never a client-side guess.
+ * snapshot reflects iTop's own answer, never a client-side guess. `timezone`
+ * is the caller's own `getItopConfig().timezone` — this function has no
+ * config access of its own, by design (mirrors `orgIdToCustomerId` above,
+ * resolved by the caller rather than fetched here).
  */
 export async function upsertTicketFromItop(
   cls: string,
   row: ItopObjectRow<ItopTicketFields>,
+  timezone: string,
 ): Promise<void> {
   const orgId = parseItopInt(row.fields.org_id) ?? 0;
   const customer = orgId > 0 ? await prisma.customer.findUnique({ where: { itopOrgId: orgId }, select: { id: true } }) : null;
   const orgIdToCustomerId = new Map<number, number>(customer ? [[orgId, customer.id]] : []);
-  await upsertTicket(cls, row, orgIdToCustomerId);
+  await upsertTicket(cls, row, orgIdToCustomerId, timezone);
 }
 
 /**
@@ -462,6 +486,7 @@ async function upsertTimeEntry(
   itopUserIdToUserId: Map<number, number>,
   orgIdToCustomerId: Map<number, number>,
   ticketIdByRef: Map<string, number>,
+  timezone: string,
 ): Promise<void> {
   const fields = row.fields;
   const itopUserId = parseItopInt(fields.user_id);
@@ -489,8 +514,8 @@ async function upsertTimeEntry(
     customerId: orgId !== null ? (orgIdToCustomerId.get(orgId) ?? null) : null,
     ticketId,
     ticketRef,
-    startDate: parseItopDate(fields.start_date) ?? new Date(),
-    endDate: parseItopDate(fields.end_date),
+    startDate: parseItopDate(fields.start_date, timezone) ?? new Date(),
+    endDate: parseItopDate(fields.end_date, timezone),
     durationMinutes,
     title: fields.title || null,
     syncedAt: new Date(),
@@ -512,8 +537,10 @@ async function upsertTimeEntry(
  * shape for the same reason: the write route re-reads with the read-only
  * APPLICATION client and calls this so the snapshot reflects iTop's own
  * answer, never a client-side guess of the stored duration/ticket link.
+ * `timezone` is the caller's own `getItopConfig().timezone` — same
+ * resolved-by-the-caller contract as `upsertTicketFromItop`.
  */
-export async function upsertTimeEntryFromItop(row: ItopObjectRow<ItopTimeSpentFields>): Promise<void> {
+export async function upsertTimeEntryFromItop(row: ItopObjectRow<ItopTimeSpentFields>, timezone: string): Promise<void> {
   const itopUserId = parseItopInt(row.fields.user_id) ?? 0;
   const user = await prisma.user.findUnique({ where: { itopUserId }, select: { id: true } });
   const itopUserIdToUserId = new Map<number, number>(user ? [[itopUserId, user.id]] : []);
@@ -527,7 +554,7 @@ export async function upsertTimeEntryFromItop(row: ItopObjectRow<ItopTimeSpentFi
   const ticket = ticketRef ? await prisma.itopTicket.findUnique({ where: { ref: ticketRef }, select: { id: true } }) : null;
   const ticketIdByRef = new Map<string, number>(ticketRef && ticket ? [[ticketRef, ticket.id]] : []);
 
-  await upsertTimeEntry(row, itopUserIdToUserId, orgIdToCustomerId, ticketIdByRef);
+  await upsertTimeEntry(row, itopUserIdToUserId, orgIdToCustomerId, ticketIdByRef, timezone);
 }
 
 /**
@@ -572,6 +599,7 @@ export async function syncTimeEntries(opts: { full?: boolean } = {}): Promise<Ti
     });
     const orgIdToCustomerId = new Map(customers.map((c) => [c.itopOrgId as number, c.id]));
 
+    const timezone = resolveConfiguredTimezone(config);
     const cutoff = new Date(Date.now() - TIME_ENTRY_WINDOW_MS);
     const seenIds = new Set<number>();
     // Tracked across the whole run (not per chunk) so one real "the ref
@@ -583,7 +611,11 @@ export async function syncTimeEntries(opts: { full?: boolean } = {}): Promise<Ti
     if (mappedItopUserIds.length > 0) {
       const client = await getItopAppClient();
       for (const idsChunk of chunk(mappedItopUserIds, CHUNK_SIZE)) {
-        const oql = `SELECT TimeSpent WHERE user_id IN (${idsChunk.join(",")}) AND start_date >= '${formatItopDate(cutoff)}'`;
+        // The cutoff itself must be expressed in the iTop SERVER's own zone
+        // (`timezone`) — an OQL string comparison against `start_date`
+        // (which iTop stores/reports in that same zone) would otherwise
+        // compare apples to oranges whenever the server isn't UTC.
+        const oql = `SELECT TimeSpent WHERE user_id IN (${idsChunk.join(",")}) AND start_date >= '${formatItopDate(cutoff, timezone)}'`;
         const result = await client.getAll<ItopTimeSpentFields>("TimeSpent", oql, ITOP_TIME_SPENT_OUTPUT_FIELDS, {
           pageSize: 100,
         });
@@ -612,7 +644,7 @@ export async function syncTimeEntries(opts: { full?: boolean } = {}): Promise<Ti
             if (ticketIdByRef.has(ref)) rowsWithResolvedRef += 1;
           }
           try {
-            await upsertTimeEntry(row, itopUserIdToUserId, orgIdToCustomerId, ticketIdByRef);
+            await upsertTimeEntry(row, itopUserIdToUserId, orgIdToCustomerId, ticketIdByRef, timezone);
             upserted += 1;
           } catch (err) {
             skipped += 1;
@@ -641,14 +673,22 @@ export async function syncTimeEntries(opts: { full?: boolean } = {}): Promise<Ti
       // Two independent reasons a snapshot row within the pull window no
       // longer belongs: (a) its iTop user is no longer mapped to any active
       // Solvro user at all, or (b) iTop didn't return it this run (edited/
-      // deleted upstream). Both are bounded to `startDate >= cutoff` — a
-      // transient unmapping (an email edit, a deactivation, iTop briefly
-      // dropping a Person) must not delete history *older* than the pull
-      // window, since that history can never be re-fetched to restore it.
+      // deleted upstream). Bounded to `startDate >= deleteCutoff`, which is
+      // the FETCH cutoff plus MAX_ZONE_OFFSET_MS — deliberately stricter
+      // than the fetch bound itself (not `>= cutoff`): a row sitting right
+      // at the fetch edge that iTop happens not to return this tick (a
+      // zone/DST-driven boundary disagreement between our cutoff string and
+      // iTop's own comparison, not a real deletion upstream) must never be
+      // purged irreversibly just because case (b) alone would otherwise
+      // consider it "iTop no longer has this". A transient unmapping (an
+      // email edit, a deactivation, iTop briefly dropping a Person) must
+      // likewise never delete history *older* than the pull window, since
+      // that history can never be re-fetched to restore it.
+      const deleteCutoff = new Date(cutoff.getTime() + MAX_ZONE_OFFSET_MS);
       const deleted = await prisma.itopTimeEntry.deleteMany({
         where: {
           AND: [
-            { startDate: { gte: cutoff } },
+            { startDate: { gte: deleteCutoff } },
             { OR: [{ itopUserId: { notIn: mappedItopUserIds } }, { id: { notIn: [...seenIds] } }] },
           ],
         },
@@ -751,6 +791,7 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
 
       ran = true;
       full = shouldRunFull(full, config);
+      const timezone = resolveConfiguredTimezone(config);
 
       try {
         if (shouldRunUserSync(full)) {
@@ -781,7 +822,10 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
             let oql = `SELECT ${cls} WHERE org_id IN (${orgIds.join(",")})`;
             if (!full && config.lastSyncAt) {
               const cutoff = new Date(config.lastSyncAt.getTime() - 60_000);
-              oql += ` AND last_update > '${formatItopDate(cutoff)}'`;
+              // Same reasoning as syncTimeEntries's cutoff: the string
+              // comparison against iTop's own `last_update` must be
+              // expressed in the SERVER's zone, not UTC.
+              oql += ` AND last_update > '${formatItopDate(cutoff, timezone)}'`;
             }
 
             const result = await client.getAll<ItopTicketFields>(cls, oql, ITOP_TICKET_OUTPUT_FIELDS, {
@@ -790,7 +834,7 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
             for (const row of result.objects) {
               seenIds.add(row.key);
               try {
-                await upsertTicket(cls, row, orgIdToCustomerId);
+                await upsertTicket(cls, row, orgIdToCustomerId, timezone);
                 upserted += 1;
               } catch (err) {
                 ticketsSkipped += 1;

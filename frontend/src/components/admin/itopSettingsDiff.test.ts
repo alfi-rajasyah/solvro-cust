@@ -14,6 +14,7 @@ const SAVED: ItopSettingsSnapshot = {
   readClasses: ["UserRequest", "Incident"],
   capacityHoursPerWeek: 40,
   actionsEnabled: false,
+  timezone: "UTC",
 };
 
 function baseForm() {
@@ -24,6 +25,7 @@ function baseForm() {
     readClasses: [...SAVED.readClasses],
     capacityHoursPerWeek: String(SAVED.capacityHoursPerWeek),
     actionsEnabled: SAVED.actionsEnabled,
+    timezone: SAVED.timezone,
   };
 }
 
@@ -121,6 +123,15 @@ describe("buildItopSettingsPatch", () => {
     const form = { ...baseForm(), capacityHoursPerWeek: "0" };
     expect(buildItopSettingsPatch(form, SAVED)).toEqual({ capacityHoursPerWeek: 1 });
   });
+
+  it("includes timezone only when it changed", () => {
+    const form = { ...baseForm(), timezone: "Europe/Paris" };
+    expect(buildItopSettingsPatch(form, SAVED)).toEqual({ timezone: "Europe/Paris" });
+  });
+
+  it("omits timezone when it matches the saved value", () => {
+    expect(buildItopSettingsPatch(baseForm(), SAVED)).not.toHaveProperty("timezone");
+  });
 });
 
 describe("clampInt", () => {
@@ -180,6 +191,7 @@ describe("formStateFromSettings", () => {
       readClasses: ["UserRequest", "Incident"],
       capacityHoursPerWeek: 40,
       actionsEnabled: false,
+      timezone: "Europe/Paris",
       lastSyncAt: null,
       lastSyncOk: null,
       lastSyncError: null,
@@ -194,6 +206,7 @@ describe("formStateFromSettings", () => {
       readClasses: ["UserRequest", "Incident"],
       capacityHoursPerWeek: "40",
       actionsEnabled: false,
+      timezone: "Europe/Paris",
     });
   });
 
@@ -206,6 +219,7 @@ describe("formStateFromSettings", () => {
       readClasses: ["UserRequest"],
       capacityHoursPerWeek: 40,
       actionsEnabled: false,
+      timezone: "UTC",
       lastSyncAt: null,
       lastSyncOk: null,
       lastSyncError: null,

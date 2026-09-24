@@ -19,7 +19,7 @@ describe("normalizeCaseLog", () => {
       ],
     };
 
-    const result = normalizeCaseLog(raw);
+    const result = normalizeCaseLog(raw, "UTC");
 
     expect(result.map((e) => e.message)).toEqual(["first", "second", "third"]);
   });
@@ -33,7 +33,7 @@ describe("normalizeCaseLog", () => {
       ],
     };
 
-    const result = normalizeCaseLog(raw);
+    const result = normalizeCaseLog(raw, "UTC");
 
     expect(result.map((e) => e.message)).toContain("undated-a");
     expect(result.findIndex((e) => e.message === "dated-1")).toBeLessThan(
@@ -50,7 +50,7 @@ describe("normalizeCaseLog", () => {
       message: `entry-${i}`,
     })).reverse();
 
-    const result = normalizeCaseLog({ entries });
+    const result = normalizeCaseLog({ entries }, "UTC");
 
     expect(result).toHaveLength(50);
     expect(result[0].message).toBe("entry-10");
@@ -67,7 +67,7 @@ describe("normalizeCaseLog", () => {
       ],
     };
 
-    const result = normalizeCaseLog(raw);
+    const result = normalizeCaseLog(raw, "UTC");
 
     expect(result[0].message).toBe("Called & emailed the customer.\nWaiting on their reply.");
   });
@@ -75,15 +75,15 @@ describe("normalizeCaseLog", () => {
   it("never runs a plain message through the HTML sanitizer", () => {
     const raw = { entries: [{ date: "2026-01-01 00:00:00", message: "Plain <not-a-real-tag> text & stuff." }] };
 
-    const result = normalizeCaseLog(raw);
+    const result = normalizeCaseLog(raw, "UTC");
 
     expect(result[0].message).toBe("Plain <not-a-real-tag> text & stuff.");
   });
 
   it("handles a bare legacy string with no structured entries", () => {
-    expect(normalizeCaseLog("Just some text")).toEqual([{ date: null, author: null, message: "Just some text" }]);
-    expect(normalizeCaseLog("")).toEqual([]);
-    expect(normalizeCaseLog(null)).toEqual([]);
-    expect(normalizeCaseLog(undefined)).toEqual([]);
+    expect(normalizeCaseLog("Just some text", "UTC")).toEqual([{ date: null, author: null, message: "Just some text" }]);
+    expect(normalizeCaseLog("", "UTC")).toEqual([]);
+    expect(normalizeCaseLog(null, "UTC")).toEqual([]);
+    expect(normalizeCaseLog(undefined, "UTC")).toEqual([]);
   });
 });

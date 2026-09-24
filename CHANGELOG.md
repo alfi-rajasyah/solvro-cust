@@ -15,6 +15,11 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-09-24 — iTop timestamps in the iTop server's timezone
+
+- **iTop times are read in the iTop server's timezone.** iTop sends date-times as wall-clock values in its own configured zone, but Solvro read them as UTC, so ticket and time-entry times were off by the zone's offset (two hours for a Europe/Paris install), incremental syncs used the wrong cutoff, and timer entries were written at the wrong time. All reads and writes now convert through the configured zone, correct across daylight-saving changes (**`backend/src/lib/itop/timezone.ts`**, **`backend/src/lib/itop/sync.ts`**, **`backend/src/routes/itop.ts`**).
+- **Admin › iTop has an "iTop server timezone" setting.** It takes an IANA zone name (default `UTC`, stored in the new `itop_config.timezone` column) and rejects unknown zones. Changing it re-converts already-stored time entries and personal-token expiry dates at once, daylight saving included, and forces the next sync to be a full sync, which corrects ticket times (**`backend/src/routes/itopAdmin.ts`**, **`frontend/src/components/admin/ItopTab.tsx`**).
+
 ### Fixed — 2026-09-24 — iTop integration against a real install
 
 - **Every write now carries a comment.** A real iTop refuses `core/apply_stimulus` and `core/update` without one, so every ticket action and log entry from Solvro failed. Writes now send a comment naming the user, e.g. `Solvro: resolve by rina@example.com` (**`backend/src/lib/itop/client.ts`**, **`backend/src/routes/itop.ts`**).

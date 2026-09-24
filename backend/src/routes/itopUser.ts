@@ -209,7 +209,9 @@ itopUserRouter.put(
           throw new HttpError(400, "itop_token_not_yours", notYoursMessage);
         }
         const raw = tokenResult.objects[0]?.fields.expiration_date;
-        expiresAt = raw ? parseItopDate(raw) : null;
+        // The server's own zone (`config.timezone`), same contract as every
+        // other iTop datetime this integration reads.
+        expiresAt = raw ? parseItopDate(raw, config.timezone) : null;
       } catch (err) {
         if (err instanceof HttpError) throw err;
         logger.debug(

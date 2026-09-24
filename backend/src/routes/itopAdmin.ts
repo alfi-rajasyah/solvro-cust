@@ -25,6 +25,7 @@ import {
 } from "../lib/itop/config.js";
 import { ITOP_ORGANIZATION_OUTPUT_FIELDS, type ItopOrganizationFields } from "../lib/itop/types.js";
 import { syncTickets, syncUsers } from "../lib/itop/sync.js";
+import { isValidTimeZone, utcToZonedWallTime, zonedWallTimeToUtc } from "../lib/itop/timezone.js";
 // One-directional import (itop.ts never imports from this file) — busts
 // Task 6.2's GET /services cache alongside every place here that busts the
 // ItopConfig cache, so a base-URL/token change or a completed manual sync
@@ -161,6 +162,7 @@ function serializeConfig(
     baseUrl: config.baseUrl,
     appTokenSet: Boolean(config.appTokenEnc),
     webhookSecretSet: Boolean(config.webhookSecretEnc),
+    timezone: config.timezone,
     refreshMinutes: config.refreshMinutes,
     readClasses: config.readClasses,
     capacityHoursPerWeek: config.capacityHoursPerWeek,
@@ -204,17 +206,111 @@ const updateItopSettingsSchema = z.object({
     .refine((v) => v === undefined || v === null || v.length >= 8, {
       message: "appToken must be at least 8 characters",
     }),
+  // Just non-empty here — the actual IANA-name check (isValidTimeZone) runs
+  // in the handler below so a bad zone name answers the distinct
+  // `invalid_timezone` code rather than the generic `validation_error` a
+  // Zod .refine() would produce.
+  timezone: z.string().min(1).optional(),
   refreshMinutes: z.number().int().min(1).max(60).optional(),
   readClasses: z.array(z.enum(READ_CLASSES)).min(1).optional(),
   capacityHoursPerWeek: z.number().int().min(1).max(80).optional(),
   actionsEnabled: z.boolean().optional(),
 });
 
+/**
+ * Re-derives what the correct UTC instant `stored` SHOULD have been, had it
+ * originally been converted with `newTz` instead of `oldTz`: re-format the
+ * stored instant back into the wall-clock digits iTop actually sent (under
+ * the OLD zone), then reinterpret those SAME digits under the NEW zone.
+ * DST-correct per row — the wall-clock parts, not a flat delta, are what
+ * carry over, so two rows a few months apart can shift by different amounts
+ * if a DST transition falls between them.
+ */
+function reconvertStoredDate(stored: Date, oldTz: string, newTz: string): Date {
+  const wallClock = utcToZonedWallTime(stored, oldTz);
+  const [datePart, timePart] = wallClock.split(" ");
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hour, minute, second] = timePart.split(":").map(Number);
+  return zonedWallTimeToUtc(year, month, day, hour, minute, second, newTz);
+}
+
+/**
+ * Corrects every already-stored iTop-sourced timestamp that a forced full
+ * re-sync would NOT otherwise fix, in place, when the admin changes
+ * ItopConfig.timezone. A full ticket/time-entry sync (triggered by clearing
+ * lastFullSyncAt, below) re-reads and re-converts everything it can still
+ * SEE from iTop right now — but two things sit outside that reach:
+ *
+ * - `ItopTimeEntry` rows older than `TIME_ENTRY_WINDOW_MS` (8 weeks):
+ *   `syncTimeEntries`'s own OQL fetch never asks iTop for anything older, so
+ *   a stale conversion on a decade-old row would otherwise never be
+ *   corrected. Every row's `startDate`/`endDate` (its only iTop-sourced
+ *   DateTime columns — `syncedAt` is a Solvro-generated "when we synced
+ *   this", never derived from an iTop wall-clock string, so it's excluded)
+ *   is corrected here, not just the ones inside the sync window.
+ * - `User.itopTokenExpiresAt`: set once when a TAM saves their personal
+ *   token (routes/itopUser.ts) and never re-fetched on any schedule — no
+ *   sync tick, full or not, ever touches it again.
+ *
+ * `ItopTicket` rows are deliberately NOT backfilled here: unlike
+ * ItopTimeEntry, a full ticket pull has no time window at all (every ticket
+ * for every mapped org, full stop), so the lastFullSyncAt-triggered full
+ * sync this same PATCH already forces is sufficient on its own to
+ * re-convert every ticket's dates under the new zone.
+ */
+async function backfillTimezoneConversion(
+  tx: Prisma.TransactionClient,
+  oldTz: string,
+  newTz: string,
+): Promise<{ timeEntriesUpdated: number; tokensUpdated: number }> {
+  let timeEntriesUpdated = 0;
+  const entries = await tx.itopTimeEntry.findMany({ select: { id: true, startDate: true, endDate: true } });
+  for (const entry of entries) {
+    const correctedStart = reconvertStoredDate(entry.startDate, oldTz, newTz);
+    const correctedEnd = entry.endDate ? reconvertStoredDate(entry.endDate, oldTz, newTz) : null;
+    if (
+      correctedStart.getTime() !== entry.startDate.getTime() ||
+      correctedEnd?.getTime() !== entry.endDate?.getTime()
+    ) {
+      await tx.itopTimeEntry.update({
+        where: { id: entry.id },
+        data: { startDate: correctedStart, endDate: correctedEnd },
+      });
+      timeEntriesUpdated += 1;
+    }
+  }
+
+  let tokensUpdated = 0;
+  const usersWithExpiry = await tx.user.findMany({
+    where: { itopTokenExpiresAt: { not: null } },
+    select: { id: true, itopTokenExpiresAt: true },
+  });
+  for (const user of usersWithExpiry) {
+    if (!user.itopTokenExpiresAt) continue;
+    const corrected = reconvertStoredDate(user.itopTokenExpiresAt, oldTz, newTz);
+    if (corrected.getTime() !== user.itopTokenExpiresAt.getTime()) {
+      await tx.user.update({ where: { id: user.id }, data: { itopTokenExpiresAt: corrected } });
+      tokensUpdated += 1;
+    }
+  }
+
+  return { timeEntriesUpdated, tokensUpdated };
+}
+
 itopAdminRouter.patch(
   "/settings",
   validate("body", updateItopSettingsSchema),
   async (req, res) => {
     const body = req.body as z.infer<typeof updateItopSettingsSchema>;
+
+    if (body.timezone !== undefined && !isValidTimeZone(body.timezone)) {
+      throw new HttpError(
+        400,
+        "invalid_timezone",
+        `"${body.timezone}" is not a recognized IANA timezone name (e.g. "Europe/Paris", "UTC").`,
+      );
+    }
+
     const data: Prisma.ItopConfigUncheckedUpdateInput = { updatedById: req.user!.sub };
 
     if (body.baseUrl !== undefined) data.baseUrl = body.baseUrl;
@@ -224,8 +320,41 @@ itopAdminRouter.patch(
     if (body.capacityHoursPerWeek !== undefined) data.capacityHoursPerWeek = body.capacityHoursPerWeek;
     if (body.actionsEnabled !== undefined) data.actionsEnabled = body.actionsEnabled;
 
-    await getItopConfig(); // ensures the row exists before the update below
-    await prisma.itopConfig.update({ where: { id: "default" }, data });
+    await getItopConfig(); // ensures the row exists before the transaction below
+
+    await prisma.$transaction(
+      async (tx) => {
+        // Read the CURRENT stored zone from inside this transaction, not
+        // the 30s-cached getItopConfig() — a stale cache read here could
+        // compare the new value against an already-superseded old one (or
+        // vice versa), silently skipping the backfill/lastFullSyncAt clear
+        // a real change needs, or running it for a no-op PATCH.
+        const currentConfig = await tx.itopConfig.findUniqueOrThrow({ where: { id: "default" } });
+
+        if (body.timezone !== undefined) {
+          data.timezone = body.timezone;
+          if (body.timezone !== currentConfig.timezone) {
+            // Every stored ticket/time-entry timestamp was converted using
+            // the OLD zone — clearing lastFullSyncAt makes the next sync
+            // tick a FULL one (shouldRunFull in lib/itop/sync.ts treats a
+            // null lastFullSyncAt as "due"), which re-reads and
+            // re-converts every currently-fetchable row under the NEW
+            // zone. backfillTimezoneConversion (same transaction) then
+            // corrects the two things that forced full sync can't reach —
+            // see its own doc comment.
+            data.lastFullSyncAt = null;
+            await backfillTimezoneConversion(tx, currentConfig.timezone, body.timezone);
+          }
+          // body.timezone === currentConfig.timezone: assign it anyway
+          // (harmless no-op write) but skip the backfill/clear entirely —
+          // nothing actually changed.
+        }
+
+        await tx.itopConfig.update({ where: { id: "default" }, data });
+      },
+      { timeout: 60_000 }, // generous: a full backfill touches every itop_time_entry + linked user row
+    );
+
     bustItopConfigCache();
     bustItopServicesCache();
 

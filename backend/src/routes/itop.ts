@@ -618,6 +618,8 @@ interface WritableTicketContext {
   baseUrl: string;
   /** The caller's Solvro email — real iTop 3.2.2 refuses core/update and core/apply_stimulus with no `comment` at all, so every write route below builds one identifying who acted from Solvro. */
   myEmail: string;
+  /** The iTop SERVER's own configured IANA timezone (`ItopConfig.timezone`) — every date this route formats for iTop (Task 7.1's `POST /tickets/:id/time` start/end) must be expressed in this zone, never UTC. */
+  timezone: string;
 }
 
 /**
@@ -672,6 +674,7 @@ async function loadWritableTicket(userSub: number, ticketId: number, user: JwtPa
     myItopUserId: me.itopUserId,
     baseUrl: config.baseUrl,
     myEmail: me.email,
+    timezone: config.timezone,
   };
 }
 
@@ -687,11 +690,11 @@ async function loadWritableTicket(userSub: number, ticketId: number, user: JwtPa
  * of a 500.
  */
 async function reReadAndUpsertTicket(cls: string, ticketId: number): Promise<ItopTicket> {
-  const appClient = await getItopAppClient();
+  const [appClient, config] = await Promise.all([getItopAppClient(), getItopConfig()]);
   const result = await appClient.get<ItopTicketFields>(cls, ticketId, ITOP_TICKET_OUTPUT_FIELDS);
   const row = result.objects[0];
   if (row) {
-    await upsertTicketFromItop(cls, { key: ticketId, class: cls, fields: row.fields });
+    await upsertTicketFromItop(cls, { key: ticketId, class: cls, fields: row.fields }, config.timezone);
   }
   return prisma.itopTicket.findUniqueOrThrow({ where: { id: ticketId } });
 }
@@ -1208,11 +1211,11 @@ const TIME_ENTRY_FUTURE_SKEW_MS = 5 * 60_000;
  */
 async function readAndUpsertNewTimeEntry(id: number): Promise<ItopTimeEntry | null> {
   try {
-    const appClient = await getItopAppClient();
+    const [appClient, config] = await Promise.all([getItopAppClient(), getItopConfig()]);
     const result = await appClient.get<ItopTimeSpentFields>("TimeSpent", id, ITOP_TIME_SPENT_OUTPUT_FIELDS);
     const row = result.objects[0];
     if (!row) return null;
-    await upsertTimeEntryFromItop(row);
+    await upsertTimeEntryFromItop(row, config.timezone);
     return await prisma.itopTimeEntry.findUniqueOrThrow({ where: { id } });
   } catch (err) {
     logger.warn(
@@ -1231,7 +1234,11 @@ itopRouter.post(
     const { id } = req.params as unknown as z.infer<typeof ticketIdParamSchema>;
     const { startedAt, endedAt, title } = req.body as z.infer<typeof logTimeBodySchema>;
 
-    const { ticket, token, myItopUserId, baseUrl, myEmail } = await loadWritableTicket(req.user!.sub, id, req.user!);
+    const { ticket, token, myItopUserId, baseUrl, myEmail, timezone } = await loadWritableTicket(
+      req.user!.sub,
+      id,
+      req.user!,
+    );
 
     if (myItopUserId === null) {
       throw new HttpError(
@@ -1268,8 +1275,11 @@ itopRouter.post(
     const createFields: Record<string, unknown> = {
       user_id: myItopUserId,
       org_id: ticket.orgId,
-      start_date: formatItopDate(startedAt),
-      end_date: formatItopDate(endedAt),
+      // Formatted in the iTop SERVER's own zone (`timezone`), never UTC —
+      // same contract lib/itop/sync.ts's parseItopDate reads this shape
+      // back with.
+      start_date: formatItopDate(startedAt, timezone),
+      end_date: formatItopDate(endedAt, timezone),
       duration: durationValue,
       title: title ?? ticket.ref,
       [ITOP_TIME_SPENT_TICKET_REF_FIELD]: ticket.ref,

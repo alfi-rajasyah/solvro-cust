@@ -5,7 +5,7 @@
 // router, not routes/admin.ts). Mirrors the in-file tab-as-function
 // convention Admin.tsx already uses for its Users/Roles/Sign-in tabs,
 // rather than splitting into separate component files.
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
 import {
@@ -34,6 +34,7 @@ import {
   formStateFromSettings,
   type ItopSettingsFormState,
 } from "./itopSettingsDiff";
+import { buildTimezoneGroups } from "./itopTimezones";
 import { Chip } from "@/components/StatusChip";
 import { Switch } from "@/components/ui/switch";
 
@@ -56,6 +57,31 @@ const MATCH_TONE: Record<ItopCustomerMatch, "emerald" | "blue" | "amber"> = {
   manual: "blue",
   unmatched: "amber",
 };
+
+// iTop server timezone (fix, 2026-09-24 — ground truth against a real
+// install: iTop stores/returns ticket timestamps in ITS OWN server
+// timezone, not UTC). A plain `<select>` grouped by region rather than the
+// vendored `reui/autocomplete.tsx` Autocomplete: Base UI's own docs
+// (docs/react/components/autocomplete.md, "Usage guidelines") say to use
+// their separate Combobox primitive instead of Autocomplete whenever
+// "the selection should be remembered and the input value cannot be
+// custom" — exactly this field's contract (always one fixed IANA name,
+// never free text) — and this repo has no vendored Combobox wrapper (only
+// the differently-purposed, free-text Autocomplete `reui/autocomplete.tsx`,
+// used elsewhere for CommandPalette.tsx's full-text search/navigate, not a
+// value-select). A native grouped `<select>` keeps native type-ahead
+// (typing jumps to a matching option) without misusing Autocomplete against
+// its own guidance or hand-rolling a new "vendored" primitive for one field.
+//
+// The raw supported-zones list and the browser's own local zone are each
+// computed once at module scope (neither changes during a session) — only
+// the grouping itself (which also unions in the currently saved zone, an
+// alias `Intl.supportedValuesOf` may not enumerate — see
+// `itopTimezones.ts`) is recomputed, in `ConnectionCard`, via `useMemo`
+// keyed on `form.timezone`.
+const SUPPORTED_TIMEZONES: readonly string[] =
+  typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
+const LOCAL_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 // Same shape/rationale as TaskPanel.tsx's own local `relativeTime` — no
 // shared export exists for this and this is the only other call site.
@@ -99,6 +125,23 @@ function ConnectionCard() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  // Set on a successful Save whose patch changed `timezone` — cleared once
+  // the admin acts on it via Sync now (or on their next unrelated save).
+  // Saving a changed timezone makes the *next* sync a full one on the
+  // backend regardless of how it's triggered (this manual button or the
+  // regular scheduled sync), so this is purely informational.
+  const [timezoneSavedNotice, setTimezoneSavedNotice] = useState(false);
+
+  // Unions in the currently-edited value and the browser's own local zone
+  // (fix round, review) so the select never renders blank for a saved alias
+  // `Intl.supportedValuesOf` doesn't enumerate (`US/Eastern`, `Etc/GMT+5`)
+  // — see itopTimezones.ts. `form` can still be `null` here (before the
+  // loading guard below), hence the `?? ""`, filtered out by
+  // `buildTimezoneGroups` itself.
+  const timezoneGroups = useMemo(
+    () => buildTimezoneGroups([form?.timezone ?? "", LOCAL_TIMEZONE], SUPPORTED_TIMEZONES),
+    [form?.timezone],
+  );
 
   // Initialize the editable draft once the settings load; re-baselined
   // explicitly after a successful Save (see handleSave) rather than reacting
@@ -137,9 +180,15 @@ function ConnectionCard() {
 
   async function handleSave() {
     setSaveError(null);
+    const timezoneChanged = Object.hasOwn(patch, "timezone");
     try {
       const fresh = await updateSettings.mutateAsync(patch);
       setForm(formStateFromSettings(fresh));
+      // Matches the state comment above: set on a save that changed
+      // `timezone`, cleared on one that didn't (fix round — this else
+      // branch was previously missing, so an unrelated save left a stale
+      // notice on screen).
+      setTimezoneSavedNotice(timezoneChanged);
     } catch (err) {
       setSaveError(errorMessage(err, "Could not save iTop settings."));
     }
@@ -157,6 +206,7 @@ function ConnectionCard() {
   async function handleSync() {
     setSyncError(null);
     setSyncMessage(null);
+    setTimezoneSavedNotice(false);
     try {
       // POST /admin/itop/sync is fire-and-forget on the backend (202 as soon
       // as it's kicked off, not once it finishes) — useItopSyncNow's own
@@ -321,6 +371,33 @@ function ConnectionCard() {
         </label>
       </div>
 
+      <div className="mt-4 border-t border-outline-variant pt-4">
+        <label className="block max-w-sm">
+          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+            iTop server timezone
+          </span>
+          <select
+            value={form.timezone}
+            onChange={(e) => setForm((f) => (f ? { ...f, timezone: e.target.value } : f))}
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          >
+            {timezoneGroups.map((group) => (
+              <optgroup key={group.region} label={group.region}>
+                {group.zones.map((zone) => (
+                  <option key={zone} value={zone}>
+                    {zone}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+        <p className="mt-1 max-w-sm text-xs text-on-surface-variant">
+          Must match the timezone setting in iTop&apos;s configuration file (Admin tools ›
+          Configuration). Ticket times are shifted if it does not.
+        </p>
+      </div>
+
       <div className="mt-3">
         <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
           Read
@@ -396,6 +473,11 @@ function ConnectionCard() {
           {syncNow.isPending ? "Syncing…" : "Sync now"}
         </button>
       </div>
+      {timezoneSavedNotice && (
+        <p className="mt-2 text-[12px] text-on-surface-variant">
+          Times will be corrected at the next sync.
+        </p>
+      )}
       {syncError && <p className="mt-2 text-sm text-error">{syncError}</p>}
       {syncMessage && (
         <p className="mt-2 text-[12px] text-on-surface-variant">{syncMessage}</p>

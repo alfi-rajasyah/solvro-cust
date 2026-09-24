@@ -28,6 +28,11 @@ export interface ItopSettingsFormState {
   /** Same raw-string rationale as refreshMinutes. */
   capacityHoursPerWeek: string;
   actionsEnabled: boolean;
+  /** IANA zone name the iTop server's own clock runs on — always one of a
+   * fixed list (`Intl.supportedValuesOf("timeZone")` plus "UTC"), picked via
+   * a `<select>` in ItopTab.tsx, so unlike refreshMinutes/capacityHoursPerWeek
+   * there's no "momentarily invalid while typing" state to guard against. */
+  timezone: string;
 }
 
 // The subset of ItopSettings the diff is computed against — deliberately
@@ -35,7 +40,12 @@ export interface ItopSettingsFormState {
 // form never round-trips those fields.
 export type ItopSettingsSnapshot = Pick<
   ItopSettings,
-  "baseUrl" | "refreshMinutes" | "readClasses" | "capacityHoursPerWeek" | "actionsEnabled"
+  | "baseUrl"
+  | "refreshMinutes"
+  | "readClasses"
+  | "capacityHoursPerWeek"
+  | "actionsEnabled"
+  | "timezone"
 >;
 
 export function formStateFromSettings(saved: ItopSettings): ItopSettingsFormState {
@@ -46,6 +56,7 @@ export function formStateFromSettings(saved: ItopSettings): ItopSettingsFormStat
     readClasses: saved.readClasses,
     capacityHoursPerWeek: String(saved.capacityHoursPerWeek),
     actionsEnabled: saved.actionsEnabled,
+    timezone: saved.timezone,
   };
 }
 
@@ -111,6 +122,10 @@ export function buildItopSettingsPatch(
 
   if (form.actionsEnabled !== saved.actionsEnabled) {
     patch.actionsEnabled = form.actionsEnabled;
+  }
+
+  if (form.timezone !== saved.timezone) {
+    patch.timezone = form.timezone;
   }
 
   return patch;
