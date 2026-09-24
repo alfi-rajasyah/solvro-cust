@@ -2228,3 +2228,13 @@ from Solvro" entry). No fix now; each is a follow-up decision.
 
 Integration complete as of 2026-09-23; the plan is archived at
 `docs/archive/plans/itop-integration.md`.
+
+## iTop integration — real-install findings (2026-09-24)
+
+Tested against a real iTop 3.2.2 (ITIL, default lifecycle). Fixed in code the same day: mandatory `comment` on writes, `pending_reason`, assign from Pending, SLA deadline fields, per-row sync skipping, priority codes. Still open:
+
+- **The application token cannot read iTop's `User` class** (Support Agent profile), and neither can a TAM's personal token. So user matching sets the person link but never `User.itopUserId`, and time logging answers "Your iTop user account is not linked yet". Options once the Time Tracking extension is installed: check whether `TimeSpent.user_id` can be omitted (iTop may default it to the caller), or grant the application token a profile that can read `User`.
+- **`PersonalToken` is not readable by a Support Agent token either.** The token-ownership check therefore falls back to the email match, and token expiry shows as unknown. See the Phase 5 entry above.
+- **Go-live iTop setting:** personal tokens work only for profiles listed in the `authent-token` module setting `personal_tokens_allowed_profiles` (e.g. `array('Support Agent')`); by default only administrators can use them.
+- **Time Tracking extension not bundled** with iTop Community; download it from iTop Hub before the `TimeSpent` checks (duration unit, `ticket_ref` writability) can run.
+- **`pending_reason` is assumed to be free text.** True on the default install; an install that turns it into a list of values will refuse free text, and the user sees iTop's message.
