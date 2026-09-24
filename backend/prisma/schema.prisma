@@ -150,6 +150,14 @@ model ItopConfig {
   baseUrl              String?   @map("base_url")
   appTokenEnc          String?   @map("app_token_enc")
   webhookSecretEnc     String?   @map("webhook_secret_enc")
+  // IANA timezone name the iTop SERVER is configured with (confirmed on the
+  // reference install: 'timezone' => 'Europe/Paris') — iTop's REST API
+  // returns/accepts "YYYY-MM-DD HH:MM:SS" wall-clock strings in THIS zone,
+  // never UTC and never with an offset suffix. lib/itop/sync.ts's
+  // parseItopDate/formatItopDate convert through lib/itop/timezone.ts using
+  // this value. Admin-set via PATCH /admin/itop/settings, validated with
+  // isValidTimeZone (routes/itopAdmin.ts).
+  timezone             String    @default("UTC") @map("timezone")
   refreshMinutes       Int       @default(5) @map("refresh_minutes")
   readClasses          String[]  @default(["UserRequest", "Incident"]) @map("read_classes")
   capacityHoursPerWeek Int       @default(40) @map("capacity_hours_per_week")

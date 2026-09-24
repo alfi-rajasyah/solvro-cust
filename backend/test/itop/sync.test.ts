@@ -10,13 +10,16 @@ import { prisma } from "../../src/prisma.js";
 import { seal } from "../../src/lib/secretBox.js";
 import { bustItopConfigCache } from "../../src/lib/itop/config.js";
 import {
+  formatItopDate,
   parseItopBoolean,
   parseItopDate,
   parseItopInt,
   syncTickets,
   syncTimeEntries,
   syncUsers,
+  TIME_ENTRY_WINDOW_MS,
 } from "../../src/lib/itop/sync.js";
+import { zonedWallTimeToUtc } from "../../src/lib/itop/timezone.js";
 import { seedRoles, createUserWithRole } from "../testAuth.js";
 import { createFakeItop, seedFakeItop, type FakeItopState, type TicketRecord, FAKE_ITOP_TOKENS } from "./fakeItop.js";
 
@@ -35,7 +38,16 @@ function closeServer(server: Server): Promise<void> {
   });
 }
 
-function formatItopDate(date: Date): string {
+// NOTE: deliberately NOT named `formatItopDate` — this file also imports the
+// real (zone-aware) `formatItopDate` from lib/itop/sync.ts above, and a
+// same-named local declaration here would shadow that import at runtime
+// (esbuild's per-file transpile doesn't flag the collision as a type error
+// the way a full tsc build normally would), silently making every "Paris"
+// test below format in UTC regardless of the `tz` argument. Discovered via
+// the "incremental cutoff is expressed in the server's own zone" test
+// intermittently computing a UTC-shaped cutoff no matter what zone was
+// requested.
+function formatUtcDate(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return (
     `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ` +
@@ -43,7 +55,7 @@ function formatItopDate(date: Date): string {
   );
 }
 
-/** Inverse of formatItopDate, for comparing/offsetting the fixture's own seeded timestamps. */
+/** Inverse of formatUtcDate, for comparing/offsetting the fixture's own seeded timestamps. Assumes the fixture's own timezone is UTC — use `parseFakeDateInZone` for a non-UTC fake. */
 function parseFakeDate(value: string): Date {
   const [datePart, timePart] = value.split(" ");
   const [y, mo, d] = datePart.split("-").map(Number);
@@ -51,11 +63,27 @@ function parseFakeDate(value: string): Date {
   return new Date(Date.UTC(y, mo - 1, d, h, mi, s));
 }
 
-async function configureItop(baseUrl: string, token: string): Promise<void> {
+/** Same idea as `parseFakeDate`, but interprets the wall-clock string in `tz` (via the real `zonedWallTimeToUtc` conversion) rather than assuming UTC — for fixtures seeded against a non-UTC fake (`state.timezone`). */
+function parseFakeDateInZone(value: string, tz: string): Date {
+  const [datePart, timePart] = value.split(" ");
+  const [y, mo, d] = datePart.split("-").map(Number);
+  const [h, mi, s] = timePart.split(":").map(Number);
+  return zonedWallTimeToUtc(y, mo, d, h, mi, s, tz);
+}
+
+async function configureItop(baseUrl: string, token: string, timezone = "UTC"): Promise<void> {
   await prisma.itopConfig.upsert({
     where: { id: "default" },
-    create: { id: "default", baseUrl, appTokenEnc: seal(token) },
-    update: { baseUrl, appTokenEnc: seal(token), lastSyncAt: null, lastSyncOk: null, lastSyncError: null, lastFullSyncAt: null },
+    create: { id: "default", baseUrl, appTokenEnc: seal(token), timezone },
+    update: {
+      baseUrl,
+      appTokenEnc: seal(token),
+      timezone,
+      lastSyncAt: null,
+      lastSyncOk: null,
+      lastSyncError: null,
+      lastFullSyncAt: null,
+    },
   });
   bustItopConfigCache();
 }
@@ -335,7 +363,7 @@ describe("syncTickets", () => {
 
     const mutated = [...state.tickets.values()].find((t) => t.ref === "R-004530")!;
     mutated.status = "resolved";
-    mutated.last_update = formatItopDate(new Date(latestSeedUpdate + 120_000));
+    mutated.last_update = formatUtcDate(new Date(latestSeedUpdate + 120_000));
 
     const second = await syncTickets();
     expect(second.ran).toBe(true);
@@ -460,7 +488,7 @@ describe("syncTickets", () => {
     // A ticket changes in iTop *during* the outage.
     const mutated = [...state.tickets.values()].find((t) => t.ref === "R-004530")!;
     mutated.status = "resolved";
-    mutated.last_update = formatItopDate(new Date(latestSeedUpdate + 120_000));
+    mutated.last_update = formatUtcDate(new Date(latestSeedUpdate + 120_000));
 
     // setAppToken (not configureItop) — an outage doesn't reset the watermark.
     await setAppToken("not-a-real-token");
@@ -491,6 +519,136 @@ describe("syncTickets", () => {
 
     const row = await prisma.itopTicket.findUniqueOrThrow({ where: { ref: "R-004530" } });
     expect(row.status).toBe("resolved");
+  });
+});
+
+describe("syncTickets against a non-UTC iTop server timezone (Europe/Paris)", () => {
+  it("a ticket created at a known summer instant syncs back to the same UTC instant", async () => {
+    const state = seedFakeItop();
+    state.timezone = "Europe/Paris";
+    // R-004512's start_date, explicitly overwritten to a known Paris
+    // wall-clock reading in summer (CEST, +2) — the fake now emits every
+    // OTHER date it seeds in Paris time too (state.timezone), but pinning
+    // this one to a literal string makes the expected UTC instant obvious.
+    const ticket = [...state.tickets.values()].find((t) => t.ref === "R-004512")!;
+    ticket.start_date = "2026-07-01 14:00:00";
+
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app, "Europe/Paris");
+    await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
+    await createMappedCustomer(2, "PT Sinar Logistik");
+
+    const summary = await syncTickets({ full: true });
+    expect(summary.error).toBeUndefined();
+
+    const row = await prisma.itopTicket.findUniqueOrThrow({ where: { ref: "R-004512" } });
+    // 14:00 CEST (+2) is 12:00 UTC — correctly converted, not taken literally.
+    expect(row.startDate?.toISOString()).toBe("2026-07-01T12:00:00.000Z");
+  });
+
+  it("the incremental cutoff is expressed in the server's own zone, not UTC", async () => {
+    const state = seedFakeItop();
+    state.timezone = "Europe/Paris";
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app, "Europe/Paris");
+    await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
+    await createMappedCustomer(2, "PT Sinar Logistik");
+
+    const first = await syncTickets({ full: true });
+    expect(first.ran).toBe(true);
+
+    // Anchor relative to the fixture's own latest Paris-zoned last_update —
+    // parsed with parseFakeDateInZone (NOT parseFakeDate, which would
+    // wrongly treat these Paris wall-clock strings as if they were UTC).
+    const latestSeedUpdateMs = Math.max(
+      ...[...state.tickets.values()].map((t) => parseFakeDateInZone(t.last_update, "Europe/Paris").getTime()),
+    );
+    const anchor = new Date(latestSeedUpdateMs + 61_000);
+    await prisma.itopConfig.update({ where: { id: "default" }, data: { lastSyncAt: anchor } });
+    bustItopConfigCache();
+
+    const mutated = [...state.tickets.values()].find((t) => t.ref === "R-004530")!;
+    mutated.status = "resolved";
+    // A fresh last_update, formatted in Paris time via the SAME
+    // formatItopDate the production sync code uses to build its OQL cutoff —
+    // if that cutoff were built in UTC instead, this Paris-zoned string
+    // (2h+ away from a UTC reading of the same instant) would fail to
+    // compare correctly against it and this row would never be picked up.
+    mutated.last_update = formatItopDate(new Date(latestSeedUpdateMs + 120_000), "Europe/Paris");
+
+    const second = await syncTickets();
+    expect(second.ran).toBe(true);
+    expect(second.full).toBe(false);
+    expect(second.upserted).toBe(1);
+
+    const row = await prisma.itopTicket.findUniqueOrThrow({ where: { ref: "R-004530" } });
+    expect(row.status).toBe("resolved");
+  });
+
+  it("leaving ItopConfig at UTC against a Paris-zoned install reproduces the 2h skew (documents the misconfiguration)", async () => {
+    const state = seedFakeItop();
+    state.timezone = "Europe/Paris";
+    const ticket = [...state.tickets.values()].find((t) => t.ref === "R-004512")!;
+    ticket.start_date = "2026-07-01 14:00:00"; // Paris CEST (+2) -> real instant 12:00Z
+
+    const { baseUrl } = await startFake(state);
+    // Deliberately LEFT at the UTC default even though the fake (like the
+    // real reference install) is actually Europe/Paris.
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app, "UTC");
+    await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
+    await createMappedCustomer(2, "PT Sinar Logistik");
+
+    await syncTickets({ full: true });
+
+    const row = await prisma.itopTicket.findUniqueOrThrow({ where: { ref: "R-004512" } });
+    // Misread as if the wall-clock digits were already UTC: 2h AHEAD of the
+    // real instant (12:00Z) — exactly the bug this task fixes when the
+    // admin sets the zone correctly instead.
+    expect(row.startDate?.toISOString()).toBe("2026-07-01T14:00:00.000Z");
+    expect(row.startDate?.toISOString()).not.toBe("2026-07-01T12:00:00.000Z");
+  });
+});
+
+describe("resilience to an invalid stored ItopConfig.timezone", () => {
+  // configureItop writes the timezone column directly, bypassing PATCH
+  // /admin/itop/settings's own isValidTimeZone check — simulates a stored
+  // value going bad some other way (a direct column edit, a Node/ICU
+  // version dropping a zone name) rather than exercising the admin route.
+  it("syncTickets falls back to UTC and still completes instead of aborting the whole tick", async () => {
+    const state = seedFakeItop();
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app, "Not/AZone");
+    await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
+    await createMappedCustomer(2, "PT Sinar Logistik");
+
+    const summary = await syncTickets({ full: true });
+
+    expect(summary.ran).toBe(true);
+    expect(summary.error).toBeUndefined();
+    expect(summary.upserted).toBeGreaterThan(0);
+
+    // Fallen back to UTC, not crashed — the fake itself defaults to UTC
+    // (state.timezone left unset), so a correct UTC fallback round-trips
+    // its seeded dates exactly.
+    const ticket = [...state.tickets.values()].find((t) => t.ref === "R-004512")!;
+    const row = await prisma.itopTicket.findUniqueOrThrow({ where: { ref: "R-004512" } });
+    expect(row.startDate?.toISOString()).toBe(parseFakeDate(ticket.start_date).toISOString());
+  });
+
+  it("syncTimeEntries falls back to UTC and still completes instead of aborting the whole pass", async () => {
+    const state = seedFakeItop();
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app, "Not/AZone");
+
+    const userA = await createUserWithRole("TAM");
+    await prisma.user.update({ where: { id: userA.userId }, data: { email: "rina.s@example.co.id" } });
+    await syncUsers();
+
+    const summary = await syncTimeEntries({ full: true });
+
+    expect(summary.ran).toBe(true);
+    expect(summary.error).toBeUndefined();
+    expect(summary.upserted).toBeGreaterThan(0);
   });
 });
 
@@ -720,6 +878,74 @@ describe("syncTimeEntries", () => {
     expect(after[0]?.id).toBe(999999);
   });
 
+  it("does NOT delete a boundary entry within the 14h grace margin of the fetch cutoff, even when iTop didn't return it this tick", async () => {
+    const state = seedFakeItop();
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
+
+    const userA = await createUserWithRole("TAM");
+    await prisma.user.update({ where: { id: userA.userId }, data: { email: "rina.s@example.co.id" } });
+    await syncUsers();
+    await syncTimeEntries({ full: true });
+
+    // Fabricated directly in Postgres (never in the fake's own TimeSpent
+    // map, so it can never land in `seenIds`) at 1h past the fetch cutoff —
+    // well inside the 14h grace margin meant to absorb a zone/DST-driven
+    // boundary disagreement between our cutoff string and iTop's own
+    // comparison, which is exactly what this row simulates: a real,
+    // still-current row that iTop simply didn't hand back this particular
+    // tick, not one it has actually deleted.
+    const cutoff = new Date(Date.now() - TIME_ENTRY_WINDOW_MS);
+    const boundaryStart = new Date(cutoff.getTime() + 60 * 60 * 1000);
+    await prisma.itopTimeEntry.create({
+      data: {
+        id: 888888,
+        itopUserId: 1,
+        userId: userA.userId,
+        startDate: boundaryStart,
+        durationMinutes: 30,
+        syncedAt: boundaryStart,
+      },
+    });
+
+    await syncTimeEntries({ full: true });
+
+    const row = await prisma.itopTimeEntry.findUnique({ where: { id: 888888 } });
+    expect(row).not.toBeNull();
+  });
+
+  it("still deletes a genuinely-gone entry once its startDate is past the 14h grace margin", async () => {
+    const state = seedFakeItop();
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
+
+    const userA = await createUserWithRole("TAM");
+    await prisma.user.update({ where: { id: userA.userId }, data: { email: "rina.s@example.co.id" } });
+    await syncUsers();
+    await syncTimeEntries({ full: true });
+
+    // Same setup as the grace-margin test above, but 15h past the fetch
+    // cutoff — outside the 14h margin, so the existing "iTop no longer
+    // returns this" cleanup still applies.
+    const cutoff = new Date(Date.now() - TIME_ENTRY_WINDOW_MS);
+    const pastGraceStart = new Date(cutoff.getTime() + 15 * 60 * 60 * 1000);
+    await prisma.itopTimeEntry.create({
+      data: {
+        id: 777777,
+        itopUserId: 1,
+        userId: userA.userId,
+        startDate: pastGraceStart,
+        durationMinutes: 30,
+        syncedAt: pastGraceStart,
+      },
+    });
+
+    await syncTimeEntries({ full: true });
+
+    const row = await prisma.itopTimeEntry.findUnique({ where: { id: 777777 } });
+    expect(row).toBeNull();
+  });
+
   it("is a no-op when iTop is not configured", async () => {
     const summary = await syncTimeEntries({ full: true });
     expect(summary.ran).toBe(false);
@@ -754,30 +980,30 @@ describe("syncTickets + syncTimeEntries combined", () => {
 
 describe("parseItopDate", () => {
   it("treats the empty-date sentinel and blank strings as null", () => {
-    expect(parseItopDate("0000-00-00 00:00:00")).toBeNull();
-    expect(parseItopDate("")).toBeNull();
-    expect(parseItopDate(undefined)).toBeNull();
-    expect(parseItopDate(null)).toBeNull();
+    expect(parseItopDate("0000-00-00 00:00:00", "UTC")).toBeNull();
+    expect(parseItopDate("", "UTC")).toBeNull();
+    expect(parseItopDate(undefined, "UTC")).toBeNull();
+    expect(parseItopDate(null, "UTC")).toBeNull();
   });
 
   it("parses a well-formed iTop datetime as UTC", () => {
-    const parsed = parseItopDate("2026-03-14 09:30:00");
+    const parsed = parseItopDate("2026-03-14 09:30:00", "UTC");
     expect(parsed).not.toBeNull();
     expect(parsed!.toISOString()).toBe("2026-03-14T09:30:00.000Z");
   });
 
   it("returns null for a value that doesn't match the expected shape", () => {
-    expect(parseItopDate("3600")).toBeNull();
+    expect(parseItopDate("3600", "UTC")).toBeNull();
   });
 
   it("returns null for a JSON number instead of throwing — the exact shape that used to crash sync (`value.trim is not a function`)", () => {
-    expect(parseItopDate(182 as unknown)).toBeNull();
+    expect(parseItopDate(182 as unknown, "UTC")).toBeNull();
   });
 
   it("returns null for any other non-string garbage without throwing", () => {
-    expect(parseItopDate({} as unknown)).toBeNull();
-    expect(parseItopDate([] as unknown)).toBeNull();
-    expect(parseItopDate(true as unknown)).toBeNull();
+    expect(parseItopDate({} as unknown, "UTC")).toBeNull();
+    expect(parseItopDate([] as unknown, "UTC")).toBeNull();
+    expect(parseItopDate(true as unknown, "UTC")).toBeNull();
   });
 });
 

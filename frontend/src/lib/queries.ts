@@ -3028,6 +3028,12 @@ export interface ItopSettings {
   readClasses: ItopReadClass[];
   capacityHoursPerWeek: number;
   actionsEnabled: boolean;
+  // IANA zone name the real iTop install's own server clock runs on (e.g.
+  // "Europe/Paris") — ground truth confirmed 2026-09-24: iTop stores/returns
+  // ticket timestamps in ITS OWN timezone, not UTC, so a mismatched default
+  // ("UTC") showed times off by that offset. Defaults to "UTC" on the
+  // backend for an unconfigured install.
+  timezone: string;
   lastSyncAt: string | null;
   lastSyncOk: boolean | null;
   lastSyncError: string | null;
@@ -3046,6 +3052,8 @@ export interface UpdateItopSettingsInput {
   readClasses?: ItopReadClass[];
   capacityHoursPerWeek?: number;
   actionsEnabled?: boolean;
+  /** 400 `invalid_timezone` from the backend for a name `Intl` can't resolve. */
+  timezone?: string;
 }
 
 export interface ItopTestConnectionInput {

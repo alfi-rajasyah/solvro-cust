@@ -10,6 +10,7 @@ import {
   ITOP_TIME_SPENT_TICKET_REF_FIELD,
   type ItopTicketClass,
 } from "../../src/lib/itop/types.js";
+import { utcToZonedWallTime } from "../../src/lib/itop/timezone.js";
 
 // ---------------------------------------------------------------------------
 // State
@@ -112,6 +113,8 @@ interface TimeSpentRecord {
 }
 
 export interface FakeItopState {
+  /** IANA zone the fake emits/accepts wall-clock datetime strings in — mirrors `ItopConfig.timezone` on a real install (confirmed reference value: `"Europe/Paris"`). Defaults to `"UTC"`; set directly on the returned state before `listen()` to exercise a non-UTC install end to end. */
+  timezone: string;
   tokens: Map<string, FakeItopToken>;
   organizations: Map<number, OrganizationRecord>;
   persons: Map<number, PersonRecord>;
@@ -140,6 +143,7 @@ export interface FakeItopState {
 
 export function createEmptyState(): FakeItopState {
   return {
+    timezone: "UTC",
     tokens: new Map(),
     organizations: new Map(),
     persons: new Map(),
@@ -187,19 +191,22 @@ const WRITE_OPERATIONS = new Set(["core/create", "core/update", "core/apply_stim
 // ---------------------------------------------------------------------------
 // Seed data
 
-function formatDate(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return (
-    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
-    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
-  );
+/** Renders a real instant as the wall-clock string a fake install configured with `tz` would report — delegates to the same helper `lib/itop/sync.ts#formatItopDate` uses, so the fake round-trips through the real conversion instead of a second, possibly-diverging implementation. */
+function formatDate(date: Date, tz: string): string {
+  return utcToZonedWallTime(date, tz);
 }
 
-function daysAgo(days: number, hours = 9): string {
+/** The real instant `days` ago at `hours`:00 (host-local wall clock, but a `Date` is just an instant — see `daysAgo`'s own comment for why that doesn't matter). Exposed separately from `daysAgo` for seeds that need the SAME instant twice (e.g. a TimeSpent row's `start_date` and its `end_date`, `minutes` later) without formatting-then-reparsing a zoned string. */
+function daysAgoDate(days: number, hours = 9): Date {
   const date = new Date();
   date.setDate(date.getDate() - days);
   date.setHours(hours, 0, 0, 0);
-  return formatDate(date);
+  return date;
+}
+
+/** `days` ago at `hours`:00, expressed in `tz`. The instant itself is host-timezone-independent (see `daysAgoDate`); only the RENDERING below depends on `tz`. */
+function daysAgo(days: number, tz: string, hours = 9): string {
+  return formatDate(daysAgoDate(days, hours), tz);
 }
 
 /**
@@ -257,22 +264,23 @@ export function seedFakeItop(): FakeItopState {
   // token can only see ITS OWN user's row here (see the ownership filter in
   // `collectionFor`'s "PersonalToken" case below), mirroring real iTop's
   // per-user scoping of this class.
-  state.personalTokens.set(1, { id: 1, user_id: 1, expiration_date: daysAgo(-90) });
-  state.personalTokens.set(2, { id: 2, user_id: 2, expiration_date: daysAgo(-60) });
+  state.personalTokens.set(1, { id: 1, user_id: 1, expiration_date: daysAgo(-90, state.timezone) });
+  state.personalTokens.set(2, { id: 2, user_id: 2, expiration_date: daysAgo(-60, state.timezone) });
 
+  const tz = state.timezone;
   const ticketSeeds: Array<Omit<TicketRecord, "id">> = [
-    mkTicket({ class: "Incident", ref: "R-004512", title: "Branch 5 VPN tunnel flapping", status: "assigned", agentId: 1, orgId: 1, ageDays: 2, ttrPassed: true }),
-    mkTicket({ class: "UserRequest", ref: "R-004530", title: "Add 2 users to the Acronis console", status: "assigned", agentId: 1, orgId: 1, ageDays: 0 }),
-    mkTicket({ class: "UserRequest", ref: "R-004498", title: "Monthly backup report not received", status: "pending", agentId: 2, orgId: 1, ageDays: 4 }),
-    mkTicket({ class: "UserRequest", ref: "R-004535", title: "Firewall rule for the new HR app", status: "new", agentId: undefined, orgId: 1, ageDays: 0 }),
-    mkTicket({ class: "Incident", ref: "R-004471", title: "Veeam job failing on VM-DB02", status: "resolved", agentId: 1, orgId: 1, ageDays: 3 }),
-    mkTicket({ class: "UserRequest", ref: "R-004402", title: "Printer queue stuck, floor 3", status: "closed", agentId: 2, orgId: 1, ageDays: 10 }),
-    mkTicket({ class: "UserRequest", ref: "R-004488", title: "VPN client licence renewal", status: "assigned", agentId: 3, orgId: 2, ageDays: 1 }),
-    mkTicket({ class: "UserRequest", ref: "R-004519", title: "New starter laptop provisioning", status: "new", agentId: undefined, orgId: 2, ageDays: 0 }),
-    mkTicket({ class: "Incident", ref: "R-004501", title: "Warehouse scanner offline", status: "pending", agentId: 3, orgId: 2, ageDays: 2 }),
-    mkTicket({ class: "UserRequest", ref: "R-004540", title: "Mailbox quota increase", status: "resolved", agentId: 3, orgId: 2, ageDays: 5 }),
-    mkTicket({ class: "Incident", ref: "R-004545", title: "Core switch reboot loop", status: "assigned", agentId: 1, orgId: 2, ageDays: 1, ttrPassed: true }),
-    mkTicket({ class: "UserRequest", ref: "R-004550", title: "Guest wifi password rotation", status: "closed", agentId: 2, orgId: 2, ageDays: 14 }),
+    mkTicket({ class: "Incident", ref: "R-004512", title: "Branch 5 VPN tunnel flapping", status: "assigned", agentId: 1, orgId: 1, ageDays: 2, ttrPassed: true, tz }),
+    mkTicket({ class: "UserRequest", ref: "R-004530", title: "Add 2 users to the Acronis console", status: "assigned", agentId: 1, orgId: 1, ageDays: 0, tz }),
+    mkTicket({ class: "UserRequest", ref: "R-004498", title: "Monthly backup report not received", status: "pending", agentId: 2, orgId: 1, ageDays: 4, tz }),
+    mkTicket({ class: "UserRequest", ref: "R-004535", title: "Firewall rule for the new HR app", status: "new", agentId: undefined, orgId: 1, ageDays: 0, tz }),
+    mkTicket({ class: "Incident", ref: "R-004471", title: "Veeam job failing on VM-DB02", status: "resolved", agentId: 1, orgId: 1, ageDays: 3, tz }),
+    mkTicket({ class: "UserRequest", ref: "R-004402", title: "Printer queue stuck, floor 3", status: "closed", agentId: 2, orgId: 1, ageDays: 10, tz }),
+    mkTicket({ class: "UserRequest", ref: "R-004488", title: "VPN client licence renewal", status: "assigned", agentId: 3, orgId: 2, ageDays: 1, tz }),
+    mkTicket({ class: "UserRequest", ref: "R-004519", title: "New starter laptop provisioning", status: "new", agentId: undefined, orgId: 2, ageDays: 0, tz }),
+    mkTicket({ class: "Incident", ref: "R-004501", title: "Warehouse scanner offline", status: "pending", agentId: 3, orgId: 2, ageDays: 2, tz }),
+    mkTicket({ class: "UserRequest", ref: "R-004540", title: "Mailbox quota increase", status: "resolved", agentId: 3, orgId: 2, ageDays: 5, tz }),
+    mkTicket({ class: "Incident", ref: "R-004545", title: "Core switch reboot loop", status: "assigned", agentId: 1, orgId: 2, ageDays: 1, ttrPassed: true, tz }),
+    mkTicket({ class: "UserRequest", ref: "R-004550", title: "Guest wifi password rotation", status: "closed", agentId: 2, orgId: 2, ageDays: 14, tz }),
   ];
   for (const seed of ticketSeeds) {
     const id = state.nextId++;
@@ -301,15 +309,19 @@ export function seedFakeItop(): FakeItopState {
   ];
   for (const seed of timeSpentSeeds) {
     const id = state.nextId++;
-    const start = daysAgo(seed.daysAgo, 9);
-    const startDate = new Date(start.replace(" ", "T"));
-    const end = new Date(startDate.getTime() + seed.minutes * 60_000);
+    // Compute both timestamps from the SAME real instant, then render each
+    // into `state.timezone` — never format-then-reparse a zoned wall-clock
+    // string (`new Date("...")` with no offset parses as the HOST's local
+    // time, not `tz`, which silently corrupts the `minutes`-later math
+    // whenever `tz` isn't the host's own zone).
+    const startInstant = daysAgoDate(seed.daysAgo, 9);
+    const endInstant = new Date(startInstant.getTime() + seed.minutes * 60_000);
     state.timeSpent.set(id, {
       id,
       user_id: String(seed.userId),
       org_id: String(seed.orgId),
-      start_date: start,
-      end_date: formatDate(end),
+      start_date: formatDate(startInstant, state.timezone),
+      end_date: formatDate(endInstant, state.timezone),
       duration: String(seed.minutes * 60),
       title: seed.ref,
       ticketRef: seed.ref,
@@ -328,6 +340,8 @@ function mkTicket(opts: {
   orgId: number;
   ageDays: number;
   ttrPassed?: boolean;
+  /** IANA zone to emit `start_date`/`last_update`/the escalation deadlines in — `state.timezone`, threaded through so a non-UTC fake seeds internally-consistent wall-clock strings. */
+  tz: string;
 }): Omit<TicketRecord, "id"> {
   const agentNames: Record<number, string> = { 1: "Rina S.", 2: "Dedi P.", 3: "Budi H." };
   const resolvedOrClosed = opts.status === "resolved" || opts.status === "closed";
@@ -346,8 +360,8 @@ function mkTicket(opts: {
     service_id_friendlyname: opts.class === "Incident" ? "Network / WAN" : "Service Desk",
     caller_id_friendlyname: "Budi H.",
     org_id: String(opts.orgId),
-    start_date: daysAgo(opts.ageDays),
-    last_update: daysAgo(Math.max(opts.ageDays - 1, 0)),
+    start_date: daysAgo(opts.ageDays, opts.tz),
+    last_update: daysAgo(Math.max(opts.ageDays - 1, 0), opts.tz),
     // Elapsed SLA-stopwatch seconds — never read by Solvro's sync (kept only
     // so a `probe()`/protocol-shape test sees the same fields a real install
     // returns).
@@ -356,11 +370,11 @@ function mkTicket(opts: {
     // Escalation deadlines — "" (clock not running) once resolved/closed,
     // otherwise a datetime a day or two out. These, not the integers above,
     // are what Solvro's sync maps into ItopTicket.tto/ttr.
-    tto_escalation_deadline: resolvedOrClosed ? "" : daysAgo(-1),
-    ttr_escalation_deadline: resolvedOrClosed ? "" : daysAgo(-2),
+    tto_escalation_deadline: resolvedOrClosed ? "" : daysAgo(-1, opts.tz),
+    ttr_escalation_deadline: resolvedOrClosed ? "" : daysAgo(-2, opts.tz),
     sla_tto_passed: "0",
     sla_ttr_passed: opts.ttrPassed ? "1" : "0",
-    resolution_date: resolvedOrClosed ? daysAgo(Math.max(opts.ageDays - 1, 0)) : "",
+    resolution_date: resolvedOrClosed ? daysAgo(Math.max(opts.ageDays - 1, 0), opts.tz) : "",
     public_log: { entries: [] },
     private_log: { entries: [] },
   };
@@ -571,7 +585,7 @@ function appendCaseLogEntry(
   message: string,
 ): void {
   const author = token.personId !== undefined ? (state.persons.get(token.personId)?.friendlyname ?? "") : "";
-  ticket[field].entries.push({ date: formatDate(new Date()), user_login: author, message });
+  ticket[field].entries.push({ date: formatDate(new Date(), state.timezone), user_login: author, message });
 }
 
 function applyTicketStimulus(
@@ -614,9 +628,9 @@ function applyTicketStimulus(
     }
   }
   if (stimulus === "ev_resolve") {
-    ticket.resolution_date = formatDate(new Date());
+    ticket.resolution_date = formatDate(new Date(), state.timezone);
   }
-  ticket.last_update = formatDate(new Date());
+  ticket.last_update = formatDate(new Date(), state.timezone);
   return { ok: true };
 }
 
@@ -810,7 +824,7 @@ export function createFakeItop(seed: FakeItopState = createEmptyState()): FakeIt
         if (typeof privateLogText === "string" && privateLogText.length > 0) {
           appendCaseLogEntry(state, ticket, "private_log", token, privateLogText);
         }
-        ticket.last_update = formatDate(new Date());
+        ticket.last_update = formatDate(new Date(), state.timezone);
         sendEnvelope(res, {
           code: 0,
           objects: {
@@ -888,8 +902,8 @@ export function createFakeItop(seed: FakeItopState = createEmptyState()): FakeIt
           service_id_friendlyname: serviceName,
           caller_id_friendlyname: callerPerson.friendlyname,
           org_id: String(orgId),
-          start_date: formatDate(new Date()),
-          last_update: formatDate(new Date()),
+          start_date: formatDate(new Date(), state.timezone),
+          last_update: formatDate(new Date(), state.timezone),
           tto: 0,
           ttr: 0,
           tto_escalation_deadline: "",

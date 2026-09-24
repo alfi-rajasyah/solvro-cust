@@ -230,6 +230,130 @@ describe("GET/PATCH /admin/itop/settings", () => {
     const res = await call("patch", "/admin/itop/settings", adminToken).send({ refreshMinutes: 0 });
     expect(res.status).toBe(400);
   });
+
+  it("defaults to UTC, and GET/PATCH round-trip a real IANA zone", async () => {
+    const before = await call("get", "/admin/itop/settings", adminToken);
+    expect(before.body.timezone).toBe("UTC");
+
+    const res = await call("patch", "/admin/itop/settings", adminToken).send({ timezone: "Europe/Paris" });
+    expect(res.status).toBe(200);
+    expect(res.body.timezone).toBe("Europe/Paris");
+
+    const after = await call("get", "/admin/itop/settings", adminToken);
+    expect(after.body.timezone).toBe("Europe/Paris");
+  });
+
+  it("400s invalid_timezone for a made-up zone name, and leaves the stored value untouched", async () => {
+    // beforeEach's resetItopTestState() deletes the singleton row before
+    // every test — create it (at the UTC default) via a plain GET first, so
+    // the PATCH below (which 400s before ever calling getItopConfig()
+    // itself) has an existing row to leave untouched.
+    await call("get", "/admin/itop/settings", adminToken);
+
+    const res = await call("patch", "/admin/itop/settings", adminToken).send({ timezone: "Not/AZone" });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("invalid_timezone");
+
+    const row = await prisma.itopConfig.findUniqueOrThrow({ where: { id: "default" } });
+    expect(row.timezone).toBe("UTC");
+  });
+
+  it("changing the timezone clears lastFullSyncAt so the next sync tick is a full one", async () => {
+    await prisma.itopConfig.upsert({
+      where: { id: "default" },
+      create: { id: "default", timezone: "UTC", lastFullSyncAt: new Date(), lastSyncAt: new Date() },
+      update: { timezone: "UTC", lastFullSyncAt: new Date(), lastSyncAt: new Date() },
+    });
+    bustItopConfigCache();
+
+    const res = await call("patch", "/admin/itop/settings", adminToken).send({ timezone: "Asia/Jakarta" });
+    expect(res.status).toBe(200);
+    expect(res.body.timezone).toBe("Asia/Jakarta");
+    expect(res.body.lastFullSyncAt).toBeNull();
+
+    const row = await prisma.itopConfig.findUniqueOrThrow({ where: { id: "default" } });
+    expect(row.lastFullSyncAt).toBeNull();
+    // lastSyncAt (the incremental watermark) is untouched — only the
+    // full-sync marker is cleared.
+    expect(row.lastSyncAt).not.toBeNull();
+  });
+
+  it("re-sending the SAME timezone does not clear lastFullSyncAt", async () => {
+    const fullSyncAt = new Date();
+    await prisma.itopConfig.upsert({
+      where: { id: "default" },
+      create: { id: "default", timezone: "Europe/Paris", lastFullSyncAt: fullSyncAt },
+      update: { timezone: "Europe/Paris", lastFullSyncAt: fullSyncAt },
+    });
+    bustItopConfigCache();
+
+    const res = await call("patch", "/admin/itop/settings", adminToken).send({ timezone: "Europe/Paris" });
+    expect(res.status).toBe(200);
+    expect(res.body.lastFullSyncAt).not.toBeNull();
+
+    const row = await prisma.itopConfig.findUniqueOrThrow({ where: { id: "default" } });
+    expect(row.lastFullSyncAt?.getTime()).toBe(fullSyncAt.getTime());
+  });
+
+  it("backfills an ItopTimeEntry outside the 8-week sync window when the timezone changes (Europe/Paris summer, +2)", async () => {
+    await prisma.itopConfig.upsert({
+      where: { id: "default" },
+      create: { id: "default", timezone: "UTC" },
+      update: { timezone: "UTC" },
+    });
+    bustItopConfigCache();
+
+    const user = await createUserWithRole("TAM");
+    // Stored as if iTop's wall-clock digits were UTC (the OLD, wrong
+    // assumption) — a decade-old-style stale row well outside
+    // TIME_ENTRY_WINDOW_MS (8 weeks), which a forced full re-sync would
+    // never re-fetch, let alone correct, on its own.
+    await prisma.itopTimeEntry.create({
+      data: {
+        id: 960_000_001,
+        itopUserId: 1,
+        userId: user.userId,
+        startDate: new Date("2026-07-01T14:00:00.000Z"),
+        endDate: new Date("2026-07-01T14:30:00.000Z"),
+        durationMinutes: 30,
+        syncedAt: new Date(),
+      },
+    });
+
+    const res = await call("patch", "/admin/itop/settings", adminToken).send({ timezone: "Europe/Paris" });
+    expect(res.status).toBe(200);
+
+    const row = await prisma.itopTimeEntry.findUniqueOrThrow({ where: { id: 960_000_001 } });
+    // The wall-clock reading "2026-07-01 14:00:00" is now correctly
+    // reinterpreted as Paris CEST (+2) instead of UTC — 2h earlier in real
+    // time (both start and end shift by the same amount).
+    expect(row.startDate.toISOString()).toBe("2026-07-01T12:00:00.000Z");
+    expect(row.endDate?.toISOString()).toBe("2026-07-01T12:30:00.000Z");
+  });
+
+  it("backfills a non-null User.itopTokenExpiresAt when the timezone changes (Europe/Paris winter, +1)", async () => {
+    await prisma.itopConfig.upsert({
+      where: { id: "default" },
+      create: { id: "default", timezone: "UTC" },
+      update: { timezone: "UTC" },
+    });
+    bustItopConfigCache();
+
+    const user = await createUserWithRole("TAM");
+    await prisma.user.update({
+      where: { id: user.userId },
+      data: { itopTokenExpiresAt: new Date("2026-01-15T14:00:00.000Z") },
+    });
+
+    const res = await call("patch", "/admin/itop/settings", adminToken).send({ timezone: "Europe/Paris" });
+    expect(res.status).toBe(200);
+
+    const row = await prisma.user.findUniqueOrThrow({ where: { id: user.userId } });
+    // CET (+1) in January — 1h earlier in real time than the old UTC
+    // reading, a different shift than the summer (+2) case above, proving
+    // the backfill is DST-correct per row rather than a flat delta.
+    expect(row.itopTokenExpiresAt?.toISOString()).toBe("2026-01-15T13:00:00.000Z");
+  });
 });
 
 describe("POST/DELETE /admin/itop/webhook-secret", () => {

@@ -16,11 +16,52 @@ import { signToken } from "../../src/http/auth.js";
 import { seal } from "../../src/lib/secretBox.js";
 import { bustItopConfigCache } from "../../src/lib/itop/config.js";
 import { syncTickets } from "../../src/lib/itop/sync.js";
+import { utcToZonedWallTime } from "../../src/lib/itop/timezone.js";
 import { weekKeyOf, parseWeekKey } from "../../src/lib/isoWeek.js";
 import { seedRoles, createUserWithRole } from "../testAuth.js";
 import { createFakeItop, seedFakeItop, type FakeItopState, FAKE_ITOP_TOKENS } from "./fakeItop.js";
 
 const app = createApp();
+
+/**
+ * Independent (NOT calling lib/itop/timezone.ts) oracle for Europe/Paris's
+ * DST offset: CEST (+2h) from the last Sunday of March 01:00 UTC to the
+ * last Sunday of October 01:00 UTC, CET (+1h) otherwise. Used for exactly
+ * one absolute-instant expectation in the "non-UTC iTop server timezone"
+ * block below. The other assertions there compare the route's output
+ * against `utcToZonedWallTime`, and the round-trip back against
+ * `startedAt`/`endedAt` — but both directions (`utcToZonedWallTime` AND
+ * `zonedWallTimeToUtc`) share the same offset-lookup primitive
+ * (`offsetMinutesAt`), so a "symmetric" bug there (e.g. a sign error
+ * applied consistently both ways) would cancel out across that round trip
+ * and still pass. This hand-rolled, independently-implemented rule shares
+ * no code with lib/itop/timezone.ts at all, so it still catches that case.
+ */
+function independentParisOffsetMs(date: Date): number {
+  const year = date.getUTCFullYear();
+  const lastSundayAt1amUtc = (month: number): Date => {
+    // month: 0-11. Walk back from the first of the FOLLOWING month to the
+    // preceding Sunday.
+    const lastDayOfMonth = new Date(Date.UTC(year, month + 1, 1) - 24 * 60 * 60 * 1000);
+    lastDayOfMonth.setUTCDate(lastDayOfMonth.getUTCDate() - lastDayOfMonth.getUTCDay());
+    lastDayOfMonth.setUTCHours(1, 0, 0, 0);
+    return lastDayOfMonth;
+  };
+  const dstStart = lastSundayAt1amUtc(2); // March
+  const dstEnd = lastSundayAt1amUtc(9); // October
+  const isDst = date.getTime() >= dstStart.getTime() && date.getTime() < dstEnd.getTime();
+  return (isDst ? 2 : 1) * 60 * 60 * 1000;
+}
+
+/** Formats `date` (a real instant) as the Paris wall-clock string per the independent oracle above — never via lib/itop/timezone.ts. */
+function independentParisWallClock(date: Date): string {
+  const paris = new Date(date.getTime() + independentParisOffsetMs(date));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${paris.getUTCFullYear()}-${pad(paris.getUTCMonth() + 1)}-${pad(paris.getUTCDate())} ` +
+    `${pad(paris.getUTCHours())}:${pad(paris.getUTCMinutes())}:${pad(paris.getUTCSeconds())}`
+  );
+}
 
 // Shared with the other itop test files — the fake iTop seed's fixed
 // Person/User emails are the only User rows any of these files need to
@@ -274,6 +315,75 @@ describe("happy path", () => {
 
     expect(res.status).toBe(201);
     expect(res.body.entry.title).toBe(ref);
+  });
+});
+
+describe("non-UTC iTop server timezone (Europe/Paris)", () => {
+  it("sends start_date/end_date zoned to the server's own timezone, and the snapshot round-trips to the same UTC instant", async () => {
+    // The fixture's beforeEach already started the fake and synced against
+    // it at the UTC default — reconfigure both the fake and ItopConfig to
+    // Europe/Paris for this test alone (mutating the SAME state object the
+    // already-listening fake server closes over).
+    fixture.state.timezone = "Europe/Paris";
+    await prisma.itopConfig.update({ where: { id: "default" }, data: { timezone: "Europe/Paris" } });
+    bustItopConfigCache();
+
+    await linkPersonalToken(fixture.rina.userId, FAKE_ITOP_TOKENS.rina);
+    const ref = "R-004535";
+    const id = await ticketIdByRef(ref);
+
+    // Real instants close to "now" (must land inside the 8-week sync window
+    // and not in the future) — the zone under test is whatever Europe/Paris
+    // actually observes today (DST or not), computed via the SAME
+    // production conversion the route itself uses, never a hardcoded
+    // "assume summer" literal.
+    // iTop's wall-clock format has no sub-second precision — floor to the
+    // second first so the round-trip comparison below can be exact rather
+    // than tolerating up to 999ms of expected truncation.
+    const now = new Date(Math.floor(Date.now() / 1000) * 1000);
+    const startedAt = new Date(now.getTime() - 30 * MINUTE_MS);
+    const endedAt = now;
+
+    const res = await call("post", `/itop/tickets/${id}/time`, fixture.rina.token, {
+      startedAt: startedAt.toISOString(),
+      endedAt: endedAt.toISOString(),
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.entry.durationMinutes).toBe(30);
+
+    // The fake stores exactly what the route sent it — zoned to Paris, never
+    // the bare UTC reading of the same instant (asserted explicitly below).
+    const created = [...fixture.state.timeSpent.values()].find((t) => t.id === res.body.entry.id)!;
+    expect(created.start_date).toBe(utcToZonedWallTime(startedAt, "Europe/Paris"));
+    expect(created.end_date).toBe(utcToZonedWallTime(endedAt, "Europe/Paris"));
+    // Distinguishing assertion: if the route had silently defaulted to UTC
+    // instead of threading the configured zone through, the fake would have
+    // received the bare UTC reading instead — different whenever Paris
+    // isn't at a zero offset (true for every date, since Europe/Paris is
+    // never UTC+0).
+    expect(created.start_date).not.toBe(utcToZonedWallTime(startedAt, "UTC"));
+
+    // Absolute-instant expectation from a SEPARATE, hand-rolled DST oracle
+    // (independentParisWallClock, top of file) that shares no code with
+    // lib/itop/timezone.ts — the two assertions above compare the route's
+    // output against `utcToZonedWallTime` itself, and the round-trip check
+    // below compares back against `startedAt`/`endedAt`, but BOTH
+    // directions of lib/itop/timezone.ts share the same offset-lookup
+    // primitive, so a bug that cancels out symmetrically across that round
+    // trip (e.g. a sign error applied consistently both ways) could still
+    // pass every check so far. An independently-computed expectation closes
+    // that gap.
+    expect(created.start_date).toBe(independentParisWallClock(startedAt));
+    expect(created.end_date).toBe(independentParisWallClock(endedAt));
+
+    // The snapshot re-read (under the read-only app client, also
+    // Europe/Paris-configured) correctly converts those zoned strings back
+    // to the SAME real UTC instants — not off by the zone's offset.
+    const row = await prisma.itopTimeEntry.findUniqueOrThrow({ where: { id: res.body.entry.id } });
+    expect(row.startDate.getTime()).toBe(startedAt.getTime());
+    expect(row.endDate?.getTime()).toBe(endedAt.getTime());
+    expect(row.startDate.toISOString()).toBe(startedAt.toISOString());
+    expect(row.endDate?.toISOString()).toBe(endedAt.toISOString());
   });
 });
 

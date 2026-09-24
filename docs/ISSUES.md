@@ -1899,14 +1899,19 @@ entry). No fix now; each is a Phase 2/3 follow-up per
   2026-09-22**: done exactly as suggested — migration
   `20260922182346_itop_time_entries` drops `itop_tickets_status_idx` and adds
   `@@index([customerId, status])` (`itop_tickets_customer_id_status_idx`).
-- **iTop datetimes are parsed as UTC.** `parseItopDate` in
+- ~~**iTop datetimes are parsed as UTC.** `parseItopDate` in
   `backend/src/lib/itop/sync.ts:61` treats every date/time string iTop
   returns (`start_date`, `last_update`, `tto`, `ttr`, `resolution_date`) as
   UTC with no timezone conversion. If the iTop server itself runs in local
   (non-UTC) time, every stamp — and the SLA/age math derived from it — is
   off by the server's UTC offset. Fix direction: a per-install timezone
   setting (likely on `ItopConfig`) once an iTop admin confirms the source
-  server's zone; no such setting exists yet.
+  server's zone; no such setting exists yet.~~ **Resolved 2026-09-24**
+  (branch `fix/itop-timezone`): confirmed on the real iTop 3.2.2 (Europe/Paris,
+  2 h skew). `ItopConfig.timezone` (IANA, default `UTC`, Admin › iTop) feeds
+  `lib/itop/timezone.ts`; all reads, OQL cutoffs and writes convert through
+  it, and a zone change forces a full re-sync. Verified live: 8 tickets and
+  their case logs match iTop after the re-sync.
 - **`GET /customers/:id` doesn't type or use `itopOrgId`/`itopOrgName` on
   the frontend, though the backend response already carries both fields.**
   `backend/src/routes/customers.ts`'s `GET /:id` calls
