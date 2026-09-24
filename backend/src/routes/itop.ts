@@ -616,6 +616,8 @@ interface WritableTicketContext {
   /** iTop `User` object key (distinct from `myItopPersonId`, the `Person`) — Task 7.1's `POST /tickets/:id/time` needs this for `TimeSpent.user_id`; the Phase 5 action/log routes ignore it. */
   myItopUserId: number | null;
   baseUrl: string;
+  /** The caller's Solvro email — real iTop 3.2.2 refuses core/update and core/apply_stimulus with no `comment` at all, so every write route below builds one identifying who acted from Solvro. */
+  myEmail: string;
 }
 
 /**
@@ -639,7 +641,7 @@ async function loadWritableTicket(userSub: number, ticketId: number, user: JwtPa
 
   const me = await prisma.user.findUnique({
     where: { id: userSub },
-    select: { itopTokenEnc: true, itopPersonId: true, itopUserId: true },
+    select: { itopTokenEnc: true, itopPersonId: true, itopUserId: true, email: true },
   });
   if (!me?.itopTokenEnc) {
     throw new HttpError(403, "itop_token_missing", "Add your personal iTop token in Settings");
@@ -663,7 +665,14 @@ async function loadWritableTicket(userSub: number, ticketId: number, user: JwtPa
     throw new HttpError(409, "itop_not_configured", "iTop is not connected. An admin must set the iTop URL first.");
   }
 
-  return { ticket, token, myItopPersonId: me.itopPersonId, myItopUserId: me.itopUserId, baseUrl: config.baseUrl };
+  return {
+    ticket,
+    token,
+    myItopPersonId: me.itopPersonId,
+    myItopUserId: me.itopUserId,
+    baseUrl: config.baseUrl,
+    myEmail: me.email,
+  };
 }
 
 /**
@@ -721,9 +730,13 @@ const actionBodySchema = z.discriminatedUnion("action", [
     action: z.literal("assign_to_me"),
     fields: z.object({ team_id: z.coerce.number().int().positive().optional() }).optional(),
   }),
+  // pending_reason is mandatory on a real iTop 3.2.2 install (`ev_pending`
+  // refuses with "Missing mandatory attribute(s) for applying the stimulus:
+  // pending_reason." otherwise) — `fields` is therefore required here, not
+  // optional, and 400s before the route even runs when it's missing.
   z.object({
     action: z.literal("pending"),
-    fields: z.object({ pending_reason: z.union([z.string(), z.number()]).optional() }).optional(),
+    fields: z.object({ pending_reason: z.string().min(1).max(500) }),
   }),
   z.object({
     action: z.literal("resolve"),
@@ -744,7 +757,7 @@ itopRouter.post(
     const { id } = req.params as unknown as z.infer<typeof ticketIdParamSchema>;
     const body = req.body as z.infer<typeof actionBodySchema>;
 
-    const { ticket, token, myItopPersonId, baseUrl } = await loadWritableTicket(req.user!.sub, id, req.user!);
+    const { ticket, token, myItopPersonId, baseUrl, myEmail } = await loadWritableTicket(req.user!.sub, id, req.user!);
     const client = makeItopClient(baseUrl, token);
 
     let stimulus: string;
@@ -805,10 +818,7 @@ itopRouter.post(
       stimulusFields = { team_id: teamId, agent_id: myItopPersonId };
     } else if (body.action === "pending") {
       stimulus = "ev_pending";
-      const pendingReason = body.fields?.pending_reason;
-      if (pendingReason !== undefined) {
-        stimulusFields = { pending_reason: pendingReason };
-      }
+      stimulusFields = { pending_reason: body.fields.pending_reason };
     } else if (body.action === "resolve") {
       stimulus = "ev_resolve";
       stimulusFields = { resolution_code: body.fields.resolution_code, solution: body.fields.solution };
@@ -819,7 +829,11 @@ itopRouter.post(
     }
 
     try {
-      await client.applyStimulus(ticket.class, ticket.id, stimulus, stimulusFields);
+      // Real iTop 3.2.2 refuses core/apply_stimulus outright with no comment
+      // ("Error: Missing parameter 'comment'") — always identify the acting
+      // Solvro user and action rather than relying on client.ts's generic
+      // default.
+      await client.applyStimulus(ticket.class, ticket.id, stimulus, stimulusFields, `Solvro: ${body.action} by ${myEmail}`);
     } catch (err) {
       mapItopWriteError(err);
     }
@@ -848,12 +862,15 @@ itopRouter.post(
     const { id } = req.params as unknown as z.infer<typeof ticketIdParamSchema>;
     const { visibility, text } = req.body as z.infer<typeof logBodySchema>;
 
-    const { ticket, token, myItopPersonId, baseUrl } = await loadWritableTicket(req.user!.sub, id, req.user!);
+    const { ticket, token, myItopPersonId, baseUrl, myEmail } = await loadWritableTicket(req.user!.sub, id, req.user!);
     const client = makeItopClient(baseUrl, token);
 
     const field = visibility === "public" ? "public_log" : "private_log";
     try {
-      await client.update(ticket.class, ticket.id, { [field]: text });
+      // Real iTop 3.2.2 refuses core/update outright with no comment ("Error:
+      // Missing parameter 'comment'") — identify the acting Solvro user
+      // rather than relying on client.ts's generic default.
+      await client.update(ticket.class, ticket.id, { [field]: text }, `Solvro: log entry by ${myEmail}`);
     } catch (err) {
       mapItopWriteError(err);
     }
@@ -982,6 +999,7 @@ interface WritableCustomerContext {
   token: string;
   myItopPersonId: number | null;
   baseUrl: string;
+  myEmail: string;
 }
 
 /**
@@ -1015,7 +1033,7 @@ async function loadWritableCustomerContext(
 
   const me = await prisma.user.findUnique({
     where: { id: userSub },
-    select: { itopTokenEnc: true, itopPersonId: true },
+    select: { itopTokenEnc: true, itopPersonId: true, email: true },
   });
   if (!me?.itopTokenEnc) {
     throw new HttpError(403, "itop_token_missing", "Add your personal iTop token in Settings");
@@ -1039,7 +1057,13 @@ async function loadWritableCustomerContext(
     throw new HttpError(409, "itop_not_configured", "iTop is not connected. An admin must set the iTop URL first.");
   }
 
-  return { itopOrgId: customer.itopOrgId, token, myItopPersonId: me.itopPersonId, baseUrl: config.baseUrl };
+  return {
+    itopOrgId: customer.itopOrgId,
+    token,
+    myItopPersonId: me.itopPersonId,
+    baseUrl: config.baseUrl,
+    myEmail: me.email,
+  };
 }
 
 /**
@@ -1077,7 +1101,7 @@ itopRouter.post(
   async (req, res) => {
     const body = req.body as z.infer<typeof createTicketBodySchema>;
 
-    const { itopOrgId, token, myItopPersonId, baseUrl } = await loadWritableCustomerContext(
+    const { itopOrgId, token, myItopPersonId, baseUrl, myEmail } = await loadWritableCustomerContext(
       req.user!.sub,
       body.customerId,
       req.user!,
@@ -1117,7 +1141,7 @@ itopRouter.post(
 
     let created: ItopObjectRow<ItopTicketFields> | undefined;
     try {
-      created = await client.create<ItopTicketFields>(body.class, createFields, "Created from Solvro");
+      created = await client.create<ItopTicketFields>(body.class, createFields, `Solvro: ticket created by ${myEmail}`);
     } catch (err) {
       mapItopWriteError(err);
     }
@@ -1207,7 +1231,7 @@ itopRouter.post(
     const { id } = req.params as unknown as z.infer<typeof ticketIdParamSchema>;
     const { startedAt, endedAt, title } = req.body as z.infer<typeof logTimeBodySchema>;
 
-    const { ticket, token, myItopUserId, baseUrl } = await loadWritableTicket(req.user!.sub, id, req.user!);
+    const { ticket, token, myItopUserId, baseUrl, myEmail } = await loadWritableTicket(req.user!.sub, id, req.user!);
 
     if (myItopUserId === null) {
       throw new HttpError(
@@ -1253,7 +1277,7 @@ itopRouter.post(
 
     let created: ItopObjectRow<ItopTimeSpentFields> | undefined;
     try {
-      created = await client.create<ItopTimeSpentFields>("TimeSpent", createFields, "Logged from Solvro");
+      created = await client.create<ItopTimeSpentFields>("TimeSpent", createFields, `Solvro: time logged by ${myEmail}`);
     } catch (err) {
       mapItopWriteError(err);
     }

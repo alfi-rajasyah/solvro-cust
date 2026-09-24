@@ -29,7 +29,7 @@ function makeTicket(id: number): TicketRecord {
     title: `Ticket ${id}`,
     status: "new",
     operational_status: "normal",
-    priority: "medium",
+    priority: "3",
     agent_id: "0",
     agent_id_friendlyname: "",
     team_id_friendlyname: "",
@@ -38,11 +38,15 @@ function makeTicket(id: number): TicketRecord {
     org_id: "1",
     start_date: "2026-01-01 00:00:00",
     last_update: "2026-01-01 00:00:00",
-    tto: "",
-    ttr: "",
+    tto: 0,
+    ttr: 0,
+    tto_escalation_deadline: "",
+    ttr_escalation_deadline: "",
     sla_tto_passed: "0",
     sla_ttr_passed: "0",
     resolution_date: "",
+    public_log: { entries: [] },
+    private_log: { entries: [] },
   };
 }
 
@@ -222,7 +226,7 @@ describe("createItopClient transport errors and request shape (mocked fetchImpl)
     expect(callCount).toBe(2);
   });
 
-  it("sends applyStimulus as a single urlencoded json_data field with the exact payload", async () => {
+  it("sends applyStimulus as a single urlencoded json_data field with the exact payload, defaulting comment when the caller doesn't pass one", async () => {
     let capturedUrl: string | undefined;
     let capturedInit: RequestInit | undefined;
     const fetchImpl = (async (url: string, init?: RequestInit) => {
@@ -248,6 +252,9 @@ describe("createItopClient transport errors and request shape (mocked fetchImpl)
     const params = new URLSearchParams(body);
     const jsonData = params.get("json_data");
     expect(jsonData).toBeTruthy();
+    // A real iTop 3.2.2 install refuses core/apply_stimulus outright with no
+    // comment at all — the client must never omit it, even when the caller
+    // doesn't pass one explicitly.
     expect(JSON.parse(jsonData as string)).toEqual({
       operation: "core/apply_stimulus",
       class: "UserRequest",
@@ -257,6 +264,88 @@ describe("createItopClient transport errors and request shape (mocked fetchImpl)
         resolution_code: "assistance",
         solution: "Both users created in the Acronis console.",
       },
+      comment: "Updated from Solvro",
     });
+  });
+
+  it("defaults update()'s comment the same way when the caller doesn't pass one", async () => {
+    let capturedInit: RequestInit | undefined;
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      capturedInit = init;
+      return new Response(JSON.stringify({ code: 0, message: "", objects: null }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const client = createItopClient({ baseUrl: "http://example.invalid/", token: "tam-token", fetchImpl });
+    await client.update("UserRequest", 4530, { public_log: "hi" });
+
+    const body = capturedInit?.body as string;
+    const jsonData = new URLSearchParams(body).get("json_data");
+    expect(JSON.parse(jsonData as string)).toMatchObject({ comment: "Updated from Solvro" });
+  });
+});
+
+describe("fake iTop: comment enforcement on core/update and core/apply_stimulus", () => {
+  let server: Server | undefined;
+
+  afterEach(async () => {
+    if (server) {
+      await closeServer(server);
+      server = undefined;
+    }
+  });
+
+  /** Bypasses createItopClient (which now always attaches a comment) to exercise the fake's own protocol-level refusal directly, the way a caller sending a raw request with no `comment` field at all would hit it. */
+  async function postRaw(baseUrl: string, token: string, payload: Record<string, unknown>) {
+    const body = new URLSearchParams({ json_data: JSON.stringify(payload) }).toString();
+    const response = await fetch(`${baseUrl}/webservices/rest.php?version=1.3`, {
+      method: "POST",
+      headers: { "Auth-Token": token, "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    return (await response.json()) as { code: number; message: string };
+  }
+
+  it("refuses core/apply_stimulus with the exact real message when comment is missing", async () => {
+    const state = seedFakeItop();
+    const started = await startFake(state);
+    server = started.server;
+
+    const result = await postRaw(started.baseUrl, FAKE_ITOP_TOKENS.rina, {
+      operation: "core/apply_stimulus",
+      class: "Incident",
+      key: 1,
+      stimulus: "ev_pending",
+      fields: { pending_reason: "waiting" },
+    });
+
+    expect(result).toMatchObject({ code: 100, message: "Error: Missing parameter 'comment'" });
+  });
+
+  it("refuses core/update with the exact real message when comment is an empty string", async () => {
+    const state = seedFakeItop();
+    const started = await startFake(state);
+    server = started.server;
+
+    const result = await postRaw(started.baseUrl, FAKE_ITOP_TOKENS.rina, {
+      operation: "core/update",
+      class: "Incident",
+      key: 1,
+      fields: { public_log: "hello" },
+      comment: "",
+    });
+
+    expect(result).toMatchObject({ code: 100, message: "Error: Missing parameter 'comment'" });
+  });
+
+  it("resolves an assigned ticket with only `solution` — resolution_code is optional at the iTop level", async () => {
+    const state = seedFakeItop();
+    const started = await startFake(state);
+    server = started.server;
+
+    const client = createItopClient({ baseUrl: started.baseUrl, token: FAKE_ITOP_TOKENS.rina });
+    // R-004512 (ticket id 1 in the seed) is "assigned" to Rina.
+    const result = await client.applyStimulus("Incident", 1, "ev_resolve", { solution: "Rebooted the tunnel." });
+
+    expect(result?.fields).toMatchObject({ status: "resolved" });
   });
 });

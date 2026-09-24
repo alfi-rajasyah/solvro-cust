@@ -159,6 +159,12 @@ afterEach(async () => {
   }
 });
 
+// pending_reason is mandatory in the request schema now (real iTop 3.2.2
+// refuses ev_pending without one) — every "pending" body below must include
+// it so these tests actually exercise the precondition under test, not the
+// 400 that a missing pending_reason would otherwise produce first.
+const pendingBody = { action: "pending" as const, fields: { pending_reason: "Waiting on the customer" } };
+
 describe("preconditions", () => {
   it("404s when actionsEnabled is false", async () => {
     await prisma.itopConfig.update({ where: { id: "default" }, data: { actionsEnabled: false } });
@@ -166,14 +172,14 @@ describe("preconditions", () => {
     await linkPersonalToken(fixture.rina.userId, FAKE_ITOP_TOKENS.rina);
 
     const id = await ticketIdByRef("R-004535");
-    const res = await call("post", `/itop/tickets/${id}/actions`, fixture.rina.token, { action: "pending" });
+    const res = await call("post", `/itop/tickets/${id}/actions`, fixture.rina.token, pendingBody);
     expect(res.status).toBe(404);
     expect(res.body.code).toBe("not_found");
   });
 
   it("403s when the caller has no personal token saved", async () => {
     const id = await ticketIdByRef("R-004535");
-    const res = await call("post", `/itop/tickets/${id}/actions`, fixture.rina.token, { action: "pending" });
+    const res = await call("post", `/itop/tickets/${id}/actions`, fixture.rina.token, pendingBody);
     expect(res.status).toBe(403);
     expect(res.body.code).toBe("itop_token_missing");
   });
@@ -181,7 +187,7 @@ describe("preconditions", () => {
   it("404s a ticket whose customer the caller cannot see", async () => {
     const outsider = await createUserWithRole("TAM");
     const id = await ticketIdByRef("R-004535"); // belongs to customer 1, owned by rina
-    const res = await call("post", `/itop/tickets/${id}/actions`, outsider.token, { action: "pending" });
+    const res = await call("post", `/itop/tickets/${id}/actions`, outsider.token, pendingBody);
     expect(res.status).toBe(404);
     expect(res.body.code).toBe("customer_not_found");
   });
@@ -192,9 +198,45 @@ describe("preconditions", () => {
       data: { itopTokenEnc: "v1:not-a-real-iv:bad-tag:bad-ciphertext" },
     });
     const id = await ticketIdByRef("R-004535");
-    const res = await call("post", `/itop/tickets/${id}/actions`, fixture.rina.token, { action: "pending" });
+    const res = await call("post", `/itop/tickets/${id}/actions`, fixture.rina.token, pendingBody);
     expect(res.status).toBe(403);
     expect(res.body.code).toBe("itop_token_unreadable");
+  });
+});
+
+describe("pending", () => {
+  it("400s with no pending_reason", async () => {
+    await linkPersonalToken(fixture.rina.userId, FAKE_ITOP_TOKENS.rina);
+    const id = await ticketIdByRef("R-004530"); // status "assigned", agent Rina
+
+    const res = await call("post", `/itop/tickets/${id}/actions`, fixture.rina.token, { action: "pending" });
+    expect(res.status).toBe(400);
+
+    const withEmptyFields = await call("post", `/itop/tickets/${id}/actions`, fixture.rina.token, {
+      action: "pending",
+      fields: {},
+    });
+    expect(withEmptyFields.status).toBe(400);
+  });
+
+  it("moves an assigned ticket to pending with a reason, and sends a comment identifying the acting user", async () => {
+    await linkPersonalToken(fixture.rina.userId, FAKE_ITOP_TOKENS.rina);
+    const id = await ticketIdByRef("R-004530"); // status "assigned", agent Rina
+
+    const res = await call("post", `/itop/tickets/${id}/actions`, fixture.rina.token, {
+      action: "pending",
+      fields: { pending_reason: "Waiting on the customer to confirm" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("pending");
+
+    const row = await prisma.itopTicket.findUniqueOrThrow({ where: { id } });
+    expect(row.status).toBe("pending");
+
+    const write = fixture.state.writeLog.find((w) => w.operation === "core/apply_stimulus");
+    expect(write?.comment).toBeTruthy();
+    expect(write?.comment).toContain("rina.s@example.co.id");
   });
 });
 
@@ -208,6 +250,27 @@ describe("assign_to_me", () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("assigned");
     expect(res.body.agentName).toBe("Rina S.");
+    expect(res.body.agentPersonId).toBe(1);
+
+    const row = await prisma.itopTicket.findUniqueOrThrow({ where: { id } });
+    expect(row.status).toBe("assigned");
+
+    // Real iTop 3.2.2 refuses core/apply_stimulus with no comment — assert
+    // the route actually sends one, identifying the acting user.
+    const write = fixture.state.writeLog.find((w) => w.operation === "core/apply_stimulus");
+    expect(write?.comment).toBeTruthy();
+    expect(write?.comment).toContain("assign_to_me");
+    expect(write?.comment).toContain("rina.s@example.co.id");
+  });
+
+  it("assigns a PENDING ticket to the caller too — ev_assign is valid from both new and pending", async () => {
+    await linkPersonalToken(fixture.rina.userId, FAKE_ITOP_TOKENS.rina);
+    const id = await ticketIdByRef("R-004498"); // status "pending", org 1, currently agent Dedi
+
+    const res = await call("post", `/itop/tickets/${id}/actions`, fixture.rina.token, { action: "assign_to_me" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("assigned");
     expect(res.body.agentPersonId).toBe(1);
 
     const row = await prisma.itopTicket.findUniqueOrThrow({ where: { id } });
@@ -312,6 +375,13 @@ describe("POST /tickets/:id/log", () => {
     expect(read.status).toBe(200);
     expect(read.body.publicLog).toHaveLength(1);
     expect(read.body.publicLog[0].author).toBe("Rina S.");
+
+    // Real iTop 3.2.2 refuses core/update with no comment — assert the route
+    // actually sends one, identifying the acting user (distinct from the
+    // log TEXT itself, which iTop stores separately in public_log).
+    const write = fixture.state.writeLog.find((w) => w.operation === "core/update");
+    expect(write?.comment).toBeTruthy();
+    expect(write?.comment).toContain("rina.s@example.co.id");
   });
 });
 
