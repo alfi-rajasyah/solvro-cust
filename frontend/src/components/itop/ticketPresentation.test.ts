@@ -3,6 +3,7 @@ import {
   ageLabel,
   isItopRef,
   itopTicketUrl,
+  priorityLabel,
   slaLabel,
   statusLabel,
   statusTone,
@@ -162,6 +163,20 @@ describe("itopTicketUrl", () => {
     expect(itopTicketUrl("https://itop.example.test//", { id: 7, class: "UserRequest" })).toBe(
       "https://itop.example.test/pages/UI.php?operation=details&class=UserRequest&id=7",
     );
+  });
+});
+
+describe("priorityLabel", () => {
+  it("humanizes iTop's default priority codes", () => {
+    expect(priorityLabel("1")).toBe("Critical");
+    expect(priorityLabel("2")).toBe("High");
+    expect(priorityLabel("3")).toBe("Medium");
+    expect(priorityLabel("4")).toBe("Low");
+  });
+
+  it("falls back to the raw value for an unknown code", () => {
+    expect(priorityLabel("5")).toBe("5");
+    expect(priorityLabel("custom")).toBe("custom");
   });
 });
 

@@ -9,7 +9,14 @@ import type { Server } from "node:http";
 import { prisma } from "../../src/prisma.js";
 import { seal } from "../../src/lib/secretBox.js";
 import { bustItopConfigCache } from "../../src/lib/itop/config.js";
-import { parseItopDate, syncTickets, syncTimeEntries, syncUsers } from "../../src/lib/itop/sync.js";
+import {
+  parseItopBoolean,
+  parseItopDate,
+  parseItopInt,
+  syncTickets,
+  syncTimeEntries,
+  syncUsers,
+} from "../../src/lib/itop/sync.js";
 import { seedRoles, createUserWithRole } from "../testAuth.js";
 import { createFakeItop, seedFakeItop, type FakeItopState, type TicketRecord, FAKE_ITOP_TOKENS } from "./fakeItop.js";
 
@@ -80,7 +87,7 @@ function extraTicket(overrides: Partial<TicketRecord> & { id: number }): TicketR
     title: "Extra ticket",
     status: "new",
     operational_status: "normal",
-    priority: "medium",
+    priority: "3",
     agent_id: "0",
     agent_id_friendlyname: "",
     team_id_friendlyname: "",
@@ -89,11 +96,15 @@ function extraTicket(overrides: Partial<TicketRecord> & { id: number }): TicketR
     org_id: "1",
     start_date: "2026-01-01 00:00:00",
     last_update: "2026-01-01 00:00:00",
-    tto: "",
-    ttr: "",
+    tto: 0,
+    ttr: 0,
+    tto_escalation_deadline: "",
+    ttr_escalation_deadline: "",
     sla_tto_passed: "0",
     sla_ttr_passed: "0",
     resolution_date: "",
+    public_log: { entries: [] },
+    private_log: { entries: [] },
     ...overrides,
   };
 }
@@ -190,6 +201,112 @@ describe("syncTickets", () => {
     expect(config.lastSyncOk).toBe(true);
     expect(config.lastSyncAt).not.toBeNull();
     expect(config.lastFullSyncAt).not.toBeNull();
+  });
+
+  it("maps the escalation-deadline attributes into tto/ttr, never the elapsed-clock integers", async () => {
+    const state = seedFakeItop();
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
+    await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
+    await createMappedCustomer(2, "PT Sinar Logistik");
+
+    // A real iTop 3.2.2 install returns `tto`/`ttr` as JSON integers (elapsed
+    // SLA-stopwatch seconds) — values that used to crash the whole sync
+    // (`value.trim is not a function`) when fed to parseItopDate. Set them
+    // here to prove they're no longer even read, while the DEADLINE
+    // attributes are what actually lands in the snapshot.
+    const ticket = [...state.tickets.values()].find((t) => t.ref === "R-004512")!;
+    ticket.tto = 182;
+    ticket.ttr = 540;
+    ticket.tto_escalation_deadline = "2026-06-01 10:00:00";
+    ticket.ttr_escalation_deadline = "2026-06-02 12:00:00";
+
+    const summary = await syncTickets({ full: true });
+    expect(summary.error).toBeUndefined();
+    expect(summary.skipped).toBe(0);
+
+    const row = await prisma.itopTicket.findUniqueOrThrow({ where: { ref: "R-004512" } });
+    expect(row.tto?.toISOString()).toBe("2026-06-01T10:00:00.000Z");
+    expect(row.ttr?.toISOString()).toBe("2026-06-02T12:00:00.000Z");
+  });
+
+  it("a ticket with a malformed field is skipped — the rest of the sync still completes and lastSyncOk stays true", async () => {
+    const state = seedFakeItop();
+    // A field a real install could plausibly omit/rename — missing entirely
+    // once it round-trips through JSON (a key with value `undefined` is
+    // dropped by JSON.stringify), so `fields.status` arrives as `undefined`
+    // and Prisma refuses the write for this one row's required column.
+    const malformedId = state.nextId++;
+    state.tickets.set(
+      malformedId,
+      extraTicket({ id: malformedId, ref: "R-MALFORMED-1", org_id: "1", status: undefined as unknown as string }),
+    );
+
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
+    await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
+    await createMappedCustomer(2, "PT Sinar Logistik");
+
+    const summary = await syncTickets({ full: true });
+
+    expect(summary.ran).toBe(true);
+    expect(summary.error).toBeUndefined();
+    expect(summary.skipped).toBe(1);
+
+    const config = await prisma.itopConfig.findUniqueOrThrow({ where: { id: "default" } });
+    expect(config.lastSyncOk).toBe(true);
+    // Non-fatal: folded into lastSyncError as an admin-visible note even
+    // though the run itself succeeded (lastSyncOk stays true) — there's no
+    // dedicated "skipped count" column.
+    expect(config.lastSyncError).toBe("Skipped 1 row that could not be read (see server log)");
+
+    const rows = await prisma.itopTicket.findMany();
+    expect(rows.some((r) => r.ref === "R-MALFORMED-1")).toBe(false);
+    // The rest of org 1 and org 2's tickets synced normally despite the one
+    // bad row.
+    expect(rows.length).toBeGreaterThan(0);
+  });
+
+  it("a duplicate ref triggers a REAL Postgres unique-constraint error mid-loop — the rest of the sync still completes", async () => {
+    const state = seedFakeItop();
+    // Same `ref` as the seeded R-004512 (Incident, org 1, id 1) but a
+    // DIFFERENT iTop object id and a different (still-mapped) org. This is a
+    // genuine Postgres unique-constraint violation (P2002 on
+    // ItopTicket.ref) raised by the database itself — not something any of
+    // sync.ts's own field-level validation catches ahead of time — so it
+    // exercises the per-row try/catch against a real database error rather
+    // than a synthetic one.
+    const duplicateId = state.nextId++;
+    state.tickets.set(
+      duplicateId,
+      extraTicket({ id: duplicateId, ref: "R-004512", class: "Incident", org_id: "2" }),
+    );
+
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
+    await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
+    await createMappedCustomer(2, "PT Sinar Logistik");
+
+    const summary = await syncTickets({ full: true });
+
+    expect(summary.ran).toBe(true);
+    expect(summary.error).toBeUndefined();
+    expect(summary.skipped).toBe(1);
+
+    const config = await prisma.itopConfig.findUniqueOrThrow({ where: { id: "default" } });
+    expect(config.lastSyncOk).toBe(true);
+    expect(config.lastSyncError).toBe("Skipped 1 row that could not be read (see server log)");
+
+    // Org 2's OTHER tickets still synced normally despite the one row that
+    // collided on ref.
+    const org2Rows = await prisma.itopTicket.findMany({ where: { orgId: 2 } });
+    expect(org2Rows.length).toBeGreaterThan(0);
+
+    // Exactly one row holds this ref — the original (org 1), never the
+    // duplicate.
+    const rows = await prisma.itopTicket.findMany({ where: { ref: "R-004512" } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.orgId).toBe(1);
   });
 
   it("incremental sync only updates a ticket whose last_update moved past the cutoff", async () => {
@@ -651,5 +768,59 @@ describe("parseItopDate", () => {
 
   it("returns null for a value that doesn't match the expected shape", () => {
     expect(parseItopDate("3600")).toBeNull();
+  });
+
+  it("returns null for a JSON number instead of throwing — the exact shape that used to crash sync (`value.trim is not a function`)", () => {
+    expect(parseItopDate(182 as unknown)).toBeNull();
+  });
+
+  it("returns null for any other non-string garbage without throwing", () => {
+    expect(parseItopDate({} as unknown)).toBeNull();
+    expect(parseItopDate([] as unknown)).toBeNull();
+    expect(parseItopDate(true as unknown)).toBeNull();
+  });
+});
+
+describe("parseItopBoolean", () => {
+  it("accepts iTop's yes/no and 1/0 string shapes, case-insensitively", () => {
+    expect(parseItopBoolean("yes")).toBe(true);
+    expect(parseItopBoolean("YES")).toBe(true);
+    expect(parseItopBoolean("1")).toBe(true);
+    expect(parseItopBoolean("true")).toBe(true);
+    expect(parseItopBoolean("no")).toBe(false);
+    expect(parseItopBoolean("0")).toBe(false);
+    expect(parseItopBoolean("")).toBe(false);
+  });
+
+  it("returns false for a number, an object, or a missing value, rather than throwing", () => {
+    expect(parseItopBoolean(1 as unknown)).toBe(false);
+    expect(parseItopBoolean(true as unknown)).toBe(false);
+    expect(parseItopBoolean({} as unknown)).toBe(false);
+    expect(parseItopBoolean(null)).toBe(false);
+    expect(parseItopBoolean(undefined)).toBe(false);
+  });
+});
+
+describe("parseItopInt", () => {
+  it("accepts a JSON integer or a plain decimal integer string, including negative and surrounding whitespace", () => {
+    expect(parseItopInt(42)).toBe(42);
+    expect(parseItopInt("42")).toBe(42);
+    expect(parseItopInt("-7")).toBe(-7);
+    expect(parseItopInt("  42  ")).toBe(42);
+  });
+
+  it("rejects non-integer numbers and non-plain-integer numeric-looking strings", () => {
+    expect(parseItopInt(1.5)).toBeNull();
+    expect(parseItopInt("1.5")).toBeNull();
+    expect(parseItopInt("0x10")).toBeNull(); // Number("0x10") === 16 — deliberately still rejected
+    expect(parseItopInt("1e3")).toBeNull(); // Number("1e3") === 1000 — deliberately still rejected
+  });
+
+  it("returns null for a missing/garbage value without throwing", () => {
+    expect(parseItopInt(undefined)).toBeNull();
+    expect(parseItopInt(null)).toBeNull();
+    expect(parseItopInt({})).toBeNull();
+    expect(parseItopInt("")).toBeNull();
+    expect(parseItopInt(Number.NaN)).toBeNull();
   });
 });

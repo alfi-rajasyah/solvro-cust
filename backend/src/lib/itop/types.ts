@@ -17,12 +17,20 @@ export const ITOP_TICKET_CLASSES: readonly ItopTicketClass[] = [
  * constant so every call site (sync, probe, ad hoc scripts) asks for the
  * same shape; Phase 5 appends `public_log`/`private_log` separately since
  * those are read-only-app-token-safe but heavier and not needed by Phase 1.
+ *
+ * `tto_escalation_deadline`/`ttr_escalation_deadline` (not the bare
+ * `tto`/`ttr` attribute codes) — confirmed against a real iTop 3.2.2
+ * install: `tto`/`ttr` are JSON *integers*, the elapsed seconds of the SLA
+ * stopwatch, not a deadline; the escalation-deadline attributes are the
+ * datetime (or empty, when the clock isn't running) fields
+ * `ItopTicket.tto`/`ttr` actually need. See `docs/archive/plans/
+ * itop-integration.md` §2 deviation notes and `lib/itop/sync.ts#upsertTicket`.
  */
 export const ITOP_TICKET_OUTPUT_FIELDS =
   "ref,title,status,operational_status,priority,agent_id,agent_id_friendlyname," +
   "team_id_friendlyname,service_id_friendlyname,caller_id_friendlyname,org_id," +
-  "start_date,last_update,tto,ttr,sla_tto_passed,sla_ttr_passed,resolution_date," +
-  "public_log,private_log";
+  "start_date,last_update,tto_escalation_deadline,ttr_escalation_deadline," +
+  "sla_tto_passed,sla_ttr_passed,resolution_date,public_log,private_log";
 
 /** Row shape for `output_fields: ITOP_TICKET_OUTPUT_FIELDS` on a ticket class. */
 export interface ItopTicketFields {
@@ -30,6 +38,7 @@ export interface ItopTicketFields {
   title: string;
   status: string;
   operational_status: string;
+  /** `"1".."4"` priority codes (1 critical .. 4 low) on a real install — stored as-is; the frontend maps the code to a label. */
   priority: string;
   agent_id: string;
   agent_id_friendlyname: string;
@@ -39,8 +48,10 @@ export interface ItopTicketFields {
   org_id: string;
   start_date: string;
   last_update: string;
-  tto: string;
-  ttr: string;
+  /** `"YYYY-MM-DD HH:MM:SS"` deadline, or `""`/`null` when the TTO clock isn't running — never the bare `tto` integer-seconds attribute. */
+  tto_escalation_deadline: string | null;
+  /** `"YYYY-MM-DD HH:MM:SS"` deadline, or `""`/`null` when the TTR clock isn't running — never the bare `ttr` integer-seconds attribute. */
+  ttr_escalation_deadline: string | null;
   sla_tto_passed: string;
   sla_ttr_passed: string;
   resolution_date: string;

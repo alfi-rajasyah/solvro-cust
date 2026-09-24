@@ -275,8 +275,28 @@ test.describe("Ticket panel", () => {
     const panel = page.getByRole("dialog", { name: "Ticket details" });
     await expect(panel).toBeVisible();
 
+    // Pending now opens the reason sheet instead of firing directly (ground
+    // truth confirmed 2026-09-24 against a real iTop 3.2.2 install:
+    // `POST .../actions { action: "pending" }` 400s there without
+    // `fields.pending_reason`).
     await panel.getByRole("button", { name: "Pending" }).click();
+    const sheet = page.getByRole("dialog", { name: /Pending R-004530/ });
+    await expect(sheet).toBeVisible();
+    await sheet.locator("textarea").fill("Waiting on the vendor's callback.");
 
+    const actionRequest = page.waitForRequest(
+      (req) => req.url().includes(`/itop/tickets/${TICKET_ID}/actions`) && req.method() === "POST",
+    );
+    await sheet.getByRole("button", { name: "Mark pending in iTop" }).click();
+    const request = await actionRequest;
+    const requestBody = request.postDataJSON() as {
+      action: string;
+      fields: { pending_reason: string };
+    };
+    expect(requestBody.action).toBe("pending");
+    expect(requestBody.fields.pending_reason).toBe("Waiting on the vendor's callback.");
+
+    await expect(sheet).toBeHidden();
     await expect(
       panel.getByText("Applied in iTop. The list refreshes on the next sync"),
     ).toBeVisible();

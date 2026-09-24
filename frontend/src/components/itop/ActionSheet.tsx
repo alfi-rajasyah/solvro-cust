@@ -1,15 +1,20 @@
-// Small modal for the two ticket actions that need iTop's mandatory fields
+// Small modal for the ticket actions that need iTop's mandatory fields
 // before they'll go through (Task 5.4, docs/archive/plans/
-// itop-integration.md): Resolve (resolution code + solution) and, when
-// `assign_to_me` comes back with a 409 `itop_team_required`, a team picker.
-// Built on the shared Modal.tsx shell (same footer/close conventions as
-// ConfirmModal.tsx) rather than a bespoke overlay.
+// itop-integration.md): Resolve (resolution code + solution), Pending
+// (reason — added against a real iTop 3.2.2 install, 2026-09-24: `ev_pending`
+// 400s there without one, correcting the plan's original "pending needs
+// nothing" assumption), and, when `assign_to_me` comes back with a 409
+// `itop_team_required`, a team picker. Built on the shared Modal.tsx shell
+// (same footer/close conventions as ConfirmModal.tsx) rather than a bespoke
+// overlay.
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import type { ItopTicketTeamOption } from "@/lib/queries";
 import { RESOLUTION_CODES } from "./ticketActions";
 
-export type ActionSheetMode = "resolve" | "team";
+const PENDING_REASON_MAX = 500;
+
+export type ActionSheetMode = "resolve" | "team" | "pending";
 
 const LABEL_CLASS = "mb-1 block text-[12px] font-bold uppercase tracking-wider text-on-surface-variant";
 const FIELD_CLASS =
@@ -41,18 +46,34 @@ export function ActionSheet({
   const [resolutionCode, setResolutionCode] = useState(RESOLUTION_CODES[0]!.value);
   const [solution, setSolution] = useState("");
   const [teamId, setTeamId] = useState<number | "">(teams?.[0]?.id ?? "");
+  const [pendingReason, setPendingReason] = useState("");
 
   const title =
     mode === "resolve"
       ? `Resolve ${ticketRef} · iTop asks for 2 fields on this step.`
-      : `Assign ${ticketRef} · iTop needs a team for this step.`;
+      : mode === "pending"
+        ? `Pending ${ticketRef} · iTop asks for a reason on this step.`
+        : `Assign ${ticketRef} · iTop needs a team for this step.`;
 
-  const canConfirm = mode === "resolve" ? solution.trim().length > 0 : teamId !== "";
+  const trimmedReason = pendingReason.trim();
+  // No upper-bound check here: `maxLength` on the textarea below already
+  // makes a >500-char value unreachable through normal typing or paste (fix
+  // round, review nit — the earlier length check and its accompanying alert
+  // were dead code).
+  const reasonRemaining = PENDING_REASON_MAX - pendingReason.length;
+  const canConfirm =
+    mode === "resolve"
+      ? solution.trim().length > 0
+      : mode === "pending"
+        ? trimmedReason.length > 0
+        : teamId !== "";
 
   function handleConfirm() {
     if (!canConfirm) return;
     if (mode === "resolve") {
       onConfirm({ resolution_code: resolutionCode, solution: solution.trim() });
+    } else if (mode === "pending") {
+      onConfirm({ pending_reason: trimmedReason });
     } else {
       onConfirm({ team_id: teamId as number });
     }
@@ -79,7 +100,13 @@ export function ActionSheet({
             disabled={busy || !canConfirm}
             className="rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60"
           >
-            {busy ? "Working…" : mode === "resolve" ? "Resolve in iTop" : "Assign in iTop"}
+            {busy
+              ? "Working…"
+              : mode === "resolve"
+                ? "Resolve in iTop"
+                : mode === "pending"
+                  ? "Mark pending in iTop"
+                  : "Assign in iTop"}
           </button>
         </>
       }
@@ -120,6 +147,25 @@ export function ActionSheet({
             />
           </label>
         </div>
+      ) : mode === "pending" ? (
+        <label className="block">
+          <span className={LABEL_CLASS}>
+            Reason required by iTop <span className="text-error">*</span>
+          </span>
+          <textarea
+            value={pendingReason}
+            onChange={(e) => setPendingReason(e.target.value)}
+            rows={4}
+            required
+            maxLength={PENDING_REASON_MAX}
+            className={FIELD_CLASS}
+          />
+          {reasonRemaining < 50 && (
+            <p className="mt-1 text-[11px] text-on-surface-variant">
+              {reasonRemaining} character{reasonRemaining === 1 ? "" : "s"} left
+            </p>
+          )}
+        </label>
       ) : (
         <label className="block">
           <span className={LABEL_CLASS}>
@@ -140,7 +186,11 @@ export function ActionSheet({
         </label>
       )}
 
-      {error && <p className="mt-3 text-sm text-error">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-error">
+          {error}
+        </p>
+      )}
 
       {personName && (
         <p className="mt-3 text-[12px] text-on-surface-variant">

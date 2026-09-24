@@ -242,7 +242,7 @@ test.describe("Tickets Board — desktop (mouse)", () => {
     test.skip(test.info().project.name !== "desktop", "mouse drag cases run on the desktop project only");
   });
 
-  test("shows 5 columns with counts, drags an allowed step, rejects a forbidden one, and opens the resolve sheet", async ({
+  test("shows 5 columns with counts, drags an allowed step through the pending sheet, rejects a forbidden one, and opens the resolve sheet", async ({
     page,
     seededProject,
   }) => {
@@ -268,18 +268,31 @@ test.describe("Tickets Board — desktop (mouse)", () => {
       await expect(boardCard(page, ref)).toBeVisible();
     }
 
-    // Allowed step: Assigned (R-911) -> Pending fires `{ action: "pending" }`
-    // and the card lands in Pending after the mocked refetch.
+    // Allowed step needing a sheet: Assigned (R-911) -> Pending opens the
+    // reason sheet instead of firing directly (ground truth confirmed
+    // 2026-09-24 against a real iTop 3.2.2 install: `ev_pending` 400s there
+    // without `fields.pending_reason`) — the card only lands in Pending once
+    // the sheet is confirmed.
     const assignedGrip = await gripFor(page, "R-911", "Drag ticket");
     const pendingColumnBox = await boardColumn(page, "pending").boundingBox();
     expect(assignedGrip, "grip for R-911 not found").toBeTruthy();
     expect(pendingColumnBox, "Pending column not found").toBeTruthy();
 
+    await mouseDrag(page, center(assignedGrip!), dropTargetPoint(pendingColumnBox!));
+
+    const pendingSheet = page.getByRole("dialog", { name: /Pending R-911/ });
+    await expect(pendingSheet).toBeVisible();
+    await pendingSheet.locator("textarea").fill("Waiting on the vendor's callback.");
+
     const pendingRequests = await captureActionRequests(page, async () => {
-      await mouseDrag(page, center(assignedGrip!), dropTargetPoint(pendingColumnBox!));
+      await pendingSheet.getByRole("button", { name: "Mark pending in iTop" }).click();
     });
     expect(pendingRequests.length).toBe(1);
-    expect(pendingRequests[0].body).toEqual({ action: "pending" });
+    expect(pendingRequests[0].body).toEqual({
+      action: "pending",
+      fields: { pending_reason: "Waiting on the vendor's callback." },
+    });
+    await expect(pendingSheet).toBeHidden();
     await expect(boardColumn(page, "pending").locator('[data-ref="R-911"]')).toBeVisible();
     await expect(boardColumn(page, "assigned").locator('[data-ref="R-911"]')).toHaveCount(0);
 
@@ -379,6 +392,33 @@ test.describe("Tickets Board — desktop (mouse)", () => {
     await expect(sheet).toBeHidden();
     await expect(boardColumn(page, "assigned").locator('[data-ref="R-910"]')).toBeVisible();
   });
+
+  test("drags Pending -> Assigned and sends assign_to_me directly — iTop's ev_assign is valid from pending too", async ({
+    page,
+    seededProject,
+  }) => {
+    const tickets = makeTickets();
+    await mockStatus(page, true);
+    await mockMyToken(page, true);
+    await mockCustomerTickets(page, tickets);
+    await mockActions(page, tickets);
+    await loginViaUi(page);
+
+    await openBoard(page, seededProject.customerId);
+
+    const pendingGrip = await gripFor(page, "R-912", "Drag ticket");
+    const assignedColumnBox = await boardColumn(page, "assigned").boundingBox();
+    expect(pendingGrip, "grip for R-912 not found").toBeTruthy();
+    expect(assignedColumnBox, "Assigned column not found").toBeTruthy();
+
+    const requests = await captureActionRequests(page, async () => {
+      await mouseDrag(page, center(pendingGrip!), dropTargetPoint(assignedColumnBox!));
+    });
+    expect(requests.length).toBe(1);
+    expect(requests[0].body).toEqual({ action: "assign_to_me" });
+    await expect(boardColumn(page, "assigned").locator('[data-ref="R-912"]')).toBeVisible();
+    await expect(boardColumn(page, "pending").locator('[data-ref="R-912"]')).toHaveCount(0);
+  });
 });
 
 test.describe("Tickets Board — mobile (touch)", () => {
@@ -410,11 +450,23 @@ test.describe("Tickets Board — mobile (touch)", () => {
     expect(assignedGrip, "grip for R-911 not found").toBeTruthy();
     expect(pendingColumnBox, "Pending column not found").toBeTruthy();
 
+    await touchDrag(page, center(assignedGrip!), dropTargetPoint(pendingColumnBox!));
+
+    // Assigned -> Pending opens the reason sheet on touch too (same ground
+    // truth as the desktop test above).
+    const pendingSheet = page.getByRole("dialog", { name: /Pending R-911/ });
+    await expect(pendingSheet).toBeVisible();
+    await pendingSheet.locator("textarea").fill("Waiting on the vendor's callback.");
+
     const pendingRequests = await captureActionRequests(page, async () => {
-      await touchDrag(page, center(assignedGrip!), dropTargetPoint(pendingColumnBox!));
+      await pendingSheet.getByRole("button", { name: "Mark pending in iTop" }).click();
     });
     expect(pendingRequests.length).toBe(1);
-    expect(pendingRequests[0].body).toEqual({ action: "pending" });
+    expect(pendingRequests[0].body).toEqual({
+      action: "pending",
+      fields: { pending_reason: "Waiting on the vendor's callback." },
+    });
+    await expect(pendingSheet).toBeHidden();
     await expect(boardColumn(page, "pending").locator('[data-ref="R-911"]')).toBeVisible();
     await expect(boardColumn(page, "assigned").locator('[data-ref="R-911"]')).toHaveCount(0);
   });

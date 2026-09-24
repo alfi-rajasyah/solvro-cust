@@ -572,6 +572,13 @@ model ItopTicket {
   customer          Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
   startDate         DateTime? @map("start_date")
   lastUpdate        DateTime  @map("last_update")
+  // Escalation DEADLINES (a point in time), not the SLA stopwatch itself —
+  // confirmed against a real iTop 3.2.2 install that the bare `tto`/`ttr`
+  // ticket attributes are JSON integers (elapsed clock seconds), which is
+  // NOT what these columns hold. Populated from iTop's
+  // `tto_escalation_deadline`/`ttr_escalation_deadline` fields; null when
+  // that clock isn't running. See lib/itop/sync.ts#upsertTicket and
+  // lib/itop/types.ts's ITOP_TICKET_OUTPUT_FIELDS doc comment.
   tto               DateTime?
   ttr               DateTime?
   slaTtoPassed      Boolean   @default(false) @map("sla_tto_passed")

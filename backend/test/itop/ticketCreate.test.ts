@@ -253,6 +253,7 @@ describe("POST /itop/tickets", () => {
     expect(writes).toHaveLength(1);
     expect(writes[0].token).toBe(FAKE_ITOP_TOKENS.rina);
     expect(writes[0].token).not.toBe(FAKE_ITOP_TOKENS.app);
+    expect(writes[0].comment).toBe("Solvro: ticket created by rina.s@example.co.id");
   });
 
   it("400s when description is missing", async () => {

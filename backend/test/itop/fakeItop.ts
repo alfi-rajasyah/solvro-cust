@@ -75,6 +75,7 @@ export interface TicketRecord {
   title: string;
   status: string;
   operational_status: string;
+  /** `"1".."4"` codes (1 critical .. 4 low) on a real install — never the words "medium"/"high". */
   priority: string;
   agent_id: string;
   agent_id_friendlyname: string;
@@ -84,8 +85,14 @@ export interface TicketRecord {
   org_id: string;
   start_date: string;
   last_update: string;
-  tto: string;
-  ttr: string;
+  /** JSON integer (elapsed SLA-stopwatch seconds) on a real install — a genuine `number`, not a numeric string, and NOT a deadline. Solvro's sync never reads this attribute (see `tto_escalation_deadline`) but the fake still returns it, matching the real shape. */
+  tto: number;
+  /** Same shape/caveat as `tto` above, for the TTR clock. */
+  ttr: number;
+  /** `"YYYY-MM-DD HH:MM:SS"` deadline, or `""` when the TTO clock isn't running — the field Solvro's sync actually reads into `ItopTicket.tto`. */
+  tto_escalation_deadline: string;
+  /** Same shape as `tto_escalation_deadline`, for TTR — read into `ItopTicket.ttr`. */
+  ttr_escalation_deadline: string;
   sla_tto_passed: string;
   sla_ttr_passed: string;
   resolution_date: string;
@@ -116,8 +123,8 @@ export interface FakeItopState {
   personalTokens: Map<number, PersonalTokenRecord>;
   /** Classes `core/get` refuses, to simulate a missing extension (e.g. Time Tracking). */
   disabledClasses: Set<string>;
-  /** Every write attempt (core/create|update|apply_stimulus), in order — asserts a route never writes with the application token. Recorded regardless of outcome (including a refusal), keyed by the raw Auth-Token header value. */
-  writeLog: Array<{ token: string; operation: string }>;
+  /** Every write attempt (core/create|update|apply_stimulus), in order — asserts a route never writes with the application token, and (via `comment`) that every write sends one, per a real iTop 3.2.2 install's refusal of core/update and core/apply_stimulus with no comment at all. Recorded regardless of outcome (including a refusal), keyed by the raw Auth-Token header value. `comment` is whatever the request sent, `undefined` when it sent none at all. */
+  writeLog: Array<{ token: string; operation: string; comment?: string }>;
   /**
    * One-shot trap: the NEXT `core/get` made with exactly this token fails
    * with `message`, then clears itself. Lets a test simulate "the read-only
@@ -323,13 +330,16 @@ function mkTicket(opts: {
   ttrPassed?: boolean;
 }): Omit<TicketRecord, "id"> {
   const agentNames: Record<number, string> = { 1: "Rina S.", 2: "Dedi P.", 3: "Budi H." };
+  const resolvedOrClosed = opts.status === "resolved" || opts.status === "closed";
   return {
     class: opts.class,
     ref: opts.ref,
     title: opts.title,
     status: opts.status,
     operational_status: opts.status === "assigned" && opts.ttrPassed ? "escalated_ttr" : "normal",
-    priority: opts.ttrPassed ? "high" : "medium",
+    // "1".."4" codes (1 critical .. 4 low) — a real install's own shape;
+    // stored as-is by Solvro, never translated to a word here.
+    priority: opts.ttrPassed ? "2" : "3",
     agent_id: opts.agentId ? String(opts.agentId) : "0",
     agent_id_friendlyname: opts.agentId ? agentNames[opts.agentId] : "",
     team_id_friendlyname: "TAM Team",
@@ -338,11 +348,19 @@ function mkTicket(opts: {
     org_id: String(opts.orgId),
     start_date: daysAgo(opts.ageDays),
     last_update: daysAgo(Math.max(opts.ageDays - 1, 0)),
-    tto: "3600",
-    ttr: "10800",
+    // Elapsed SLA-stopwatch seconds — never read by Solvro's sync (kept only
+    // so a `probe()`/protocol-shape test sees the same fields a real install
+    // returns).
+    tto: 3600,
+    ttr: 10800,
+    // Escalation deadlines — "" (clock not running) once resolved/closed,
+    // otherwise a datetime a day or two out. These, not the integers above,
+    // are what Solvro's sync maps into ItopTicket.tto/ttr.
+    tto_escalation_deadline: resolvedOrClosed ? "" : daysAgo(-1),
+    ttr_escalation_deadline: resolvedOrClosed ? "" : daysAgo(-2),
     sla_tto_passed: "0",
     sla_ttr_passed: opts.ttrPassed ? "1" : "0",
-    resolution_date: opts.status === "resolved" || opts.status === "closed" ? daysAgo(Math.max(opts.ageDays - 1, 0)) : "",
+    resolution_date: resolvedOrClosed ? daysAgo(Math.max(opts.ageDays - 1, 0)) : "",
     public_log: { entries: [] },
     private_log: { entries: [] },
   };
@@ -526,10 +544,20 @@ function collectionFor(
 // ---------------------------------------------------------------------------
 // Ticket lifecycle (core/apply_stimulus)
 
+// Confirmed against a real iTop 3.2.2 install (ITIL, default lifecycle):
+// ev_assign is valid from "new" AND "pending" (both -> "assigned") with no
+// mandatory fields (agent/team are optional there); it is REFUSED from
+// "assigned" ("Invalid stimulus") — reassigning an already-assigned ticket
+// is ev_reassign instead. ev_pending needs only pending_reason; ev_resolve
+// needs only solution (resolution_code is optional on this install, even
+// though Solvro's own action schema still requires both — see
+// docs/archive/plans/itop-integration.md §"Ground truth" for the fix that
+// prompted this).
 const TICKET_STIMULI: Record<string, { from: string[]; to: string; required?: string[] }> = {
-  ev_assign: { from: ["new"], to: "assigned", required: ["team_id", "agent_id"] },
-  ev_pending: { from: ["assigned"], to: "pending" },
-  ev_resolve: { from: ["assigned", "pending"], to: "resolved", required: ["resolution_code", "solution"] },
+  ev_assign: { from: ["new", "pending"], to: "assigned" },
+  ev_reassign: { from: ["assigned"], to: "assigned" },
+  ev_pending: { from: ["assigned"], to: "pending", required: ["pending_reason"] },
+  ev_resolve: { from: ["assigned", "pending"], to: "resolved", required: ["solution"] },
   ev_close: { from: ["resolved"], to: "closed" },
   ev_reopen: { from: ["resolved"], to: "assigned" },
 };
@@ -557,19 +585,33 @@ function applyTicketStimulus(
   if (!rule.from.includes(ticket.status)) {
     return { ok: false, message: `Invalid stimulus '${stimulus}' for status '${ticket.status}'` };
   }
-  for (const required of rule.required ?? []) {
+  const missingRequired = (rule.required ?? []).filter((required) => {
     const value = fields[required];
-    if (value === undefined || value === null || value === "") {
-      return { ok: false, message: `Missing mandatory field '${required}' for stimulus '${stimulus}'` };
-    }
+    return value === undefined || value === null || value === "";
+  });
+  if (missingRequired.length > 0) {
+    // Exact wording confirmed against a real iTop 3.2.2 install (e.g. for
+    // ev_pending with no pending_reason).
+    return {
+      ok: false,
+      message: `Missing mandatory attribute(s) for applying the stimulus: ${missingRequired.join(", ")}.`,
+    };
   }
 
   ticket.status = rule.to;
-  if (stimulus === "ev_assign") {
-    const agentId = Number(fields.agent_id);
-    ticket.agent_id = String(agentId);
-    ticket.agent_id_friendlyname = state.persons.get(agentId)?.friendlyname ?? String(fields.agent_id);
-    ticket.team_id_friendlyname = String(fields.team_id);
+  if (stimulus === "ev_assign" || stimulus === "ev_reassign") {
+    // Both agent_id and team_id are optional on this install (ground truth:
+    // "it needs no mandatory fields") — only touch the ticket's agent/team
+    // when the caller actually sent one, so an ev_assign with no fields at
+    // all still transitions status without clobbering them to "0"/"".
+    if (fields.agent_id !== undefined && fields.agent_id !== null && fields.agent_id !== "") {
+      const agentId = Number(fields.agent_id);
+      ticket.agent_id = String(agentId);
+      ticket.agent_id_friendlyname = state.persons.get(agentId)?.friendlyname ?? String(fields.agent_id);
+    }
+    if (fields.team_id !== undefined && fields.team_id !== null && fields.team_id !== "") {
+      ticket.team_id_friendlyname = String(fields.team_id);
+    }
   }
   if (stimulus === "ev_resolve") {
     ticket.resolution_date = formatDate(new Date());
@@ -617,12 +659,29 @@ export function createFakeItop(seed: FakeItopState = createEmptyState()): FakeIt
     }
 
     const operation = payload.operation;
+    const requestComment = typeof payload.comment === "string" ? payload.comment : undefined;
 
     if (typeof operation === "string" && WRITE_OPERATIONS.has(operation)) {
       // Recorded unconditionally — including a refusal further down — so a
-      // test asserting "the application token is never used for a write"
-      // can check this regardless of whether the write itself succeeded.
-      state.writeLog.push({ token: authToken ?? "", operation });
+      // test asserting "the application token is never used for a write" (or
+      // "every write carries a comment") can check this regardless of
+      // whether the write itself succeeded.
+      state.writeLog.push({ token: authToken ?? "", operation, comment: requestComment });
+    }
+
+    // A real iTop 3.2.2 install refuses core/update and core/apply_stimulus
+    // outright with no comment at all — `code 100 "Error: Missing parameter
+    // 'comment'"`, verbatim. core/create does NOT require one on that
+    // install, so it's deliberately excluded here. Checked after the
+    // writeLog recording above (so a refused write is still visible there)
+    // but before any class-specific handling, matching the real server
+    // treating this as a generic REST-parameter check.
+    if (
+      (operation === "core/update" || operation === "core/apply_stimulus") &&
+      (!requestComment || requestComment.trim().length === 0)
+    ) {
+      sendEnvelope(res, { code: 100, message: "Error: Missing parameter 'comment'" });
+      return;
     }
 
     if (operation === "list_operations") {
@@ -822,7 +881,7 @@ export function createFakeItop(seed: FakeItopState = createEmptyState()): FakeIt
           title: String(fields.title),
           status: "new",
           operational_status: "normal",
-          priority: "medium",
+          priority: "3",
           agent_id: "0",
           agent_id_friendlyname: "",
           team_id_friendlyname: "",
@@ -831,8 +890,10 @@ export function createFakeItop(seed: FakeItopState = createEmptyState()): FakeIt
           org_id: String(orgId),
           start_date: formatDate(new Date()),
           last_update: formatDate(new Date()),
-          tto: "",
-          ttr: "",
+          tto: 0,
+          ttr: 0,
+          tto_escalation_deadline: "",
+          ttr_escalation_deadline: "",
           sla_tto_passed: "0",
           sla_ttr_passed: "0",
           resolution_date: "",

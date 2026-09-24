@@ -15,6 +15,16 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-09-24 — iTop integration against a real install
+
+- **Every write now carries a comment.** A real iTop refuses `core/apply_stimulus` and `core/update` without one, so every ticket action and log entry from Solvro failed. Writes now send a comment naming the user, e.g. `Solvro: resolve by rina@example.com` (**`backend/src/lib/itop/client.ts`**, **`backend/src/routes/itop.ts`**).
+- **Pending needs a reason.** iTop requires `pending_reason` for the Pending step. The API now requires it, and the ticket panel's Pending button and the Board's Assigned → Pending drop open a reason sheet (**`frontend/src/components/itop/ActionSheet.tsx`**).
+- **Pending → Assigned is supported.** iTop's default lifecycle accepts "assign" from Pending; the panel, the Board and the Daily Review strip offer it (**`frontend/src/components/itop/board/dropMapper.ts`**).
+- **SLA deadlines come from the right fields.** iTop returns `tto`/`ttr` as elapsed seconds, not deadlines; the sync now reads `tto_escalation_deadline` / `ttr_escalation_deadline`, which fixes a sync that stopped with "value.trim is not a function" once a ticket's SLA clock had started (**`backend/src/lib/itop/sync.ts`**).
+- **One bad row no longer stops the sync.** A ticket or time entry that cannot be read is logged and skipped, the rest of the run completes, and Admin › iTop shows how many rows were skipped.
+- **Priority shows as a word.** iTop sends priority codes 1–4; the ticket panel shows Critical, High, Medium or Low.
+- The in-memory fake iTop used by the tests now enforces the same rules (comment required, pending reason, default lifecycle, deadline fields, priority codes), so these regressions are caught in CI.
+
 ### Added — 2026-09-23 — Time tracking and task-to-ticket from Solvro
 
 - **Log time on a ticket** — `POST /itop/tickets/:id/time` (**`backend/src/routes/itop.ts`**) creates a Time Tracking entry in iTop under the acting user's own iTop account (the user must be matched to an iTop user), validates the window (1 minute to 24 hours, not in the future, within the last 8 weeks), stores the entry in the snapshot right away and reports it as stale if the follow-up read fails. `GET /itop/tickets/:id` now returns how many minutes the caller logged on that ticket in their local ISO week.

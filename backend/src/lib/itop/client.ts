@@ -311,10 +311,15 @@ export function createItopClient(options: ItopClientOptions): ItopClient {
   async function create<T>(
     cls: string,
     fields: Record<string, unknown>,
-    comment?: string,
+    // Defaulted (not just optional) so this client can never send a write
+    // with no comment at all — real iTop 3.2.2 refuses core/update and
+    // core/apply_stimulus outright without one ("Error: Missing parameter
+    // 'comment'"); core/create doesn't require it, but every call site here
+    // already passes an explicit one, so the default is defense in depth,
+    // never actually relied on.
+    comment: string = "Created from Solvro",
   ): Promise<ItopObjectRow<T> | undefined> {
-    const payload: Record<string, unknown> = { operation: "core/create", class: cls, fields };
-    if (comment !== undefined) payload.comment = comment;
+    const payload: Record<string, unknown> = { operation: "core/create", class: cls, fields, comment };
     const raw = await request(payload);
     return flattenObjects<T>(raw.objects)[0];
   }
@@ -323,10 +328,14 @@ export function createItopClient(options: ItopClientOptions): ItopClient {
     cls: string,
     key: number | string,
     fields: Record<string, unknown>,
-    comment?: string,
+    // Real iTop 3.2.2 answers `code 100 "Error: Missing parameter 'comment'"`
+    // for core/update with no comment at all — defaulted so a caller can
+    // never accidentally send one without. Routes pass a specific one
+    // (e.g. "Solvro: log entry by <email>"); this default only fires if a
+    // future call site forgets to.
+    comment: string = "Updated from Solvro",
   ): Promise<ItopObjectRow<T> | undefined> {
-    const payload: Record<string, unknown> = { operation: "core/update", class: cls, key, fields };
-    if (comment !== undefined) payload.comment = comment;
+    const payload: Record<string, unknown> = { operation: "core/update", class: cls, key, fields, comment };
     const raw = await request(payload);
     return flattenObjects<T>(raw.objects)[0];
   }
@@ -336,7 +345,9 @@ export function createItopClient(options: ItopClientOptions): ItopClient {
     key: number | string,
     stimulus: string,
     fields: Record<string, unknown> = {},
-    comment?: string,
+    // Same reasoning as update()'s comment default — real iTop 3.2.2 refuses
+    // core/apply_stimulus with no comment the same way.
+    comment: string = "Updated from Solvro",
   ): Promise<ItopObjectRow<T> | undefined> {
     const payload: Record<string, unknown> = {
       operation: "core/apply_stimulus",
@@ -344,8 +355,8 @@ export function createItopClient(options: ItopClientOptions): ItopClient {
       key,
       stimulus,
       fields,
+      comment,
     };
-    if (comment !== undefined) payload.comment = comment;
     const raw = await request(payload);
     return flattenObjects<T>(raw.objects)[0];
   }

@@ -4,18 +4,18 @@ import { allowedTargets, mapDropToAction } from "./dropMapper";
 
 // Full from x to matrix, per the dispatch's acceptance table (iTop's default
 // UserRequest/Incident lifecycle, docs/archive/plans/itop-integration.md decision 10).
-const EXPECTED: Record<string, { action: string; needsSheet: "resolve" | null } | null> = {
+const EXPECTED: Record<string, { action: string; needsSheet: "resolve" | "pending" | null } | null> = {
   "new>assigned": { action: "assign_to_me", needsSheet: null },
   "new>pending": null,
   "new>resolved": null,
   "new>closed": null,
   "new>new": null,
-  "assigned>pending": { action: "pending", needsSheet: null },
+  "assigned>pending": { action: "pending", needsSheet: "pending" },
   "assigned>resolved": { action: "resolve", needsSheet: "resolve" },
   "assigned>new": null,
   "assigned>closed": null,
   "assigned>assigned": null,
-  "pending>assigned": null,
+  "pending>assigned": { action: "assign_to_me", needsSheet: null },
   "pending>resolved": { action: "resolve", needsSheet: "resolve" },
   "pending>new": null,
   "pending>closed": null,
@@ -51,7 +51,7 @@ describe("allowedTargets", () => {
   const cases: Array<[BoardColumn, BoardColumn[]]> = [
     ["new", ["assigned"]],
     ["assigned", ["pending", "resolved"]],
-    ["pending", ["resolved"]],
+    ["pending", ["assigned", "resolved"]],
     ["resolved", ["closed", "assigned"]],
     ["closed", []],
   ];

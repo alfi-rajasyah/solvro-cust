@@ -258,6 +258,7 @@ describe("happy path", () => {
     const writes = fixture.state.writeLog.filter((w) => w.operation === "core/create");
     expect(writes).toHaveLength(1);
     expect(writes[0].token).toBe(FAKE_ITOP_TOKENS.rina);
+    expect(writes[0].comment).toBe("Solvro: time logged by rina.s@example.co.id");
   });
 
   it("defaults the title to the ticket's ref when none is given", async () => {

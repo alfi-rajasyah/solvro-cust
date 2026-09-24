@@ -41,6 +41,15 @@ export interface SyncSummary {
   usersMatched: number;
   timeEntriesUpserted: number;
   timeEntriesRemoved: number;
+  /**
+   * Count of rows (tickets AND time entries — see `TimeEntrySyncResult.skipped`,
+   * folded in here) that iTop returned but that failed to upsert (a malformed
+   * field, an unexpected type, ...) and were skipped rather than failing the
+   * whole run. Each skip is also logged at `warn` with the row's id and the
+   * error. Real installs occasionally have one bad row; the rest of the
+   * snapshot must still sync.
+   */
+  skipped: number;
   /** Set when the time-entry pass itself errored — kept separate from `error` since a ticket sync can succeed while the time-entry pass fails (e.g. TimeSpent missing on this install). Surfaceable later by the admin route. */
   timeEntriesError?: string;
   error?: string;
@@ -51,6 +60,8 @@ export interface TimeEntrySyncResult {
   ran: boolean;
   upserted: number;
   removed: number;
+  /** Rows that failed to upsert (bad field, unexpected type, ...) and were skipped, logged at `warn`, rather than failing the whole pass. */
+  skipped: number;
   error?: string;
 }
 
@@ -78,17 +89,28 @@ const ITOP_DATE_RE = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
  * any value that doesn't match the expected shape (defensive — a field iTop
  * doesn't return as a plain datetime should not become a bogus Date).
  *
+ * Takes `unknown`, not `string | null | undefined`: a real install can
+ * return a field as a JSON integer instead of a string (confirmed on
+ * `tto`/`ttr` themselves, which is exactly why sync now reads the
+ * `*_escalation_deadline` attributes instead) or omit it as `null`/an
+ * object entirely — any non-string value becomes `null` rather than
+ * throwing (`value.trim is not a function`), so one unexpected field shape
+ * degrades gracefully instead of crashing the whole sync run.
+ *
  * TODO(timezone): iTop's REST API does not include a timezone in this
  * format. We assume the value is UTC (i.e. the reference install's server
  * timezone). If a later phase adds a per-install timezone setting, this
  * assumption should be revisited.
  */
-export function parseItopDate(value: string | null | undefined): Date | null {
-  if (!value) return null;
+export function parseItopDate(value: unknown): Date | null {
+  if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed || trimmed === "0000-00-00 00:00:00") return null;
   const match = ITOP_DATE_RE.exec(trimmed);
-  if (!match) return null;
+  if (!match) {
+    logger.debug({ value: trimmed }, "iTop date field in an unexpected format — ignored");
+    return null;
+  }
   const [, y, mo, d, h, mi, s] = match;
   return new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s)));
 }
@@ -110,11 +132,40 @@ export function formatItopDate(date: Date): string {
   );
 }
 
-/** iTop returns SLA-passed flags as `"yes"`/`"no"` or `"1"`/`"0"` depending on the attribute type — accept either. */
-function parseItopBoolean(value: string | undefined): boolean {
-  if (value === undefined) return false;
+/**
+ * iTop returns SLA-passed flags as `"yes"`/`"no"` or `"1"`/`"0"` depending on
+ * the attribute type — accept either. Takes `unknown` (see `parseItopDate`'s
+ * doc comment for why) and returns `false` for anything that isn't a string,
+ * rather than throwing on a garbage/missing field. Exported for direct unit
+ * testing of its `unknown`-input handling.
+ */
+export function parseItopBoolean(value: unknown): boolean {
+  if (typeof value !== "string") return false;
   const normalized = value.trim().toLowerCase();
   return normalized === "yes" || normalized === "1" || normalized === "true";
+}
+
+/** Plain decimal integer, optionally negative — deliberately narrower than what `Number()` itself accepts (rejects "1.5", "0x10", "1e3", which `Number()` would happily turn into 1.5/16/1000). */
+const PLAIN_INTEGER_RE = /^-?\d+$/;
+
+/**
+ * Parses an iTop numeric id/external-key field (`org_id`, `agent_id`,
+ * `user_id`, ...) defensively: accepts a JSON number OR a numeric string
+ * (iTop's REST API normally sends the latter), returns `null` for anything
+ * else — a missing field, `null`, an object, a non-integer value, or a
+ * string that isn't a plain decimal integer (`"1.5"`, `"0x10"`, `"1e3"` all
+ * parse "successfully" with the bare `Number()` constructor but are not
+ * legitimate iTop id shapes) — rather than propagating a fractional/`NaN`
+ * value into a database column that can't hold it. Never throws. Exported
+ * for direct unit testing of its `unknown`-input handling.
+ */
+export function parseItopInt(value: unknown): number | null {
+  if (typeof value === "number") return Number.isInteger(value) ? value : null;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!PLAIN_INTEGER_RE.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  return Number.isInteger(parsed) ? parsed : null;
 }
 
 /** Escapes a single-quoted OQL string literal (iTop/MySQL style: double the quote). Exported so `routes/itopUser.ts`'s email lookup builds the same OQL shape as `syncUsers` rather than re-deriving the escaping rule. */
@@ -329,8 +380,16 @@ async function upsertTicket(
   orgIdToCustomerId: Map<number, number>,
 ): Promise<void> {
   const fields = row.fields;
-  const orgId = Number(fields.org_id);
-  const agentPersonId = fields.agent_id && Number(fields.agent_id) > 0 ? Number(fields.agent_id) : null;
+  const orgId = parseItopInt(fields.org_id);
+  if (orgId === null) {
+    // orgId is a required (non-nullable) column — a row iTop returns with no
+    // usable org_id at all is malformed enough that it can't be stored;
+    // throwing here (instead of writing garbage) lets the caller's
+    // try/catch count it in SyncSummary.skipped and move on to the next row.
+    throw new Error(`iTop ticket ${row.key} (${cls}) has an unusable org_id: ${JSON.stringify(fields.org_id)}`);
+  }
+  const parsedAgentId = parseItopInt(fields.agent_id);
+  const agentPersonId = parsedAgentId !== null && parsedAgentId > 0 ? parsedAgentId : null;
 
   const data = {
     class: cls,
@@ -350,8 +409,15 @@ async function upsertTicket(
     // lastUpdate is non-nullable on the model; fall back to "now" in the
     // (unexpected) case iTop returns an unparseable value for it.
     lastUpdate: parseItopDate(fields.last_update) ?? new Date(),
-    tto: parseItopDate(fields.tto),
-    ttr: parseItopDate(fields.ttr),
+    // `tto`/`ttr` store the escalation DEADLINE (a point in time), read from
+    // `tto_escalation_deadline`/`ttr_escalation_deadline` — confirmed
+    // against a real iTop 3.2.2 install that the bare `tto`/`ttr` attributes
+    // are JSON integers (elapsed SLA-clock seconds), not deadlines; reading
+    // those through parseItopDate used to crash the whole sync
+    // (`value.trim is not a function`). See types.ts's
+    // ITOP_TICKET_OUTPUT_FIELDS doc comment.
+    tto: parseItopDate(fields.tto_escalation_deadline),
+    ttr: parseItopDate(fields.ttr_escalation_deadline),
     slaTtoPassed: parseItopBoolean(fields.sla_tto_passed),
     slaTtrPassed: parseItopBoolean(fields.sla_ttr_passed),
     resolutionDate: parseItopDate(fields.resolution_date),
@@ -379,7 +445,7 @@ export async function upsertTicketFromItop(
   cls: string,
   row: ItopObjectRow<ItopTicketFields>,
 ): Promise<void> {
-  const orgId = Number(row.fields.org_id);
+  const orgId = parseItopInt(row.fields.org_id) ?? 0;
   const customer = orgId > 0 ? await prisma.customer.findUnique({ where: { itopOrgId: orgId }, select: { id: true } }) : null;
   const orgIdToCustomerId = new Map<number, number>(customer ? [[orgId, customer.id]] : []);
   await upsertTicket(cls, row, orgIdToCustomerId);
@@ -398,13 +464,19 @@ async function upsertTimeEntry(
   ticketIdByRef: Map<string, number>,
 ): Promise<void> {
   const fields = row.fields;
-  const itopUserId = Number(fields.user_id);
-  const rawOrgId = fields.org_id ? Number(fields.org_id) : 0;
+  const itopUserId = parseItopInt(fields.user_id);
+  if (itopUserId === null) {
+    // itopUserId is a required (non-nullable) column — same reasoning as
+    // upsertTicket's org_id guard: throw so the caller's try/catch counts
+    // this row in skipped and moves on, rather than writing garbage.
+    throw new Error(`iTop TimeSpent ${row.key} has an unusable user_id: ${JSON.stringify(fields.user_id)}`);
+  }
+  const rawOrgId = parseItopInt(fields.org_id) ?? 0;
   const orgId = rawOrgId > 0 ? rawOrgId : null;
   const ticketRef = fields[ITOP_TIME_SPENT_TICKET_REF_FIELD] || null;
   const ticketId = ticketRef ? (ticketIdByRef.get(ticketRef) ?? null) : null;
 
-  const durationSeconds = Number(fields.duration) || 0;
+  const durationSeconds = parseItopInt(fields.duration) ?? 0;
   const durationMinutes = Math.round(durationSeconds / (ITOP_TIME_SPENT_DURATION_IN_SECONDS ? 60 : 1));
 
   const data = {
@@ -442,11 +514,11 @@ async function upsertTimeEntry(
  * answer, never a client-side guess of the stored duration/ticket link.
  */
 export async function upsertTimeEntryFromItop(row: ItopObjectRow<ItopTimeSpentFields>): Promise<void> {
-  const itopUserId = Number(row.fields.user_id);
+  const itopUserId = parseItopInt(row.fields.user_id) ?? 0;
   const user = await prisma.user.findUnique({ where: { itopUserId }, select: { id: true } });
   const itopUserIdToUserId = new Map<number, number>(user ? [[itopUserId, user.id]] : []);
 
-  const rawOrgId = row.fields.org_id ? Number(row.fields.org_id) : 0;
+  const rawOrgId = parseItopInt(row.fields.org_id) ?? 0;
   const orgId = rawOrgId > 0 ? rawOrgId : null;
   const customer = orgId !== null ? await prisma.customer.findUnique({ where: { itopOrgId: orgId }, select: { id: true } }) : null;
   const orgIdToCustomerId = new Map<number, number>(orgId !== null && customer ? [[orgId, customer.id]] : []);
@@ -475,12 +547,13 @@ export async function syncTimeEntries(opts: { full?: boolean } = {}): Promise<Ti
   const full = Boolean(opts.full);
   let upserted = 0;
   let removed = 0;
+  let skipped = 0;
 
   try {
     const config = await getItopConfig();
     if (!isItopConfigured(config)) {
       logger.debug("iTop syncTimeEntries skipped: iTop is not configured");
-      return { ran: false, upserted: 0, removed: 0 };
+      return { ran: false, upserted: 0, removed: 0, skipped: 0 };
     }
 
     const users = await prisma.user.findMany({
@@ -538,8 +611,16 @@ export async function syncTimeEntries(opts: { full?: boolean } = {}): Promise<Ti
             rowsWithRef += 1;
             if (ticketIdByRef.has(ref)) rowsWithResolvedRef += 1;
           }
-          await upsertTimeEntry(row, itopUserIdToUserId, orgIdToCustomerId, ticketIdByRef);
-          upserted += 1;
+          try {
+            await upsertTimeEntry(row, itopUserIdToUserId, orgIdToCustomerId, ticketIdByRef);
+            upserted += 1;
+          } catch (err) {
+            skipped += 1;
+            logger.warn(
+              { err: errorMessage(err), timeEntryId: row.key },
+              "iTop syncTimeEntries: skipping a TimeSpent row that failed to upsert",
+            );
+          }
         }
       }
     }
@@ -575,11 +656,11 @@ export async function syncTimeEntries(opts: { full?: boolean } = {}): Promise<Ti
       removed = deleted.count;
     }
 
-    return { ran: true, upserted, removed };
+    return { ran: true, upserted, removed, skipped };
   } catch (err) {
     const message = errorMessage(err);
     logger.warn({ err: message }, "iTop syncTimeEntries failed");
-    return { ran: true, upserted, removed, error: message };
+    return { ran: true, upserted, removed, skipped, error: message };
   }
 }
 
@@ -635,18 +716,26 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
   let upserted = 0;
   let removed = 0;
   let usersMatched = 0;
+  let ticketsSkipped = 0;
   let timeEntriesUpserted = 0;
   let timeEntriesRemoved = 0;
+  let timeEntriesSkipped = 0;
   let timeEntriesError: string | undefined;
   let runError: string | undefined;
 
   await prisma.$transaction(
     async (tx) => {
-      // `_xact` self-releases at COMMIT/ROLLBACK of this interactive
-      // transaction — no matching unlock statement to remember, and no risk
-      // of leaking the lock if the process dies mid-sync. The transaction is
-      // still needed to pin every query below (and the lock/unlock that used
-      // to bracket them) to one connection.
+      // This interactive transaction exists SOLELY to hold
+      // `pg_try_advisory_xact_lock` — `_xact` self-releases at COMMIT/
+      // ROLLBACK, so there's no matching unlock statement to remember and no
+      // risk of leaking the lock if the process dies mid-sync. Every
+      // per-row query below (config reads, ticket/time-entry upserts, the
+      // full-sync deletes) deliberately uses the module-level `prisma`
+      // client on the normal pooled connections, NOT `tx` — a single row's
+      // Postgres error (e.g. a unique-constraint violation) must reject only
+      // that row's own statement, caught by its own try/catch, rather than
+      // poisoning this transaction and aborting the advisory lock along with
+      // every other row still to come.
       const lockRows = await tx.$queryRaw<
         Array<{ locked: boolean }>
       >`SELECT pg_try_advisory_xact_lock(hashtext(${ADVISORY_LOCK_KEY})) AS locked`;
@@ -700,8 +789,16 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
             });
             for (const row of result.objects) {
               seenIds.add(row.key);
-              await upsertTicket(cls, row, orgIdToCustomerId);
-              upserted += 1;
+              try {
+                await upsertTicket(cls, row, orgIdToCustomerId);
+                upserted += 1;
+              } catch (err) {
+                ticketsSkipped += 1;
+                logger.warn(
+                  { err: errorMessage(err), ticketId: row.key, cls },
+                  "iTop sync: skipping a ticket that failed to upsert",
+                );
+              }
             }
           }
         }
@@ -729,12 +826,25 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
         const timeEntryResult = await syncTimeEntries({ full });
         timeEntriesUpserted = timeEntryResult.upserted;
         timeEntriesRemoved = timeEntryResult.removed;
+        timeEntriesSkipped = timeEntryResult.skipped;
         timeEntriesError = timeEntryResult.error;
         if (timeEntriesError) {
           logger.warn({ err: timeEntriesError }, "iTop syncTimeEntries failed during the ticket sync tick");
         }
 
-        await writeConfigResult(startedAt, true, null, full);
+        const totalSkipped = ticketsSkipped + timeEntriesSkipped;
+        // The run still succeeded (lastSyncOk stays true) — a skipped row is
+        // logged individually at `warn` already — but an admin watching only
+        // ItopConfig would otherwise have no visibility into it at all.
+        // Folded into `lastSyncError` as a non-fatal note rather than a
+        // schema change (no dedicated column): NOT an error, just the only
+        // admin-visible surface this integration has for "some rows didn't
+        // make it, check the server log".
+        const nonFatalNote =
+          totalSkipped > 0
+            ? `Skipped ${totalSkipped} row${totalSkipped === 1 ? "" : "s"} that could not be read (see server log)`
+            : null;
+        await writeConfigResult(startedAt, true, nonFatalNote, full);
         logger.info(
           {
             full,
@@ -742,6 +852,7 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
             upserted,
             removed,
             usersMatched,
+            skipped: totalSkipped,
             timeEntriesUpserted,
             timeEntriesRemoved,
             timeEntriesError,
@@ -767,6 +878,7 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
     upserted,
     removed,
     usersMatched,
+    skipped: ticketsSkipped + timeEntriesSkipped,
     timeEntriesUpserted,
     timeEntriesRemoved,
     timeEntriesError,
