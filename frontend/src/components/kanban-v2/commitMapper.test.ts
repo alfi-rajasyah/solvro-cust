@@ -28,6 +28,7 @@ function makeTask(
     labels: [],
     _count: { subtasks: 0, comments: 0 },
     itopTicketRef: null,
+    epicId: null,
     ...overrides,
   };
 }

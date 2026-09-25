@@ -116,6 +116,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
         points: [
           "Overview: counters, the Progress S-Curve, tasks that need attention, status breakdown, top risks, and recent notes.",
           "List, Kanban, Gantt, and Timeline: four views of the same tasks — see \"Project views\".",
+          "Epics: group top-level tasks into larger deliverables and track done/total progress. Open one to edit its status, owner, dates, description, and stories.",
           "Risks: the risk register. Services: the services and tools in scope.",
         ],
       },

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { DateRangeField } from "./DateRangeField";
 import { Drawer } from "./Drawer";
+import { EpicChip } from "./EpicChip";
 import { LabelPicker } from "./LabelPicker";
 import {
   CRITICAL_PATH_GLYPH,
@@ -18,6 +19,7 @@ import {
   type TaskStatus,
   useCreateTask,
   useDeleteTask,
+  useProjectEpics,
   useProjectSections,
   useProjectTasks,
   useUpdateTask,
@@ -72,6 +74,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
   const { data: users } = useUsers();
   const { data: projectTasks } = useProjectTasks(open ? projectId : null);
   const { data: sections } = useProjectSections(open ? projectId : null);
+  const { data: epics } = useProjectEpics(open ? projectId : null);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -82,6 +85,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
   const [assignedToId, setAssignedToId] = useState<number | "">("");
   const [parentTaskId, setParentTaskId] = useState<number | "">("");
   const [sectionId, setSectionId] = useState<number | "">("");
+  const [epicId, setEpicId] = useState<number | "">("");
   const [labelIds, setLabelIds] = useState<number[]>([]);
   const [isCriticalPath, setIsCriticalPath] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +111,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
       setAssignedToId(editingTask.assignedToId ?? "");
       setParentTaskId(editingTask.parentTaskId ?? "");
       setSectionId(editingTask.sectionId ?? "");
+      setEpicId(editingTask.epicId ?? "");
       setLabelIds(editingTask.labels.map((l) => l.id));
       setIsCriticalPath(editingTask.isCriticalPath ?? false);
     } else {
@@ -119,6 +124,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
       setAssignedToId("");
       setParentTaskId(createProps?.initialParentTaskId ?? "");
       setSectionId(createProps?.initialSectionId ?? "");
+      setEpicId("");
       setLabelIds([]);
       setIsCriticalPath(false);
     }
@@ -134,6 +140,14 @@ export function TaskFormModal(props: TaskFormModalProps) {
     createProps?.initialParentTaskId,
     createProps?.initialSectionId,
   ]);
+
+  // Epics (docs/archive/plans/epics-spec.md §4/§6): epicId is only ever set on a
+  // top-level task — mirror the backend's epic_on_subtask rejection here so
+  // picking a parent never leaves a stale epic selection the submit would
+  // otherwise send. The select below is also disabled while a parent is set.
+  useEffect(() => {
+    if (parentTaskId !== "") setEpicId("");
+  }, [parentTaskId]);
 
   const possibleParents = (projectTasks ?? []).filter(
     (t) => !editingTask || (t.id !== editingTask.id && t.parentTaskId === null),
@@ -194,6 +208,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
             assignedToId: assignee,
             parentTaskId: parent,
             sectionId: sec,
+            epicId: parent === null ? (epicId === "" ? null : Number(epicId)) : null,
             labelIds,
             isCriticalPath,
           },
@@ -209,6 +224,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
           assignedToId: assignee,
           parentTaskId: parent,
           sectionId: sec,
+          epicId: parent === null ? (epicId === "" ? null : Number(epicId)) : null,
           labelIds: labelIds.length > 0 ? labelIds : undefined,
           isCriticalPath,
         });
@@ -431,6 +447,32 @@ export function TaskFormModal(props: TaskFormModalProps) {
                 </option>
               ))}
             </select>
+          </FieldRow>
+
+          {/* Epic — disabled + cleared when a parent is chosen above (§4:
+              epicId is only ever set on a top-level task; the backend
+              rejects it on a subtask with epic_on_subtask). */}
+          <FieldRow icon="workspaces" label="Epic">
+            <div className="flex items-center gap-1.5">
+              <select
+                value={epicId === "" ? "" : String(epicId)}
+                onChange={(e) => setEpicId(e.target.value === "" ? "" : Number(e.target.value))}
+                disabled={!canEdit || parentTaskId !== ""}
+                className="cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden disabled:cursor-default"
+              >
+                <option value="">No epic</option>
+                {(epics ?? []).map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.title}
+                  </option>
+                ))}
+              </select>
+              {epicId !== "" &&
+                (() => {
+                  const selected = (epics ?? []).find((e) => e.id === epicId);
+                  return selected ? <EpicChip epic={selected} compact /> : null;
+                })()}
+            </div>
           </FieldRow>
 
           {/* Labels */}

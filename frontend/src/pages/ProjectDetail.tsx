@@ -7,6 +7,7 @@ import {
   useOutletContext,
   useParams,
   useSearchParams,
+  useLocation,
 } from "react-router-dom";
 import { RightSidebar } from "@/components/layout/RightSidebar";
 import { ProjectFormModal } from "@/components/ProjectFormModal";
@@ -26,6 +27,7 @@ const TABS = [
   { to: "list", label: "List" },
   { to: "kanban", label: "Kanban" },
   { to: "gantt", label: "Gantt" },
+  { to: "epics", label: "Epics" },
   { to: "timeline", label: "Timeline" },
   { to: "risks", label: "Risks" },
   { to: "services", label: "Services" },
@@ -45,6 +47,7 @@ export function ProjectDetail() {
   const [contextOpen, setContextOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const deleteProject = useDeleteProject();
 
@@ -55,6 +58,13 @@ export function ProjectDetail() {
   const taskParam = searchParams.get("task");
   const parsedTaskId = taskParam ? Number(taskParam) : NaN;
   const openTaskId = Number.isFinite(parsedTaskId) ? parsedTaskId : null;
+  // The Epics tab's detail panel (EpicPanel.tsx) uses ?epic=<id> the same way
+  // and occupies the same 380px rail, so the content shifts for it too. Same
+  // parse as ProjectEpics.tsx (empty string = no panel), and only on the Epics
+  // route — EpicPanel mounts nowhere else.
+  const epicParam = searchParams.get("epic");
+  const epicPanelOpen =
+    location.pathname.endsWith("/epics") && !!epicParam && Number.isFinite(Number(epicParam));
 
   function closeTaskPanel() {
     setSearchParams(
@@ -131,7 +141,7 @@ export function ProjectDetail() {
     <div
       className={[
         "flex h-full min-w-0 flex-col transition-[margin] duration-200 ease-out",
-        contextOpen ? "md:mr-80" : openTaskId !== null ? "md:mr-[380px]" : "mr-0",
+        contextOpen ? "md:mr-80" : openTaskId !== null || epicPanelOpen ? "md:mr-[380px]" : "mr-0",
       ].join(" ")}
     >
       {/* Project name + status now live in the TopBar (see TopBar.tsx); the

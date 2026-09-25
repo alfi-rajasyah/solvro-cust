@@ -232,3 +232,25 @@ export async function setWipLimits(
     body: JSON.stringify({ wipLimits }),
   });
 }
+
+export interface SeededEpic {
+  id: number;
+  title: string;
+  color: string;
+  [key: string]: unknown;
+}
+
+/** Creates an epic in the seeded project through the API (POST /projects/:id/epics). */
+export async function createEpic(
+  base: string,
+  token: string,
+  projectId: number,
+  input: { title: string; color?: string; description?: string },
+): Promise<SeededEpic> {
+  const res = await fetch(`${base}/api/projects/${projectId}/epics`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return json<SeededEpic>(res);
+}

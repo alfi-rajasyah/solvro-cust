@@ -99,6 +99,7 @@ model User {
   projectsAsTAM          Project[]             @relation("ProjectTAM")
   projectBaselinesLocked Project[]             @relation("ProjectBaselineLockedBy")
   assignedTasks          Task[]
+  epicsOwned             Epic[]
   comments               Comment[]
   projectNotes           ProjectNote[]
   authConfigUpdates      AuthConfig[]          @relation("AuthConfigUpdatedBy")
@@ -200,6 +201,7 @@ model Project {
   tasks                Task[]
   labels               Label[]
   sections             Section[]
+  epics                Epic[]
   risks                Risk[]
   taskDependencies     TaskDependency[]
   notes                ProjectNote[]
@@ -330,6 +332,14 @@ model Task {
   /// find a task from a ticket, the opposite direction of the by-ref
   /// endpoint above (which resolves a ref to a ticket).
   itopTicketRef     String?          @map("itop_ticket_ref")
+  // Optional Jira-style Epic link — top-level tasks only. A subtask always
+  // has epicId null and inherits its parent's epic for display; routes/
+  // tasks.ts and routes/projects.ts enforce that (400 epic_on_subtask) and
+  // re-parenting a task clears its epicId in the same transaction. Deleting
+  // the epic keeps the task (SetNull), mirroring section delete. See
+  // docs/archive/plans/epics-spec.md §4.
+  epicId            Int?             @map("epic_id")
+  epic              Epic?            @relation(fields: [epicId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@index([sectionId])
@@ -341,6 +351,7 @@ model Task {
   @@index([projectId, position])
   // Backs the reverse lookup itopTicketRef documents above (ticket ref -> task).
   @@index([itopTicketRef])
+  @@index([epicId])
   @@map("tasks")
 }
 
@@ -382,6 +393,35 @@ model Section {
 
   @@index([projectId])
   @@map("sections")
+}
+
+// Jira-style Epic: a named grouping of a project's top-level tasks ("stories"
+// in Jira's vocabulary — Solvro keeps the Task name, see docs/plans/
+// epics-spec.md §3 non-goals). Distinct from Section (a phase/track axis);
+// an epic is a scope axis. Deleting an epic keeps its tasks (Task.epicId
+// SetNull, mirroring section delete). Status is manual, like Jira; progress
+// (done/total) is derived server-side from top-level tasks only — see
+// routes/epics.ts and routes/projects.ts.
+model Epic {
+  id          Int        @id @default(autoincrement())
+  projectId   Int        @map("project_id")
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  status      TaskStatus @default(TODO) // reuse the enum so StatusChip works unchanged
+  color       String     @default("#94a3b8") // same default as Section
+  ownerId     Int?       @map("owner_id")
+  owner       User?      @relation(fields: [ownerId], references: [id])
+  startDate   DateTime?  @map("start_date") // manual; date contract via lib/dateBoundary.ts / z.coerce.date()
+  dueDate     DateTime?  @map("due_date")
+  position    Int        @default(0) // dense 0..n-1 per project
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  tasks       Task[]
+
+  @@index([projectId])
+  @@index([projectId, position])
+  @@map("epics")
 }
 
 model Label {

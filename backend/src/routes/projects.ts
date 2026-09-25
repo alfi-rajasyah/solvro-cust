@@ -30,6 +30,7 @@ import {
   countSiblings,
   type SiblingKey,
 } from "../lib/taskOrdering.js";
+import { assertEpicNotOnSubtask, assertValidEpic } from "../lib/epics.js";
 
 // Kanban WIP limits — one optional positive-int cap per top-level status
 // column, or null/absent for "no limit". Visual-only on the board (amber
@@ -96,6 +97,7 @@ const createTaskSchema = z
     parentTaskId: z.number().int().positive().nullable().optional(),
     sectionId: z.number().int().positive().nullable().optional(),
     labelIds: z.array(z.number().int().positive()).optional(),
+    epicId: z.number().int().positive().nullable().optional(),
   })
   .refine((b) => !b.isMilestone || b.dueDate != null, {
     message: "A milestone requires a due date",
@@ -106,6 +108,15 @@ const createSectionSchema = z.object({
   name: z.string().min(1).max(100),
   position: z.number().int().min(0).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+});
+
+const createEpicSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  ownerId: z.number().int().positive().nullable().optional(),
+  startDate: z.coerce.date().nullable().optional(),
+  dueDate: z.coerce.date().nullable().optional(),
 });
 
 const taskListQuerySchema = z.object({
@@ -389,6 +400,10 @@ projectsRouter.post(
       if (body.labelIds && body.labelIds.length > 0) {
         await assertLabelsInProject(tx, id, body.labelIds);
       }
+      if (body.epicId != null) {
+        assertEpicNotOnSubtask(body.epicId, body.parentTaskId ?? null);
+        await assertValidEpic(tx, id, body.epicId);
+      }
 
       const siblingKey: SiblingKey = {
         projectId: id,
@@ -415,6 +430,7 @@ projectsRouter.post(
           assignedToId: body.assignedToId ?? null,
           parentTaskId: body.parentTaskId ?? null,
           sectionId: body.sectionId ?? null,
+          epicId: body.epicId ?? null,
           position,
           labels: body.labelIds && body.labelIds.length > 0
             ? { connect: body.labelIds.map((lid) => ({ id: lid })) }
@@ -468,6 +484,86 @@ projectsRouter.post(
       },
     });
     res.status(201).json(section);
+  },
+);
+
+// Project-scoped epics — see docs/archive/plans/epics-spec.md §4-5. Item-scoped
+// PATCH/DELETE/GET-detail live in routes/epics.ts; collection routes stay
+// here for URL nesting, mirroring sections.
+projectsRouter.get(
+  "/:id/epics",
+  validate("params", idParamSchema),
+  async (req, res) => {
+    const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
+    await ensureProjectVisible(req.user!, id);
+
+    const epics = await prisma.epic.findMany({
+      where: { projectId: id },
+      orderBy: [{ position: "asc" }, { id: "asc" }],
+      include: { owner: { select: { id: true, username: true, email: true } } },
+    });
+
+    // One groupBy over top-level tasks carrying an epicId in this project —
+    // never N+1 (acceptance criterion in docs/archive/plans/epics-spec.md §7 T1).
+    // Subtasks are excluded: progress counts stories, not their subtasks.
+    const counts = await prisma.task.groupBy({
+      by: ["epicId", "status"],
+      where: { projectId: id, epicId: { not: null }, parentTaskId: null },
+      _count: { _all: true },
+    });
+    const progressByEpic = new Map<number, { done: number; total: number }>();
+    for (const row of counts) {
+      const epicId = row.epicId!;
+      const entry = progressByEpic.get(epicId) ?? { done: 0, total: 0 };
+      entry.total += row._count._all;
+      if (row.status === "DONE") entry.done += row._count._all;
+      progressByEpic.set(epicId, entry);
+    }
+
+    res.json(
+      epics.map((epic) => ({
+        ...epic,
+        progress: progressByEpic.get(epic.id) ?? { done: 0, total: 0 },
+      })),
+    );
+  },
+);
+
+projectsRouter.post(
+  "/:id/epics",
+  requirePermission("project:write"),
+  validate("params", idParamSchema),
+  validate("body", createEpicSchema),
+  async (req, res) => {
+    const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
+    const body = req.body as z.infer<typeof createEpicSchema>;
+    await ensureProjectVisible(req.user!, id);
+
+    // Appends at the end. Epics have no re-pack on delete (unlike tasks'
+    // countSiblings, which is safe because DELETE /tasks/:id never re-packs
+    // either, but nothing here re-packs the epic list after a delete), so a
+    // plain count would collide with — or land before — an existing epic
+    // once any earlier epic has been deleted (count != max position + 1).
+    // max(position) + 1 mirrors the sections POST /:id/sections above.
+    const max = await prisma.epic.aggregate({
+      where: { projectId: id },
+      _max: { position: true },
+    });
+    const position = (max._max.position ?? -1) + 1;
+    const epic = await prisma.epic.create({
+      data: {
+        projectId: id,
+        title: body.title,
+        description: body.description ?? null,
+        ownerId: body.ownerId ?? null,
+        startDate: body.startDate ?? null,
+        dueDate: body.dueDate ?? null,
+        position,
+        ...(body.color !== undefined && { color: body.color }),
+      },
+      include: { owner: { select: { id: true, username: true, email: true } } },
+    });
+    res.status(201).json({ ...epic, progress: { done: 0, total: 0 } });
   },
 );
 

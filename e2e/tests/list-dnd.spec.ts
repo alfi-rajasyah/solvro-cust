@@ -7,7 +7,7 @@ import {
   mouseDrag,
   apiBase,
 } from "../fixtures/test";
-import { getTasks, type SeededTask } from "../fixtures/seed";
+import { getTasks, type SeededTask, createEpic } from "../fixtures/seed";
 import type { Page } from "@playwright/test";
 
 // Regression coverage for unified-task-ordering
@@ -52,6 +52,29 @@ async function openGanttView(page: Page, projectId: number): Promise<void> {
  */
 function desktopRow(page: Page, title: string) {
   return page.locator('div[class*="grid-cols-"]', { hasText: title });
+}
+
+async function apiPatchTask(
+  base: string,
+  token: string,
+  id: number,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const res = await fetch(`${base}/api/tasks/${id}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`PATCH /tasks/${id} failed: ${res.status} ${await res.text()}`);
+  }
+}
+
+/** Same "click past the popover" dismissal kanban-dnd.spec.ts's
+ * `closeFilterPopover` uses — the List filter popover is the same
+ * fixed-overlay + absolute-panel shape (ProjectList.tsx). */
+async function closeFilterPopover(page: Page): Promise<void> {
+  await page.mouse.click(500, 500);
 }
 
 test.describe("list & gantt drag & drop — desktop (mouse)", () => {
@@ -224,5 +247,60 @@ test.describe("list & gantt drag & drop — desktop (mouse)", () => {
     const movedAfter = afterOrder[movedIdx];
     expect(movedAfter.startDate).toBe(moved.startDate);
     expect(movedAfter.dueDate).toBe(moved.dueDate);
+  });
+
+  // T6 (docs/archive/plans/epics-spec.md §6/§7): epic chip renders on the assigned
+  // row only, and the List toolbar's Epic filter narrows the visible rows
+  // the same render-only way SolvroKanban.tsx's filter does — mirrors
+  // kanban-dnd.spec.ts's G11 case. A drag-while-filtered assertion (also
+  // covered for Kanban by G11) isn't meaningful here: narrowing to one epic
+  // leaves exactly one visible top-level row, and ProjectList's DnD needs a
+  // second visible row/group to drop onto — so this case stops at filter +
+  // chip, as the task brief allows.
+  test("epic chip + filter — renders on the tagged row only, filter narrows and clears", async ({
+    page,
+    seededProject,
+  }) => {
+    const base = apiBase(test.info());
+    const token = seededProject.token;
+    const projectId = seededProject.projectId;
+
+    const current = topLevelSorted(await getTasks(base, token, projectId));
+    expect(current.length, "need at least 2 top-level tasks").toBeGreaterThanOrEqual(2);
+    const [tagged, other] = current;
+
+    const epic = await createEpic(base, token, projectId, { title: "Epic T6" });
+    await apiPatchTask(base, token, tagged.id, { epicId: epic.id });
+
+    await openList(page, projectId);
+
+    const taggedRow = desktopRow(page, tagged.title);
+    const otherRow = desktopRow(page, other.title);
+    await expect(taggedRow.getByTestId("epic-chip")).toBeVisible();
+    await expect(taggedRow.getByTestId("epic-chip")).toHaveText(epic.title);
+    await expect(otherRow.getByTestId("epic-chip")).toHaveCount(0);
+
+    // Apply the Epic filter to this epic — the List toolbar has exactly one
+    // <select> (ProjectList.tsx has no assignee/priority filter to
+    // disambiguate against, unlike Kanban's popover).
+    await page.getByRole("button", { name: "Filter" }).click();
+    const epicSelect = page.locator("select");
+    await epicSelect.selectOption(String(epic.id));
+    await closeFilterPopover(page);
+
+    // Both the desktop grid row and the `md:hidden` mobile card render for
+    // the same title in the DOM at once (CSS hides whichever doesn't match
+    // the viewport) — `.first()` picks the desktop variant, matching the
+    // other locators in this file at the desktop project's 1440px viewport.
+    await expect(page.getByText(tagged.title, { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(other.title, { exact: true })).toHaveCount(0);
+
+    // Clear the filter — every row is back.
+    await page.getByRole("button", { name: "Filter" }).click();
+    await page.locator("select").selectOption("");
+    await closeFilterPopover(page);
+
+    await expect(page.getByText(tagged.title, { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(other.title, { exact: true }).first()).toBeVisible();
   });
 });

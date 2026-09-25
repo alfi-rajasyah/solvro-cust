@@ -6,6 +6,7 @@ import {
   CRITICAL_PATH_HELPER_TEXT,
   CRITICAL_PATH_LABEL,
 } from "./CriticalPathMark";
+import { EpicChip } from "./EpicChip";
 import { InlineDateRangeEditor } from "./InlineDateRangeEditor";
 import { LabelPicker } from "./LabelPicker";
 import { TaskTicketField } from "@/components/itop/TaskTicketField";
@@ -25,6 +26,7 @@ import {
   useDuplicateTask,
   useItopStatus,
   useProject,
+  useProjectEpics,
   useProjectSections,
   useProjectTasks,
   useUpdateTask,
@@ -105,6 +107,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
 
   const { data: tasks } = useProjectTasks(projectId);
   const { data: sections } = useProjectSections(projectId);
+  const { data: epics, isLoading: epicsLoading } = useProjectEpics(projectId);
   const { data: users } = useUsers();
   const updateTask = useUpdateTask(projectId);
   const createTask = useCreateTask(projectId);
@@ -128,6 +131,20 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const isSubtask = parentId !== null;
   const parentTask = parentId === null ? null : ((tasks ?? []).find((t) => t.id === parentId) ?? null);
 
+  // Epics (docs/archive/plans/epics-spec.md §6 "Task surfaces"). A subtask never
+  // carries its own epicId (backend invariant, §4) — its breadcrumb shows the
+  // PARENT's epic instead, read from the same tasks cache the breadcrumb
+  // already uses for the parent's title.
+  const taskEpic = task && task.epicId !== null ? (epics ?? []).find((e) => e.id === task.epicId) ?? null : null;
+  const parentEpic =
+    parentTask && parentTask.epicId !== null
+      ? (epics ?? []).find((e) => e.id === parentTask.epicId) ?? null
+      : null;
+  // The task carries an epicId but the epics query hasn't resolved yet — show
+  // a placeholder rather than "No epic", which would be actively wrong for
+  // the instant between the task query and the epics query settling.
+  const taskEpicPending = task !== null && task.epicId !== null && epicsLoading;
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -135,6 +152,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const [editingDates, setEditingDates] = useState(false);
   const [editingAssignee, setEditingAssignee] = useState(false);
   const [editingSection, setEditingSection] = useState(false);
+  const [editingEpic, setEditingEpic] = useState(false);
   const [newSubtask, setNewSubtask] = useState("");
   const [editingSubtaskId, setEditingSubtaskId] = useState<number | null>(null);
   const [subtaskTitleDraft, setSubtaskTitleDraft] = useState("");
@@ -164,6 +182,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     setEditingDates(false);
     setEditingAssignee(false);
     setEditingSection(false);
+    setEditingEpic(false);
     setEditingSubtaskId(null);
     setMenuOpen(false);
     setStatusMenuOpen(false);
@@ -412,16 +431,19 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {/* Parent breadcrumb — the only way back out of a subtask. */}
           {parentTask && (
-            <button
-              type="button"
-              onClick={() => onOpenTask(parentTask.id)}
-              className="mb-1 flex max-w-full items-center gap-0.5 rounded-sm text-[11px] text-on-surface-variant hover:text-primary outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              <span className="material-symbols-outlined text-[13px]" aria-hidden="true">
-                arrow_back
-              </span>
-              <span className="truncate">{parentTask.title}</span>
-            </button>
+            <div className="mb-1 flex max-w-full items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => onOpenTask(parentTask.id)}
+                className="flex min-w-0 items-center gap-0.5 rounded-sm text-[11px] text-on-surface-variant hover:text-primary outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <span className="material-symbols-outlined text-[13px]" aria-hidden="true">
+                  arrow_back
+                </span>
+                <span className="truncate">{parentTask.title}</span>
+              </button>
+              {parentEpic && <EpicChip epic={parentEpic} compact />}
+            </div>
           )}
 
           {/* Title + subtitle */}
@@ -615,6 +637,59 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                 </button>
               )}
             </div>
+
+            {/* Epic — hidden entirely on a subtask (§4: epicId is only ever
+                set on a top-level task; the parent's epic shows in the
+                breadcrumb above instead). */}
+            {!isSubtask && (
+              <>
+                <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                  Epic
+                </span>
+                <div className="relative">
+                  {editingEpic && canEdit ? (
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        autoFocus
+                        value={task.epicId ?? ""}
+                        onChange={(e) => {
+                          patch({ epicId: e.target.value === "" ? null : Number(e.target.value) });
+                          setEditingEpic(false);
+                        }}
+                        onBlur={() => setEditingEpic(false)}
+                        className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden"
+                      >
+                        <option value="">No epic</option>
+                        {(epics ?? []).map((e) => (
+                          <option key={e.id} value={e.id}>
+                            {e.title}
+                          </option>
+                        ))}
+                      </select>
+                      {taskEpic && <EpicChip epic={taskEpic} compact />}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!canEdit || taskEpicPending}
+                      onClick={() => setEditingEpic(true)}
+                      className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
+                    >
+                      {taskEpicPending ? (
+                        <span
+                          aria-hidden="true"
+                          className="h-4 w-16 animate-pulse rounded-full bg-surface-container-high"
+                        />
+                      ) : taskEpic ? (
+                        <EpicChip epic={taskEpic} compact />
+                      ) : (
+                        <span className="text-on-surface">No epic</span>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
 
             {itopConfigured && (
               <>

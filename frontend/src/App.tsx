@@ -17,6 +17,7 @@ import { Settings } from "@/pages/Settings";
 import { Tasks } from "@/pages/Tasks";
 import { Utilization } from "@/pages/Utilization";
 import { WeeklySync } from "@/pages/WeeklySync";
+import { ProjectEpics } from "@/pages/views/ProjectEpics";
 import { ProjectGantt } from "@/pages/views/ProjectGantt";
 import { ProjectKanban } from "@/pages/views/ProjectKanban";
 import { ProjectList } from "@/pages/views/ProjectList";
@@ -46,6 +47,7 @@ export function App() {
           <Route path="list" element={<ProjectList />} />
           <Route path="kanban" element={<ProjectKanban />} />
           <Route path="gantt" element={<ProjectGantt />} />
+          <Route path="epics" element={<ProjectEpics />} />
           <Route path="timeline" element={<ProjectTimeline />} />
           <Route path="risks" element={<ProjectRisks />} />
           <Route path="services" element={<ProjectServices />} />
