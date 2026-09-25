@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useCallback, useMemo, useState, type FormEvent } from "react";
 import {
   DndContext,
   KeyboardSensor,
@@ -21,6 +21,7 @@ import { useProjectContext } from "../ProjectDetail";
 import { AssigneeAvatar } from "@/components/AssigneeAvatar";
 import { CriticalPathMark } from "@/components/CriticalPathMark";
 import { DateField } from "@/components/DateField";
+import { EpicChip } from "@/components/EpicChip";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { SectionReorderModal } from "@/components/SectionReorderModal";
 import { TaskFormModal } from "@/components/TaskFormModal";
@@ -28,6 +29,7 @@ import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { commitDraft, dayFromIso, dayToDate } from "@/lib/dateField";
 import {
+  type Epic,
   type Priority,
   type Section,
   type Task,
@@ -35,6 +37,7 @@ import {
   useCreateSection,
   useDeleteSection,
   useDuplicateSection,
+  useProjectEpics,
   useProjectSections,
   useProjectTasks,
   useUpdateSection,
@@ -117,11 +120,22 @@ export function ProjectList() {
   const { data: tasks, isLoading: tasksLoading, isError, error } = useProjectTasks(project.id);
   const { data: sections, isLoading: sectionsLoading } = useProjectSections(project.id);
   const { data: users } = useUsers();
+  const { data: epics } = useProjectEpics(project.id);
   const updateTask = useUpdateTask(project.id);
   const createSection = useCreateSection(project.id);
   const updateSection = useUpdateSection(project.id);
   const deleteSection = useDeleteSection(project.id);
   const duplicateSection = useDuplicateSection(project.id);
+
+  // Built once from useProjectEpics, keyed by Epic.id — passed down to
+  // TaskRow the same way `users` is, so rows never call a per-row hook to
+  // look up their epic (docs/archive/plans/epics-spec.md §6/§7 T6, mirrors
+  // SolvroKanban.tsx's epicMap).
+  const epicMap = useMemo(() => {
+    const map = new Map<number, Epic>();
+    for (const e of epics ?? []) map.set(e.id, e);
+    return map;
+  }, [epics]);
 
   const [collapsed, setCollapsed] = useState<Set<GroupKey>>(new Set());
   const [createTaskCtx, setCreateTaskCtx] = useState<{
@@ -134,6 +148,11 @@ export function ProjectList() {
   const [renamingSectionKey, setRenamingSectionKey] = useState<GroupKey | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  // Epic filter (docs/archive/plans/epics-spec.md §6/§7 T6): "" = All (inactive),
+  // `null` = "No epic" (task.epicId === null), a number = one project epic —
+  // same three-state shape as SolvroKanban.tsx's filterEpicId.
+  const [filterEpicId, setFilterEpicId] = useState<number | null | "">("");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -146,7 +165,35 @@ export function ProjectList() {
   // for display; within a rendered section group, sorting by (position, id)
   // is not a stand-in for the real order, it *is* the canonical order
   // projected onto that section (position is globally unique per project).
+  //
+  // `grouped` itself stays unfiltered — it's built straight from `tasks`
+  // (also the unfiltered source `handleDragEnd` below reads directly for its
+  // reorder math, via its own `topLevelOrdered`/siblings derivations, never
+  // through `grouped`). Epic filtering only ever hides rows from the
+  // rendered `visibleGrouped` projection below — mirrors SolvroKanban.tsx's
+  // `topLevelAll` (unfiltered, drop-math source) vs `derivedColumns`
+  // (filtered, render-only) split.
   const grouped = useMemo(() => groupBySection(tasks ?? [], sections ?? []), [tasks, sections]);
+
+  const isTaskVisible = useCallback(
+    (task: Task) => {
+      if (filterEpicId !== "") {
+        if (filterEpicId === null) {
+          if (task.epicId !== null) return false;
+        } else if (task.epicId !== filterEpicId) {
+          return false;
+        }
+      }
+      return true;
+    },
+    [filterEpicId],
+  );
+  const filterActive = filterEpicId !== "";
+
+  const visibleGrouped = useMemo(
+    () => grouped.map((g) => ({ ...g, tasks: g.tasks.filter((n) => isTaskVisible(n.task)) })),
+    [grouped, isTaskVisible],
+  );
 
   function openTask(id: number) {
     setSearchParams(
@@ -375,6 +422,63 @@ export function ProjectList() {
   return (
     <>
       <div className="mb-3 flex items-center justify-end gap-2">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setFilterOpen((v) => !v)}
+            className={[
+              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-display text-xs font-semibold transition-colors",
+              filterActive
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container",
+            ].join(" ")}
+          >
+            <span className="material-symbols-outlined text-base">filter_alt</span>
+            Filter
+            {filterActive && (
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-on-primary">
+                1
+              </span>
+            )}
+          </button>
+          {filterOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setFilterOpen(false)} />
+              <div className="absolute right-0 z-20 mt-2 w-64 rounded-lg border border-outline-variant bg-surface-container-lowest p-3 shadow-overlay">
+                <div className="mb-3">
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+                    Epic
+                  </label>
+                  <select
+                    value={filterEpicId === "" ? "" : filterEpicId === null ? "none" : String(filterEpicId)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setFilterEpicId(v === "" ? "" : v === "none" ? null : Number(v));
+                    }}
+                    className="w-full rounded-lg border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden"
+                  >
+                    <option value="">All</option>
+                    <option value="none">No epic</option>
+                    {(epics ?? []).map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {filterActive && (
+                  <button
+                    type="button"
+                    onClick={() => setFilterEpicId("")}
+                    className="text-xs font-semibold text-primary hover:underline"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
         {canEdit && (sections?.length ?? 0) >= 2 && (
           <button
             type="button"
@@ -425,7 +529,7 @@ export function ProjectList() {
         </div>
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          {grouped.map((g) => (
+          {visibleGrouped.map((g) => (
             <SectionGroup
               key={g.section?.id ?? "none"}
               section={g.section}
@@ -433,6 +537,7 @@ export function ProjectList() {
               collapsed={collapsed.has(groupKeyOf(g.section?.id ?? null))}
               canEdit={canEdit}
               users={users ?? []}
+              epicMap={epicMap}
               onToggle={() => toggleGroup(groupKeyOf(g.section?.id ?? null))}
               onAddTask={() =>
                 setCreateTaskCtx({ sectionId: g.section?.id ?? null, parentTaskId: null })
@@ -525,6 +630,7 @@ interface SectionGroupProps {
   collapsed: boolean;
   canEdit: boolean;
   users: { id: number; username: string }[];
+  epicMap: Map<number, Epic>;
   onToggle: () => void;
   onAddTask: () => void;
   onAddSubtask: (parentId: number) => void;
@@ -551,6 +657,7 @@ function SectionGroup({
   collapsed,
   canEdit,
   users,
+  epicMap,
   onToggle,
   onAddTask,
   onAddSubtask,
@@ -673,6 +780,7 @@ function SectionGroup({
               node={node}
               canEdit={canEdit}
               users={users}
+              epicMap={epicMap}
               onAddSubtask={onAddSubtask}
               onOpenTask={onOpenTask}
               onToggleDone={onToggleDone}
@@ -707,6 +815,7 @@ function TaskRow({
   node,
   canEdit,
   users,
+  epicMap,
   onAddSubtask,
   onOpenTask,
   onToggleDone,
@@ -718,6 +827,7 @@ function TaskRow({
   node: TaskNode;
   canEdit: boolean;
   users: { id: number; username: string }[];
+  epicMap: Map<number, Epic>;
   onAddSubtask: (parentId: number) => void;
   onOpenTask: (id: number) => void;
   onToggleDone: (t: Task) => void;
@@ -727,6 +837,7 @@ function TaskRow({
   onSetDates: (t: Task, start: string | null, due: string | null) => void;
 }) {
   const { task, subtasks } = node;
+  const epic = task.epicId !== null ? epicMap.get(task.epicId) : undefined;
   const [expanded, setExpanded] = useState(subtasks.length > 0);
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
     useSortable({ id: rowId(task.id), disabled: !canEdit });
@@ -781,6 +892,7 @@ function TaskRow({
           >
             {task.title}
           </span>
+          {epic && <EpicChip epic={epic} compact className="shrink-0" />}
         </span>
 
         <span onClick={(e) => e.stopPropagation()}>
@@ -857,6 +969,11 @@ function TaskRow({
           </span>
           {task.isCriticalPath && <CriticalPathMark variant="glyph" />}
         </div>
+        {epic && (
+          <div className="flex items-center gap-1.5 pl-0">
+            <EpicChip epic={epic} compact />
+          </div>
+        )}
         <div className="flex items-center justify-between gap-2 pl-0">
           <span className="flex items-center gap-1.5">
             <AssigneeAvatar user={task.assignedTo} size="xs" />

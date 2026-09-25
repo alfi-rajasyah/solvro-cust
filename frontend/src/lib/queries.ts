@@ -40,6 +40,35 @@ export interface Section {
   createdAt: string;
 }
 
+// Epics (Jira Epic & Story parity, docs/archive/plans/epics-spec.md §4/§5). A scope
+// grouping over a project's top-level tasks — distinct from `Section`
+// (phase); see the spec §2 decision record. `progress` is server-derived
+// (one groupBy per list call, backend/src/routes/epics.ts) — never computed
+// client-side, so a stale cache is the only way this can drift (§11 risk;
+// see the epics invalidation added to every task mutation below).
+export interface Epic {
+  id: number;
+  projectId: number;
+  title: string;
+  description: string | null;
+  status: TaskStatus;
+  color: string;
+  ownerId: number | null;
+  owner: { id: number; username: string; email: string } | null;
+  startDate: string | null;
+  dueDate: string | null;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+  progress: { done: number; total: number };
+}
+
+// GET /epics/:id — the epic detail panel's shape: the Epic fields plus its
+// top-level stories, ordered by position (§5).
+export interface EpicDetail extends Epic {
+  tasks: Task[];
+}
+
 export interface CustomerSummary {
   id: number;
   name: string;
@@ -137,6 +166,11 @@ export interface Task {
   parentTaskId: number | null;
   sectionId: number | null;
   section: { id: number; name: string; position: number; color: string } | null;
+  // Epics (Jira Epic & Story parity, docs/archive/plans/epics-spec.md §4). Only set
+  // on top-level tasks — a subtask always carries `epicId: null` and
+  // inherits its parent's epic for display. Always present on every task
+  // payload, same rationale as `itopTicketRef` below.
+  epicId: number | null;
   position: number;
   labels: Label[];
   _count: { subtasks: number; comments: number };
@@ -491,6 +525,12 @@ export const queryKeys = {
   projectTasks: (id: number) => ["projects", id, "tasks"] as const,
   projectLabels: (id: number) => ["projects", id, "labels"] as const,
   projectSections: (id: number) => ["projects", id, "sections"] as const,
+  // Epics (docs/archive/plans/epics-spec.md §5). `epic` is a standalone top-level
+  // key (not nested under `projects`) since the epic detail panel/route can
+  // be reached without the project already in scope — mirrors `customer`/
+  // `project` above, not the `projects`-prefixed nested keys.
+  projectEpics: (id: number) => ["projects", id, "epics"] as const,
+  epic: (id: number) => ["epics", id] as const,
   projectRisks: (id: number) => ["projects", id, "risks"] as const,
   // `window` (visibility/limit/from/to) is appended to the key so each
   // filtered view caches independently. Mutations invalidate the whole
@@ -979,6 +1019,9 @@ export interface UpdateTaskInput {
   labelIds?: number[];
   position?: number;
   itopTicketRef?: string | null;
+  // Epics (docs/archive/plans/epics-spec.md §4/§5). Backend rejects this on a task
+  // that has (or is being given) a `parentTaskId` — 400 `epic_on_subtask`.
+  epicId?: number | null;
 }
 
 export interface LockBaselineInput {
@@ -1044,6 +1087,9 @@ export function reorderTasksLocally(
     status: nextStatus,
     parentTaskId: nextParentTaskId,
     sectionId: nextSectionId,
+    // Mirror the backend: re-parenting under a parent clears epicId in the
+    // same transaction (§4) — a subtask never carries its own epic link.
+    epicId: nextParentTaskId !== null ? null : current.epicId,
   };
 
   const oldListId = siblingListId(current);
@@ -1090,6 +1136,7 @@ export function useUpdateTask(projectId: number) {
     onMutate: async ({ id, patch }) => {
       await qc.cancelQueries({ queryKey: queryKeys.projectTasks(projectId) });
       const prev = qc.getQueryData<Task[]>(queryKeys.projectTasks(projectId));
+      const current = prev?.find((t) => t.id === id);
       if (prev) {
         // Mirror the server's rule (backend/src/routes/tasks.ts): a patch only
         // re-orders when it sets an explicit position or moves the task to a
@@ -1097,7 +1144,6 @@ export function useUpdateTask(projectId: number) {
         // reorder — its sibling list is keyed on parentTaskId alone — so it
         // must fall through to a plain field merge, not reorderTasksLocally
         // (which would re-append the row to the end of its list).
-        const current = prev.find((t) => t.id === id);
         const listChanged =
           current !== undefined &&
           siblingListId(current) !==
@@ -1109,16 +1155,26 @@ export function useUpdateTask(projectId: number) {
         const touchesOrdering = patch.position !== undefined || listChanged;
         const next = touchesOrdering
           ? reorderTasksLocally(prev, id, patch)
-          : prev.map((t) => (t.id === id ? ({ ...t, ...patch } as Task) : t));
+          : prev.map((t) =>
+              t.id === id
+                ? ({
+                    ...t,
+                    ...patch,
+                    // Same server mirror as reorderTasksLocally above, for
+                    // whichever plain-merge patch also touches parentTaskId.
+                    ...(patch.parentTaskId != null ? { epicId: null } : {}),
+                  } as Task)
+                : t,
+            );
         qc.setQueryData<Task[]>(queryKeys.projectTasks(projectId), next);
       }
-      return { prev };
+      return { prev, prevEpicId: current?.epicId ?? null };
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev)
         qc.setQueryData(queryKeys.projectTasks(projectId), ctx.prev);
     },
-    onSettled: () => {
+    onSettled: (data, _err, { patch }, ctx) => {
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: queryKeys.overview });
@@ -1126,6 +1182,31 @@ export function useUpdateTask(projectId: number) {
       // status inline (daily-review-v2-spec.md §6.3) — keep that cache in
       // sync too.
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      // Epic progress (done/total) derives from task status + epicId (§4) —
+      // any update here (status flip, epic reassignment, or a reorder that
+      // crosses sibling lists) can change it, so the epics list always
+      // refetches (§11 risk). The individual epic-detail cache only needs a
+      // bust for the epic(s) this task actually touched: the one it left
+      // and/or the one it landed in.
+      qc.invalidateQueries({ queryKey: queryKeys.projectEpics(projectId) });
+      const prevEpicId = ctx?.prevEpicId ?? null;
+      // Prefer the mutation response over the patch/cache: `prevEpicId` (and
+      // an epicId-less patch) can both be wrong when `projectTasks` was
+      // never populated for this project — e.g. an edit made from the
+      // Epics tab, which only ever fetches useEpic, not useProjectTasks.
+      // The server response always carries the task's actual epicId, so
+      // fall back to the patch/cache only on error (no `data`).
+      const nextEpicId = data
+        ? data.epicId
+        : patch.epicId !== undefined
+          ? patch.epicId
+          : prevEpicId;
+      if (prevEpicId !== null) {
+        qc.invalidateQueries({ queryKey: queryKeys.epic(prevEpicId) });
+      }
+      if (nextEpicId !== null && nextEpicId !== prevEpicId) {
+        qc.invalidateQueries({ queryKey: queryKeys.epic(nextEpicId) });
+      }
     },
   });
 }
@@ -1135,13 +1216,32 @@ export function useDeleteTask(projectId: number) {
   return useMutation({
     mutationFn: (id: number) =>
       apiRequest<void>(`/tasks/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
+    // Read-only onMutate (no optimistic write) purely to capture the
+    // deleted task's epicId before it's gone from cache, for the epic
+    // invalidation in onSuccess below.
+    onMutate: (id) => {
+      const prev = qc.getQueryData<Task[]>(queryKeys.projectTasks(projectId));
+      return { epicId: prev?.find((t) => t.id === id)?.epicId ?? null };
+    },
+    onSuccess: (_data, _id, ctx) => {
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: queryKeys.overview });
       // Same rationale as useUpdateTask above — a deleted task can drop out
       // of the Daily Review page's overdue-tasks attention list.
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      // A deleted task drops out of its epic's done/total count (§11 risk).
+      qc.invalidateQueries({ queryKey: queryKeys.projectEpics(projectId) });
+      if (ctx?.epicId !== null && ctx?.epicId !== undefined) {
+        qc.invalidateQueries({ queryKey: queryKeys.epic(ctx.epicId) });
+      } else {
+        // projectTasks was cold when this delete started (e.g. deleted from
+        // the Epics tab, which never populates it), so the deleted task's
+        // epicId is unknown — bust every open epic-detail cache rather than
+        // silently skip the invalidation. ["epics"] is a prefix match, so
+        // this covers every queryKeys.epic(id) entry.
+        qc.invalidateQueries({ queryKey: ["epics"] });
+      }
     },
   });
 }
@@ -1159,6 +1259,9 @@ export interface CreateTaskInput {
   parentTaskId?: number | null;
   sectionId?: number | null;
   labelIds?: number[];
+  // Epics (docs/archive/plans/epics-spec.md §4/§5) — only meaningful for a
+  // top-level task; the backend rejects it alongside `parentTaskId`.
+  epicId?: number | null;
 }
 
 export function useCreateTask(projectId: number) {
@@ -1169,10 +1272,16 @@ export function useCreateTask(projectId: number) {
         method: "POST",
         body: input,
       }),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: queryKeys.overview });
+      // A new task can be created directly under an epic (§6 "Add story…"
+      // inline create) — keep that epic's progress (done/total) in sync.
+      qc.invalidateQueries({ queryKey: queryKeys.projectEpics(projectId) });
+      if (variables.epicId !== undefined && variables.epicId !== null) {
+        qc.invalidateQueries({ queryKey: queryKeys.epic(variables.epicId) });
+      }
     },
   });
 }
@@ -1187,7 +1296,7 @@ export function useDuplicateTask(projectId: number) {
     // mutateAsync — TaskPanel's handleDuplicate awaits the copy and then
     // re-targets the panel at it, so the refetched list is already in cache
     // by the time that happens, avoiding a "Loading task…" flash.
-    onSuccess: () =>
+    onSuccess: (data) =>
       Promise.all([
         qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) }),
         qc.invalidateQueries({ queryKey: ["tasks"] }),
@@ -1195,6 +1304,12 @@ export function useDuplicateTask(projectId: number) {
         // Same rationale as useUpdateTask/useDeleteTask above — a duplicated
         // task can newly appear in the Daily Review page's attention lists.
         qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot }),
+        // lib/duplicate.ts copies keep `epicId` (§4) — the duplicate can
+        // count toward the same epic's total.
+        qc.invalidateQueries({ queryKey: queryKeys.projectEpics(projectId) }),
+        ...(data.epicId !== null
+          ? [qc.invalidateQueries({ queryKey: queryKeys.epic(data.epicId) })]
+          : []),
       ]),
   });
 }
@@ -1356,7 +1471,100 @@ export function useDuplicateSection(projectId: number) {
         qc.invalidateQueries({ queryKey: ["tasks"] }),
         qc.invalidateQueries({ queryKey: queryKeys.overview }),
         qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot }),
+        // The section's duplicated tasks keep their `epicId` (§4) — their
+        // epics' done/total counts can change. Which epics is unknown here
+        // (the response is just `{ section, taskCount }`), so bust every
+        // open epic-detail cache alongside the list.
+        qc.invalidateQueries({ queryKey: queryKeys.projectEpics(projectId) }),
+        qc.invalidateQueries({ queryKey: ["epics"] }),
       ]),
+  });
+}
+
+// Epics (Jira Epic & Story parity, docs/archive/plans/epics-spec.md §5/§7 T2).
+// Mirrors the section hooks above in shape, error handling and invalidation
+// style.
+export function useProjectEpics(projectId: number | null) {
+  return useQuery({
+    queryKey: projectId ? queryKeys.projectEpics(projectId) : ["projects", "noop", "epics"],
+    queryFn: ({ signal }) =>
+      apiRequest<Epic[]>(`/projects/${projectId}/epics`, { signal }),
+    enabled: projectId !== null,
+    staleTime: 30_000,
+  });
+}
+
+export function useEpic(id: number | null) {
+  return useQuery({
+    queryKey: id ? queryKeys.epic(id) : ["epics", "noop"],
+    queryFn: ({ signal }) => apiRequest<EpicDetail>(`/epics/${id}`, { signal }),
+    enabled: id !== null,
+  });
+}
+
+export interface CreateEpicInput {
+  title: string;
+  description?: string;
+  color?: string;
+  ownerId?: number | null;
+  startDate?: string | null;
+  dueDate?: string | null;
+}
+
+export function useCreateEpic(projectId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateEpicInput) =>
+      apiRequest<Epic>(`/projects/${projectId}/epics`, {
+        method: "POST",
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.projectEpics(projectId) });
+    },
+  });
+}
+
+export interface UpdateEpicInput {
+  title?: string;
+  description?: string | null;
+  status?: TaskStatus;
+  color?: string;
+  ownerId?: number | null;
+  startDate?: string | null;
+  dueDate?: string | null;
+  position?: number;
+}
+
+export function useUpdateEpic() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...patch }: { id: number } & UpdateEpicInput) =>
+      apiRequest<Epic>(`/epics/${id}`, { method: "PATCH", body: patch }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: queryKeys.projectEpics(data.projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.epic(data.id) });
+    },
+  });
+}
+
+export function useDeleteEpic() {
+  const qc = useQueryClient();
+  return useMutation({
+    // `projectId` rides along in the mutation variables (rather than as a
+    // hook argument, unlike useDeleteSection) since DELETE returns 204 with
+    // no body to read it back from, and callers of this hook (the Epics tab
+    // row action) already have the epic's `projectId` in hand.
+    mutationFn: ({ id }: { id: number; projectId: number }) =>
+      apiRequest<void>(`/epics/${id}`, { method: "DELETE" }),
+    onSuccess: (_data, { id, projectId }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.projectEpics(projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.epic(id) });
+      // Deleting an epic keeps its tasks (SetNull, §4) — refresh task lists
+      // so the epic chip clears everywhere it was rendered.
+      qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
   });
 }
 

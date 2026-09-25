@@ -15,6 +15,7 @@ import { overviewRouter } from "./routes/overview.js";
 import { labelsRouter } from "./routes/labels.js";
 import { customersRouter } from "./routes/customers.js";
 import { sectionsRouter } from "./routes/sections.js";
+import { epicsRouter } from "./routes/epics.js";
 import { holidaysRouter } from "./routes/holidays.js";
 import { servicesRouter } from "./routes/services.js";
 import { risksRouter } from "./routes/risks.js";
@@ -65,6 +66,7 @@ export function createApp(): Express {
   app.use("/tasks", tasksRouter);
   app.use("/labels", labelsRouter);
   app.use("/sections", sectionsRouter);
+  app.use("/epics", epicsRouter);
   app.use("/holidays", holidaysRouter);
   app.use("/services", servicesRouter);
   app.use("/risks", risksRouter);

@@ -27,6 +27,7 @@ import {
   useDuplicateTask,
   useHolidays,
   useProjectDependencies,
+  useProjectEpics,
   useProjectSections,
   useProjectTasks,
   useUpdateSection,
@@ -346,6 +347,8 @@ export function SolvroGantt(props: SolvroGanttProps) {
 
   const { data: tasks = [], isLoading, isError, error } = useProjectTasks(projectId);
   const { data: sections = [] } = useProjectSections(projectId);
+  // Epics feed only the Excel export's "Epic" column (exportExcel.ts).
+  const { data: epics = [] } = useProjectEpics(projectId);
   // Plan B Task 6 — the overlay (connectors, drag-create, baselines) is the
   // consumer this query was wired ahead of in Task 4/5; now actually used.
   const { data: dependencies = [] } = useProjectDependencies(projectId);
@@ -884,6 +887,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
             chartEnd: end,
             holidays,
             colorBy,
+            epics,
           });
         } catch (err) {
           setActionError(err instanceof Error ? err.message : "Excel export failed.");
@@ -936,7 +940,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
       },
     });
     return () => register(null);
-  }, [register, projectName, allRows, allDateRange, holidays, colorBy, dependencies]);
+  }, [register, projectName, allRows, allDateRange, holidays, colorBy, dependencies, epics]);
 
   const runExport = useCallback(
     async (kind: "excel" | "pdf") => {

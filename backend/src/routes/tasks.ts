@@ -16,6 +16,7 @@ import {
   siblingKeyEquals,
   type SiblingKey,
 } from "../lib/taskOrdering.js";
+import { assertEpicNotOnSubtask, assertValidEpic } from "../lib/epics.js";
 import { duplicateTaskTree } from "../lib/duplicate.js";
 
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
@@ -39,6 +40,7 @@ const updateTaskSchema = z
     parentTaskId: z.number().int().positive().nullable().optional(),
     sectionId: z.number().int().positive().nullable().optional(),
     labelIds: z.array(z.number().int().positive()).optional(),
+    epicId: z.number().int().positive().nullable().optional(),
     position: z.number().int().min(0).optional(),
     // Optional pin to one iTop ticket ref, e.g. "R-000123" (1-3 uppercase
     // letters, a dash, 4-8 digits — matches iTop's default ref format for
@@ -209,6 +211,28 @@ tasksRouter.patch(
         await assertLabelsInProject(tx, current.projectId, body.labelIds);
       }
 
+      // An explicit epicId is validated the same way create is (400
+      // epic_on_subtask, checked unconditionally against the EFFECTIVE next
+      // parent — whether that parent comes from this same request's
+      // parentTaskId or was already set — so `{ parentTaskId: X, epicId: Y }`
+      // 400s here exactly like it does on create, instead of silently
+      // clearing); non-null also must belong to the same project (400
+      // epic_not_found). `epicId: null` always clears it, regardless of
+      // parent. Only when epicId is ABSENT from the body does re-parenting
+      // to non-null implicitly clear it (docs/archive/plans/epics-spec.md §4 — a
+      // subtask never carries its own epic, it inherits the parent's for
+      // display); an absent epicId with no re-parent leaves it untouched.
+      let epicIdUpdate: number | null | undefined;
+      if (body.epicId !== undefined) {
+        if (body.epicId !== null) {
+          assertEpicNotOnSubtask(body.epicId, nextParentTaskId);
+          await assertValidEpic(tx, current.projectId, body.epicId);
+        }
+        epicIdUpdate = body.epicId;
+      } else if (body.parentTaskId !== undefined && body.parentTaskId !== null) {
+        epicIdUpdate = null;
+      }
+
       const data: Prisma.TaskUpdateInput = {};
       if (body.title !== undefined) data.title = body.title;
       if (body.description !== undefined) data.description = body.description;
@@ -241,6 +265,9 @@ tasksRouter.patch(
       }
       if (body.labelIds !== undefined) {
         data.labels = { set: body.labelIds.map((lid) => ({ id: lid })) };
+      }
+      if (epicIdUpdate !== undefined) {
+        data.epic = epicIdUpdate === null ? { disconnect: true } : { connect: { id: epicIdUpdate } };
       }
 
       if (touchesOrdering) {

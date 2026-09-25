@@ -10,7 +10,7 @@ import {
   apiBase,
   captureTaskRequests,
 } from "../fixtures/test";
-import { getTasks, setWipLimits, type SeededTask } from "../fixtures/seed";
+import { getTasks, setWipLimits, type SeededTask, createEpic } from "../fixtures/seed";
 import type { Page } from "@playwright/test";
 
 // Ported from the QA gate script qa-wave2.mjs, then rewritten against the
@@ -92,6 +92,7 @@ async function createSubtask(
   }
   return res.json();
 }
+
 
 /** T10 Fix 3: the modal trio (subtask re-parent, subtask promote, G10) moved
  * off the Gantt/Timeline paths — the Gantt route never actually opened the
@@ -829,6 +830,89 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     });
 
     expect(requests.length).toBe(0);
+  });
+
+  // G11 (docs/archive/plans/epics-spec.md §6/§7 T5): epic chip renders on the
+  // assigned card only, the toolbar's Epic filter narrows the visible set
+  // the same render-only way assignee/priority do, and a cross-column drag
+  // taken while that filter is active still derives its drop math from
+  // `topLevelAll` (unfiltered) — the position/status it commits survives a
+  // reload just like an unfiltered drag would.
+  test("G11: epic chip + filter — renders on the assigned card only, narrows visible cards, and a filtered drag persists after reload", async ({
+    page,
+    seededProject,
+  }) => {
+    const base = apiBase(test.info());
+    const token = seededProject.token;
+    const projectId = seededProject.projectId;
+
+    const current = globalTopLevel(await getTasks(base, token, projectId));
+    expect(current.length, "need at least 2 top-level tasks").toBeGreaterThanOrEqual(2);
+    const [tagged, other, ...rest] = current;
+
+    // Pin a clean, deterministic starting state: `tagged` alone in TODO (so
+    // the cross-column drag below has somewhere to go and the filtered TODO
+    // column shows exactly one card), everything else swept into
+    // IN_PROGRESS.
+    await apiPatchTask(base, token, tagged.id, { status: "TODO" });
+    for (const t of [other, ...rest]) {
+      await apiPatchTask(base, token, t.id, { status: "IN_PROGRESS" });
+    }
+
+    const epic = await createEpic(base, token, projectId, { title: "Epic G11" });
+    await apiPatchTask(base, token, tagged.id, { epicId: epic.id });
+
+    await openKanban(page, projectId);
+
+    const taggedCard = page
+      .locator('[data-slot="kanban-item"]')
+      .filter({ has: page.getByText(tagged.title, { exact: true }) });
+    const otherCard = page
+      .locator('[data-slot="kanban-item"]')
+      .filter({ has: page.getByText(other.title, { exact: true }) });
+    await expect(taggedCard.getByTestId("epic-chip")).toBeVisible();
+    await expect(taggedCard.getByTestId("epic-chip")).toHaveText(epic.title);
+    await expect(otherCard.getByTestId("epic-chip")).toHaveCount(0);
+
+    // Apply the Epic filter to this epic — the "No epic" option is unique to
+    // this select, disambiguating it from the Assignee/Priority selects.
+    await page.getByRole("button", { name: "Filter" }).click();
+    const epicSelect = page
+      .locator("select")
+      .filter({ has: page.getByRole("option", { name: "No epic" }) });
+    await epicSelect.selectOption(String(epic.id));
+    await closeFilterPopover(page);
+
+    await expect(page.getByText(tagged.title, { exact: true })).toBeVisible();
+    await expect(page.getByText(other.title, { exact: true })).toHaveCount(0);
+
+    // Drag the only visible (filtered) card cross-column — drop math must
+    // still derive from `topLevelAll`, per SolvroKanban.tsx's `isTaskVisible`
+    // comments.
+    const grip = await gripFor(page, tagged.title, "Drag to reorder");
+    const col =
+      (await page.locator("h3", { hasText: "In Progress" }).first().boundingBox()) ??
+      (await page.getByText("In progress", { exact: true }).first().boundingBox());
+    expect(grip, `grip for ${tagged.title} not found`).toBeTruthy();
+    expect(col, "In Progress column not found").toBeTruthy();
+
+    await mouseDrag(page, center(grip!), { x: col!.x + 60, y: col!.y + 150 });
+
+    const afterDrag = await getTasks(base, token, projectId);
+    expect(byTitle(afterDrag, tagged.title)?.status).toBe("IN_PROGRESS");
+
+    // Reload (filter state resets — it's local component state, not a URL
+    // param) and confirm the status committed by the filtered drag persisted
+    // server-side and renders correctly once more, unfiltered.
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForTimeout(800);
+    const afterReload = await getTasks(base, token, projectId);
+    expect(byTitle(afterReload, tagged.title)?.status).toBe("IN_PROGRESS");
+    const reloadedCard = page
+      .locator('[data-slot="kanban-item"]')
+      .filter({ has: page.getByText(tagged.title, { exact: true }) });
+    await expect(reloadedCard).toBeVisible();
+    await expect(reloadedCard.getByTestId("epic-chip")).toHaveText(epic.title);
   });
 
   // RG-2 rewrite (T10 follow-up): board-level subtask re-parent is retired;

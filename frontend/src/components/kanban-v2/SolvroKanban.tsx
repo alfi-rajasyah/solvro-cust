@@ -42,10 +42,12 @@ import { Alert, AlertDescription } from "@/components/reui/alert";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { hasPermission, useAuth } from "@/lib/auth";
 import {
+  type Epic,
   type Priority,
   type ProjectDetail,
   type Task,
   type TaskStatus,
+  useProjectEpics,
   useProjectTasks,
   useUpdateTask,
   useUsers,
@@ -157,13 +159,26 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   const { user } = useAuth();
   const { data: tasks, isLoading, isError, error } = useProjectTasks(project.id);
   const { data: users } = useUsers();
+  const { data: epics } = useProjectEpics(project.id);
   const updateTask = useUpdateTask(project.id);
   const [, setSearchParams] = useSearchParams();
   const [createStatus, setCreateStatus] = useState<TaskStatus | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAssigneeId, setFilterAssigneeId] = useState<number | "">("");
   const [filterPriority, setFilterPriority] = useState<Priority | "">("");
+  // Epic filter (docs/archive/plans/epics-spec.md §6/§7 T5): "" = All (inactive),
+  // `null` = "No epic" (task.epicId === null), a number = one project epic.
+  const [filterEpicId, setFilterEpicId] = useState<number | null | "">("");
   const [mobileSheetTask, setMobileSheetTask] = useState<Task | null>(null);
+
+  // Built once from useProjectEpics, keyed by Epic.id — passed down to
+  // TaskCard the same way subtaskMapAll is, so cards never call a per-card
+  // hook to look up their epic.
+  const epicMap = useMemo(() => {
+    const map = new Map<number, Epic>();
+    for (const e of epics ?? []) map.set(e.id, e);
+    return map;
+  }, [epics]);
 
   // Mobile swipeable-columns pager (<md), ported from ProjectKanban.tsx
   // lines 150-161/225-243 — tracks which column page is centered in the
@@ -224,11 +239,18 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
     (task: Task) => {
       if (filterAssigneeId !== "" && task.assignedToId !== filterAssigneeId) return false;
       if (filterPriority !== "" && task.priority !== filterPriority) return false;
+      if (filterEpicId !== "") {
+        if (filterEpicId === null) {
+          if (task.epicId !== null) return false;
+        } else if (task.epicId !== filterEpicId) {
+          return false;
+        }
+      }
       return true;
     },
-    [filterAssigneeId, filterPriority],
+    [filterAssigneeId, filterPriority, filterEpicId],
   );
-  const filterActive = filterAssigneeId !== "" || filterPriority !== "";
+  const filterActive = filterAssigneeId !== "" || filterPriority !== "" || filterEpicId !== "";
 
   const derivedColumns = useMemo(
     () => projectToColumns(topLevelAll, isTaskVisible),
@@ -456,7 +478,9 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
             Filter
             {filterActive && (
               <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-on-primary">
-                {(filterAssigneeId !== "" ? 1 : 0) + (filterPriority !== "" ? 1 : 0)}
+                {(filterAssigneeId !== "" ? 1 : 0) +
+                  (filterPriority !== "" ? 1 : 0) +
+                  (filterEpicId !== "" ? 1 : 0)}
               </span>
             )}
           </button>
@@ -499,12 +523,34 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                     <option value="URGENT">Urgent</option>
                   </select>
                 </div>
+                <div className="mb-3">
+                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+                    Epic
+                  </label>
+                  <select
+                    value={filterEpicId === "" ? "" : filterEpicId === null ? "none" : String(filterEpicId)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setFilterEpicId(v === "" ? "" : v === "none" ? null : Number(v));
+                    }}
+                    className="w-full rounded-lg border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden"
+                  >
+                    <option value="">All</option>
+                    <option value="none">No epic</option>
+                    {(epics ?? []).map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 {filterActive && (
                   <button
                     type="button"
                     onClick={() => {
                       setFilterAssigneeId("");
                       setFilterPriority("");
+                      setFilterEpicId("");
                     }}
                     className="text-xs font-semibold text-primary hover:underline"
                   >
@@ -670,6 +716,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                           <TaskCard
                             task={task}
                             subtaskMap={subtaskMapAll}
+                            epicMap={epicMap}
                             canDrag={dragEnabled}
                             canToggleSubtasks={dragEnabled}
                             onClick={() => openTask(task.id)}
@@ -711,7 +758,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
             // `isDragging: true` for the grabbing cursor.
             return (
               <KanbanItem value={getItemValue(task)}>
-                <TaskCard task={task} subtaskMap={subtaskMapAll} canDrag dragging />
+                <TaskCard task={task} subtaskMap={subtaskMapAll} epicMap={epicMap} canDrag dragging />
               </KanbanItem>
             );
           }}

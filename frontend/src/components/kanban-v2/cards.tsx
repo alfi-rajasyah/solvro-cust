@@ -18,15 +18,17 @@
 // button (opens MobileMoveSheet, wired in SolvroKanban.tsx).
 import { AssigneeAvatar } from "@/components/AssigneeAvatar";
 import { CriticalPathMark } from "@/components/CriticalPathMark";
+import { EpicChip } from "@/components/EpicChip";
 import { LabelChip } from "@/components/LabelChip";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { KanbanItemHandle } from "@/components/reui/kanban";
 import { dayFromIso, dayToDate } from "@/lib/dateField";
-import { type Task } from "@/lib/queries";
+import { type Epic, type Task } from "@/lib/queries";
 
 export function TaskCard({
   task,
   subtaskMap,
+  epicMap,
   canDrag,
   canToggleSubtasks = false,
   dragging = false,
@@ -36,6 +38,11 @@ export function TaskCard({
 }: {
   task: Task;
   subtaskMap: Map<number, Task[]>;
+  // Epics (docs/archive/plans/epics-spec.md §6/§7 T5): keyed by Epic.id, built once
+  // in SolvroKanban.tsx from useProjectEpics — no per-card hook calls.
+  // Optional so the drag-overlay ghost (which only needs `canDrag`/`dragging`
+  // today) doesn't have to thread it through if a future caller omits it.
+  epicMap?: Map<number, Epic>;
   canDrag: boolean;
   canToggleSubtasks?: boolean;
   // M4 (Phase 2 review): restores the drag-overlay treatment
@@ -50,6 +57,7 @@ export function TaskCard({
   const subtasks = subtaskMap.get(task.id) ?? [];
   const subtasksDone = subtasks.filter((s) => s.status === "DONE").length;
   const duration = getDuration(task.startDate, task.dueDate);
+  const epic = task.epicId !== null ? epicMap?.get(task.epicId) : undefined;
 
   function handleClick(e: React.MouseEvent) {
     e.stopPropagation();
@@ -113,9 +121,11 @@ export function TaskCard({
         </div>
       </div>
 
-      {/* Labels */}
-      {task.labels.length > 0 && (
-        <div className="mb-1.5 flex flex-wrap gap-1">
+      {/* Labels + epic chip (docs/archive/plans/epics-spec.md §6): same row, epic
+          first — renders on its own even when the task has no labels. */}
+      {(epic || task.labels.length > 0) && (
+        <div className="mb-1.5 flex flex-wrap items-center gap-1">
+          {epic && <EpicChip epic={epic} compact />}
           {task.labels.slice(0, 2).map((l) => (
             <LabelChip key={l.id} label={l} compact />
           ))}
