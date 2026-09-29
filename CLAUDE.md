@@ -41,9 +41,9 @@ MUST/NEVER invariants. User-owned — agents read this block; only the user edit
 | `docs/CONFIGURATION.md` | Env vars, ports, volumes, prod deploy (`setup.sh`) — docs-keeper-owned |
 | `docs/ISSUES.md` | Known issues & deferred findings — docs-keeper-owned |
 | `docs/archive/` | Superseded docs & dated snapshots |
-| `CHANGELOG.md` | What shipped — the only tracked doc |
+| `CHANGELOG.md` | What shipped — the public, release-facing record |
 
-Everything in this table except `CHANGELOG.md` is gitignored/local-only — including every `CLAUDE.md`. Untracked files have no git history; `docs/archive/` snapshots are the only rollback.
+Everything in this table is tracked in git — every `CLAUDE.md`, `.claude/`, and `docs/` included (decided by the user 2026-09-29; `gates.sh`'s `guardrail-local-only-tracked` fails if they stop being tracked). Docs ride in the same phase PR as the code they describe: the phase's plan in `docs/plans/`, its deferred findings in `docs/ISSUES.md`, and any `DESIGN.md` / `CONFIGURATION.md` sync. The repo can be public while a PR's CI runs, so these files must never hold secrets, tokens, or credentials.
 
 Specs and plans land in `docs/plans/` no matter which tool or skill writes them — never in tool-named folders (a past `docs/superpowers/` was archived for this reason). When a feature ships, its idea/plan/prompt files move to `docs/archive/`. Code comments that cite a plan use its eventual archive path (`docs/archive/plans/<name>.md`) from the start, never a bare `docs/plans/` path or a bare decision id — every plan ends up archived, so a live-path citation goes stale at archive time.
 
