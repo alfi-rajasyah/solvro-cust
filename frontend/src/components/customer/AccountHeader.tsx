@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { CopyLinkButton } from "@/components/CopyLinkButton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -145,8 +146,13 @@ export function AccountHeader({
         </p>
       </div>
 
-      {canMutate && (
-        <div className="flex shrink-0 items-center gap-2 self-end md:self-auto">
+      <div className="flex shrink-0 items-center gap-2 self-end md:self-auto">
+        <CopyLinkButton
+          label="Copy link"
+          className="h-8 w-8 rounded-lg border border-outline-variant bg-surface-container-lowest hover:bg-surface-container"
+        />
+        {canMutate && (
+          <>
           <button
             type="button"
             onClick={onEdit}
@@ -189,8 +195,9 @@ export function AccountHeader({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-      )}
+          </>
+        )}
+      </div>
     </header>
   );
 }

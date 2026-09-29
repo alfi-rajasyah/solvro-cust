@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { ConfirmModal } from "./ConfirmModal";
+import { CopyLinkButton } from "./CopyLinkButton";
 import {
   CRITICAL_PATH_GLYPH,
   CRITICAL_PATH_HELPER_TEXT,
@@ -168,13 +169,18 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   }, [taskId]);
 
   if (!task) {
+    // `tasks` undefined = still loading; once it has loaded, a missing task was
+    // deleted (or is not visible to this user) — say so instead of spinning.
+    const notFound = tasks !== undefined;
     return (
       <aside
         ref={panelRef}
         className="fixed right-0 top-14 bottom-0 z-40 flex w-full flex-col border-l border-outline-variant bg-surface-container px-5 py-4 md:w-[380px]"
       >
         <div className="flex items-center justify-between">
-          <span className="text-sm text-on-surface-variant">Loading task…</span>
+          <span className="text-sm text-on-surface-variant">
+            {notFound ? "Task not found" : "Loading task…"}
+          </span>
           <button
             type="button"
             onClick={onClose}
@@ -353,6 +359,11 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
             )}
           </div>
           <span className="flex-1" />
+          <CopyLinkButton
+            label="Copy task link"
+            getUrl={() => `${window.location.origin}/projects/${projectId}?task=${taskId}`}
+            className="rounded-sm p-1 hover:bg-surface-container-high"
+          />
           <div className="relative">
             <button
               type="button"
