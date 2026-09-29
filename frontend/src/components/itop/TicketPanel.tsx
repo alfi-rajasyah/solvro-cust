@@ -206,7 +206,7 @@ export function TicketPanel({
                       type="button"
                       disabled={actionMutation.isPending}
                       onClick={() => handleAction(action)}
-                      className="rounded-sm border border-outline-variant px-3 py-1 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface hover:border-primary hover:text-primary disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                      className="rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                     >
                       {actionLabel(action)}
                     </button>
@@ -224,12 +224,12 @@ export function TicketPanel({
               </div>
 
               {canAct && (
-                <p className="mt-1.5 text-[11px] text-on-surface-variant">
+                <p className="mt-1.5 text-xs text-on-surface-variant">
                   Writes go to iTop as {myToken?.personName ?? "you"}
                 </p>
               )}
               {!actionsEnabled && (
-                <p className="mt-1.5 text-[11px] text-on-surface-variant">
+                <p className="mt-1.5 text-xs text-on-surface-variant">
                   Actions from Solvro are off (Admin › iTop).
                 </p>
               )}
@@ -315,7 +315,7 @@ export function TicketPanel({
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <>
-      <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+      <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
         {label}
       </span>
       <span className="text-on-surface">{value}</span>

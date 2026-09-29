@@ -34,6 +34,8 @@
 // characters) or, for `parseWeekKey`'s `key` argument, simply never match a
 // valid week key shape.
 
+import { fmtWeek } from "./formatDate";
+
 const WEEK_KEY_RE = /^(\d{4})-W(\d{2})$/;
 const DAY_STRING_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -164,11 +166,6 @@ export function shiftWeek(key: string, delta: number): string {
   return weekKeyOf(toDay(shifted));
 }
 
-const MONTH_ABBR = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
 /**
  * Human-readable week range for the header/day-strip, e.g. `"24 – 30 Aug"`.
  * Crosses a month boundary → `"28 Sep – 4 Oct"`; crosses a year boundary →
@@ -181,20 +178,5 @@ export function formatWeekRange(key: string): string {
   if (!parsed) {
     throw new Error(`invalid week key: ${key}`);
   }
-  const start = fromDay(parsed.start);
-  const end = fromDay(parsed.days[6]);
-  const startDate = start.getUTCDate();
-  const endDate = end.getUTCDate();
-  const startMonth = MONTH_ABBR[start.getUTCMonth()];
-  const endMonth = MONTH_ABBR[end.getUTCMonth()];
-  const startYear = start.getUTCFullYear();
-  const endYear = end.getUTCFullYear();
-
-  if (startYear !== endYear) {
-    return `${startDate} ${startMonth} ${startYear} – ${endDate} ${endMonth} ${endYear}`;
-  }
-  if (startMonth !== endMonth) {
-    return `${startDate} ${startMonth} – ${endDate} ${endMonth}`;
-  }
-  return `${startDate} – ${endDate} ${endMonth}`;
+  return fmtWeek(parsed.start);
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Autocomplete,
   AutocompleteCollection,
@@ -16,15 +16,16 @@ import { hasPermission, useAuth } from "@/lib/auth";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { projectStatusLabel } from "@/components/StatusChip";
 import { filterNavCommands } from "@/lib/navCommands";
+import { buildPaletteActions } from "@/lib/paletteActions";
 import { useSearch } from "@/lib/queries";
 
 interface PaletteItem {
-  value: string; // unique: "page:/overview", "project:3", "task:17", "customer:2"
+  value: string; // unique: "page:/overview", "action:new-project", "project:3", "task:17", "customer:2"
   label: string;
-  group: "Pages" | "Projects" | "Tasks" | "Customers";
+  group: "Pages" | "Actions" | "Projects" | "Tasks" | "Customers";
   to: string;
   hint?: string; // secondary text: customer/project name or status
-  icon?: string; // material symbol name (pages only)
+  icon?: string; // material symbol name (pages and actions)
 }
 
 interface PaletteGroup {
@@ -41,11 +42,12 @@ function useDebounced(value: string, ms: number): string {
   return debounced;
 }
 
-const GROUP_ORDER: PaletteItem["group"][] = ["Pages", "Projects", "Tasks", "Customers"];
+const GROUP_ORDER: PaletteItem["group"][] = ["Pages", "Actions", "Projects", "Tasks", "Customers"];
 
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { pathname, search } = useLocation();
   const [query, setQuery] = useState("");
   const debounced = useDebounced(query, 200);
   const { data, error, isFetching } = useSearch(debounced);
@@ -88,6 +90,18 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       to: c.to,
       icon: c.icon,
     }));
+    const actions: PaletteItem[] = buildPaletteActions(
+      (p) => hasPermission(user, p),
+      pathname,
+      query,
+      search,
+    ).map((a) => ({
+      value: `action:${a.id}`,
+      label: a.label,
+      group: "Actions",
+      to: a.to,
+      icon: a.icon,
+    }));
     const remote: PaletteItem[] = !hasQuery || !data
       ? []
       : [
@@ -113,8 +127,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             to: `/customers/${c.id}`,
           })),
         ];
-    return [...pages, ...remote];
-  }, [user, query, data, hasQuery]);
+    return [...pages, ...actions, ...remote];
+  }, [user, pathname, search, query, data, hasQuery]);
 
   // Base UI's Autocomplete groups by nesting: `items` is an array of
   // { value, items } buckets rather than a flat list with a `group` field.
@@ -179,11 +193,11 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               placeholder="Search projects, tasks, customers…"
               className="flex-1 border-none bg-transparent text-[13px] text-on-surface outline-hidden placeholder:text-on-surface-variant dark:bg-transparent rounded-none h-auto px-0 focus-visible:ring-0 focus-visible:border-transparent"
             />
-            <span className="rounded-sm border border-outline-variant bg-surface-container-low px-1.5 py-0.5 font-mono text-[10px] text-on-surface-variant">
+            <span className="rounded-sm border border-outline-variant bg-surface-container-low px-1.5 py-0.5 font-mono text-meta text-on-surface-variant">
               esc
             </span>
           </div>
-          <AutocompleteStatus className="px-4 text-[11px] text-on-surface-variant">
+          <AutocompleteStatus className="px-4 text-xs text-on-surface-variant">
             {isFetching && hasQuery ? "Searching…" : null}
           </AutocompleteStatus>
           <div className="flex min-h-0 flex-1 flex-col">
@@ -201,10 +215,20 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                   : `No results for "${debounced}"`
                 : null}
             </AutocompleteEmpty>
-            <AutocompleteList className="p-1" scrollAreaClassName="min-h-0 flex-1">
+            {/*
+              The dialog only has a max-height (auto height), so the viewport's
+              `h-full` cannot resolve and the list would grow past the popup
+              border. On desktop cap the root AND the viewport explicitly so
+              the list scrolls inside the popup and the popup fits its content
+              up to the cap; phones keep the full-height flex fill.
+            */}
+            <AutocompleteList
+              className="p-1"
+              scrollAreaClassName="min-h-0 flex-1 md:max-h-[min(50vh,28rem)] md:**:data-[slot=scroll-area-viewport]:max-h-[min(50vh,28rem)]"
+            >
               {(group: PaletteGroup) => (
                 <AutocompleteGroup key={group.value} items={group.items}>
-                  <AutocompleteGroupLabel className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                  <AutocompleteGroupLabel className="px-3 pb-1 pt-2 text-label-caps uppercase text-on-surface-variant">
                     {group.value}
                   </AutocompleteGroupLabel>
                   <AutocompleteCollection>
@@ -222,7 +246,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                         )}
                         <span className="min-w-0 flex-1 truncate">{item.label}</span>
                         {item.hint && (
-                          <span className="shrink-0 text-[11px] text-on-surface-variant">
+                          <span className="shrink-0 text-meta text-on-surface-variant">
                             {item.hint}
                           </span>
                         )}

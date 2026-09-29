@@ -2,11 +2,12 @@ import { useState } from "react";
 import { LabelChip } from "./LabelChip";
 import { useCreateLabel, useProjectLabels, type Label } from "@/lib/queries";
 
+// No red or near-red: a label must never read as an error.
 const PALETTE = [
   "#0058be",
   "#10b981",
   "#f59e0b",
-  "#ba1a1a",
+  "#0d9488",
   "#7c3aed",
   "#0ea5e9",
   "#ec4899",
@@ -77,9 +78,9 @@ export function LabelPicker({
               createLabel.reset();
               setCreating(true);
             }}
-            className="rounded-sm border border-dashed border-outline-variant px-1.5 py-0.5 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:border-primary hover:text-primary"
+            className="rounded-sm border border-dashed border-outline-variant px-1.5 py-0.5 font-display text-meta text-on-surface-variant hover:border-primary hover:text-primary font-semibold"
           >
-            + Label
+            Add label
           </button>
         )}
       </div>
@@ -107,7 +108,7 @@ export function LabelPicker({
               type="button"
               onClick={() => void handleCreate()}
               disabled={createLabel.isPending || !newName.trim()}
-              className="rounded-sm bg-primary px-2 py-1 font-display text-label-caps uppercase text-on-primary hover:bg-primary-container disabled:opacity-50"
+              className="rounded-sm bg-primary px-2 py-1 font-display text-xs text-on-primary hover:bg-primary-container disabled:opacity-50 font-semibold"
             >
               {createLabel.isPending ? "…" : "Add"}
             </button>
@@ -118,13 +119,13 @@ export function LabelPicker({
                 setCreating(false);
                 setNewName("");
               }}
-              className="rounded-sm px-2 py-1 text-[11px] text-on-surface-variant hover:bg-surface-container"
+              className="rounded-sm px-2 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container"
             >
               Cancel
             </button>
           </div>
           <div className="mt-2 flex items-center gap-1">
-            <span className="text-[11px] uppercase tracking-wider text-on-surface-variant">
+            <span className="text-label-caps uppercase text-on-surface-variant">
               Color
             </span>
             {PALETTE.map((c) => (
@@ -142,7 +143,7 @@ export function LabelPicker({
             ))}
           </div>
           {createLabel.error && (
-            <p className="mt-1 text-[11px] text-error">
+            <p className="mt-1 text-xs text-error">
               {(createLabel.error as Error).message}
             </p>
           )}

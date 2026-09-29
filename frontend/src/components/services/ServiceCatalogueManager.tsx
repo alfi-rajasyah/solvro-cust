@@ -6,6 +6,7 @@ import {
   type ColumnDef,
   type SortingState,
 } from "@tanstack/react-table";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { ApiError } from "@/lib/api";
 import {
   type Service,
@@ -42,6 +43,7 @@ export function ServiceCatalogueManager() {
   const update = useUpdateService();
   const remove = useDeleteService();
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<Service | null>(null);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -129,7 +131,7 @@ export function ServiceCatalogueManager() {
               type="button"
               onClick={() => toggleActive(s)}
               className={[
-                "rounded-full px-2 py-0.5 font-display text-label-caps uppercase tracking-wider",
+                "rounded-full px-2 py-0.5 font-display text-sm font-semibold",
                 s.active
                   ? "bg-chip-emerald-bg text-chip-emerald-text"
                   : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest",
@@ -158,7 +160,7 @@ export function ServiceCatalogueManager() {
                   type="button"
                   onClick={saveEdit}
                   disabled={update.isPending || !editName.trim()}
-                  className="rounded-sm bg-primary px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-primary hover:bg-primary-container disabled:opacity-50"
+                  className="rounded-sm bg-primary px-2 py-1 font-display text-sm text-on-primary hover:bg-primary-container disabled:opacity-50 font-semibold"
                 >
                   Save
                 </button>
@@ -166,7 +168,7 @@ export function ServiceCatalogueManager() {
                   type="button"
                   onClick={() => setEditingId(null)}
                   disabled={update.isPending}
-                  className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-surface-container"
+                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container font-semibold"
                 >
                   Cancel
                 </button>
@@ -176,14 +178,14 @@ export function ServiceCatalogueManager() {
                 <button
                   type="button"
                   onClick={() => startEdit(s)}
-                  className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
+                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-semibold"
                 >
                   Edit
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDelete(s)}
-                  className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-error-container hover:text-on-error-container"
+                  onClick={() => setDeleting(s)}
+                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container font-semibold"
                 >
                   Delete
                 </button>
@@ -261,12 +263,7 @@ export function ServiceCatalogueManager() {
   }
 
   async function handleDelete(s: Service) {
-    if (
-      !confirm(
-        `Delete service "${s.name}"? It will be removed from every customer and project that has it assigned.`,
-      )
-    )
-      return;
+    setDeleting(null);
     setError(null);
     try {
       await remove.mutateAsync(s.id);
@@ -294,7 +291,7 @@ export function ServiceCatalogueManager() {
         className="flex flex-wrap items-end gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest p-3"
       >
         <label className="w-full md:flex-1 md:min-w-[160px]">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Name
           </span>
           <input
@@ -307,7 +304,7 @@ export function ServiceCatalogueManager() {
           />
         </label>
         <label className="w-full md:flex-2 md:min-w-[240px]">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Description
           </span>
           <input
@@ -358,6 +355,17 @@ export function ServiceCatalogueManager() {
           </DataGridScrollArea>
         </DataGridContainer>
       </DataGrid>
+
+      <ConfirmModal
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && void handleDelete(deleting)}
+        title="Delete service"
+        body={`Delete service "${deleting?.name ?? ""}"? It will be removed from every customer and project that has it assigned.`}
+        confirmLabel="Delete"
+        confirmTone="danger"
+        busy={remove.isPending}
+      />
     </div>
   );
 }

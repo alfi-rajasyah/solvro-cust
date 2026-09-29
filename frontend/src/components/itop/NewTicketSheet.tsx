@@ -193,7 +193,7 @@ export function NewTicketSheet({
             ))}
           </select>
           {!contactsLoading && (contacts ?? []).length === 0 && (
-            <p className="mt-1 text-[11px] text-on-surface-variant">
+            <p className="mt-1 text-xs text-on-surface-variant">
               No contacts mapped for this customer yet.
             </p>
           )}

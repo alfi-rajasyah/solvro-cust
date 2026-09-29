@@ -38,12 +38,12 @@ export function WeekStrip({ days, today, coverage, onDayClick }: WeekStripProps)
             ].join(" ")}
           >
             <span
-              className={`text-[11px] font-bold uppercase tracking-wider ${isWeekend && !isToday ? "text-on-surface-variant" : "text-on-surface"}`}
+              className={`text-label-caps uppercase ${isWeekend && !isToday ? "text-on-surface-variant" : "text-on-surface"}`}
             >
               {label}
             </span>
             <span
-              className={`font-mono text-[11px] tabular-nums ${full ? "text-chip-emerald-text" : "text-on-surface-variant"}`}
+              className={`text-meta tabular-nums ${full ? "text-chip-emerald-text" : "text-on-surface-variant"}`}
             >
               {cov.withNote}/{cov.total}
             </span>

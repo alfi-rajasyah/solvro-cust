@@ -21,6 +21,7 @@
 // one row with "—" in Highlight/Risk/Action), a Reflection row is an
 // ACHIEVEMENT (a customer with N achievements produces N rows, one with no
 // achievement still gets one row with "—" in the five text cells).
+import { WEEKLY_HEALTH_LABEL } from "./labels";
 import type { DailyReviewCustomer, WeeklyHealth } from "./queries";
 
 export type WeeklySyncTab = "midweek" | "reflection";
@@ -36,11 +37,7 @@ const EM_DASH = "—";
 // cells (finding 2, phase review) so the page and the clipboard agree on
 // casing, even though the page still needs its own "—" wrapper for a null
 // health (a plain pill, not a table cell).
-export const HEALTH_LABEL: Record<WeeklyHealth, string> = {
-  GREEN: "Green",
-  AMBER: "Amber",
-  RED: "Red",
-};
+export const HEALTH_LABEL: Record<WeeklyHealth, string> = WEEKLY_HEALTH_LABEL;
 
 /** True when any of `customer`'s current-week achievement rows has a non-empty `managerDecision` after trim (D10's pin condition). */
 export function hasManagerDecision(customer: DailyReviewCustomer): boolean {

@@ -7,6 +7,7 @@ import {
   barFillHex,
   type ColorByMode,
 } from "./palette";
+import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
 import type { Epic, Holiday } from "@/lib/queries";
 
 interface ExportExcelOpts {
@@ -24,12 +25,6 @@ interface ExportExcelOpts {
   // and just renders an empty Epic column.
   epics?: Epic[];
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  TODO: "To Do",
-  IN_PROGRESS: "In Progress",
-  DONE: "Done",
-};
 
 const MONTHS_SHORT = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -112,8 +107,8 @@ export function buildTasksSheet(rows: Row[], epics: Epic[] = []): {
       section: sectionName,
       epic: epicTitle,
       title: `${indent}${r.name}`,
-      status: t ? STATUS_LABEL[t.status] ?? t.status : "",
-      priority: t?.priority ?? "",
+      status: t ? TASK_STATUS_LABEL[t.status] ?? t.status : "",
+      priority: t ? PRIORITY_LABEL[t.priority] ?? t.priority : "",
       ...(hasCriticalPath ? { criticalPath: r.isCriticalPath ? "Yes" : "" } : {}),
       start: t?.startDate ? fmtIsoDate(parseISODate(t.startDate)) : "",
       due: t?.dueDate ? fmtIsoDate(parseISODate(t.dueDate)) : "",

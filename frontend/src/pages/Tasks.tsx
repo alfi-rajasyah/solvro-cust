@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   getCoreRowModel,
   getSortedRowModel,
@@ -11,9 +11,14 @@ import { AssigneeAvatar } from "@/components/AssigneeAvatar";
 import { LabelChip } from "@/components/LabelChip";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { Alert, AlertDescription } from "@/components/reui/alert";
+import { Tabs } from "@/components/Tabs";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { TaskStatusChip } from "@/components/StatusChip";
-import { dateToDay, dayFromIso, dayToDate } from "@/lib/dateField";
+import { useAuth } from "@/lib/auth";
+import { dateToDay, dayFromIso } from "@/lib/dateField";
+import { fmtDay, fmtDue } from "@/lib/formatDate";
+import { parseWeekKey, weekKeyOf } from "@/lib/isoWeek";
+import { priorityOptions, taskStatusOptions } from "@/lib/labels";
 import {
   type Filter,
   type FilterFieldConfig,
@@ -31,12 +36,11 @@ import {
   type TaskWithProject,
   type TasksFilter,
   useCustomers,
-  useTasks,
+  useTasksWithTotal,
   useUsers,
 } from "@/lib/queries";
 
 const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
-const PRIORITIES: Priority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 const PRIORITY_ORDER: Record<Priority, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
 // Stable empty-array reference for `data:` while `useTasks` is loading —
@@ -52,16 +56,54 @@ const EMPTY_TASKS: TaskWithProject[] = [];
 // still filter as "Status is DONE"). Same fix as Projects.tsx's customer field.
 const ONLY_IS_OPERATOR = [{ value: "is", label: "is" }];
 
+// Saved views, synced to `?view=`. "open" is the default and is written to the
+// URL as the absence of the param, so `/tasks` and `/tasks?view=open` agree.
+const VIEWS = [
+  { key: "open", label: "All open" },
+  { key: "my-open", label: "My open" },
+  { key: "overdue", label: "Overdue" },
+  { key: "week", label: "This week" },
+  { key: "all", label: "All" },
+] as const;
+type ViewKey = (typeof VIEWS)[number]["key"];
+const DEFAULT_VIEW: ViewKey = "open";
+
+function parseView(raw: string | null): ViewKey {
+  return VIEWS.find((v) => v.key === raw)?.key ?? DEFAULT_VIEW;
+}
+
+// The server-side part of each view. The Filters chips and "Top-level only"
+// are layered on top of this in Tasks().
+function viewFilter(view: ViewKey, todayDay: string, userId: number | undefined): TasksFilter {
+  switch (view) {
+    case "open":
+      return { open: true, sort: "due" };
+    case "my-open":
+      return { open: true, assignedToId: userId, sort: "due" };
+    case "overdue":
+      return { overdue: true, sort: "due" };
+    case "week": {
+      // ISO week Sunday (Mon..Sun weeks), as a "yyyy-MM-dd" calendar day.
+      const sunday = parseWeekKey(weekKeyOf(todayDay))?.days[6];
+      return { open: true, dueFrom: todayDay, dueTo: sunday, sort: "due" };
+    }
+    case "all":
+      return { sort: "due" };
+  }
+}
+
 export function Tasks() {
   // Filters chip state is UI-only (Filter[]); it is derived down into the
   // TasksFilter shape useTasks/queries.ts already expects — see `filter` below.
   const [activeFilters, setActiveFilters] = useState<Filter<string>[]>([]);
-  const [overdue, setOverdue] = useState(false);
   const [topLevel, setTopLevel] = useState(true);
-  // Replaces the old hand-rolled `sortKey` header state: TanStack owns
-  // sorting now, driven entirely through DataGridColumnHeader. Same default
-  // as before — due ascending.
-  const [sorting, setSorting] = useState<SortingState>([{ id: "due", desc: false }]);
+  // TanStack owns header sorting (DataGridColumnHeader). It starts empty: the
+  // server already returns rows soonest-due first (`sort=due`), and a header
+  // click re-sorts the loaded rows client-side.
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view = parseView(searchParams.get("view"));
+  const { user } = useAuth();
   const [editTask, setEditTask] = useState<TaskWithProject | null>(null);
 
   const { data: users } = useUsers();
@@ -74,14 +116,14 @@ export function Tasks() {
         label: "Status",
         type: "select",
         operators: ONLY_IS_OPERATOR,
-        options: STATUSES.map((s) => ({ value: s, label: s.replace("_", " ") })),
+        options: taskStatusOptions,
       },
       {
         key: "priority",
         label: "Priority",
         type: "select",
         operators: ONLY_IS_OPERATOR,
-        options: PRIORITIES.map((p) => ({ value: p, label: p })),
+        options: priorityOptions,
       },
       {
         key: "assignedToId",
@@ -104,6 +146,11 @@ export function Tasks() {
   // Derive the TasksFilter useTasks/queries.ts expects from the active Filter
   // chips: first value per field, absent field -> undefined (never ""/null —
   // a different shape would splinter the react-query cache key).
+  // Hoisted once per render of the list rather than once per cell — the
+  // day string is identical for every row in a single render pass.
+  const todayDay = dateToDay(startOfToday());
+
+  const userId = user?.id;
   const filter = useMemo<TasksFilter>(() => {
     const valueFor = (key: string) =>
       activeFilters.find((f) => f.field === key)?.values[0];
@@ -111,21 +158,36 @@ export function Tasks() {
     const priority = valueFor("priority");
     const assignedToId = valueFor("assignedToId");
     const customerId = valueFor("customerId");
+    const base = viewFilter(view, todayDay!, userId);
     return {
+      ...base,
+      // An explicit Status chip wins over the view's "hide Done" — otherwise
+      // picking Status "Done" inside an open-only view would always be empty.
+      open: status ? undefined : base.open,
       status: status as TaskStatus | undefined,
       priority: priority as Priority | undefined,
-      assignedToId: assignedToId === undefined ? undefined : Number(assignedToId),
+      // Likewise an Assignee chip wins over "My open"'s current user.
+      assignedToId: assignedToId === undefined ? base.assignedToId : Number(assignedToId),
       customerId: customerId === undefined ? undefined : Number(customerId),
-      overdue: overdue || undefined,
       topLevel: topLevel || undefined,
     };
-  }, [activeFilters, overdue, topLevel]);
+  }, [activeFilters, topLevel, view, todayDay, userId]);
 
-  const { data: tasks, isLoading, isError, error } = useTasks(filter);
+  const { data, isLoading, isError, error } = useTasksWithTotal(filter);
+  const tasks = data?.tasks;
+  const total = data?.total ?? 0;
 
-  // Hoisted once per render of the list rather than once per cell — the
-  // day string is identical for every row in a single render pass.
-  const todayDay = dateToDay(startOfToday());
+  const setView = (next: ViewKey) => {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if (next === DEFAULT_VIEW) params.delete("view");
+        else params.set("view", next);
+        return params;
+      },
+      { replace: false },
+    );
+  };
 
   const columns = useMemo<ColumnDef<TaskWithProject>[]>(
     () => [
@@ -134,7 +196,7 @@ export function Tasks() {
         header: ({ column }) => <DataGridColumnHeader column={column} title="ID" />,
         enableSorting: false,
         cell: ({ row }) => (
-          <span className="font-mono text-[11px] uppercase tracking-widest text-on-surface-variant">
+          <span className="font-mono text-label-caps uppercase tracking-widest text-on-surface-variant">
             T-{String(row.original.id).padStart(3, "0")}
           </span>
         ),
@@ -184,7 +246,7 @@ export function Tasks() {
               <LabelChip key={l.id} label={l} compact />
             ))}
             {row.original.labels.length > 2 && (
-              <span className="text-[11px] text-on-surface-variant">
+              <span className="text-meta text-on-surface-variant">
                 +{row.original.labels.length - 2}
               </span>
             )}
@@ -222,12 +284,11 @@ export function Tasks() {
             <span
               className={
                 isOverdue
-                  ? "font-mono text-[12px] font-bold text-error"
-                  : "font-mono text-[12px] text-on-surface-variant"
+                  ? "text-[12px] font-bold text-error"
+                  : "text-[12px] text-on-surface-variant"
               }
             >
-              {fmt(task.dueDate)}
-              {isOverdue && " · OVERDUE"}
+              {fmt(task.dueDate, task.status === "DONE")}
             </span>
           );
         },
@@ -263,8 +324,12 @@ export function Tasks() {
       <div className="mb-4">
         <h1 className="font-display text-2xl font-bold text-on-surface">Tasks</h1>
         <p className="text-sm text-on-surface-variant">
-          Cross-project task list. Apply filters, sort, click any row to open the editor.
+          Cross-project task list. Pick a view, apply filters, click any row to open the editor.
         </p>
+      </div>
+
+      <div className="mb-3 overflow-x-auto">
+        <Tabs items={VIEWS} active={view} onChange={setView} />
       </div>
 
       <div className="mb-4 flex flex-wrap items-end gap-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-3">
@@ -278,15 +343,6 @@ export function Tasks() {
         <label className="flex items-center gap-2 text-xs text-on-surface-variant">
           <input
             type="checkbox"
-            checked={overdue}
-            onChange={(e) => setOverdue(e.target.checked)}
-            className="h-3.5 w-3.5 accent-primary"
-          />
-          Overdue only
-        </label>
-        <label className="flex items-center gap-2 text-xs text-on-surface-variant">
-          <input
-            type="checkbox"
             checked={topLevel}
             onChange={(e) => setTopLevel(e.target.checked)}
             className="h-3.5 w-3.5 accent-primary"
@@ -297,10 +353,10 @@ export function Tasks() {
           type="button"
           onClick={() => {
             setActiveFilters([]);
-            setOverdue(false);
             setTopLevel(true);
+            setView(DEFAULT_VIEW);
           }}
-          className="ml-auto rounded-sm border border-outline-variant px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:border-primary hover:text-primary"
+          className="ml-auto rounded-sm border border-outline-variant px-2 py-1 font-display text-sm text-on-surface-variant hover:border-primary hover:text-primary font-semibold"
         >
           Reset
         </button>
@@ -363,6 +419,12 @@ export function Tasks() {
         </DataGrid>
       )}
 
+      {!isError && !isLoading && total > (tasks?.length ?? 0) && (
+        <p className="mt-2 text-xs text-on-surface-variant">
+          Showing {tasks?.length ?? 0} of {total}
+        </p>
+      )}
+
       {editTask && (
         <TaskFormModal
           mode="edit"
@@ -376,12 +438,9 @@ export function Tasks() {
   );
 }
 
-function fmt(iso: string | null) {
-  // Derive the day via the UTC date-part,
-  // not a local-time parse of the ISO instant.
-  const d = dayToDate(dayFromIso(iso));
-  if (!d) return "—";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+// Done tasks show the plain date — "Nd late" would misreport a finished task.
+function fmt(iso: string | null, done: boolean) {
+  return (done ? fmtDay(iso) : fmtDue(iso)) || "—";
 }
 
 function startOfToday() {

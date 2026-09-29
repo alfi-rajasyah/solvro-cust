@@ -5,7 +5,8 @@ import { TaskStatusChip } from "./StatusChip";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
-import { dayFromIso, dayToDate } from "@/lib/dateField";
+import { fmtRange } from "@/lib/formatDate";
+import { TASK_STATUS_LABEL } from "@/lib/labels";
 import {
   type TaskStatus,
   type UpdateEpicInput,
@@ -16,19 +17,6 @@ import {
 } from "@/lib/queries";
 
 const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
-const STATUS_LABEL: Record<TaskStatus, string> = {
-  TODO: "To do",
-  IN_PROGRESS: "In progress",
-  DONE: "Done",
-};
-
-function fmtShort(iso: string | null): string {
-  // Derive the day via the UTC date-part, not a local-time parse of the ISO
-  // instant — same convention as TaskPanel.tsx's identical helper.
-  const d = dayToDate(dayFromIso(iso));
-  if (!d) return "—";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
 
 interface EpicPanelProps {
   projectId: number;
@@ -234,7 +222,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
         <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2.5 text-sm">
-          <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+          <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
             Status
           </span>
           <select
@@ -246,12 +234,12 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
           >
             {STATUSES.map((s) => (
               <option key={s} value={s}>
-                {STATUS_LABEL[s]}
+                {TASK_STATUS_LABEL[s]}
               </option>
             ))}
           </select>
 
-          <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+          <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
             Owner
           </span>
           <select
@@ -271,7 +259,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
             ))}
           </select>
 
-          <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+          <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
             Dates
           </span>
           <div className="relative">
@@ -292,7 +280,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
                 onClick={() => setEditingDates(true)}
                 className="rounded-sm px-1 py-0.5 text-left text-on-surface hover:bg-surface-container-high disabled:cursor-default"
               >
-                {fmtShort(epic.startDate)} – {fmtShort(epic.dueDate)}
+                {fmtRange(epic.startDate, epic.dueDate)}
               </button>
             )}
           </div>
@@ -301,7 +289,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
         <div className="mt-4">
           <label
             htmlFor="epic-description"
-            className="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant"
+            className="mb-1.5 block font-display text-label-caps uppercase text-on-surface-variant"
           >
             Description
           </label>
@@ -325,7 +313,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
         )}
 
         <div className="mt-4">
-          <p className="mb-1.5 font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+          <p className="mb-1.5 font-display text-label-caps uppercase text-on-surface-variant">
             Stories {epic.progress.total > 0 && `${epic.progress.done}/${epic.progress.total}`}
           </p>
           {epic.tasks.length === 0 ? (

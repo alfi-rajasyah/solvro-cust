@@ -2,10 +2,15 @@ import { useState } from "react";
 import { InlineDateRangeEditor } from "@/components/InlineDateRangeEditor";
 import { TaskStatusChip } from "@/components/StatusChip";
 import { dayFromIso, dayToDate } from "@/lib/dateField";
+import { isTaskOverdue } from "@/lib/formatDate";
 import { fmtDateRangeDDMM } from "@/lib/gantt/geometry";
 import { SECTION_COLOR_PRESETS } from "@/lib/gantt/palette";
 import type { Task, TaskStatus } from "@/lib/queries";
 import { cn } from "@/lib/utils";
+
+// The predicate lives in `lib/formatDate.ts` (so Kanban cards need not pull in
+// this Gantt module); re-exported here for existing callers and tests.
+export { isTaskOverdue };
 
 // Ported mounting for the tree-pane inline editors that used to live in the
 // old engine's GanttListRow.tsx (~:258 dates popover, ~:164-193 section color
@@ -51,7 +56,7 @@ export function TaskDatesCell({ task, canEdit, onSave, todayDay }: TaskDatesCell
           setEditing(true);
         }}
         className={cn(
-          "w-full truncate text-right font-mono text-[11px]",
+          "w-full truncate text-right text-meta",
           overdue ? "font-semibold text-error" : "text-on-surface-variant",
           // Overdue red must survive hover — hover:text-primary would flip
           // the signal to green exactly while the TAM points at it.
@@ -190,30 +195,4 @@ export function TaskStatusCell({ task }: { task: Task }) {
       <TaskStatusChip status={task.status} />
     </div>
   );
-}
-
-/**
- * Pure predicate backing the Dates column's `text-error` treatment —
- * exported so it's independently unit-testable (this repo's frontend test
- * convention is pure-function `.test.ts` files over pure logic, not
- * component-render tests — see `lib/gantt/palette.test.ts`,
- * `kanban-v2/adapter.test.ts` — so the predicate is split out from the JSX
- * cell below rather than tested through rendering).
- *
- * `status !== "DONE"` (open task) AND `dueDay` is strictly before
- * `todayDay`, compared as calendar days (never an ISO-instant compare —
- * frontend/CLAUDE.md's date contract) via `dayFromIso` — same pattern as
- * the established precedent in `pages/views/ProjectTimeline.tsx`'s
- * `TaskTimelineItem` (`task.status !== "DONE" && dayFromIso(task.dueDate)! <
- * todayDay!`). Plain string comparison is correct for `"yyyy-MM-dd"` —
- * lexicographic order matches calendar order (same rule `lib/dateField.ts`'s
- * `normalizePair` relies on).
- */
-export function isTaskOverdue(
-  status: TaskStatus,
-  dueDateIso: string | null,
-  todayDay: string | null,
-): boolean {
-  const dueDay = dayFromIso(dueDateIso);
-  return status !== "DONE" && dueDay !== null && todayDay !== null && dueDay < todayDay;
 }

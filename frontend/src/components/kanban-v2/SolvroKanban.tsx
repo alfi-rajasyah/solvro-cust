@@ -52,16 +52,12 @@ import {
   useUpdateTask,
   useUsers,
 } from "@/lib/queries";
+import { priorityOptions, TASK_STATUS_LABEL } from "@/lib/labels";
+import { BoardSkeleton } from "@/components/skeletons";
 import { KANBAN_STATUSES, projectToColumns, sortTasksCanonical } from "./adapter";
 import { TaskCard } from "./cards";
 import { mapCommitToPatch, type KanbanCommitMetaLike } from "./commitMapper";
 import { MobileMoveSheet } from "./MobileMoveSheet";
-
-const COLUMN_LABELS: Record<TaskStatus, string> = {
-  TODO: "To Do",
-  IN_PROGRESS: "In Progress",
-  DONE: "Done",
-};
 
 /**
  * Synthesizes the same "append to target column" commit shape a column-body
@@ -439,16 +435,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   }
 
   if (isLoading) {
-    return (
-      <div className="grid h-full grid-cols-3 gap-4">
-        {KANBAN_STATUSES.map((status) => (
-          <div
-            key={status}
-            className="h-64 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low"
-          />
-        ))}
-      </div>
-    );
+    return <BoardSkeleton columns={KANBAN_STATUSES.length} />;
   }
 
   if (isError) {
@@ -477,7 +464,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
             <span className="material-symbols-outlined text-base">filter_alt</span>
             Filter
             {filterActive && (
-              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-on-primary">
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-meta leading-none font-bold text-on-primary">
                 {(filterAssigneeId !== "" ? 1 : 0) +
                   (filterPriority !== "" ? 1 : 0) +
                   (filterEpicId !== "" ? 1 : 0)}
@@ -489,7 +476,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
               <div className="fixed inset-0 z-10" onClick={() => setFilterOpen(false)} />
               <div className="absolute right-0 z-20 mt-2 w-64 rounded-lg border border-outline-variant bg-surface-container-lowest p-3 shadow-overlay">
                 <div className="mb-3">
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+                  <label className="mb-1 block text-label-caps uppercase text-on-surface-variant">
                     Assignee
                   </label>
                   <select
@@ -508,7 +495,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                   </select>
                 </div>
                 <div className="mb-3">
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+                  <label className="mb-1 block text-label-caps uppercase text-on-surface-variant">
                     Priority
                   </label>
                   <select
@@ -517,14 +504,15 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                     className="w-full rounded-lg border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden"
                   >
                     <option value="">Any priority</option>
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                    <option value="URGENT">Urgent</option>
+                    {priorityOptions.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="mb-3">
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+                  <label className="mb-1 block text-label-caps uppercase text-on-surface-variant">
                     Epic
                   </label>
                   <select
@@ -587,8 +575,8 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
         >
           chevron_left
         </button>
-        <span className="text-sm font-semibold text-on-surface">{COLUMN_LABELS[KANBAN_STATUSES[activeColIdx]]}</span>
-        <span className="rounded-full bg-surface-container-high px-2 py-0.5 text-[11px] font-medium text-on-surface-variant">
+        <span className="text-sm font-semibold text-on-surface">{TASK_STATUS_LABEL[KANBAN_STATUSES[activeColIdx]]}</span>
+        <span className="rounded-full bg-surface-container-high px-2 py-0.5 text-meta font-medium text-on-surface-variant">
           {columns[KANBAN_STATUSES[activeColIdx]].length}
         </span>
         <button
@@ -607,7 +595,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
             key={status}
             type="button"
             onClick={() => scrollToColumn(idx)}
-            aria-label={`Go to ${COLUMN_LABELS[status]} column`}
+            aria-label={`Go to ${TASK_STATUS_LABEL[status]} column`}
             className={`h-1.5 w-1.5 rounded-full transition-colors ${
               idx === activeColIdx ? "bg-primary" : "bg-outline-variant"
             }`}
@@ -676,10 +664,10 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                   >
                     {/* Column header — stays pinned; the card list below scrolls on its own (md:+) */}
                     <div className="flex items-center gap-2 px-1 pb-1">
-                      <h3 className="text-sm font-bold text-on-surface">{COLUMN_LABELS[status]}</h3>
+                      <h3 className="text-sm font-bold text-on-surface">{TASK_STATUS_LABEL[status]}</h3>
                       <span
                         className={[
-                          "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                          "rounded-full px-2 py-0.5 text-meta font-medium",
                           overLimit
                             ? "bg-chip-amber-bg text-chip-amber-text"
                             : "bg-surface-container-high text-on-surface-variant",

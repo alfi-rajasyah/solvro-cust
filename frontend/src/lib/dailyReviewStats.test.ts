@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   computeDailyReviewStats,
   dayLabel,
@@ -308,6 +308,15 @@ describe("dayLabel", () => {
 });
 
 describe("dueDateLabel", () => {
+  // `dueDateLabel` omits the year only for the current year, so pin the clock.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-28T12:00:00Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("formats a day instant as day-of-month + month abbreviation, in UTC", () => {
     expect(dueDateLabel("2026-08-24T00:00:00.000Z")).toBe("24 Aug");
   });

@@ -3,6 +3,7 @@
 // order the backend returns them ("newest last" per the API contract, same
 // reading order as a chat thread) — this component never reorders them.
 import { useId, useState, type FormEvent } from "react";
+import { fmtDateTime } from "@/lib/formatDate";
 import type { ItopTicketLogEntry } from "@/lib/queries";
 
 type LogVisibility = "public" | "private";
@@ -10,7 +11,7 @@ type LogVisibility = "public" | "private";
 const LOG_MAX_LENGTH = 4000;
 
 const PILL_BASE =
-  "rounded-full px-2.5 py-1 font-display text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "rounded-full px-2.5 py-1 font-display text-meta font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
 function pillClass(active: boolean): string {
   return [
@@ -109,7 +110,7 @@ export function TicketLog({
                 {entry.author ?? "—"}
               </span>
               <span className="shrink-0">
-                {entry.date ? new Date(entry.date).toLocaleString() : ""}
+                {fmtDateTime(entry.date)}
               </span>
             </div>
             <p className="whitespace-pre-wrap wrap-break-word text-sm text-on-surface">
@@ -131,7 +132,7 @@ export function TicketLog({
             className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden"
           />
           {remaining < 200 && (
-            <p className="text-[11px] text-on-surface-variant">
+            <p className="text-xs text-on-surface-variant">
               {remaining} character{remaining === 1 ? "" : "s"} left
             </p>
           )}
@@ -157,7 +158,7 @@ export function TicketLog({
             <button
               type="submit"
               disabled={adding || !text.trim()}
-              className="rounded-sm bg-primary px-3 py-1 font-display text-[12px] font-bold uppercase tracking-wider text-on-primary hover:bg-primary-container disabled:opacity-50"
+              className="rounded-sm bg-primary px-3 py-1 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-50"
             >
               {adding ? "Adding…" : "Add entry"}
             </button>

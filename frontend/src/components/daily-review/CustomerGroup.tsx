@@ -22,6 +22,7 @@ import { Link } from "react-router-dom";
 import { Badge } from "@/components/reui/badge";
 import { isGroupCollapsible } from "@/lib/dailyReviewStats";
 import { dayFromIso } from "@/lib/dateField";
+import { WEEKLY_HEALTH_LABEL } from "@/lib/labels";
 import type { DailyItopCustomer, DailyReviewCustomer, WeeklyStatus } from "@/lib/queries";
 import { OperationsCard } from "./OperationsCard";
 import { ProjectCard } from "./ProjectCard";
@@ -120,8 +121,8 @@ export function CustomerGroup({
         </span>
         <Badge variant={weeklyBadge.variant}>{weeklyBadge.label}</Badge>
         {health && (
-          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${HEALTH_CLASS[health]}`}>
-            {health}
+          <span className={`rounded-full px-2 py-0.5 text-meta font-semibold ${HEALTH_CLASS[health]}`}>
+            {WEEKLY_HEALTH_LABEL[health]}
           </span>
         )}
       </h2>

@@ -11,13 +11,13 @@ import { Link } from "react-router-dom";
 import { formatElapsed, useTicketTimer, type TimerTicketRef } from "./useTicketTimer";
 
 const BUTTON_CLASS =
-  "rounded-sm border border-outline-variant px-3 py-1 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface hover:border-primary hover:text-primary disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
 const LINK_BUTTON_CLASS =
-  "font-display text-[11px] font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "font-display text-meta font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
 const LABEL_CLASS =
-  "mb-1.5 font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant";
+  "mb-1.5 font-display text-label-caps uppercase text-on-surface-variant";
 
 // `myMinutesThisWeek` is legitimately `undefined` for a beat after an
 // action/log write (see `ItopTicketDetail`'s own doc comment in

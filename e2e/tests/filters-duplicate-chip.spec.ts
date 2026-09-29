@@ -77,7 +77,7 @@ test.describe("filters — duplicate-chip guard (desktop)", () => {
       await page.mouse.up();
     };
 
-    await addChipViaLongPress("Status", "TODO");
+    await addChipViaLongPress("Status", "To do");
     await page.waitForTimeout(300);
 
     // Core invariant: exactly one "Status" chip, never two.
@@ -86,7 +86,7 @@ test.describe("filters — duplicate-chip guard (desktop)", () => {
     // A second, distinct field + value: confirms the guard's field+values
     // equality check doesn't over-trigger and block a legitimate add for a
     // field with no existing chip.
-    await addChipViaLongPress("Priority", "HIGH");
+    await addChipViaLongPress("Priority", "High");
     await page.waitForTimeout(300);
 
     await expect(chipsFor("Status")).toHaveCount(1);

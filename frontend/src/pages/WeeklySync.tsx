@@ -9,7 +9,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { weekNumberLabel } from "@/lib/dailyReviewStats";
 import { dateToDay } from "@/lib/dateField";
+import { fmtDateTime } from "@/lib/formatDate";
 import { formatWeekRange, parseWeekKey, shiftWeek, weekKeyOf } from "@/lib/isoWeek";
+import { WEEKLY_HEALTH_LABEL } from "@/lib/labels";
 import {
   type DailyReviewCustomer,
   type WeeklyAchievement,
@@ -18,7 +20,6 @@ import {
 } from "@/lib/queries";
 import {
   buildSyncTable,
-  HEALTH_LABEL,
   hasManagerDecision,
   hasTabUpdate,
   orderForTab,
@@ -26,12 +27,6 @@ import {
   toTsv,
   type WeeklySyncTab,
 } from "@/lib/weeklySyncTable";
-
-const MIDWEEK_SAVED_FMT = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  day: "numeric",
-  month: "short",
-});
 
 const MIDWEEK_GRID_COLS =
   "grid-cols-[180px_88px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_140px]";
@@ -220,10 +215,10 @@ export function WeeklySync() {
               <span className="material-symbols-outlined text-lg">chevron_left</span>
             </button>
             <div className="text-center">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+              <div className="text-label-caps uppercase text-on-surface-variant">
                 Week {weekNumberLabel(week)}
               </div>
-              <div className="font-mono text-xs tabular-nums text-on-surface">{formatWeekRange(week)}</div>
+              <div className="text-xs tabular-nums text-on-surface">{formatWeekRange(week)}</div>
             </div>
             <button
               type="button"
@@ -413,7 +408,7 @@ function GroupHeader({ label, amber }: { label: string; amber?: boolean }) {
   return (
     <div
       className={[
-        "border-t border-outline-variant bg-surface-container-low px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider",
+        "border-t border-outline-variant bg-surface-container-low px-3 py-1.5 text-label-caps uppercase",
         amber ? "text-chip-amber-text" : "text-on-surface-variant",
       ].join(" ")}
     >
@@ -557,8 +552,8 @@ function MidweekBlock({ customer, gridColsClass, clickable, onOpen }: MidweekBlo
             <Cell border={isFirst ? "outline" : "none"}>
               {isFirst &&
                 (health ? (
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${HEALTH_CLASS[health]}`}>
-                    {HEALTH_LABEL[health]}
+                  <span className={`rounded-full px-2 py-0.5 text-meta font-semibold ${HEALTH_CLASS[health]}`}>
+                    {WEEKLY_HEALTH_LABEL[health]}
                   </span>
                 ) : (
                   <span className="text-on-surface-variant">—</span>
@@ -570,7 +565,7 @@ function MidweekBlock({ customer, gridColsClass, clickable, onOpen }: MidweekBlo
             <Cell border={isFirst ? "outline" : "none"}>
               {isFirst &&
                 (update?.midweekSavedAt ? (
-                  `Saved ${MIDWEEK_SAVED_FMT.format(new Date(update.midweekSavedAt))}`
+                  `Saved ${fmtDateTime(update.midweekSavedAt)}`
                 ) : (
                   <span className="text-on-surface-variant">Not filled</span>
                 ))}
@@ -651,8 +646,8 @@ function ReflectionBlock({ customer, gridColsClass, clickable, onOpen }: Reflect
             <Cell border={isFirst ? "outline" : "none"}>
               {isFirst &&
                 (health ? (
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${HEALTH_CLASS[health]}`}>
-                    {HEALTH_LABEL[health]}
+                  <span className={`rounded-full px-2 py-0.5 text-meta font-semibold ${HEALTH_CLASS[health]}`}>
+                    {WEEKLY_HEALTH_LABEL[health]}
                   </span>
                 ) : (
                   <span className="text-on-surface-variant">—</span>

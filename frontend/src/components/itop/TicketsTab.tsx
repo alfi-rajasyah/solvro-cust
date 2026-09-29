@@ -148,7 +148,7 @@ export function TicketsTab({
         <TicketBoard customerId={customerId} cls={cls} onOpenTicket={onOpenTicket} />
       )}
 
-      <p className="text-[11px] text-on-surface-variant">
+      <p className="text-xs text-on-surface-variant">
         Tickets belong to the customer&apos;s iTop organisation. Solvro shows them; it does not own
         them.
       </p>

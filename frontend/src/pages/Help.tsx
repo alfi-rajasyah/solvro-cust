@@ -115,7 +115,7 @@ function HelpSection({ topic }: { topic: HelpTopic }) {
                 {s.keys.map((k) => (
                   <kbd
                     key={k}
-                    className="rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 font-mono text-[11px] text-on-surface-variant"
+                    className="rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 font-mono text-meta text-on-surface-variant"
                   >
                     {k}
                   </kbd>

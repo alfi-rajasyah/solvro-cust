@@ -7,6 +7,7 @@ import { ProjectStatusChip } from "@/components/StatusChip";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { dateToDay, formatDisplay } from "@/lib/dateField";
+import { fmtDateTime, fmtDay } from "@/lib/formatDate";
 import { useGanttExport } from "@/lib/gantt/exportContext";
 import { type ProjectDetail as ProjectDetailType, useLockBaseline } from "@/lib/queries";
 
@@ -43,10 +44,10 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
     }
   }, [confirmingBaseline]);
   const baselineLockedAtPretty = project.baselineLockedAt
-    ? new Date(project.baselineLockedAt).toLocaleString()
+    ? fmtDateTime(project.baselineLockedAt)
     : null;
   const baselineLockedAtDay = project.baselineLockedAt
-    ? new Date(project.baselineLockedAt).toLocaleDateString()
+    ? fmtDay(dateToDay(new Date(project.baselineLockedAt)))
     : null;
 
   // Closed panel = `inert`: it only slides off-screen (translate-x-full), so
@@ -180,7 +181,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
               {project.baselineLockedAt ? "Reset baseline" : "Lock baseline"}
             </button>
           )}
-          <p className="mt-2 text-[11px] text-on-surface-variant">
+          <p className="mt-2 text-xs text-on-surface-variant">
             {project.baselineLockedAt
               ? "Ghost bars show the locked dates — toggle them from the Gantt toolbar's Baseline button."
               : "Snapshot every task's dates so later slips can be measured against them."}
@@ -241,7 +242,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                 {exporting === "pdfTab" ? "Opening…" : "View"}
               </button>
             </div>
-            <p className="mt-2 text-[11px] text-on-surface-variant">
+            <p className="mt-2 text-xs text-on-surface-variant">
               Excel: tasks + date grid · PDF: download · View: open the PDF in a
               tab (use when downloads hang).
             </p>
@@ -299,7 +300,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
           try {
             const asOfIso = baselineAsOf ? new Date(`${baselineAsOf}T00:00:00`).toISOString() : undefined;
             const res = await lockBaseline.mutateAsync({ asOfDate: asOfIso });
-            const stamp = res.baselineLockedAt ? new Date(res.baselineLockedAt).toLocaleDateString() : "";
+            const stamp = res.baselineLockedAt ? fmtDay(dateToDay(new Date(res.baselineLockedAt))) : "";
             setBaselineNotice(
               project.baselineLockedAt
                 ? `Baseline overwritten — now anchored to ${stamp}`
@@ -333,7 +334,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
               </p>
             )}
             <label className="block">
-              <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+              <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
                 Baseline as-of date
               </span>
               <DateField
@@ -347,7 +348,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                     : "Baseline as-of date"
                 }
               />
-              <span className="mt-1 block text-[11px] text-on-surface-variant">
+              <span className="mt-1 block text-xs text-on-surface-variant">
                 Defaults to today. Use a different date to backdate the snapshot — e.g. "May 1
                 baseline".
               </span>
@@ -370,11 +371,11 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                       setConfirmingBaseline(false);
                     }
                   }}
-                  className="font-display text-label-caps uppercase tracking-wider text-error hover:underline disabled:opacity-50"
+                  className="font-display text-xs text-error hover:underline disabled:opacity-50 font-semibold"
                 >
                   Clear baseline instead
                 </button>
-                <span className="ml-1 text-[11px] text-on-surface-variant">
+                <span className="ml-1 text-xs text-on-surface-variant">
                   — removes the snapshot entirely.
                 </span>
               </div>

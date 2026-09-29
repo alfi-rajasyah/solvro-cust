@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { weekNumberLabel } from "@/lib/dailyReviewStats";
 import { dateToDay } from "@/lib/dateField";
+import { fmtTime } from "@/lib/formatDate";
 import { formatWeekRange, parseWeekKey, shiftWeek, weekKeyOf } from "@/lib/isoWeek";
 import { type UtilizationScope, useRequestItopRefresh, useUtilization } from "@/lib/queries";
 
@@ -24,7 +25,7 @@ function currentWeek(): string {
 
 function formatSyncedAt(iso: string | null): string {
   if (!iso) return "Not synced yet";
-  return `Synced ${new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
+  return `Synced ${fmtTime(iso)}`;
 }
 
 // Utilization (Task 3.3, docs/archive/plans/itop-integration.md — "Work Logs
@@ -124,10 +125,10 @@ export function Utilization() {
             <span className="material-symbols-outlined text-lg">chevron_left</span>
           </button>
           <div className="text-center">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <div className="text-label-caps uppercase text-on-surface-variant">
               Week {weekNumberLabel(week)}
             </div>
-            <div className="font-mono text-xs tabular-nums text-on-surface">{formatWeekRange(week)}</div>
+            <div className="text-xs tabular-nums text-on-surface">{formatWeekRange(week)}</div>
           </div>
           <button
             type="button"

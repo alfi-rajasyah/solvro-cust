@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { Alert, AlertDescription } from "@/components/reui/alert";
+import { CardGridSkeleton } from "@/components/skeletons";
 import { ServiceCatalogueManager } from "@/components/services/ServiceCatalogueManager";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
+import { fmtAgo, fmtDateTime } from "@/lib/formatDate";
 import {
   useChangeMyPassword,
   useMyItopToken,
@@ -66,14 +68,14 @@ export function Settings() {
         </h2>
         <dl className="grid grid-cols-1 gap-y-2 text-sm md:grid-cols-[140px_1fr]">
           <dt className="text-on-surface-variant">Username</dt>
-          <dd className="font-mono text-on-surface">{user.username}</dd>
+          <dd className="text-on-surface">{user.username}</dd>
 
           <dt className="text-on-surface-variant">Email</dt>
-          <dd className="font-mono text-on-surface">{user.email}</dd>
+          <dd className="text-on-surface">{user.email}</dd>
 
           <dt className="text-on-surface-variant">Role</dt>
           <dd>
-            <span className="rounded-full bg-surface-container-low px-2 py-0.5 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+            <span className="rounded-full bg-surface-container-low px-2 py-0.5 font-display text-label-caps uppercase text-on-surface-variant">
               {user.role}
             </span>
           </dd>
@@ -150,7 +152,7 @@ export function Settings() {
             <button
               type="submit"
               disabled={change.isPending}
-              className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-bold uppercase tracking-wider text-on-primary hover:bg-primary-container disabled:opacity-60"
+              className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-60"
             >
               {change.isPending ? "Saving…" : "Update password"}
             </button>
@@ -159,21 +161,6 @@ export function Settings() {
       </section>
     </div>
   );
-}
-
-// Same shape/rationale as ItopTab.tsx's own local `relativeTime` — no shared
-// export exists for this and each call site stays small and self-contained.
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const diffMs = Date.now() - then;
-  const diffMin = Math.round(diffMs / 60_000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.round(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return new Date(iso).toLocaleDateString();
 }
 
 // "iTop" section (Task 5.2, docs/archive/plans/itop-integration.md): each
@@ -191,7 +178,10 @@ function ItopTokenSection() {
   const [error, setError] = useState<string | null>(null);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
 
-  if (isLoading || !token || !token.configured) return null;
+  if (isLoading) {
+    return <CardGridSkeleton count={1} gridClassName="grid-cols-1" />;
+  }
+  if (!token || !token.configured) return null;
 
   async function handleSave(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -236,8 +226,8 @@ function ItopTokenSection() {
               check_circle
             </span>
             Valid · {token.personName ?? "—"}
-            {token.checkedAt && ` · checked ${relativeTime(token.checkedAt)}`}
-            {token.expiresAt && ` · expires ${new Date(token.expiresAt).toLocaleDateString()}`}
+            {token.checkedAt && ` · checked ${fmtAgo(token.checkedAt)}`}
+            {token.expiresAt && ` · expires ${fmtDateTime(token.expiresAt)}`}
           </p>
         )
       )}
@@ -289,7 +279,7 @@ function ItopTokenSection() {
               <button
                 type="button"
                 onClick={() => setConfirmingRemove(true)}
-                className="rounded-sm border border-outline-variant px-4 py-1.5 font-display text-xs font-bold uppercase tracking-wider text-on-surface-variant hover:bg-surface-container"
+                className="rounded-sm border border-outline-variant px-4 py-1.5 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container"
               >
                 Remove
               </button>
@@ -297,7 +287,7 @@ function ItopTokenSection() {
           <button
             type="submit"
             disabled={save.isPending || !draft.trim()}
-            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-bold uppercase tracking-wider text-on-primary hover:bg-primary-container disabled:opacity-60"
+            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-60"
           >
             {save.isPending ? "Saving…" : "Save"}
           </button>
@@ -370,7 +360,7 @@ function ThemeCard() {
                   </div>
                 )}
               </div>
-              <p className="text-[11px] text-on-surface-variant">{opt.hint}</p>
+              <p className="text-xs text-on-surface-variant">{opt.hint}</p>
             </button>
           );
         })}

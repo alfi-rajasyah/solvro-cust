@@ -4,6 +4,7 @@
 // formatters shared by the page's components. No React here — see the
 // Vitest suite in `dailyReviewStats.test.ts`.
 import { dayFromIso } from "./dateField";
+import { fmtDay } from "./formatDate";
 import type { DailyReviewCustomer, DailyReviewProject, DailyReviewResponse } from "./queries";
 
 export interface DailyReviewStats {
@@ -91,10 +92,6 @@ export function firstProjectId(data: DailyReviewResponse): number | null {
 }
 
 const WEEKDAY_ABBR = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTH_ABBR = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
 
 /**
  * "Mon 24" — weekday abbreviation + day-of-month, derived in UTC from a
@@ -109,16 +106,14 @@ export function dayLabel(day: string): string {
 }
 
 /**
- * "24 Aug" — day-of-month + month abbreviation, for a task's due date in the
- * project card's attention row. `iso` is a `T00:00:00.000Z` day instant
- * (dateBoundary.ts convention); the UTC date-part is read directly rather
- * than via a local-timezone `Date` format, so the displayed day never
- * drifts by timezone.
+ * "24 Aug" — a task's due date in the project card's attention row (already
+ * under an "Overdue" heading, so no relative `Nd late` wording). `iso` is a
+ * `T00:00:00.000Z` day instant (dateBoundary.ts convention); the shared
+ * formatter reads its UTC date part, so the day never drifts by timezone.
+ * Shows the year only when the day is not in the current year.
  */
 export function dueDateLabel(iso: string): string {
-  const day = iso.slice(0, 10);
-  const d = new Date(`${day}T00:00:00.000Z`);
-  return `${d.getUTCDate()} ${MONTH_ABBR[d.getUTCMonth()]}`;
+  return fmtDay(iso);
 }
 
 /** "35" from "2026-W35" — the caps "Week NN" label's number. Falls back to the raw key if malformed. */

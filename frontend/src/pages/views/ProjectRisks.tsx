@@ -20,6 +20,7 @@ import {
 } from "@/components/RiskFormModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { hasPermission, useAuth } from "@/lib/auth";
+import { RISK_CATEGORY_LABEL, RISK_STATUS_LABEL } from "@/lib/labels";
 import {
   type Risk,
   type RiskCategory,
@@ -29,20 +30,6 @@ import {
   useUpdateRisk,
 } from "@/lib/queries";
 
-const CATEGORY_LABEL: Record<RiskCategory, string> = {
-  EXTERNAL: "External",
-  INTERNAL: "Internal",
-  TECHNICAL: "Technical",
-  ORGANIZATIONAL: "Organizational",
-  FINANCIAL: "Financial",
-};
-
-const STATUS_LABEL: Record<RiskStatus, string> = {
-  OPEN: "Open",
-  MITIGATED: "Mitigated",
-  CLOSED: "Closed",
-};
-
 const STATUS_TONE: Record<RiskStatus, string> = {
   OPEN: "bg-error-container text-on-error-container",
   MITIGATED: "bg-amber-100 text-amber-800",
@@ -50,7 +37,7 @@ const STATUS_TONE: Record<RiskStatus, string> = {
 };
 
 // Workflow order for the DataGrid's Status column (accessorFn below) —
-// matches STATUS_LABEL's own key order, same "not a person column, numeric
+// matches RISK_STATUS_LABEL's own key order, same "not a person column, numeric
 // workflow-order accessor" call as Tasks.tsx's status column.
 const STATUS_ORDER: RiskStatus[] = ["OPEN", "MITIGATED", "CLOSED"];
 
@@ -160,7 +147,7 @@ export function ProjectRisks() {
           onChange={(v) => setCategoryFilter(v as RiskCategory | "ALL")}
           options={CATEGORIES.map((c) => ({
             value: c,
-            label: c === "ALL" ? "All categories" : CATEGORY_LABEL[c],
+            label: c === "ALL" ? "All categories" : RISK_CATEGORY_LABEL[c],
           }))}
         />
         <Select
@@ -169,7 +156,7 @@ export function ProjectRisks() {
           onChange={(v) => setStatusFilter(v as RiskStatus | "ALL")}
           options={STATUSES.map((s) => ({
             value: s,
-            label: s === "ALL" ? "All statuses" : STATUS_LABEL[s],
+            label: s === "ALL" ? "All statuses" : RISK_STATUS_LABEL[s],
           }))}
         />
         {(categoryFilter !== "ALL" || statusFilter !== "ALL" || search) && (
@@ -180,7 +167,7 @@ export function ProjectRisks() {
               setStatusFilter("ALL");
               setSearch("");
             }}
-            className="ml-auto rounded-sm px-2 py-1 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface-variant hover:text-primary"
+            className="ml-auto rounded-sm px-2 py-1 font-display text-xs font-semibold text-on-surface-variant hover:text-primary"
           >
             Reset
           </button>
@@ -267,7 +254,7 @@ export function ProjectRisks() {
           ) : null
         }
         confirmLabel="Delete"
-        confirmTone="warning"
+        confirmTone="danger"
         busy={deleteRisk.isPending}
       />
     </div>
@@ -351,7 +338,7 @@ function RisksDataGrid({
       },
       {
         id: "category",
-        accessorFn: (row) => CATEGORY_LABEL[row.category],
+        accessorFn: (row) => RISK_CATEGORY_LABEL[row.category],
         header: ({ column }) => <DataGridColumnHeader column={column} title="Category" />,
         // Operator-facing English label, not a person name — "alphanumeric"
         // (decision 7, reui-data-grid.md Checkpoint B) same as Admin.tsx's
@@ -359,7 +346,7 @@ function RisksDataGrid({
         sortingFn: "alphanumeric",
         cell: ({ row }) => (
           <span className="text-xs text-on-surface-variant">
-            {CATEGORY_LABEL[row.original.category]}
+            {RISK_CATEGORY_LABEL[row.original.category]}
           </span>
         ),
         meta: { skeleton: <Skeleton className="h-3.5 w-20" /> },
@@ -445,13 +432,13 @@ function RisksDataGrid({
             <div className="flex justify-end">
               <div
                 className={[
-                  "flex items-center justify-center gap-1 rounded-sm border px-2 py-1 font-mono text-xs font-bold tabular-nums",
+                  "flex items-center justify-center gap-1 rounded-sm border px-2 py-1 text-xs font-bold tabular-nums",
                   scoreClass(score),
                 ].join(" ")}
                 title={`${risk.probability} × ${risk.impact} = ${score}`}
               >
                 {score}
-                <span className="font-display text-[10px] font-bold uppercase tracking-wider">
+                <span className="font-display text-label-caps uppercase">
                   {scoreLevel(score)}
                 </span>
               </div>
@@ -475,20 +462,20 @@ function RisksDataGrid({
                 STATUS_TONE[risk.status],
               ].join(" ")}
             >
-              {(Object.keys(STATUS_LABEL) as RiskStatus[]).map((s) => (
+              {(Object.keys(RISK_STATUS_LABEL) as RiskStatus[]).map((s) => (
                 <option key={s} value={s}>
-                  {STATUS_LABEL[s]}
+                  {RISK_STATUS_LABEL[s]}
                 </option>
               ))}
             </select>
           ) : (
             <span
               className={[
-                "inline-block rounded-sm px-2 py-0.5 font-display text-label-caps uppercase tracking-wider",
+                "inline-block rounded-sm px-2 py-0.5 font-display text-label-caps uppercase",
                 STATUS_TONE[risk.status],
               ].join(" ")}
             >
-              {STATUS_LABEL[risk.status]}
+              {RISK_STATUS_LABEL[risk.status]}
             </span>
           );
         },
@@ -602,7 +589,7 @@ function RiskCard({
         </button>
         <div
           className={[
-            "shrink-0 rounded-sm border px-2 py-1 font-mono text-xs font-bold tabular-nums",
+            "shrink-0 rounded-sm border px-2 py-1 text-xs font-bold tabular-nums",
             scoreClass(score),
           ].join(" ")}
         >
@@ -611,18 +598,18 @@ function RiskCard({
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
         <span className="text-on-surface-variant">
-          {CATEGORY_LABEL[risk.category]}
+          {RISK_CATEGORY_LABEL[risk.category]}
         </span>
         <span className="text-on-surface-variant">
           P{risk.probability} · I{risk.impact}
         </span>
         <span
           className={[
-            "rounded-sm px-2 py-0.5 font-display text-label-caps uppercase tracking-wider",
+            "rounded-sm px-2 py-0.5 font-display text-label-caps uppercase",
             STATUS_TONE[risk.status],
           ].join(" ")}
         >
-          {STATUS_LABEL[risk.status]}
+          {RISK_STATUS_LABEL[risk.status]}
         </span>
       </div>
       {canEdit && (
