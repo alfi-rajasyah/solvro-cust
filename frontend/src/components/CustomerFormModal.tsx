@@ -83,7 +83,12 @@ export function CustomerFormModal({ open, onClose, customer }: Props) {
       setInitialTam(initial);
       setDescription("");
     }
-  }, [open, customer, user, viewAll]);
+    // Seed on open / customer switch only — `customer` gets a fresh identity on
+    // every 30 s refetch, and re-running this reset wipes in-progress input
+    // (docs/archive/plans/collaboration-and-sharing.md). `user?.id` and
+    // `viewAll` are the only other inputs (create-mode TAM default).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, customer?.id, user?.id, viewAll]);
 
   async function performSave(payload: CustomerInput) {
     setError(null);

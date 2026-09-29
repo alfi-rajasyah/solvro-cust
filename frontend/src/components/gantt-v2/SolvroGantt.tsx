@@ -9,6 +9,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { dateToDay } from "@/lib/dateField";
+import { usePointerPressActivity } from "@/lib/dragActivity";
 import { fmtDateTime } from "@/lib/formatDate";
 import { useGanttExport } from "@/lib/gantt/exportContext";
 import { addDays, buildRows, rowsDateRange, startOfDay, type Row } from "@/lib/gantt/geometry";
@@ -346,6 +347,10 @@ export function SolvroGantt(props: SolvroGanttProps) {
   const { user } = useAuth();
   // Ported verbatim from GanttFrame.tsx:86-87.
   const canEdit = hasPermission(user, "task:write");
+  // Pauses the project queries' 30 s refresh while a bar move/resize, row
+  // reorder or connect-dot drag is live (the vendored engine has no
+  // start/end callbacks) — docs/archive/plans/collaboration-and-sharing.md.
+  usePointerPressActivity("[data-slot=gantt]", canEdit);
 
   const { data: tasks = [], isLoading, isError, error } = useProjectTasks(projectId);
   const { data: sections = [] } = useProjectSections(projectId);

@@ -1,3 +1,4 @@
+import { useCallback, useSyncExternalStore } from "react";
 import {
   useMutation,
   useQueries,
@@ -8,6 +9,7 @@ import {
 import { apiRequest, apiRequestWithHeaders } from "./api";
 import { useAuth, type Role } from "./auth";
 import { dateToDay, dayFromIso, isoFromDay } from "./dateField";
+import { shouldPauseRefresh, subscribeDragActivity } from "./dragActivity";
 import { parseWeekKey } from "./isoWeek";
 
 export type ProjectStatus =
@@ -798,6 +800,59 @@ export function useProjects(filter: ProjectsFilter = {}) {
   });
 }
 
+// Shared-editing freshness (docs/archive/plans/collaboration-and-sharing.md,
+// C3a): several TAMs edit the same projects, so the project-scoped queries the
+// List/Kanban/Gantt/Epics/detail views read refetch on window focus and every
+// 30 s while the tab is visible (`refetchIntervalInBackground: false`).
+// Applied per hook, NOT via main.tsx's global defaults — those also govern the
+// iTop and admin queries, which must not start polling. Both the interval and
+// the focus refetch hold off while a board/Gantt/list drag is live or any
+// mutation is pending (`isMutating() > 0`), so a refetch never moves a card
+// under the cursor or overwrites an optimistic write. The pause is any
+// mutation, app-wide, not just project ones: mutations carry no keys to scope
+// on, they are short, and polling resumes the moment the last one settles.
+//
+// Timing trap: query-core evaluates `refetchInterval` only when the query
+// updates or the observer's options are re-set — never when the timer fires,
+// and a `false` is never re-armed by itself. So `useLiveRefresh` subscribes to
+// the drag store and the mutation cache and re-renders when the gate flips;
+// that re-render re-sets the options, which clears the timer on pause and
+// re-arms it on resume. The function forms below keep reading live state so
+// the gate is also right at every evaluation in between. Focus refetch still
+// only fires on stale data (the global 30 s `staleTime`).
+export const LIVE_REFRESH_MS = 30_000;
+export function subscribeRefreshGate(
+  qc: Pick<QueryClient, "getMutationCache">,
+  listener: () => void,
+): () => void {
+  const offDrag = subscribeDragActivity(listener);
+  const offMutations = qc.getMutationCache().subscribe(listener);
+  return () => {
+    offDrag();
+    offMutations();
+  };
+}
+export function liveRefreshOptions(qc: Pick<QueryClient, "isMutating">) {
+  return {
+    refetchOnWindowFocus: () => !shouldPauseRefresh(qc.isMutating()),
+    refetchInterval: () =>
+      shouldPauseRefresh(qc.isMutating()) ? (false as const) : LIVE_REFRESH_MS,
+    refetchIntervalInBackground: false,
+  };
+}
+export function useLiveRefresh() {
+  const qc = useQueryClient();
+  // Stable callbacks so React does not re-subscribe on every render. Snapshot
+  // is a boolean, so a consumer re-renders only when the gate flips.
+  const subscribe = useCallback(
+    (listener: () => void) => subscribeRefreshGate(qc, listener),
+    [qc],
+  );
+  const getSnapshot = useCallback(() => shouldPauseRefresh(qc.isMutating()), [qc]);
+  useSyncExternalStore(subscribe, getSnapshot);
+  return liveRefreshOptions(qc);
+}
+
 export function useCustomers() {
   // `health.overdueCount` depends on the caller's local day — see useProjects.
   // The day is appended to the key (the bare ["customers"] prefix that
@@ -815,7 +870,9 @@ export function useCustomer(id: number | null) {
   // Nested projects[] carry `health`, whose overdue count depends on `today`
   // — see useProjects.
   const today = dateToDay(new Date())!;
+  const live = useLiveRefresh();
   return useQuery({
+    ...live,
     queryKey: id ? [...queryKeys.customer(id), today] : ["customers", "noop"],
     queryFn: ({ signal }) =>
       apiRequest<CustomerDetail>(`/customers/${id}?today=${today}`, { signal }),
@@ -826,7 +883,9 @@ export function useCustomer(id: number | null) {
 export function useProject(id: number | null) {
   // `health.overdueCount` depends on the caller's local day — see useProjects.
   const today = dateToDay(new Date())!;
+  const live = useLiveRefresh();
   return useQuery({
+    ...live,
     queryKey: id ? [...queryKeys.project(id), today] : ["projects", "noop"],
     queryFn: ({ signal }) =>
       apiRequest<ProjectDetail>(`/projects/${id}?today=${today}`, { signal }),
@@ -835,7 +894,9 @@ export function useProject(id: number | null) {
 }
 
 export function useProjectTasks(id: number | null) {
+  const live = useLiveRefresh();
   return useQuery({
+    ...live,
     queryKey: id ? queryKeys.projectTasks(id) : ["projects", "noop", "tasks"],
     queryFn: ({ signal }) =>
       apiRequest<Task[]>(`/projects/${id}/tasks`, { signal }),
@@ -1527,7 +1588,9 @@ export function useComments(taskId: number | null) {
 }
 
 export function useProjectSections(id: number | null) {
+  const live = useLiveRefresh();
   return useQuery({
+    ...live,
     queryKey: id ? queryKeys.projectSections(id) : ["projects", "noop", "sections"],
     queryFn: ({ signal }) =>
       apiRequest<Section[]>(`/projects/${id}/sections`, { signal }),
@@ -1658,7 +1721,9 @@ export function useDuplicateSection(projectId: number) {
 // Mirrors the section hooks above in shape, error handling and invalidation
 // style.
 export function useProjectEpics(projectId: number | null) {
+  const live = useLiveRefresh();
   return useQuery({
+    ...live,
     queryKey: projectId ? queryKeys.projectEpics(projectId) : ["projects", "noop", "epics"],
     queryFn: ({ signal }) =>
       apiRequest<Epic[]>(`/projects/${projectId}/epics`, { signal }),
@@ -3746,7 +3811,9 @@ export interface CreateDependencyInput {
 }
 
 export function useProjectDependencies(projectId: number | null) {
+  const live = useLiveRefresh();
   return useQuery({
+    ...live,
     queryKey: projectId
       ? queryKeys.projectDependencies(projectId)
       : ["projects", "noop", "dependencies"],

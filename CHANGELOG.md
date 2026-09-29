@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-09-29 — Project data stays fresh when several people edit it
+
+- Project pages now pick up other people's edits without a reload: the project, its tasks, sections, epics and dependencies, and the customer detail page refresh when you return to the tab and every 30 seconds while the tab is visible. Refreshing pauses while you drag a card, bar or row and while any save is in flight, then resumes on its own once the drag or save finishes. Open Edit project and Edit customer dialogs keep what you have typed, because they now fill their fields only when they open (**`frontend/src/components/ProjectFormModal.tsx`**, **`frontend/src/components/CustomerFormModal.tsx`**). The options are applied per query in **`frontend/src/lib/queries.ts`** (`useLiveRefresh`), so iTop and admin queries do not start polling; drag state is tracked by the new **`frontend/src/lib/dragActivity.ts`**, called from the Kanban (**`frontend/src/components/kanban-v2/SolvroKanban.tsx`**), the List (**`frontend/src/pages/views/ProjectList.tsx`**) and the Gantt (**`frontend/src/components/gantt-v2/SolvroGantt.tsx`**).
+
 ### Changed — 2026-09-29 — Professional UI pass (consistency, hierarchy, polish)
 
 A pass over every screen so Solvro reads as one consistent, professional tool: one set of words for statuses and priorities, one day-first date format, sentence-case buttons, clearer page headers, health at a glance on projects and customers, and loading states instead of blank boxes.
