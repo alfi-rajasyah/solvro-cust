@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AdminGuard } from "@/components/AdminGuard";
 import { AuthGuard } from "@/components/AuthGuard";
 import { ExecutiveGuard } from "@/components/ExecutiveGuard";
@@ -26,6 +26,15 @@ import { ProjectRisks } from "@/pages/views/ProjectRisks";
 import { ProjectServices } from "@/pages/views/ProjectServices";
 import { ProjectTimeline } from "@/pages/views/ProjectTimeline";
 
+/**
+ * `/projects/:id` → its Overview tab. Carries `?task=` (and any other query or
+ * hash) across the redirect so a shared task link still opens the panel.
+ */
+function ProjectIndexRedirect() {
+  const { search, hash } = useLocation();
+  return <Navigate to={{ pathname: "overview", search, hash }} replace />;
+}
+
 export function App() {
   return (
     <Routes>
@@ -42,7 +51,7 @@ export function App() {
         <Route path="overview" element={<Overview />} />
         <Route path="projects" element={<Projects />} />
         <Route path="projects/:id" element={<ProjectDetail />}>
-          <Route index element={<Navigate to="overview" replace />} />
+          <Route index element={<ProjectIndexRedirect />} />
           <Route path="overview" element={<ProjectOverview />} />
           <Route path="list" element={<ProjectList />} />
           <Route path="kanban" element={<ProjectKanban />} />

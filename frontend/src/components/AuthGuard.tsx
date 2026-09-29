@@ -9,7 +9,10 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   if (status === "loading") return <AuthLoading />;
 
   if (status !== "authenticated") {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    // Keep the query and hash so a deep link such as /projects/6?task=42
+    // survives the sign-in round trip.
+    const from = location.pathname + location.search + location.hash;
+    return <Navigate to="/login" replace state={{ from }} />;
   }
 
   return <>{children}</>;
