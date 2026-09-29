@@ -2,14 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ProjectFormModal } from "@/components/ProjectFormModal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
-import { ProjectStatusChip } from "@/components/StatusChip";
+import { Chip, ProjectStatusChip } from "@/components/StatusChip";
 import {
   createFilter,
   Filters,
   type Filter,
   type FilterFieldConfig,
 } from "@/components/reui/filters";
+import { useNewParam } from "@/hooks/useNewParam";
 import { hasPermission, useAuth } from "@/lib/auth";
+import { fmtRange } from "@/lib/formatDate";
 import { type ProjectSummary, useCustomers, useProjects } from "@/lib/queries";
 
 const CUSTOMER_FILTER_FIELD = "customerId";
@@ -27,6 +29,7 @@ export function Projects() {
   const [createOpen, setCreateOpen] = useState(false);
 
   const canCreate = hasPermission(user, "project:write");
+  useNewParam("1", canCreate, () => setCreateOpen(true));
 
   function setCustomerFilter(id: number | "") {
     const next = new URLSearchParams(searchParams);
@@ -101,7 +104,7 @@ export function Projects() {
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 font-display text-label-caps uppercase tracking-wider text-on-primary transition-colors hover:bg-primary-container"
+            className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 font-display text-sm text-on-primary transition-colors hover:bg-primary-container font-semibold"
           >
             <span className="material-symbols-outlined text-base">add</span>
             New project
@@ -156,6 +159,13 @@ export function Projects() {
 function ProjectCard({ project }: { project: ProjectSummary }) {
   const tamInit = project.tam.username.slice(0, 2).toUpperCase();
   const idBadge = `P-${String(project.id).padStart(3, "0")}`;
+  const health = project.health;
+  const done = health?.progress.done ?? 0;
+  const total = health?.progress.total ?? project._count.tasks;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const overdue = health?.overdueCount ?? 0;
+  const openRisks = health?.openRiskCount ?? 0;
+  const hasDates = health !== undefined && (health.startDate !== null || health.endDate !== null);
 
   return (
     <Link
@@ -164,7 +174,7 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
     >
       {/* ID + status row */}
       <div className="mb-1.5 flex items-start justify-between gap-2">
-        <span className="font-mono text-[11px] text-on-surface-variant">{idBadge}</span>
+        <span className="font-mono text-meta text-on-surface-variant">{idBadge}</span>
         <ProjectStatusChip status={project.status} />
       </div>
 
@@ -179,31 +189,62 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
       </p>
 
       {/* Bottom row: customer + avatar stack + task count */}
-      <div className="mt-auto flex items-center justify-between gap-2 text-[11px] text-on-surface-variant">
+      <div className="mt-auto flex items-center justify-between gap-2 text-meta text-on-surface-variant">
         <span className="min-w-0 flex-1 truncate">
           {project.customer?.name ?? <em className="opacity-70">No customer</em>}
         </span>
         <div className="flex -space-x-1.5">
           <span
             title={`TAM: ${project.tam.username}`}
-            className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-surface-container-lowest bg-primary text-[10px] font-bold text-on-primary"
+            className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-surface-container-lowest bg-primary text-meta font-bold text-on-primary"
           >
             {tamInit}
           </span>
         </div>
       </div>
 
-      {/* Task-count strip */}
-      <div className="mt-3 flex items-center justify-between border-t border-outline-variant pt-2 text-[11px] text-on-surface-variant">
-        <span className="flex items-center gap-1">
-          <span className="material-symbols-outlined text-[14px]">task_alt</span>
-          {project._count.tasks} {project._count.tasks === 1 ? "task" : "tasks"}
-        </span>
-        {project.baselineLockedAt && (
-          <span className="flex items-center gap-1" title="Baseline locked">
-            <span className="material-symbols-outlined text-[14px] text-primary">bookmark</span>
-            Baseline
-          </span>
+      {/* Progress + health footer */}
+      <div className="mt-3 border-t border-outline-variant pt-2 text-meta text-on-surface-variant">
+        {total > 0 ? (
+          <div className="flex items-center gap-2">
+            <div
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={pct}
+              aria-label="Project progress"
+              className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-container-high"
+            >
+              <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="shrink-0 whitespace-nowrap tabular-nums">
+              {pct}% · {done} of {total}
+            </span>
+          </div>
+        ) : (
+          <span>No tasks yet</span>
+        )}
+
+        {(hasDates || overdue > 0 || openRisks > 0 || project.baselineLockedAt) && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {overdue > 0 && <Chip tone="rose">{overdue} overdue</Chip>}
+            {openRisks > 0 && (
+              <Chip tone="amber">
+                {openRisks} open {openRisks === 1 ? "risk" : "risks"}
+              </Chip>
+            )}
+            {project.baselineLockedAt && (
+              <span className="flex items-center gap-1" title="Baseline locked">
+                <span className="material-symbols-outlined text-[14px] text-primary">bookmark</span>
+                Baseline locked
+              </span>
+            )}
+            {hasDates && (
+              <span className="ml-auto whitespace-nowrap tabular-nums">
+                {fmtRange(health.startDate, health.endDate)}
+              </span>
+            )}
+          </div>
         )}
       </div>
     </Link>

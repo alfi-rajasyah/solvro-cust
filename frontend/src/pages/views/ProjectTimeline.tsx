@@ -10,7 +10,9 @@ import { Timeline, TimelineIndicator, TimelineItem, TimelineSeparator } from "@/
 import { TaskStatusChip } from "@/components/StatusChip";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { hasPermission, useAuth } from "@/lib/auth";
-import { dateToDay, dayFromIso, dayToDate } from "@/lib/dateField";
+import { dateToDay, dayFromIso } from "@/lib/dateField";
+import { fmtRange } from "@/lib/formatDate";
+import { TASK_STATUS_LABEL } from "@/lib/labels";
 import { type Priority, type Task, type TaskStatus, useProjectTasks, useUpdateTask } from "@/lib/queries";
 
 const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
@@ -180,9 +182,9 @@ function TaskTimelineItem({
             ))}
           </div>
           <span
-            className={`font-mono text-[12px] ${overdue ? "font-bold text-error" : "text-on-surface-variant"}`}
+            className={`text-[12px] ${overdue ? "font-bold text-error" : "text-on-surface-variant"}`}
           >
-            {fmt(task.startDate)} → {fmt(task.dueDate)}
+            {fmtRange(task.startDate, task.dueDate)}
             {overdue && " · OVERDUE"}
           </span>
         </div>
@@ -228,13 +230,13 @@ function TaskTimelineItem({
                 onClick={() => onChangeStatus(s)}
                 disabled={task.status === s}
                 className={[
-                  "rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider transition-colors",
+                  "rounded-sm px-2 py-1 font-display text-sm transition-colors font-semibold",
                   task.status === s
                     ? "cursor-default bg-primary text-on-primary"
                     : "border border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary",
                 ].join(" ")}
               >
-                {s.replace("_", " ")}
+                {TASK_STATUS_LABEL[s]}
               </button>
             ))}
           </div>
@@ -242,17 +244,6 @@ function TaskTimelineItem({
       </div>
     </TimelineItem>
   );
-}
-
-function fmt(iso: string | null) {
-  // Derive the day via the UTC date-part,
-  // not a local-time parse of the ISO instant.
-  const d = dayToDate(dayFromIso(iso));
-  if (!d) return "—";
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
 }
 
 function startOfToday() {

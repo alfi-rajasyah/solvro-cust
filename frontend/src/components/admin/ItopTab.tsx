@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
+import { fmtAgo } from "@/lib/formatDate";
 import {
   useAutomatchItopCustomers,
   useGenerateItopWebhookSecret,
@@ -39,7 +40,7 @@ import { Chip } from "@/components/StatusChip";
 import { Switch } from "@/components/ui/switch";
 
 const OUTLINE_BUTTON_CLASS =
-  "rounded-sm border border-outline-variant px-3 py-1 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface-variant hover:bg-surface-container disabled:opacity-50";
+  "rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50";
 
 const READ_CLASS_LABEL: Record<ItopReadClass, string> = {
   UserRequest: "User requests",
@@ -82,21 +83,6 @@ const MATCH_TONE: Record<ItopCustomerMatch, "emerald" | "blue" | "amber"> = {
 const SUPPORTED_TIMEZONES: readonly string[] =
   typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
 const LOCAL_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-// Same shape/rationale as TaskPanel.tsx's own local `relativeTime` — no
-// shared export exists for this and this is the only other call site.
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const diffMs = Date.now() - then;
-  const diffMin = Math.round(diffMs / 60_000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.round(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return new Date(iso).toLocaleDateString();
-}
 
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiError ? err.message : fallback;
@@ -269,7 +255,7 @@ function ConnectionCard() {
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             iTop URL
           </span>
           <input
@@ -283,7 +269,7 @@ function ConnectionCard() {
           />
         </label>
         <label className="block">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Application token
           </span>
           <input
@@ -301,7 +287,7 @@ function ConnectionCard() {
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span
           className={[
-            "rounded-full px-2 py-0.5 font-display text-[11px] font-semibold",
+            "rounded-full px-2 py-0.5 font-display text-meta font-semibold",
             connectionStatus.tone === "emerald"
               ? "bg-chip-emerald-bg text-chip-emerald-text"
               : connectionStatus.tone === "amber"
@@ -315,7 +301,7 @@ function ConnectionCard() {
           type="button"
           onClick={() => void handleTest()}
           disabled={testConnection.isPending}
-          className="rounded-sm border border-outline-variant px-3 py-1 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+          className="rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
         >
           {testConnection.isPending ? "Testing…" : "Test connection"}
         </button>
@@ -330,7 +316,7 @@ function ConnectionCard() {
 
       <div className="mt-4 grid gap-3 border-t border-outline-variant pt-4 sm:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Refresh every
           </span>
           <div className="flex items-center gap-2">
@@ -349,7 +335,7 @@ function ConnectionCard() {
           </div>
         </label>
         <label className="block">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Capacity per TAM
           </span>
           <div className="flex items-center gap-2">
@@ -373,7 +359,7 @@ function ConnectionCard() {
 
       <div className="mt-4 border-t border-outline-variant pt-4">
         <label className="block max-w-sm">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             iTop server timezone
           </span>
           <select
@@ -399,7 +385,7 @@ function ConnectionCard() {
       </div>
 
       <div className="mt-3">
-        <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+        <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
           Read
         </span>
         <div className="flex flex-wrap gap-4">
@@ -419,7 +405,7 @@ function ConnectionCard() {
 
       <div className="mt-3 flex items-start justify-between gap-3 border-t border-outline-variant pt-3">
         <div>
-          <span className="block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="block font-display text-label-caps uppercase text-on-surface-variant">
             Actions from Solvro
           </span>
           <p className="mt-0.5 text-xs text-on-surface-variant">
@@ -443,7 +429,7 @@ function ConnectionCard() {
           type="button"
           onClick={() => void handleSave()}
           disabled={!dirty || updateSettings.isPending}
-          className="rounded-sm bg-primary px-4 py-1.5 font-display text-[12px] font-bold uppercase tracking-wider text-on-primary hover:bg-primary-container disabled:opacity-50"
+          className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-50"
         >
           {updateSettings.isPending ? "Saving…" : "Save"}
         </button>
@@ -453,10 +439,10 @@ function ConnectionCard() {
         <p className="text-[13px] text-on-surface-variant">
           {settings.lastSyncAt ? (
             settings.lastSyncOk ? (
-              <>Synced {relativeTime(settings.lastSyncAt)} · ok</>
+              <>Synced {fmtAgo(settings.lastSyncAt)} · ok</>
             ) : (
               <span className="text-error">
-                Synced {relativeTime(settings.lastSyncAt)} ·{" "}
+                Synced {fmtAgo(settings.lastSyncAt)} ·{" "}
                 {settings.lastSyncError ?? "failed"}
               </span>
             )
@@ -468,7 +454,7 @@ function ConnectionCard() {
           type="button"
           onClick={() => void handleSync()}
           disabled={syncNow.isPending || !settings.baseUrl || !settings.appTokenSet}
-          className="rounded-sm border border-outline-variant px-3 py-1 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+          className="rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
         >
           {syncNow.isPending ? "Syncing…" : "Sync now"}
         </button>
@@ -501,7 +487,7 @@ function ProbeList({ probes }: { probes: ItopProbeResult[] }) {
           <span className="shrink-0 font-medium text-on-surface">{p.name}</span>
           {p.name === "TimeSpent" ? (
             <span
-              className="min-w-0 flex-1 truncate font-mono text-[11px] text-on-surface-variant"
+              className="min-w-0 flex-1 truncate font-mono text-meta text-on-surface-variant"
               title={p.message}
             >
               {p.message}
@@ -697,7 +683,7 @@ function CopyRow({
 }) {
   return (
     <div>
-      <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+      <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
         {label}
       </span>
       <div className="flex items-center gap-2">
@@ -717,7 +703,7 @@ function CopyRow({
         </button>
       </div>
       {copiedLabel === label && (
-        <p className="mt-0.5 text-[11px] text-chip-emerald-text">Copied</p>
+        <p className="mt-0.5 text-meta text-chip-emerald-text">Copied</p>
       )}
     </div>
   );
@@ -798,7 +784,7 @@ function CustomersCard() {
             type="button"
             onClick={() => void handleAutomatch()}
             disabled={automatch.isPending || orgsQuery.isError}
-            className="rounded-sm border border-outline-variant px-3 py-1 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+            className="rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
           >
             {automatch.isPending ? "Matching…" : "Automatch by name"}
           </button>
@@ -814,13 +800,13 @@ function CustomersCard() {
         <table className="w-full min-w-[480px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-outline-variant text-left">
-              <th className="py-1.5 pr-3 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+              <th className="py-1.5 pr-3 font-display text-label-caps uppercase text-on-surface-variant">
                 Solvro customer
               </th>
-              <th className="py-1.5 pr-3 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+              <th className="py-1.5 pr-3 font-display text-label-caps uppercase text-on-surface-variant">
                 iTop organisation
               </th>
-              <th className="py-1.5 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+              <th className="py-1.5 font-display text-label-caps uppercase text-on-surface-variant">
                 Match
               </th>
             </tr>
@@ -848,7 +834,7 @@ function CustomersCard() {
                     ))}
                   </select>
                   {rowErrors[row.id] && (
-                    <p className="mt-1 text-[11px] text-error">{rowErrors[row.id]}</p>
+                    <p className="mt-1 text-xs text-error">{rowErrors[row.id]}</p>
                   )}
                 </td>
                 <td className="py-1.5">
@@ -915,7 +901,7 @@ function PersonsCard() {
             type="button"
             onClick={() => void handleMatch()}
             disabled={matchNow.isPending}
-            className="rounded-sm border border-outline-variant px-3 py-1 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+            className="rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
           >
             {matchNow.isPending ? "Matching…" : "Match now"}
           </button>
@@ -927,16 +913,16 @@ function PersonsCard() {
         <table className="w-full min-w-[480px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-outline-variant text-left">
-              <th className="py-1.5 pr-3 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+              <th className="py-1.5 pr-3 font-display text-label-caps uppercase text-on-surface-variant">
                 Username
               </th>
-              <th className="py-1.5 pr-3 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+              <th className="py-1.5 pr-3 font-display text-label-caps uppercase text-on-surface-variant">
                 Email
               </th>
-              <th className="py-1.5 pr-3 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+              <th className="py-1.5 pr-3 font-display text-label-caps uppercase text-on-surface-variant">
                 Matched
               </th>
-              <th className="py-1.5 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+              <th className="py-1.5 font-display text-label-caps uppercase text-on-surface-variant">
                 iTop person ID
               </th>
             </tr>

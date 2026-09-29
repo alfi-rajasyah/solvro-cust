@@ -13,7 +13,7 @@ import { formatHours, utilisationPct } from "./utilizationPresentation";
 function TileCard({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="rounded-sm border border-outline-variant bg-surface-container-lowest px-4 py-3">
-      <p className="font-display text-label-caps uppercase tracking-wider text-on-surface-variant">{label}</p>
+      <p className="font-display text-label-caps uppercase text-on-surface-variant">{label}</p>
       <div className="mt-1.5">{children}</div>
     </div>
   );

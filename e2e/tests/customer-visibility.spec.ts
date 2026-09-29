@@ -132,8 +132,8 @@ test.describe("Customer visibility", () => {
     await loginViaUi(page, tamAEmail, password);
 
     // ------------------------------------------------------------------
-    // /customers: customer A's card (h3 name, CustomerCard in
-    // Customers.tsx) is visible; customer B's is absent.
+    // /customers: customer A's row (h3 name in the Customer cell of the
+    // Customers.tsx data-grid) is visible; customer B's is absent.
     // ------------------------------------------------------------------
     await page.goto("/customers", { waitUntil: "networkidle" });
     await page.waitForTimeout(500);

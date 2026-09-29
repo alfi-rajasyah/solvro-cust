@@ -189,12 +189,12 @@ export function ServiceMappingList({
                       <p className="flex flex-wrap items-center gap-2 font-medium text-on-surface">
                         {s.name}
                         {!s.active && (
-                          <span className="font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                          <span className="font-display text-label-caps uppercase text-on-surface-variant">
                             inactive
                           </span>
                         )}
                         {subscribed && (
-                          <span className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 font-display text-label-caps uppercase tracking-wider text-primary">
+                          <span className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 font-display text-label-caps uppercase text-primary">
                             Subscribed
                           </span>
                         )}
@@ -230,7 +230,7 @@ export function ServiceMappingList({
           className="flex flex-wrap items-end gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest p-3"
         >
           <label className="w-full md:flex-1 md:min-w-[160px]">
-            <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+            <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
               Name
             </span>
             <input
@@ -243,7 +243,7 @@ export function ServiceMappingList({
             />
           </label>
           <label className="w-full md:flex-2 md:min-w-[240px]">
-            <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+            <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
               Description
             </span>
             <input
@@ -307,7 +307,7 @@ function ToolsEditor({
 
   return (
     <div>
-      <p className="mb-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+      <p className="mb-1 font-display text-label-caps uppercase text-on-surface-variant">
         Tools used
       </p>
       <div className="flex flex-wrap items-center gap-1.5">

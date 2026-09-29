@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useProjectContext } from "../ProjectDetail";
 import { Alert, AlertDescription } from "@/components/reui/alert";
+import { CardGridSkeleton } from "@/components/skeletons";
 import { ServiceMappingList } from "@/components/services/ServiceMappingList";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
@@ -16,7 +17,7 @@ export function ProjectServices() {
   const canMutate = hasPermission(user, "project:write");
 
   const update = useUpdateProjectServices(project.id);
-  const { data: customer } = useCustomer(project.customerId);
+  const { data: customer, isLoading: customerLoading } = useCustomer(project.customerId);
   const [addAllError, setAddAllError] = useState<string | null>(null);
 
   const subscribedServiceIds = useMemo(() => {
@@ -77,15 +78,19 @@ export function ProjectServices() {
       )}
 
       <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
-        <ServiceMappingList
-          assignments={project.services}
-          onSave={(assignments) => update.mutateAsync(assignments)}
-          canMutate={canMutate}
-          saving={update.isPending}
-          subscribedServiceIds={subscribedServiceIds}
-          title="Services in Scope"
-          description="Select the services in play for this engagement and the tools used for each. Services the customer subscribes to are badged."
-        />
+        {customerLoading ? (
+          <CardGridSkeleton count={4} />
+        ) : (
+          <ServiceMappingList
+            assignments={project.services}
+            onSave={(assignments) => update.mutateAsync(assignments)}
+            canMutate={canMutate}
+            saving={update.isPending}
+            subscribedServiceIds={subscribedServiceIds}
+            title="Services in Scope"
+            description="Select the services in play for this engagement and the tools used for each. Services the customer subscribes to are badged."
+          />
+        )}
       </div>
     </div>
   );

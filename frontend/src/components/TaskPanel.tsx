@@ -9,12 +9,14 @@ import {
 import { EpicChip } from "./EpicChip";
 import { InlineDateRangeEditor } from "./InlineDateRangeEditor";
 import { LabelPicker } from "./LabelPicker";
+import { TASK_STATUS_TONE_CLASS } from "./StatusChip";
 import { TaskTicketField } from "@/components/itop/TaskTicketField";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { Sortable, SortableItem, SortableItemHandle } from "@/components/reui/sortable";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
-import { dayFromIso, dayToDate } from "@/lib/dateField";
+import { fmtAgo, fmtRange } from "@/lib/formatDate";
+import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
 import {
   type Priority,
   type Task,
@@ -34,24 +36,8 @@ import {
 } from "@/lib/queries";
 
 const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
-const STATUS_LABEL: Record<TaskStatus, string> = {
-  TODO: "To do",
-  IN_PROGRESS: "In progress",
-  DONE: "Done",
-};
-const STATUS_TONE_CLASS: Record<TaskStatus, string> = {
-  TODO: "bg-surface-container-high text-on-surface-variant",
-  IN_PROGRESS: "bg-chip-emerald-bg text-chip-emerald-text",
-  DONE: "bg-chip-emerald-bg text-chip-emerald-text",
-};
 
 const PRIORITY_ORDER: Priority[] = ["LOW", "MEDIUM", "HIGH"];
-const PRIORITY_LABEL: Record<Priority, string> = {
-  LOW: "Low",
-  MEDIUM: "Medium",
-  HIGH: "High",
-  URGENT: "Urgent",
-};
 const PRIORITY_ICON_CLASS: Record<Priority, string> = {
   LOW: "text-on-surface-variant",
   MEDIUM: "text-chip-amber-text",
@@ -63,14 +49,6 @@ function nextPriority(p: Priority): Priority {
   const idx = PRIORITY_ORDER.indexOf(p);
   if (idx === -1) return "LOW";
   return PRIORITY_ORDER[(idx + 1) % PRIORITY_ORDER.length];
-}
-
-function fmtShort(iso: string | null): string {
-  // Derive the day via the UTC date-part,
-  // not a local-time parse of the ISO instant.
-  const d = dayToDate(dayFromIso(iso));
-  if (!d) return "—";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 interface TaskPanelProps {
@@ -340,12 +318,12 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               disabled={!canEdit}
               onClick={() => setStatusMenuOpen((v) => !v)}
               className={[
-                "inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-display text-[11px] font-semibold",
-                STATUS_TONE_CLASS[task.status],
+                "inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-display text-meta font-semibold",
+                TASK_STATUS_TONE_CLASS[task.status],
                 canEdit ? "cursor-pointer" : "cursor-default",
               ].join(" ")}
             >
-              {STATUS_LABEL[task.status]}
+              {TASK_STATUS_LABEL[task.status]}
               {canEdit && (
                 <span className="material-symbols-outlined text-[13px]">expand_more</span>
               )}
@@ -367,7 +345,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         s === task.status ? "font-bold text-primary" : "text-on-surface",
                       ].join(" ")}
                     >
-                      {STATUS_LABEL[s]}
+                      {TASK_STATUS_LABEL[s]}
                     </button>
                   ))}
                 </div>
@@ -435,7 +413,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               <button
                 type="button"
                 onClick={() => onOpenTask(parentTask.id)}
-                className="flex min-w-0 items-center gap-0.5 rounded-sm text-[11px] text-on-surface-variant hover:text-primary outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
+                className="flex min-w-0 items-center gap-0.5 rounded-sm text-meta text-on-surface-variant hover:text-primary outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
               >
                 <span className="material-symbols-outlined text-[13px]" aria-hidden="true">
                   arrow_back
@@ -473,12 +451,12 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
             </button>
           )}
           {task.section && (
-            <p className="mt-0.5 text-[11px] text-on-surface-variant">in {sectionName}</p>
+            <p className="mt-0.5 text-meta text-on-surface-variant">in {sectionName}</p>
           )}
 
           {/* Meta grid */}
           <div className="mt-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2.5 text-sm">
-            <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
               Assignee
             </span>
             <div className="relative">
@@ -515,7 +493,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               )}
             </div>
 
-            <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
               Dates
             </span>
             <div className="relative">
@@ -536,12 +514,12 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                   onClick={() => setEditingDates(true)}
                   className="rounded-sm px-1 py-0.5 text-left text-on-surface hover:bg-surface-container-high disabled:cursor-default"
                 >
-                  {fmtShort(task.startDate)} – {fmtShort(task.dueDate)}
+                  {fmtRange(task.startDate, task.dueDate)}
                 </button>
               )}
             </div>
 
-            <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
               Priority
             </span>
             <button
@@ -559,7 +537,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               <span className="text-on-surface">{PRIORITY_LABEL[task.priority]}</span>
             </button>
 
-            <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
               Type
             </span>
             <button
@@ -579,7 +557,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               </span>
             </button>
 
-            <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
               {CRITICAL_PATH_LABEL}
             </span>
             <button
@@ -598,7 +576,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               <span className="text-on-surface">{task.isCriticalPath ? "Yes" : "No"}</span>
             </button>
 
-            <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
               Section
             </span>
             <div className="relative">
@@ -643,7 +621,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                 breadcrumb above instead). */}
             {!isSubtask && (
               <>
-                <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
                   Epic
                 </span>
                 <div className="relative">
@@ -693,7 +671,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
 
             {itopConfigured && (
               <>
-                <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
                   iTop ticket
                 </span>
                 <TaskTicketField
@@ -710,7 +688,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
 
           {/* Labels */}
           <div className="mt-4">
-            <p className="mb-1.5 font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <p className="mb-1.5 font-display text-label-caps uppercase text-on-surface-variant">
               Labels
             </p>
             <LabelPicker
@@ -723,7 +701,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
           {/* Subtasks — hidden entirely on a subtask (max depth is 1). */}
           {!isSubtask && (
             <div className="mt-4">
-              <p className="mb-1.5 font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+              <p className="mb-1.5 font-display text-label-caps uppercase text-on-surface-variant">
                 Subtasks {subtasks.length > 0 && `${subtasksDone}/${subtasks.length}`}
               </p>
               <Sortable
@@ -772,7 +750,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                       ].join(" ")}
                     >
                       {s.status === "DONE" && (
-                        <span className="material-symbols-outlined text-[11px] leading-none">
+                        <span className="material-symbols-outlined text-meta leading-none">
                           check
                         </span>
                       )}
@@ -909,7 +887,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
           </>
         }
         confirmLabel="Delete"
-        confirmTone="warning"
+        confirmTone="danger"
         busy={deleteTask.isPending}
       />
     </>
@@ -941,7 +919,7 @@ function PanelComments({ taskId }: { taskId: number }) {
 
   return (
     <div className="space-y-3">
-      <h3 className="font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+      <h3 className="font-display text-label-caps uppercase text-on-surface-variant">
         Comments {comments && comments.length > 0 && `· ${comments.length}`}
       </h3>
 
@@ -967,7 +945,7 @@ function PanelComments({ taskId }: { taskId: number }) {
               <div className="min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2">
                 <div className="mb-0.5 flex items-center justify-between gap-2 text-[12px]">
                   <span className="min-w-0 truncate font-medium text-on-surface">{c.author.username}</span>
-                  <span className="shrink-0 text-on-surface-variant">{relativeTime(c.createdAt)}</span>
+                  <span className="shrink-0 text-on-surface-variant">{fmtAgo(c.createdAt)}</span>
                 </div>
                 <p className="whitespace-pre-wrap wrap-break-word text-xs text-on-surface">{c.body}</p>
               </div>
@@ -1002,17 +980,4 @@ function PanelComments({ taskId }: { taskId: number }) {
       )}
     </div>
   );
-}
-
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const diffMs = Date.now() - then;
-  const diffMin = Math.round(diffMs / 60_000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.round(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return new Date(iso).toLocaleDateString();
 }

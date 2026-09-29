@@ -67,7 +67,7 @@ test.describe("gantt color-by legend — desktop", () => {
     await expect(legend.getByText(phaseBeta, { exact: true })).toBeVisible();
 
     await page.getByRole("menuitemradio", { name: "Status" }).click();
-    await expect(legend.getByText("In Progress", { exact: true })).toBeVisible();
+    await expect(legend.getByText("In progress", { exact: true })).toBeVisible();
 
     await page.getByRole("menuitemradio", { name: "Priority" }).click();
     await expect(legend.getByText("Urgent", { exact: true })).toBeVisible();

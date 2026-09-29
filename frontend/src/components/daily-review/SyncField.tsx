@@ -11,12 +11,13 @@
 import type { ReactNode } from "react";
 import type { BadgeProps } from "@/components/reui/badge";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { WEEKLY_HEALTH_LABEL, WEEKLY_STATUS_LABEL } from "@/lib/labels";
 import type { WeeklyHealth, WeeklyStatus } from "@/lib/queries";
 
 export const WEEKLY_STATUS_BADGE: Record<WeeklyStatus, { label: string; variant: BadgeProps["variant"] }> = {
-  NOT_STARTED: { label: "Not started", variant: "outline" },
-  DRAFT: { label: "Draft", variant: "warning-light" },
-  DONE: { label: "Done", variant: "success-light" },
+  NOT_STARTED: { label: WEEKLY_STATUS_LABEL.NOT_STARTED, variant: "outline" },
+  DRAFT: { label: WEEKLY_STATUS_LABEL.DRAFT, variant: "warning-light" },
+  DONE: { label: WEEKLY_STATUS_LABEL.DONE, variant: "success-light" },
 };
 
 export const HEALTH_CLASS: Record<WeeklyHealth, string> = {
@@ -26,9 +27,9 @@ export const HEALTH_CLASS: Record<WeeklyHealth, string> = {
 };
 
 const HEALTH_OPTIONS: { value: WeeklyHealth; label: string; className: string }[] = [
-  { value: "GREEN", label: "Green", className: HEALTH_CLASS.GREEN },
-  { value: "AMBER", label: "Amber", className: HEALTH_CLASS.AMBER },
-  { value: "RED", label: "Red", className: HEALTH_CLASS.RED },
+  { value: "GREEN", label: WEEKLY_HEALTH_LABEL.GREEN, className: HEALTH_CLASS.GREEN },
+  { value: "AMBER", label: WEEKLY_HEALTH_LABEL.AMBER, className: HEALTH_CLASS.AMBER },
+  { value: "RED", label: WEEKLY_HEALTH_LABEL.RED, className: HEALTH_CLASS.RED },
 ];
 
 export interface HealthButtonGroupProps {
@@ -86,7 +87,7 @@ export function SyncField({ id, label, action, helper, children }: SyncFieldProp
         {action}
       </div>
       {children}
-      {helper && <p className="mt-1 text-[11px] text-on-surface-variant">{helper}</p>}
+      {helper && <p className="mt-1 text-xs text-on-surface-variant">{helper}</p>}
     </div>
   );
 }

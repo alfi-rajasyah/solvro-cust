@@ -31,6 +31,7 @@ import {
   type SiblingKey,
 } from "../lib/taskOrdering.js";
 import { assertEpicNotOnSubtask, assertValidEpic } from "../lib/epics.js";
+import { computeProjectHealth, computeSlipDays } from "../lib/projectHealth.js";
 
 // Kanban WIP limits — one optional positive-int cap per top-level status
 // column, or null/absent for "no limit". Visual-only on the board (amber
@@ -63,9 +64,19 @@ const updateProjectSchema = z.object({
   excludeFromPortfolio: z.boolean().optional(),
 });
 
+// Caller's local calendar day ("yyyy-MM-dd") — the overdue boundary for the
+// `health` block (lib/dateBoundary.ts). Optional; falls back to the UTC day.
+const healthTodaySchema = z
+  .string()
+  .refine(isValidDayString, { message: "today must be a valid yyyy-MM-dd date" })
+  .optional();
+
 const projectListQuerySchema = z.object({
   customerId: z.coerce.number().int().positive().optional(),
+  today: healthTodaySchema,
 });
+
+const projectDetailQuerySchema = z.object({ today: healthTodaySchema });
 
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 
@@ -131,7 +142,9 @@ export const projectsRouter = Router();
 projectsRouter.use(requireAuth);
 
 projectsRouter.get("/", validate("query", projectListQuerySchema), async (req, res) => {
-  const { customerId } = req.query as unknown as z.infer<typeof projectListQuerySchema>;
+  const { customerId, today } = req.query as unknown as z.infer<
+    typeof projectListQuerySchema
+  >;
   const where: Prisma.ProjectWhereInput = projectVisibilityFilter(req.user!);
   if (customerId) where.customerId = customerId;
   const projects = await prisma.project.findMany({
@@ -143,7 +156,13 @@ projectsRouter.get("/", validate("query", projectListQuerySchema), async (req, r
       customer: { select: { id: true, name: true } },
     },
   });
-  res.json(projects);
+  // Health for exactly the projects the visibility filter returned — one
+  // fixed-cost batch (lib/projectHealth.ts), not a query per project.
+  const health = await computeProjectHealth(
+    projects.map((p) => p.id),
+    today,
+  );
+  res.json(projects.map((p) => ({ ...p, health: health.get(p.id) })));
 });
 
 projectsRouter.post(
@@ -172,8 +191,9 @@ projectsRouter.post(
   },
 );
 
-projectsRouter.get("/:id", validate("params", idParamSchema), async (req, res) => {
+projectsRouter.get("/:id", validate("params", idParamSchema), validate("query", projectDetailQuerySchema), async (req, res) => {
   const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
+  const { today } = req.query as unknown as z.infer<typeof projectDetailQuerySchema>;
   // Apply the visibility filter inside the lookup. The previous hand-rolled
   // `"tamId" in filter` guard was a dead no-op — the filter shape is
   // `{ OR: [{tamId}, {customer:{tamId}}] }`, so that key never exists — which left this
@@ -185,7 +205,24 @@ projectsRouter.get("/:id", validate("params", idParamSchema), async (req, res) =
   });
   if (!project) throw new HttpError(404, "not_found", "Project not found");
 
-  res.json(project);
+  // slipDays needs the project's own due/baseline dates; computeSlipDays
+  // returns null without a baseline lock, so skip the read in that case.
+  const [healthByProject, slipTasks] = await Promise.all([
+    computeProjectHealth([id], today),
+    project.baselineLockedAt
+      ? prisma.task.findMany({
+          where: { projectId: id },
+          select: { dueDate: true, baselineDueDate: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  res.json({
+    ...project,
+    health: {
+      ...healthByProject.get(id)!,
+      slipDays: computeSlipDays(project.baselineLockedAt, slipTasks),
+    },
+  });
 });
 
 const lockBaselineSchema = z.object({

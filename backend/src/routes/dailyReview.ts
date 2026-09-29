@@ -1,16 +1,16 @@
 import { Router } from "express";
 import { z } from "zod";
-import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
-import { hasPermission, requireAuth } from "../http/auth.js";
+import { requireAuth } from "../http/auth.js";
 import { validate } from "../http/validate.js";
-import { customerVisibilityFilter, projectVisibilityFilter } from "../lib/visibility.js";
+import { resolveDailyReviewScope } from "../lib/dailyReviewScope.js";
 import {
   isValidDayString,
   overdueBoundary,
   utcMidnightOfDayString,
 } from "../lib/dateBoundary.js";
 import { parseWeekKey } from "../lib/isoWeek.js";
+import { computeSlipDays, currentPhase } from "../lib/projectHealth.js";
 
 // One-request payload for the Daily Review page (spec §5.1). Every
 // sub-collection is fetched with a single batched `findMany` keyed by an
@@ -28,65 +28,6 @@ const dailyReviewQuerySchema = z.object({
     .refine((w) => parseWeekKey(w) !== null, { message: "invalid_week" }),
   today: z.string().refine(isValidDayString, { message: "invalid_today" }),
 });
-
-// --- Ports of frontend/src/pages/DailyReview.tsx's currentPhase() /
-// scheduleSignal() (lines 254-292 as of the v1 page), computed server-side
-// so the payload ships the finished value instead of raw task lists.
-
-interface PhaseTask {
-  status: string;
-  section: { id: number; name: string; position: number } | null;
-}
-
-// Earliest section (by position) that still has a non-DONE task. Mirrors
-// currentPhase() in the frontend exactly, including the two terminal
-// strings ("All phases complete" when every section is done, "—" when the
-// project has no sections at all).
-function currentPhase(tasks: PhaseTask[]): string {
-  const bySection = new Map<
-    number,
-    { name: string; pos: number; total: number; done: number }
-  >();
-  for (const t of tasks) {
-    if (!t.section) continue;
-    const e =
-      bySection.get(t.section.id) ??
-      { name: t.section.name, pos: t.section.position, total: 0, done: 0 };
-    e.total++;
-    if (t.status === "DONE") e.done++;
-    bySection.set(t.section.id, e);
-  }
-  const ordered = [...bySection.values()].sort((a, b) => a.pos - b.pos);
-  const cur = ordered.find((s) => s.done < s.total);
-  if (cur) return cur.name;
-  return ordered.length > 0 ? "All phases complete" : "—";
-}
-
-interface SlipTask {
-  dueDate: Date | null;
-  baselineDueDate: Date | null;
-}
-
-// Mirrors scheduleSignal()'s slip math, minus the label/tone — the frontend
-// derives its own chip from this number. null whenever there is no baseline
-// lock, or either side of the comparison has no dated tasks.
-function computeSlipDays(baselineLockedAt: Date | null, tasks: SlipTask[]): number | null {
-  if (!baselineLockedAt) return null;
-  let maxDue: number | null = null;
-  let maxBaselineDue: number | null = null;
-  for (const t of tasks) {
-    if (t.dueDate) {
-      const ms = t.dueDate.getTime();
-      if (maxDue === null || ms > maxDue) maxDue = ms;
-    }
-    if (t.baselineDueDate) {
-      const ms = t.baselineDueDate.getTime();
-      if (maxBaselineDue === null || ms > maxBaselineDue) maxBaselineDue = ms;
-    }
-  }
-  if (maxDue === null || maxBaselineDue === null) return null;
-  return Math.round((maxDue - maxBaselineDue) / 86_400_000);
-}
 
 function groupBy<T, K>(items: T[], keyFn: (item: T) => K): Map<K, T[]> {
   const map = new Map<K, T[]>();
@@ -118,11 +59,6 @@ dailyReviewRouter.get(
     // Already validated non-null by the query schema's second refine.
     const week = parseWeekKey(weekKey)!;
     const user = req.user!;
-    // hasPermission treats "*" as satisfying every permission check, so this
-    // single predicate also covers wildcard (ADMIN) users — see
-    // lib/visibility.ts's projectVisibilityFilter, which the same check
-    // gates internally.
-    const viewAll = hasPermission(user, "project:view-all");
 
     const weekStartDate = utcMidnightOfDayString(week.start);
     const weekEndDate = utcMidnightOfDayString(week.days[6]);
@@ -138,106 +74,10 @@ dailyReviewRouter.get(
       ),
     );
 
-    // Decisions 8-9 (customer-visibility-spec.md §5.3): customer-first
-    // scope, replacing the old project-first Decisions 13/14. First resolve
-    // the customers on the page — a TAM's owned customers (tamId = me;
-    // view-all: every customer with a TAM set) plus any customer with at
-    // least one ACTIVE project visible to the caller (the "attached" tier,
-    // via projectVisibilityFilter so a project TAM on someone else's
-    // customer still reaches it) — then split them into owned vs. attached
-    // so the project query below can apply Decision 9's two-tier rule.
-    // AND-composed (not object-spread) so customerVisibilityFilter's own
-    // keys can never collide with or be silently overwritten by a sibling
-    // condition — same pattern as projectWhere below.
-    const customerWhere: Prisma.CustomerWhereInput = {
-      AND: [
-        customerVisibilityFilter(user),
-        {
-          OR: [
-            viewAll ? { tamId: { not: null } } : { tamId: user.sub },
-            {
-              projects: {
-                some: { AND: [{ status: "ACTIVE" }, projectVisibilityFilter(user)] },
-              },
-            },
-          ],
-        },
-      ],
-    };
-
-    const candidateCustomers = await prisma.customer.findMany({
-      where: customerWhere,
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        name: true,
-        tam: { select: { id: true, username: true } },
-      },
-    });
-    const candidateCustomerIds = candidateCustomers.map((c) => c.id);
-
-    // Decision 9: split into owned (tamId = me; view-all: every customer
-    // resolved above) vs. attached (visible only through a project) — the
-    // project query below treats the two tiers differently, and the
-    // post-projects prune further down uses ownedIdSet to decide which
-    // attached customers actually survive onto the page.
-    const ownedIds = viewAll
-      ? candidateCustomerIds
-      : candidateCustomers.filter((c) => c.tam?.id === user.sub).map((c) => c.id);
-    const ownedIdSet = new Set(ownedIds);
-    const attachedIds = candidateCustomerIds.filter((id) => !ownedIdSet.has(id));
-
-    // Decision 9: ACTIVE projects in scope. Owned customer → every ACTIVE
-    // project of that customer, whoever the project TAM is. Attached
-    // customer → only the caller's own ACTIVE projects (the old Decision 13
-    // rule). Decision 10: the "No customer" group is unchanged — ACTIVE
-    // projects with customerId: null and Project.tamId = me. AND-composed
-    // (not object-spread) so a sibling condition can never collide with or
-    // silently overwrite another — same pattern as routes/overview.ts's
-    // `scope`.
-    const projectWhere: Prisma.ProjectWhereInput = viewAll
-      ? { status: "ACTIVE" }
-      : {
-          AND: [
-            { status: "ACTIVE" },
-            {
-              OR: [
-                { customerId: { in: ownedIds } },
-                { tamId: user.sub, customerId: { in: attachedIds } },
-                { tamId: user.sub, customerId: null },
-              ],
-            },
-          ],
-        };
-
-    const projects = await prisma.project.findMany({
-      where: projectWhere,
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        name: true,
-        status: true,
-        customerId: true,
-        baselineLockedAt: true,
-      },
-    });
+    // Customer-first scope (Decisions 8-10) — shared with GET /overview/badges;
+    // see lib/dailyReviewScope.ts.
+    const { customers, projects } = await resolveDailyReviewScope(user);
     const projectIds = projects.map((p) => p.id);
-
-    // Decision 9 (fix): an ATTACHED customer surfaces only when it actually
-    // has a project in the result above — the customer query's "attached"
-    // OR arm admits a customer via ANY project matching
-    // projectVisibilityFilter, while the project query above only pulls the
-    // caller's own (tamId) projects for an attached customer. Without this
-    // prune, a customer the caller can't actually see any project of would
-    // render as an empty group and inflate coverage.total. Owned customers
-    // always stay, even with zero active projects — they still carry
-    // operations notes and the weekly update (Decision 8).
-    const projectCustomerIds = new Set(
-      projects.map((p) => p.customerId).filter((id): id is number => id !== null),
-    );
-    const customers = candidateCustomers.filter(
-      (c) => ownedIdSet.has(c.id) || projectCustomerIds.has(c.id),
-    );
     const customerIds = customers.map((c) => c.id);
 
     const [tasks, risks, projectNotes, reviews] = await Promise.all([

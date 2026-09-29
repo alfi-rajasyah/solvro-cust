@@ -78,7 +78,7 @@ export function InstallBanner() {
       <button
         type="button"
         onClick={handleInstallTap}
-        className="flex w-full items-center gap-1.5 bg-primary px-3 py-1.5 text-left text-[11px] font-semibold text-on-primary md:hidden"
+        className="flex w-full items-center gap-1.5 bg-primary px-3 py-1.5 text-left text-meta font-semibold text-on-primary md:hidden"
       >
         <span className="material-symbols-outlined text-[14px]">download</span>
         <span className="flex-1">Install Solvro — add to home screen</span>
@@ -96,7 +96,7 @@ export function InstallBanner() {
 
   if (showIosHint) {
     return (
-      <div className="flex w-full items-center gap-1.5 bg-primary px-3 py-1.5 text-[11px] font-semibold text-on-primary md:hidden">
+      <div className="flex w-full items-center gap-1.5 bg-primary px-3 py-1.5 text-meta font-semibold text-on-primary md:hidden">
         <span className="material-symbols-outlined text-[14px]">ios_share</span>
         <span className="flex-1">Add to Home Screen from the share menu</span>
         <button

@@ -9,11 +9,22 @@ import {
   useSearchParams,
   useLocation,
 } from "react-router-dom";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { RightSidebar } from "@/components/layout/RightSidebar";
 import { ProjectFormModal } from "@/components/ProjectFormModal";
+import { ProjectHeaderFacts } from "@/components/ProjectHeaderFacts";
+import { TaskFormModal } from "@/components/TaskFormModal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
+import { ProjectPageSkeleton } from "@/components/skeletons";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { TaskPanel } from "@/components/TaskPanel";
 import { ApiError } from "@/lib/api";
+import { useNewParam } from "@/hooks/useNewParam";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { GanttExportProvider } from "@/lib/gantt/exportContext";
 import {
@@ -44,7 +55,9 @@ export function ProjectDetail() {
   const projectId = id ? Number(id) : null;
   const { user } = useAuth();
   const [editOpen, setEditOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -93,14 +106,11 @@ export function ProjectDetail() {
   }
 
   const canEdit = hasPermission(user, "project:write");
+  // ⌘K palette "Add task": opens the create form on whichever tab is showing.
+  useNewParam("task", hasPermission(user, "task:write"), () => setNewTaskOpen(true));
 
   if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <div className="h-24 animate-pulse rounded-xl bg-surface-container-low" />
-        <div className="h-64 animate-pulse rounded-xl bg-surface-container-low" />
-      </div>
-    );
+    return <ProjectPageSkeleton />;
   }
 
   if (isError || !project) {
@@ -120,13 +130,7 @@ export function ProjectDetail() {
 
   async function handleDelete() {
     if (!project) return;
-    const taskCount = project._count.tasks;
-    const confirmed = confirm(
-      `Delete project "${project.name}"? This permanently removes its ${taskCount} ${
-        taskCount === 1 ? "task" : "tasks"
-      }, sections, labels, notes, risks and reviews. There is no undo.`,
-    );
-    if (!confirmed) return;
+    setConfirmDeleteOpen(false);
     setActionError(null);
     try {
       await deleteProject.mutateAsync(project.id);
@@ -144,55 +148,104 @@ export function ProjectDetail() {
         contextOpen ? "md:mr-80" : openTaskId !== null || epicPanelOpen ? "md:mr-[380px]" : "mr-0",
       ].join(" ")}
     >
-      {/* Project name + status now live in the TopBar (see TopBar.tsx); the
-          description lives in the Context sidebar (RightSidebar.tsx).
-          This thin meta row keeps roles + actions next to the tabs. */}
-      <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-start md:justify-between md:gap-4">
-        <div className="min-w-0">
-          <p className="text-[12px] text-on-surface-variant">
-            TAM <span className="font-medium text-on-surface">{project.tam.username}</span>{" "}
-            · {project._count.tasks} tasks
-          </p>
-        </div>
+      {/* Project name, status and the customer crumb live in the TopBar
+          (TopBar.tsx); the description lives in the Context sidebar
+          (RightSidebar.tsx). This row keeps the project's facts and its
+          actions next to the tabs. */}
+      <div className="mb-3 flex items-start justify-between gap-3 md:gap-4">
+        <ProjectHeaderFacts project={project} />
 
+        {/* Below md every action lives in the ⋯ menu; Edit and the Context
+            toggle render as buttons from md up. The two copies never share a
+            viewport (display:none leaves the accessibility tree), so the
+            Context toggle's aria-labels stay unique. */}
         <div className="flex shrink-0 items-center gap-2">
           {canEdit && (
-            <>
-              <button
-                type="button"
-                onClick={() => setEditOpen(true)}
-                className="inline-flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container"
-              >
-                <span className="material-symbols-outlined text-base">edit</span>
-                Edit project
-              </button>
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={deleteProject.isPending}
-                className="inline-flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface-variant hover:border-error hover:text-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
-              >
-                <span className="material-symbols-outlined text-base">delete</span>
-                Delete project
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => setEditOpen(true)}
+              className="hidden items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container md:inline-flex"
+            >
+              <span className="material-symbols-outlined text-base">edit</span>
+              Edit
+            </button>
           )}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label="More project actions"
+                  title="More project actions"
+                  className={[
+                    "h-8 w-8 items-center justify-center rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30",
+                    canEdit ? "inline-flex" : "inline-flex md:hidden",
+                  ].join(" ")}
+                >
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">
+                    more_horiz
+                  </span>
+                </button>
+              }
+            />
+            {/* z-50 on the Positioner (frontend/CLAUDE.md "Popover
+                z-index"): the menu never opens inside Modal.tsx's z-100
+                layer. Lock baseline and Export stay in the Context panel
+                (RightSidebar.tsx) — their state and the Gantt export
+                handlers live there. */}
+            <DropdownMenuContent
+              align="end"
+              className="w-52 bg-surface-container-lowest shadow-overlay!"
+              positionerClassName="z-50"
+            >
+              {canEdit && (
+                <DropdownMenuItem onClick={() => setEditOpen(true)} className="text-xs md:hidden">
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">
+                    edit
+                  </span>
+                  Edit project
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                onClick={() => setContextOpen((v) => !v)}
+                className="text-xs md:hidden"
+              >
+                <span className="material-symbols-outlined text-base" aria-hidden="true">
+                  {contextOpen ? "right_panel_close" : "right_panel_open"}
+                </span>
+                {contextOpen ? "Hide project context" : "Show project context"}
+              </DropdownMenuItem>
+              {canEdit && (
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={deleteProject.isPending}
+                  onClick={() => setConfirmDeleteOpen(true)}
+                  className="text-xs"
+                >
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">
+                    delete
+                  </span>
+                  Delete project
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <button
             type="button"
             onClick={() => setContextOpen((v) => !v)}
             aria-pressed={contextOpen}
             aria-label={contextOpen ? "Hide project context" : "Show project context"}
+            title={contextOpen ? "Hide project context" : "Show project context"}
             className={[
-              "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 font-display text-xs font-bold transition-colors",
+              "hidden h-8 w-8 items-center justify-center rounded-lg border transition-colors md:inline-flex",
               contextOpen
                 ? "border-primary bg-primary/10 text-primary"
-                : "border-outline-variant bg-surface-container-lowest text-on-surface hover:bg-surface-container",
+                : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container hover:text-on-surface",
             ].join(" ")}
           >
-            <span className="material-symbols-outlined text-base">
+            <span className="material-symbols-outlined text-base" aria-hidden="true">
               {contextOpen ? "right_panel_close" : "right_panel_open"}
             </span>
-            Context
           </button>
         </div>
       </div>
@@ -203,25 +256,33 @@ export function ProjectDetail() {
         </Alert>
       )}
 
-      <nav className="mb-6 flex gap-6 overflow-x-auto overflow-y-clip whitespace-nowrap border-b border-outline-variant">
-        {TABS.map((tab) => (
-          <NavLink
-            key={tab.to}
-            to={tab.to}
-            className={({ isActive }) =>
-              [
-                "-mb-px border-b-2 px-1 pb-3 font-display text-sm transition-colors",
-                isActive
-                  ? "border-primary text-primary"
-                  : "border-transparent text-on-surface-variant hover:text-on-surface",
-                tab.to === "gantt" ? "hidden md:inline-block" : "",
-              ].join(" ")
-            }
-          >
-            {tab.label}
-          </NavLink>
-        ))}
-      </nav>
+      {/* Below md the tab row scrolls sideways; the right-edge fade hints at
+          the tabs off-screen. */}
+      <div className="relative mb-6">
+        <nav className="flex gap-6 overflow-x-auto overflow-y-clip whitespace-nowrap border-b border-outline-variant">
+          {TABS.map((tab) => (
+            <NavLink
+              key={tab.to}
+              to={tab.to}
+              className={({ isActive }) =>
+                [
+                  "-mb-px border-b-2 px-1 pb-3 font-display text-sm transition-colors",
+                  isActive
+                    ? "border-primary text-primary"
+                    : "border-transparent text-on-surface-variant hover:text-on-surface",
+                  tab.to === "gantt" ? "hidden md:inline-block" : "",
+                ].join(" ")
+              }
+            >
+              {tab.label}
+            </NavLink>
+          ))}
+        </nav>
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-linear-to-l from-background to-transparent md:hidden"
+        />
+      </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Outlet
@@ -236,6 +297,28 @@ export function ProjectDetail() {
         onClose={() => setEditOpen(false)}
         project={project}
       />
+
+      <ConfirmModal
+        open={confirmDeleteOpen}
+        onClose={() => setConfirmDeleteOpen(false)}
+        onConfirm={() => void handleDelete()}
+        title="Delete project"
+        body={`Delete project "${project.name}"? This permanently removes its ${project._count.tasks} ${
+          project._count.tasks === 1 ? "task" : "tasks"
+        }, sections, labels, notes, risks and reviews. There is no undo.`}
+        confirmLabel="Delete"
+        confirmTone="danger"
+        busy={deleteProject.isPending}
+      />
+
+      {newTaskOpen && (
+        <TaskFormModal
+          mode="create"
+          open={newTaskOpen}
+          onClose={() => setNewTaskOpen(false)}
+          projectId={project.id}
+        />
+      )}
 
       <RightSidebar
         project={project}

@@ -6,7 +6,11 @@ import { requireAuth, requirePermission, type JwtPayload } from "../http/auth.js
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { ensureTaskVisible, projectVisibilityFilter } from "../lib/visibility.js";
-import { isValidDayString, overdueBoundary } from "../lib/dateBoundary.js";
+import {
+  isValidDayString,
+  overdueBoundary,
+  utcMidnightOfDayString,
+} from "../lib/dateBoundary.js";
 import {
   assertLabelsInProject,
   assertSectionInProject,
@@ -59,27 +63,47 @@ const updateTaskSchema = z
     path: ["dueDate"],
   });
 
-const tasksListQuerySchema = z.object({
-  status: z.nativeEnum(TaskStatus).optional(),
-  priority: z.nativeEnum(Priority).optional(),
-  assignedToId: z.coerce.number().int().positive().optional(),
-  labelId: z.coerce.number().int().positive().optional(),
-  customerId: z.coerce.number().int().positive().optional(),
-  overdue: z
-    .union([z.literal("true"), z.literal("false")])
-    .transform((v) => v === "true")
-    .optional(),
-  topLevel: z
-    .union([z.literal("true"), z.literal("false")])
-    .transform((v) => v === "true")
-    .optional(),
-  // Caller's local calendar day ("yyyy-MM-dd"), used only when overdue=true
-  // — see lib/dateBoundary.ts for the full contract. Ignored otherwise.
-  today: z
-    .string()
-    .refine(isValidDayString, { message: "today must be a valid yyyy-MM-dd date" })
-    .optional(),
-});
+const dayString = z
+  .string()
+  .refine(isValidDayString, { message: "must be a valid yyyy-MM-dd date" });
+
+const tasksListQuerySchema = z
+  .object({
+    status: z.nativeEnum(TaskStatus).optional(),
+    priority: z.nativeEnum(Priority).optional(),
+    assignedToId: z.coerce.number().int().positive().optional(),
+    labelId: z.coerce.number().int().positive().optional(),
+    customerId: z.coerce.number().int().positive().optional(),
+    overdue: z
+      .union([z.literal("true"), z.literal("false")])
+      .transform((v) => v === "true")
+      .optional(),
+    // open=true adds "status is not DONE"; open=false is a no-op.
+    open: z
+      .union([z.literal("true"), z.literal("false")])
+      .transform((v) => v === "true")
+      .optional(),
+    topLevel: z
+      .union([z.literal("true"), z.literal("false")])
+      .transform((v) => v === "true")
+      .optional(),
+    // Inclusive due-date day range ("yyyy-MM-dd"), see the handler.
+    dueFrom: dayString.optional(),
+    dueTo: dayString.optional(),
+    // `position` (default) is board order; `due` is soonest first with
+    // undated tasks last.
+    sort: z.enum(["position", "due"]).optional(),
+    // Caller's local calendar day ("yyyy-MM-dd"), used only when overdue=true
+    // — see lib/dateBoundary.ts for the full contract. Ignored otherwise.
+    today: z
+      .string()
+      .refine(isValidDayString, { message: "today must be a valid yyyy-MM-dd date" })
+      .optional(),
+  })
+  .refine((q) => !(q.dueFrom && q.dueTo) || q.dueFrom <= q.dueTo, {
+    message: "dueFrom must not be after dueTo",
+    path: ["dueFrom"],
+  });
 
 const createCommentSchema = z.object({
   body: z.string().min(1).max(5000),
@@ -97,12 +121,28 @@ tasksRouter.use(requireAuth);
 
 // Cross-project list with filters
 tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) => {
-  const { status, priority, assignedToId, labelId, customerId, overdue, topLevel, today } =
-    req.query as unknown as z.infer<typeof tasksListQuerySchema>;
+  const {
+    status,
+    priority,
+    assignedToId,
+    labelId,
+    customerId,
+    overdue,
+    open,
+    topLevel,
+    dueFrom,
+    dueTo,
+    sort,
+    today,
+  } = req.query as unknown as z.infer<typeof tasksListQuerySchema>;
 
   const where: Prisma.TaskWhereInput = {
     ...buildVisibilityWhere(req.user!),
   };
+  // Every filter that can overlap another appends to this list, so
+  // combinations (overdue + status + open + a due range) intersect instead of
+  // one overwriting the next.
+  const and: Prisma.TaskWhereInput[] = [];
   if (priority) where.priority = priority;
   if (assignedToId) where.assignedToId = assignedToId;
   if (labelId) where.labels = { some: { id: labelId } };
@@ -110,39 +150,57 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
     where.project = { ...(where.project as object | undefined), customerId };
   }
   if (topLevel) where.parentTaskId = null;
+  if (status) and.push({ status });
+  if (open) and.push({ status: { not: "DONE" } });
   if (overdue) {
     // Overdue = due before the CALLER's calendar day (param `today`),
     // falling back to the server's UTC day; DONE always excluded. See
     // lib/dateBoundary.ts for the full contract (shared with
     // lib/portfolio.ts's isOverdue/daysOverdue).
-    where.dueDate = { lt: overdueBoundary(today) };
     // Overdue is not Done: the not-DONE exclusion always applies, and an
     // explicit ?status filter narrows by INTERSECTION rather than being
     // silently overwritten — status=TODO&overdue=true returns overdue
     // TODOs; status=DONE&overdue=true is a contradiction and returns
     // nothing, by construction.
-    where.AND = status ? [{ status }, { status: { not: "DONE" } }] : [{ status: { not: "DONE" } }];
-  } else if (status) {
-    where.status = status;
+    and.push({ dueDate: { lt: overdueBoundary(today) } }, { status: { not: "DONE" } });
   }
+  if (dueFrom) and.push({ dueDate: { gte: utcMidnightOfDayString(dueFrom) } });
+  if (dueTo) {
+    // Inclusive of the last day: strictly before the next UTC midnight, which
+    // also catches legacy rows holding a non-midnight instant on that day.
+    const next = utcMidnightOfDayString(dueTo);
+    next.setUTCDate(next.getUTCDate() + 1);
+    and.push({ dueDate: { lt: next } });
+  }
+  if (and.length > 0) where.AND = and;
 
-  const tasks = await prisma.task.findMany({
-    where,
-    orderBy: [{ position: "asc" }, { id: "asc" }],
-    include: {
-      assignedTo: { select: { id: true, username: true, email: true } },
-      labels: true,
-      project: {
-        select: {
-          id: true,
-          name: true,
-          customer: { select: { id: true, name: true } },
+  const orderBy: Prisma.TaskOrderByWithRelationInput[] =
+    sort === "due"
+      ? [{ dueDate: { sort: "asc", nulls: "last" } }, { id: "asc" }]
+      : [{ position: "asc" }, { id: "asc" }];
+
+  const [tasks, total] = await Promise.all([
+    prisma.task.findMany({
+      where,
+      orderBy,
+      include: {
+        assignedTo: { select: { id: true, username: true, email: true } },
+        labels: true,
+        project: {
+          select: {
+            id: true,
+            name: true,
+            customer: { select: { id: true, name: true } },
+          },
         },
+        _count: { select: { subtasks: true, comments: true } },
       },
-      _count: { select: { subtasks: true, comments: true } },
-    },
-    take: 200,
-  });
+      take: 200,
+    }),
+    // Full match count (ignores the take cap) so the UI can say "200 of N".
+    prisma.task.count({ where }),
+  ]);
+  res.setHeader("X-Total-Count", String(total));
   res.json(tasks);
 });
 

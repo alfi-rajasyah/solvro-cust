@@ -28,10 +28,10 @@ const INPUT_CLASS =
   "w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 font-mono text-xs text-on-surface focus:border-primary focus:outline-hidden disabled:opacity-60";
 
 const LINK_CLASS =
-  "font-display text-[11px] font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "font-display text-meta font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
 const AFFORDANCE_CLASS =
-  "font-display text-[11px] font-semibold text-on-surface-variant underline hover:text-on-surface";
+  "font-display text-meta font-semibold text-on-surface-variant underline hover:text-on-surface";
 
 export function TaskTicketField({
   itopTicketRef,
@@ -169,7 +169,7 @@ export function TaskTicketField({
           )}
         </div>
         {error && (
-          <p id={errorId} className="mt-1 text-[11px] text-error">
+          <p id={errorId} className="mt-1 text-xs text-error">
             {error}
           </p>
         )}

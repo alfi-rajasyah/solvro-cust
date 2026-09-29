@@ -161,7 +161,7 @@ export function ActionSheet({
             className={FIELD_CLASS}
           />
           {reasonRemaining < 50 && (
-            <p className="mt-1 text-[11px] text-on-surface-variant">
+            <p className="mt-1 text-xs text-on-surface-variant">
               {reasonRemaining} character{reasonRemaining === 1 ? "" : "s"} left
             </p>
           )}

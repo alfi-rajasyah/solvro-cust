@@ -17,7 +17,7 @@ import { createTask, isoDateOffset } from "../fixtures/seed";
 // fixture used here (ADMIN role = ["*"] wildcard, backend/prisma/seed.ts)
 // that's every ACTIVE project/customer in the whole shared dev DB
 // (routes/dailyReview.ts's `viewAll` branch), not just this spec's own
-// fixture data. Asserting a literal "1" or "1 / 1" would be flaky against a
+// fixture data. Asserting a literal "1" or "1 of 1" would be flaky against a
 // dev stack that already has other ACTIVE projects/reviews/notes from
 // manual QA, other test runs, or a concurrently-running agent. Every tile
 // assertion below instead reads a BASELINE before this spec's customer/
@@ -59,8 +59,8 @@ async function readFraction(page: Page, testId: string): Promise<Fraction> {
   const el = page.getByTestId(testId);
   await expect(el).toBeVisible();
   const text = (await el.textContent())?.trim() ?? "";
-  const m = /^(\d+)\s*\/\s*(\d+)$/.exec(text);
-  if (!m) throw new Error(`stat "${testId}": expected "count / total", got "${text}"`);
+  const m = /^(\d+)\s+of\s+(\d+)$/.exec(text);
+  if (!m) throw new Error(`stat "${testId}": expected "count of total", got "${text}"`);
   return { count: Number(m[1]), total: Number(m[2]) };
 }
 
@@ -227,7 +227,7 @@ test.describe("Daily Review v2", () => {
     await projectCard.getByRole("button", { name: "Mark reviewed" }).click();
     await expect(projectCard.getByText(/Reviewed \d{2}:\d{2}/)).toBeVisible();
     await expect(page.getByTestId("stat-reviewed-today")).toHaveText(
-      `${baseReviewed.count + 1} / ${baseReviewed.total + 1}`,
+      `${baseReviewed.count + 1} of ${baseReviewed.total + 1}`,
     );
 
     // ------------------------------------------------------------------
@@ -279,7 +279,7 @@ test.describe("Daily Review v2", () => {
     await expect(reflectionDialog).toBeHidden();
 
     await expect(page.getByTestId("stat-weekly-updates")).toHaveText(
-      `${baseWeekly.count + 1} / ${baseWeekly.total + 1}`,
+      `${baseWeekly.count + 1} of ${baseWeekly.total + 1}`,
     );
     await waitForCollapsedDone(page, customerName);
 

@@ -54,13 +54,13 @@ export function OperationsCard({ customer, today, days, currentUserId, canDelete
   return (
     <article className="rounded-sm border border-outline-variant bg-surface-container-lowest">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-outline-variant px-4 py-3">
-        <span className="rounded-sm bg-surface-container-high px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+        <span className="rounded-sm bg-surface-container-high px-1.5 py-0.5 text-label-caps leading-4 uppercase text-on-surface-variant">
           Operations
         </span>
         <span className="font-display text-sm font-semibold text-on-surface">
           {customer.name} · issues outside a project
         </span>
-        <span className="ml-auto font-mono text-[11px] tabular-nums text-on-surface-variant">
+        <span className="ml-auto text-meta tabular-nums text-on-surface-variant">
           {noteCount} note{noteCount === 1 ? "" : "s"} this week
         </span>
       </header>

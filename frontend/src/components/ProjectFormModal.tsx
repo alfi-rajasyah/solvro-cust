@@ -3,6 +3,7 @@ import { Modal } from "./Modal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { PROJECT_STATUS_LABEL, taskStatusOptions } from "@/lib/labels";
 import {
   type ProjectDetail,
   type ProjectStatus,
@@ -22,11 +23,7 @@ const PROJECT_STATUSES: ProjectStatus[] = [
   "CANCELLED",
 ];
 
-const WIP_COLUMNS: { id: TaskStatus; label: string }[] = [
-  { id: "TODO", label: "To Do" },
-  { id: "IN_PROGRESS", label: "In Progress" },
-  { id: "DONE", label: "Done" },
-];
+const WIP_COLUMNS = taskStatusOptions;
 
 // Form-local representation: each column's limit as the literal <input>
 // string value ("" = no limit) so the field can be edited freely without
@@ -224,7 +221,7 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
           >
             {PROJECT_STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s.replace("_", " ")}
+                {PROJECT_STATUS_LABEL[s]}
               </option>
             ))}
           </select>
@@ -250,8 +247,8 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
         <Field label="WIP limit — leave empty for none">
           <div className="grid grid-cols-3 gap-3">
             {WIP_COLUMNS.map((col) => (
-              <label key={col.id} className="block">
-                <span className="mb-1 block text-[11px] text-on-surface-variant">
+              <label key={col.value} className="block">
+                <span className="mb-1 block text-xs text-on-surface-variant">
                   {col.label}
                 </span>
                 <input
@@ -259,9 +256,9 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
                   min={1}
                   step={1}
                   inputMode="numeric"
-                  value={wipLimits[col.id]}
+                  value={wipLimits[col.value]}
                   onChange={(e) =>
-                    setWipLimits((prev) => ({ ...prev, [col.id]: e.target.value }))
+                    setWipLimits((prev) => ({ ...prev, [col.value]: e.target.value }))
                   }
                   placeholder="—"
                   className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
@@ -282,7 +279,7 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
             <span className="block text-[12px] font-bold uppercase tracking-wider text-on-surface-variant">
               Administrative project
             </span>
-            <span className="block text-[11px] text-on-surface-variant">
+            <span className="block text-xs text-on-surface-variant">
               Exclude from portfolio roll-ups (Executive dashboard, Overview,
               overdue monitoring). The project stays fully usable here.
             </span>

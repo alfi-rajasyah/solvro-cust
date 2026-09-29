@@ -1,11 +1,33 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  getCoreRowModel,
+  getSortedRowModel,
+  useReactTable,
+  type ColumnDef,
+  type SortingState,
+} from "@tanstack/react-table";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { CustomerFormModal } from "@/components/CustomerFormModal";
 import { EmptyState } from "@/components/EmptyState";
 import { Alert, AlertDescription } from "@/components/reui/alert";
-import { Frame } from "@/components/reui/frame";
+import { DataGrid, DataGridContainer } from "@/components/reui/data-grid/data-grid";
+import { DataGridColumnHeader } from "@/components/reui/data-grid/data-grid-column-header";
+import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll-area";
+import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
+import { Chip } from "@/components/StatusChip";
+import { TableSkeleton } from "@/components/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ApiError } from "@/lib/api";
+import { useNewParam } from "@/hooks/useNewParam";
 import { hasPermission, useAuth } from "@/lib/auth";
+import { WEEKLY_STATUS_LABEL } from "@/lib/labels";
 import {
   type CustomerSummary,
   useCustomers,
@@ -18,13 +40,15 @@ export function Customers() {
   const deleteCustomer = useDeleteCustomer();
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<CustomerSummary | null>(null);
+  const [deleting, setDeleting] = useState<CustomerSummary | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const canMutate = hasPermission(user, "project:write");
   const viewAll = hasPermission(user, "project:view-all");
+  useNewParam("1", canMutate, () => setCreateOpen(true));
 
   async function handleDelete(c: CustomerSummary) {
-    if (!confirm(`Delete customer "${c.name}"? Linked projects keep their tasks but lose the customer link.`)) return;
+    setDeleting(null);
     setDeleteError(null);
     try {
       await deleteCustomer.mutateAsync(c.id);
@@ -48,7 +72,7 @@ export function Customers() {
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 font-display text-label-caps uppercase tracking-wider text-on-primary transition-colors hover:bg-primary-container"
+            className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 font-display text-sm text-on-primary transition-colors hover:bg-primary-container font-semibold"
           >
             <span className="material-symbols-outlined text-base">add</span>
             New customer
@@ -62,7 +86,13 @@ export function Customers() {
         </Alert>
       )}
 
-      {isLoading && <SkeletonGrid />}
+      {isLoading && (
+        <TableSkeleton
+          rows={8}
+          columns={canMutate ? 8 : 7}
+          widths={["w-3/4", "w-2/3", "w-2/3", "w-8", "w-8", "w-8", "w-20", "w-6"]}
+        />
+      )}
 
       {isError && (
         <Alert variant="destructive">
@@ -90,17 +120,12 @@ export function Customers() {
       )}
 
       {customers && customers.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {customers.map((c) => (
-            <CustomerCard
-              key={c.id}
-              customer={c}
-              canMutate={canMutate}
-              onEdit={() => setEditing(c)}
-              onDelete={() => handleDelete(c)}
-            />
-          ))}
-        </div>
+        <CustomersTable
+          customers={customers}
+          canMutate={canMutate}
+          onEdit={setEditing}
+          onDelete={setDeleting}
+        />
       )}
 
       <CustomerFormModal open={createOpen} onClose={() => setCreateOpen(false)} />
@@ -109,142 +134,254 @@ export function Customers() {
         onClose={() => setEditing(null)}
         customer={editing}
       />
+      <ConfirmModal
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && void handleDelete(deleting)}
+        title="Delete customer"
+        body={`Delete customer "${deleting?.name ?? ""}"? Linked projects keep their tasks but lose the customer link.`}
+        confirmLabel="Delete"
+        confirmTone="danger"
+        busy={deleteCustomer.isPending}
+      />
     </div>
   );
 }
 
-function CustomerCard({
-  customer,
+// Weekly-update column: sorts None < Draft < Done. A NOT_STARTED row counts as
+// "none" — nothing has been written for the week yet.
+const WEEKLY_RANK = { none: 0, draft: 1, done: 2 } as const;
+
+function weeklyKind(c: CustomerSummary): keyof typeof WEEKLY_RANK {
+  const status = c.health?.weeklyUpdate?.status;
+  if (status === "DONE") return "done";
+  if (status === "DRAFT") return "draft";
+  return "none";
+}
+
+function initialsOf(name: string) {
+  return name.slice(0, 2).toUpperCase();
+}
+
+function CustomersTable({
+  customers,
   canMutate,
   onEdit,
   onDelete,
 }: {
-  customer: CustomerSummary;
+  customers: CustomerSummary[];
   canMutate: boolean;
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit: (c: CustomerSummary) => void;
+  onDelete: (c: CustomerSummary) => void;
 }) {
-  const init = customer.name.slice(0, 2).toUpperCase();
-  return (
-    <Link to={`/customers/${customer.id}`} className="group flex flex-col">
-      {/* SOLVRO PATCH (reui-data-grid.md Wave 3, rescoped) — card shell runs
-          on the vendored Frame (reui/frame.tsx) instead of the hand-rolled
-          bordered div, mirroring EmptyState.tsx's bare-Frame usage (no
-          FramePanel — this card has no nested-panel structure, same
-          reasoning as EmptyState). `grow` lets Frame fill the Link's
-          grid-stretched height so the metric grid's `mt-auto` below still
-          pushes the footer to the card's bottom edge, exactly as it did
-          when Link itself was the flex-col container. `--frame-gap` is
-          zeroed because the card's vertical rhythm is driven by each
-          child's own `mb-3`/`mt-auto`/`mt-3`, not Frame's own gap; `--frame-px`/
-          `--frame-py` reproduce the old `p-4`; `--frame-radius` reproduces
-          `rounded-sm` (same override EmptyState uses). Border/bg colors and
-          the hover state are plain utility classes that win over Frame's
-          CSS-var defaults by Tailwind source order (see frame.tsx's
-          FramePanel comment). */}
-      <Frame className="grow [--frame-radius:var(--radius-sm)] [--frame-gap:0px] [--frame-px:--spacing(4)] [--frame-py:--spacing(4)] border-outline-variant bg-surface-container-lowest transition-colors hover:border-primary">
-        <div className="mb-3 flex items-center gap-3">
-          <div
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-sm font-display text-base font-bold text-white"
-            style={{ background: avatarColor(customer.name) }}
-          >
-            {init}
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="truncate font-display text-sm font-bold leading-tight text-on-surface group-hover:text-primary">
-              {customer.name}
-            </h3>
-            {customer.accountManager && (
-              <p className="truncate text-[11px] text-on-surface-variant">
-                AM: {customer.accountManager}
-              </p>
-            )}
-            {customer.tam && (
-              <p className="truncate text-[11px] text-on-surface-variant">
-                TAM: {customer.tam.username}
-              </p>
-            )}
-          </div>
-        </div>
+  const navigate = useNavigate();
+  // The server returns rows by name; a header click re-sorts client-side.
+  const [sorting, setSorting] = useState<SortingState>([]);
 
-        {customer.description && (
-          <p className="mb-3 line-clamp-2 text-[12px] leading-snug text-on-surface-variant">
-            {customer.description}
-          </p>
-        )}
-
-        {/* Metric grid */}
-        <div className="mt-auto grid grid-cols-2 gap-y-1 text-[12px]">
-          <span className="text-on-surface-variant">Projects</span>
-          <span className="text-right font-mono tabular-nums">{customer._count.projects}</span>
-          {customer.solutionArchitect && (
-            <>
-              <span className="text-on-surface-variant">SA lead</span>
-              <span className="truncate text-right font-mono text-[11px]" title={customer.solutionArchitect}>
-                {customer.solutionArchitect}
-              </span>
-            </>
-          )}
-        </div>
-
-        {/* Actions */}
-        <div className="mt-3 flex items-center justify-between border-t border-outline-variant pt-2">
-          <Link
-            to={`/projects?customerId=${customer.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="text-[11px] text-on-surface-variant hover:text-primary"
-          >
-            View projects →
-          </Link>
-          {canMutate && (
-            <div
-              className="flex items-center gap-1"
-              onClick={(e) => e.stopPropagation()}
+  const columns = useMemo<ColumnDef<CustomerSummary>[]>(() => {
+    const cols: ColumnDef<CustomerSummary>[] = [
+      {
+        id: "name",
+        accessorFn: (c) => c.name.toLowerCase(),
+        header: ({ column }) => <DataGridColumnHeader column={column} title="Customer" />,
+        cell: ({ row }) => (
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span
+              aria-hidden="true"
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-sm bg-primary/10 font-display text-xs font-bold text-primary"
             >
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onEdit();
-                }}
-                className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-surface-container hover:text-primary"
+              {initialsOf(row.original.name)}
+            </span>
+            {/* Heading kept so the customer name stays a named landmark
+                (customer-visibility.spec.ts reads it as an h3). */}
+            <h3 className="min-w-0 truncate font-display text-sm font-semibold text-on-surface">
+              <Link
+                to={`/customers/${row.original.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="hover:text-primary hover:underline"
               >
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onDelete();
-                }}
-                className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-error-container hover:text-on-error-container"
+                {row.original.name}
+              </Link>
+            </h3>
+          </div>
+        ),
+        meta: { skeleton: <Skeleton className="h-3.5 w-32" /> },
+      },
+      {
+        id: "am",
+        accessorFn: (c) => c.accountManager?.toLowerCase() || undefined,
+        sortUndefined: "last",
+        header: ({ column }) => <DataGridColumnHeader column={column} title="AM" />,
+        cell: ({ row }) => (
+          <span className="text-on-surface-variant">{row.original.accountManager || "—"}</span>
+        ),
+        meta: { skeleton: <Skeleton className="h-3.5 w-20" /> },
+      },
+      {
+        id: "tam",
+        accessorFn: (c) => c.tam?.username.toLowerCase(),
+        sortUndefined: "last",
+        header: ({ column }) => <DataGridColumnHeader column={column} title="TAM" />,
+        cell: ({ row }) => (
+          <span className="text-on-surface-variant">{row.original.tam?.username ?? "—"}</span>
+        ),
+        meta: { skeleton: <Skeleton className="h-3.5 w-20" /> },
+      },
+      {
+        id: "projects",
+        accessorFn: (c) => c._count.projects,
+        header: ({ column }) => <DataGridColumnHeader column={column} title="Projects" />,
+        cell: ({ row }) => (
+          <Link
+            to={`/projects?customerId=${row.original.id}`}
+            onClick={(e) => e.stopPropagation()}
+            title="View this customer's projects"
+            className="tabular-nums text-on-surface-variant hover:text-primary hover:underline"
+          >
+            {row.original._count.projects}
+          </Link>
+        ),
+        meta: { skeleton: <Skeleton className="h-3.5 w-6" /> },
+      },
+      {
+        id: "overdue",
+        accessorFn: (c) => c.health?.overdueCount ?? 0,
+        header: ({ column }) => <DataGridColumnHeader column={column} title="Overdue" />,
+        cell: ({ row }) => {
+          const n = row.original.health?.overdueCount ?? 0;
+          return (
+            <span
+              className={
+                n > 0 ? "font-bold tabular-nums text-error" : "tabular-nums text-on-surface-variant"
+              }
+            >
+              {n}
+            </span>
+          );
+        },
+        meta: { skeleton: <Skeleton className="h-3.5 w-6" /> },
+      },
+      {
+        id: "risks",
+        accessorFn: (c) => c.health?.openRiskCount ?? 0,
+        header: ({ column }) => <DataGridColumnHeader column={column} title="Risks" />,
+        cell: ({ row }) => {
+          const n = row.original.health?.openRiskCount ?? 0;
+          return (
+            <span
+              className={
+                n > 0
+                  ? "font-semibold tabular-nums text-on-surface"
+                  : "tabular-nums text-on-surface-variant"
+              }
+            >
+              {n}
+            </span>
+          );
+        },
+        meta: { skeleton: <Skeleton className="h-3.5 w-6" /> },
+      },
+      {
+        id: "weekly",
+        accessorFn: (c) => WEEKLY_RANK[weeklyKind(c)],
+        header: ({ column }) => <DataGridColumnHeader column={column} title="Weekly update" />,
+        cell: ({ row }) => {
+          const kind = weeklyKind(row.original);
+          if (kind === "done") return <Chip tone="emerald">{WEEKLY_STATUS_LABEL.DONE}</Chip>;
+          if (kind === "draft") return <Chip tone="amber">{WEEKLY_STATUS_LABEL.DRAFT}</Chip>;
+          return <Chip tone="gray">{WEEKLY_STATUS_LABEL.NOT_STARTED}</Chip>;
+        },
+        meta: { skeleton: <Skeleton className="h-4 w-20 rounded-full" /> },
+      },
+    ];
+    if (canMutate) {
+      cols.push({
+        id: "actions",
+        enableSorting: false,
+        size: 48,
+        header: () => <span className="sr-only">Actions</span>,
+        cell: ({ row }) => (
+          // The menu popup portals out of the row, but React events still
+          // bubble through the component tree to the row's onClick.
+          <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={`Actions for ${row.original.name}`}
+                    title="More customer actions"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30"
+                  >
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">
+                      more_horiz
+                    </span>
+                  </button>
+                }
+              />
+              {/* z-50 on the Positioner (frontend/CLAUDE.md "Popover z-index"). */}
+              <DropdownMenuContent
+                align="end"
+                className="w-40 bg-surface-container-lowest shadow-overlay!"
+                positionerClassName="z-50"
               >
-                Delete
-              </button>
-            </div>
-          )}
-        </div>
-      </Frame>
-    </Link>
-  );
-}
+                <DropdownMenuItem onClick={() => onEdit(row.original)} className="text-xs">
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">
+                    edit
+                  </span>
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => onDelete(row.original)}
+                  className="text-xs"
+                >
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">
+                    delete
+                  </span>
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ),
+        meta: { skeleton: <Skeleton className="h-6 w-6" /> },
+      });
+    }
+    return cols;
+  }, [canMutate, onEdit, onDelete]);
 
-const AVATAR_PALETTE = ["#0d9488", "#7c3aed", "#dc2626", "#0ea5e9", "#9333ea", "#a78bfa", "#f59e0b", "#10b981", "#0058be"];
-function avatarColor(seed: string) {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
-}
+  const table = useReactTable({
+    data: customers,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getRowId: (row) => String(row.id),
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
 
-function SkeletonGrid() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div
-          key={i}
-          className="h-40 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low"
-        />
-      ))}
-    </div>
+    <DataGrid
+      table={table}
+      recordCount={customers.length}
+      onRowClick={(c) => navigate(`/customers/${c.id}`)}
+      emptyMessage="No customers."
+      tableLayout={{
+        dense: true,
+        rowBorder: true,
+        headerBorder: true,
+        headerBackground: false,
+        width: "auto",
+      }}
+      tableClassNames={{ header: "bg-surface-container-low" }}
+    >
+      {/* Level-1 hairline on the container (same as the Tasks grid). */}
+      <DataGridContainer className="rounded-sm border border-outline-variant bg-surface-container-lowest">
+        <DataGridScrollArea>
+          <DataGridTable />
+        </DataGridScrollArea>
+      </DataGridContainer>
+    </DataGrid>
   );
 }

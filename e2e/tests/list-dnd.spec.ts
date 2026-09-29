@@ -138,7 +138,7 @@ test.describe("list & gantt drag & drop — desktop (mouse)", () => {
     // this same seeded project's Beta to IN_PROGRESS when both files share
     // a worker — so hardcoding "TODO" here is a false assumption about
     // fixture isolation, not a real precondition on the app.
-    const STATUS_LABEL: Record<string, string> = { TODO: "To do", IN_PROGRESS: "Active", DONE: "Done" };
+    const STATUS_LABEL: Record<string, string> = { TODO: "To do", IN_PROGRESS: "In progress", DONE: "Done" };
     const NEXT: Record<string, string> = { TODO: "IN_PROGRESS", IN_PROGRESS: "DONE", DONE: "TODO" };
 
     const base = apiBase(test.info());
@@ -156,7 +156,7 @@ test.describe("list & gantt drag & drop — desktop (mouse)", () => {
     await openList(page, seededProject.projectId);
 
     // StatusSelect (ProjectList.tsx): the chip is a <button> whose visible
-    // text is the current STATUS_LABEL ("To do"/"Active"/"Done"); clicking
+    // text is the current STATUS_LABEL ("To do"/"In progress"/"Done"); clicking
     // it opens a dropdown of the same three labels as sibling <button>s
     // inside the same row.
     const row = desktopRow(page, "Beta");

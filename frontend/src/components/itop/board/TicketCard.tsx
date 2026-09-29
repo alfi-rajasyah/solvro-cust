@@ -68,7 +68,7 @@ export function TicketCard({
         <span className="flex-1" />
         {escalated && <Chip tone="rose">Escalated</Chip>}
         {folded && (
-          <span className="whitespace-nowrap rounded-sm bg-surface-container-high px-1.5 py-0.5 text-[10px] font-semibold text-on-surface-variant">
+          <span className="whitespace-nowrap rounded-sm bg-surface-container-high px-1.5 py-0.5 text-meta font-semibold text-on-surface-variant">
             {folded}
           </span>
         )}
@@ -76,7 +76,7 @@ export function TicketCard({
 
       <p className="line-clamp-2 text-[13px] font-bold leading-snug text-on-surface">{ticket.title}</p>
 
-      <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px] text-on-surface-variant">
+      <div className="mt-1.5 flex items-center justify-between gap-2 text-meta text-on-surface-variant">
         <span className="truncate">
           {CLASS_LABEL[ticket.class] ?? ticket.class} · {ticket.agentName ?? "Unassigned"}
         </span>
@@ -93,7 +93,7 @@ export function TicketCard({
             onAssignToMe();
           }}
           disabled={assigning}
-          className="mt-2 rounded-sm border border-outline-variant px-2 py-1 font-display text-[11px] font-bold uppercase tracking-wider text-on-surface hover:border-primary hover:text-primary disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="mt-2 rounded-sm border border-outline-variant px-2 py-1 font-display text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           Assign to me
         </button>

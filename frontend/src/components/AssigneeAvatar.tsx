@@ -12,7 +12,7 @@ export function AssigneeAvatar({
   size?: "xs" | "sm" | "md";
 }) {
   const dimensions =
-    size === "xs" ? "h-5 w-5 text-[10px]" : size === "md" ? "h-8 w-8 text-xs" : "h-6 w-6 text-[11px]";
+    size === "xs" ? "h-5 w-5 text-meta" : size === "md" ? "h-8 w-8 text-xs" : "h-6 w-6 text-meta";
 
   if (!user) {
     return (

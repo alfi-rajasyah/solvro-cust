@@ -237,7 +237,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+        <span className="text-label-caps uppercase text-on-surface-variant">
           This week
         </span>
         <button
@@ -245,7 +245,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
           onClick={toggleWeek}
           aria-expanded={weekExpanded}
           aria-controls={rowsId}
-          className="text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           {weekExpanded
             ? "Hide week"
@@ -269,7 +269,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
               tabIndex={-1}
               className="flex flex-col gap-2 py-2.5 outline-none first:pt-0 last:pb-0 md:flex-row md:gap-3"
             >
-              <div className="shrink-0 pt-1 font-mono text-xs tabular-nums text-on-surface-variant md:w-16">
+              <div className="shrink-0 pt-1 text-xs tabular-nums text-on-surface-variant md:w-16">
                 {dayLabel(day)}
               </div>
               <div className="min-w-0 flex-1 space-y-2">
@@ -296,14 +296,14 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
                       <div className="min-w-0 flex-1">
                         {renderPrefix?.(note)}
                         <p className="whitespace-pre-wrap text-sm text-on-surface">{note.body}</p>
-                        <p className="text-[11px] text-on-surface-variant">{note.author.username}</p>
+                        <p className="text-meta text-on-surface-variant">{note.author.username}</p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         {note.author.id === currentUserId && (
                           <button
                             type="button"
                             onClick={() => startEdit(note)}
-                            className="text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                            className="text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                           >
                             Edit
                           </button>
@@ -312,7 +312,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
                           <button
                             type="button"
                             onClick={() => handleDelete(note.id)}
-                            className="text-[11px] font-semibold text-error hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                            className="text-meta font-semibold text-error hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                           >
                             Delete
                           </button>
@@ -328,7 +328,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
                     <button
                       type="button"
                       onClick={() => startAdd(day)}
-                      className="shrink-0 text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                      className="shrink-0 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                     >
                       Add
                     </button>
@@ -339,7 +339,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
                   <button
                     type="button"
                     onClick={() => startAdd(day)}
-                    className="text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                    className="text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                   >
                     + Add another note
                   </button>
@@ -389,7 +389,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
         title="Delete note"
         body="Delete this note? This can't be undone."
         confirmLabel="Delete"
-        confirmTone="warning"
+        confirmTone="danger"
       />
     </div>
   );
@@ -447,7 +447,7 @@ function NoteEditorForm({
         className="min-h-16"
       />
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <KbdGroup className="text-[11px] text-on-surface-variant">
+        <KbdGroup className="text-meta text-on-surface-variant">
           <Kbd>⌘</Kbd>
           <Kbd>↵</Kbd>
           <span className="ml-1">saves</span>

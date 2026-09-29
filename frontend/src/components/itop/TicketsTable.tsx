@@ -67,25 +67,25 @@ export function TicketsTable({
       <table className="hidden w-full border-collapse text-sm md:table">
         <thead>
           <tr className="border-b border-outline-variant text-left">
-            <th className="py-2 pl-3 pr-2 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+            <th className="py-2 pl-3 pr-2 font-display text-label-caps uppercase text-on-surface-variant">
               Ref
             </th>
-            <th className="py-2 pr-2 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+            <th className="py-2 pr-2 font-display text-label-caps uppercase text-on-surface-variant">
               Title
             </th>
-            <th className="py-2 pr-2 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+            <th className="py-2 pr-2 font-display text-label-caps uppercase text-on-surface-variant">
               Type
             </th>
-            <th className="py-2 pr-2 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+            <th className="py-2 pr-2 font-display text-label-caps uppercase text-on-surface-variant">
               Status
             </th>
-            <th className="py-2 pr-2 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+            <th className="py-2 pr-2 font-display text-label-caps uppercase text-on-surface-variant">
               Agent
             </th>
-            <th className="py-2 pr-2 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+            <th className="py-2 pr-2 font-display text-label-caps uppercase text-on-surface-variant">
               Age
             </th>
-            <th className="py-2 pr-2 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+            <th className="py-2 pr-2 font-display text-label-caps uppercase text-on-surface-variant">
               SLA
             </th>
             <th className="py-2 pr-3" />
@@ -179,7 +179,7 @@ export function TicketsTable({
                 <Chip tone={statusTone(t)}>{statusLabel(t.status)}</Chip>
               </div>
               <p className="mt-1 truncate text-sm text-on-surface">{t.title}</p>
-              <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px] text-on-surface-variant">
+              <div className="mt-1.5 flex items-center justify-between gap-2 text-meta text-on-surface-variant">
                 <span>
                   {ageLabel(t.startDate)} · {slaLabel(t)}
                 </span>

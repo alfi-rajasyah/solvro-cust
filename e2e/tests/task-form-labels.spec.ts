@@ -45,7 +45,7 @@ test.describe("task drawer label creation — desktop", () => {
     await expect(title).toBeVisible();
     await title.fill(draftTitle);
 
-    await page.getByRole("button", { name: "+ Label" }).click();
+    await page.getByRole("button", { name: "Add label" }).click();
     await page.getByPlaceholder("Label name").fill(labelName);
     await page.getByRole("button", { name: "Add", exact: true }).click();
 
@@ -58,7 +58,7 @@ test.describe("task drawer label creation — desktop", () => {
     expect(tasksAfter.length).toBe(tasksBefore.length);
 
     // Enter in the label-name input must not submit the task form either.
-    await page.getByRole("button", { name: "+ Label" }).click();
+    await page.getByRole("button", { name: "Add label" }).click();
     await page.getByPlaceholder("Label name").fill(`${labelName} B`);
     await page.getByPlaceholder("Label name").press("Enter");
     await expect(page.getByText(`${labelName} B`)).toBeVisible();

@@ -12,22 +12,12 @@ import { useState } from "react";
 import { Badge } from "@/components/reui/badge";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { weekNumberLabel } from "@/lib/dailyReviewStats";
+import { fmtDateTime } from "@/lib/formatDate";
+import { WEEKLY_HEALTH_LABEL, WEEKLY_STATUS_LABEL } from "@/lib/labels";
 import type { DailyReviewCustomer, WeeklyStatus } from "@/lib/queries";
 import { MidweekSyncModal } from "./MidweekSyncModal";
 import { ReflectionSyncModal } from "./ReflectionSyncModal";
 import { HEALTH_CLASS, WEEKLY_STATUS_BADGE } from "./SyncField";
-
-const MIDWEEK_SAVED_FMT = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  day: "numeric",
-  month: "short",
-});
-
-const REFLECTION_STATE_LABEL: Record<WeeklyStatus, string> = {
-  NOT_STARTED: "not started",
-  DRAFT: "draft",
-  DONE: "done",
-};
 
 export interface WeeklySyncRowProps {
   customer: DailyReviewCustomer;
@@ -45,20 +35,20 @@ export function WeeklySyncRow({ customer, week }: WeeklySyncRowProps) {
   const health = update?.health ?? null;
 
   const midweekLine = update?.midweekSavedAt
-    ? `Mid-week saved ${MIDWEEK_SAVED_FMT.format(new Date(update.midweekSavedAt))}`
+    ? `Mid-week saved ${fmtDateTime(update.midweekSavedAt)}`
     : "Mid-week not filled";
-  const statusLine = `${midweekLine} · Reflection ${REFLECTION_STATE_LABEL[status]}`;
+  const statusLine = `${midweekLine} · Reflection: ${WEEKLY_STATUS_LABEL[status]}`;
 
   return (
     <section className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-sm border border-outline-variant bg-surface-container px-4 py-3">
       <h3 className="font-display text-sm font-semibold text-on-surface">Weekly sync</h3>
-      <span className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+      <span className="text-label-caps uppercase text-on-surface-variant">
         Week {weekNumberLabel(week.key)} · {customer.name}
       </span>
       <Badge variant={badge.variant}>{badge.label}</Badge>
       {health && (
-        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${HEALTH_CLASS[health]}`}>
-          {health}
+        <span className={`rounded-full px-2 py-0.5 text-meta font-semibold ${HEALTH_CLASS[health]}`}>
+          {WEEKLY_HEALTH_LABEL[health]}
         </span>
       )}
       <span className="text-[13px] text-on-surface-variant">{statusLine}</span>

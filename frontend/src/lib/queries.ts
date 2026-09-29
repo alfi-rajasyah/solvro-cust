@@ -1,5 +1,11 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "./api";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
+import { apiRequest, apiRequestWithHeaders } from "./api";
 import { useAuth, type Role } from "./auth";
 import { dateToDay, dayFromIso, isoFromDay } from "./dateField";
 import { parseWeekKey } from "./isoWeek";
@@ -81,6 +87,20 @@ export interface CustomerSummary {
   tamId: number | null;
   tam: { id: number; username: string } | null;
   _count: { projects: number };
+  // GET /customers only (backend/src/routes/customers.ts): overdue tasks and
+  // open risks summed over the caller's visible projects of this customer,
+  // plus the weekly update filed for the current ISO week (null = none).
+  health?: CustomerHealth;
+}
+
+export interface CustomerHealth {
+  overdueCount: number;
+  openRiskCount: number;
+  weeklyUpdate: {
+    weekStart: string;
+    status: WeeklyStatus;
+    health: WeeklyHealth | null;
+  } | null;
 }
 
 export interface Service {
@@ -122,6 +142,20 @@ export interface WipLimits {
   DONE?: number | null;
 }
 
+// Server-computed health block on GET /projects, GET /projects/:id and the
+// nested projects[] of GET /customers/:id (backend/src/lib/projectHealth.ts).
+export interface ProjectHealth {
+  /** All tasks, subtasks included. */
+  progress: { done: number; total: number };
+  /** Open tasks due before the caller's local day (`today`). */
+  overdueCount: number;
+  /** Risks with status OPEN. */
+  openRiskCount: number;
+  /** Earliest task start / latest task due, "yyyy-MM-dd", null when no task is dated. */
+  startDate: string | null;
+  endDate: string | null;
+}
+
 export interface ProjectSummary {
   id: number;
   name: string;
@@ -139,9 +173,13 @@ export interface ProjectSummary {
   tam: { id: number; username: string };
   customer: { id: number; name: string } | null;
   _count: { tasks: number };
+  /** Optional so hand-built fixtures and mutation responses (bare rows) still type-check. */
+  health?: ProjectHealth;
 }
 
 export interface ProjectDetail extends ProjectSummary {
+  /** Present on GET /projects/:id; adds the baseline slip (whole days, null without a baseline). */
+  health?: ProjectHealth & { slipDays: number | null };
   tam: { id: number; username: string; email: string };
   customer: { id: number; name: string } | null;
   baselineLockedBy: { id: number; username: string } | null;
@@ -252,6 +290,17 @@ export interface OverviewResponse {
   projectStatusCounts: Partial<Record<ProjectStatus, number>>;
   taskCounts: Record<TaskStatus, number>;
   portfolio: PortfolioProjectRow[];
+  // Open-work tiles: `overdue` = open and due before today; `dueThisWeek` =
+  // open and due from today through the ISO week's Sunday; `openRisks` =
+  // OPEN risks on projects in scope. Same visibility scope as the rest of
+  // the response (backend/src/routes/overview.ts).
+  workCounts: WorkCounts;
+}
+
+export interface WorkCounts {
+  overdue: number;
+  dueThisWeek: number;
+  openRisks: number;
 }
 
 // GET /notes/recent — the Overview page's "Recent notes" feed
@@ -331,7 +380,21 @@ export interface TasksFilter {
   labelId?: number;
   customerId?: number;
   overdue?: boolean;
+  /** true = hide DONE tasks (open work only). */
+  open?: boolean;
   topLevel?: boolean;
+  /** Inclusive due-date day range, "yyyy-MM-dd" (the server rejects from > to). */
+  dueFrom?: string;
+  dueTo?: string;
+  /** "due" = soonest first, undated last; default is board order. */
+  sort?: "position" | "due";
+}
+
+// GET /tasks result plus the uncapped match count (`X-Total-Count`): the
+// list itself stops at 200 rows, `total` says how many matched overall.
+export interface TasksResult {
+  tasks: TaskWithProject[];
+  total: number;
 }
 
 export interface ProjectsFilter {
@@ -557,6 +620,12 @@ export const queryKeys = {
   // `projectNotes` above documents.
   customerWeeklyUpdates: (id: number, limit?: number) =>
     ["customers", id, "weekly-updates", limit ?? null] as const,
+  // Newest-first customer (operations) notes for the account Overview.
+  // `customerNotesRoot` is the prefix every customer-note mutation invalidates
+  // (same shape as `recentNotesRoot` below).
+  customerNotesRoot: (id: number) => ["customers", id, "notes"] as const,
+  customerNotes: (id: number, limit: number) =>
+    [...queryKeys.customerNotesRoot(id), limit] as const,
   tasks: (filter?: TasksFilter) => ["tasks", filter ?? {}] as const,
   comments: (taskId: number) => ["tasks", taskId, "comments"] as const,
   search: (q: string) => ["search", q] as const,
@@ -569,6 +638,11 @@ export const queryKeys = {
   // uses, rather than ~20 repeated `["daily-review"]` array literals that
   // could each silently drift.
   dailyReviewRoot: ["daily-review"] as const,
+  // Sidebar counts (GET /overview/badges). `today` is in the key — the
+  // "reviewed today" judgement flips at local midnight. `navBadgesRoot` is the
+  // prefix the review mutations invalidate.
+  navBadges: (today: string) => ["nav-badges", today] as const,
+  navBadgesRoot: ["nav-badges"] as const,
   // Overview's "Recent notes" feed (GET /notes/recent). `today` is folded
   // into the key by useRecentNotes — same day-boundary rationale as
   // useOverview. `recentNotesRoot` is the prefix every note mutation below
@@ -664,6 +738,26 @@ export function useRecentNotes() {
   });
 }
 
+export interface NavBadgesResponse {
+  // Daily Review customers with at least one ACTIVE project not yet marked
+  // reviewed by the caller today.
+  dailyReviewPending: number;
+}
+
+// Light sidebar counts — 60 s fresh, refetched when the tab regains focus so
+// a review marked elsewhere (or a new day) shows up without a page reload.
+export function useNavBadges() {
+  const today = dateToDay(new Date())!;
+  return useQuery({
+    queryKey: queryKeys.navBadges(today),
+    queryFn: ({ signal }) =>
+      apiRequest<NavBadgesResponse>(`/overview/badges?today=${today}`, { signal }),
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
+    placeholderData: (prev) => prev,
+  });
+}
+
 // Powers the ⌘K command palette (CommandPalette.tsx). `enabled` gates on the
 // backend's own 2-char minimum (search.ts's Zod schema) so we never fire a
 // request that's guaranteed to 400. `placeholderData` keeps the previous
@@ -691,36 +785,51 @@ export function useUsers() {
 export function useProjects(filter: ProjectsFilter = {}) {
   const params = new URLSearchParams();
   if (filter.customerId) params.set("customerId", String(filter.customerId));
+  // `health.overdueCount` is bucketed against the caller's local day, so
+  // `today` rides along in the URL and the key (same reasoning as useTasks):
+  // the key rolls over with the day instead of serving a pre-midnight entry.
+  const today = dateToDay(new Date())!;
+  params.set("today", today);
   const qs = params.toString();
   return useQuery({
-    queryKey: queryKeys.projects(filter),
+    queryKey: [...queryKeys.projects(filter), today],
     queryFn: ({ signal }) =>
       apiRequest<ProjectSummary[]>(`/projects${qs ? `?${qs}` : ""}`, { signal }),
   });
 }
 
 export function useCustomers() {
+  // `health.overdueCount` depends on the caller's local day — see useProjects.
+  // The day is appended to the key (the bare ["customers"] prefix that
+  // mutations invalidate still matches it).
+  const today = dateToDay(new Date())!;
   return useQuery({
-    queryKey: queryKeys.customers,
-    queryFn: ({ signal }) => apiRequest<CustomerSummary[]>("/customers", { signal }),
+    queryKey: [...queryKeys.customers, today],
+    queryFn: ({ signal }) =>
+      apiRequest<CustomerSummary[]>(`/customers?today=${today}`, { signal }),
     staleTime: 30_000,
   });
 }
 
 export function useCustomer(id: number | null) {
+  // Nested projects[] carry `health`, whose overdue count depends on `today`
+  // — see useProjects.
+  const today = dateToDay(new Date())!;
   return useQuery({
-    queryKey: id ? queryKeys.customer(id) : ["customers", "noop"],
+    queryKey: id ? [...queryKeys.customer(id), today] : ["customers", "noop"],
     queryFn: ({ signal }) =>
-      apiRequest<CustomerDetail>(`/customers/${id}`, { signal }),
+      apiRequest<CustomerDetail>(`/customers/${id}?today=${today}`, { signal }),
     enabled: id !== null,
   });
 }
 
 export function useProject(id: number | null) {
+  // `health.overdueCount` depends on the caller's local day — see useProjects.
+  const today = dateToDay(new Date())!;
   return useQuery({
-    queryKey: id ? queryKeys.project(id) : ["projects", "noop"],
+    queryKey: id ? [...queryKeys.project(id), today] : ["projects", "noop"],
     queryFn: ({ signal }) =>
-      apiRequest<ProjectDetail>(`/projects/${id}`, { signal }),
+      apiRequest<ProjectDetail>(`/projects/${id}?today=${today}`, { signal }),
     enabled: id !== null,
   });
 }
@@ -744,7 +853,40 @@ export function useProjectLabels(id: number | null) {
   });
 }
 
-export function useTasks(filter: TasksFilter = {}) {
+// Task and risk writes move the server-computed `health` numbers (progress,
+// overdue, open risks) shown on project and customer surfaces. Only the
+// queries that carry `health` are refreshed — never the bare "projects" /
+// "customers" prefixes, which would also refetch every per-project subquery
+// (tasks, sections, labels, epics, risks, notes, …) and the customer
+// weekly-updates / notes caches on each drag or inline edit. Those queries
+// are told apart by key shape: `useProjects` = ["projects", {filter}, today],
+// `useProject` = ["projects", id, today], `useCustomers` = ["customers",
+// today], `useCustomer` = ["customers", id, today]; subquery keys carry a
+// non-day string or extra segments instead.
+const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const isDayKey = (v: unknown): boolean => typeof v === "string" && DAY_KEY_RE.test(v);
+
+function invalidateProjectHealth(qc: QueryClient, projectId: number) {
+  return Promise.all([
+    qc.invalidateQueries({
+      predicate: ({ queryKey: k }) =>
+        k[0] === "projects" &&
+        // project lists, or this project's detail
+        (typeof k[1] === "object" ||
+          (k[1] === projectId && k.length === 3 && isDayKey(k[2]))),
+    }),
+    qc.invalidateQueries({
+      predicate: ({ queryKey: k }) =>
+        k[0] === "customers" &&
+        // customers list, or any customer detail (a task write doesn't know
+        // its project's customer; only mounted detail queries refetch)
+        ((k.length === 2 && isDayKey(k[1])) ||
+          (typeof k[1] === "number" && k.length === 3 && isDayKey(k[2]))),
+    }),
+  ]);
+}
+
+function tasksQueryOptions(filter: TasksFilter) {
   const params = new URLSearchParams();
   if (filter.status) params.set("status", filter.status);
   if (filter.priority) params.set("priority", filter.priority);
@@ -759,9 +901,13 @@ export function useTasks(filter: TasksFilter = {}) {
     // itself is active; `today` isn't a TasksFilter option callers set.
     params.set("today", dateToDay(new Date())!);
   }
+  if (filter.open) params.set("open", "true");
   if (filter.topLevel) params.set("topLevel", "true");
+  if (filter.dueFrom) params.set("dueFrom", filter.dueFrom);
+  if (filter.dueTo) params.set("dueTo", filter.dueTo);
+  if (filter.sort) params.set("sort", filter.sort);
   const qs = params.toString();
-  return useQuery({
+  return {
     // `qs` (not just `filter`) is part of the key: `today` lives only in
     // `qs`, recomputed fresh each render this hook runs, so the key
     // naturally changes the next time the component re-renders after local
@@ -769,12 +915,34 @@ export function useTasks(filter: TasksFilter = {}) {
     // pre-midnight cache entry for an unchanged `{overdue:true}` filter
     // instead of refetching against the new day.
     queryKey: [...queryKeys.tasks(filter), qs],
-    queryFn: ({ signal }) =>
-      apiRequest<TaskWithProject[]>(`/tasks${qs ? `?${qs}` : ""}`, { signal }),
+    queryFn: async ({ signal }: { signal: AbortSignal }): Promise<TasksResult> => {
+      const { data, headers } = await apiRequestWithHeaders<TaskWithProject[]>(
+        `/tasks${qs ? `?${qs}` : ""}`,
+        { signal },
+      );
+      // Header missing (older server, stripped by a proxy): fall back to the
+      // length of what we received rather than NaN.
+      const header = Number(headers.get("X-Total-Count"));
+      const total = headers.has("X-Total-Count") && Number.isFinite(header) ? header : data.length;
+      return { tasks: data, total };
+    },
     // See useOverview()'s comment: avoids a skeleton flash on the render
     // where the day-boundary key change lands.
-    placeholderData: (prev) => prev,
-  });
+    placeholderData: (prev: TasksResult | undefined) => prev,
+  };
+}
+
+const selectTasks = (r: TasksResult) => r.tasks;
+
+// The task list alone (`data` is the array). Shares its cache entry with
+// useTasksWithTotal — same key, same stored `{ tasks, total }` shape.
+export function useTasks(filter: TasksFilter = {}) {
+  return useQuery({ ...tasksQueryOptions(filter), select: selectTasks });
+}
+
+// The task list plus the uncapped match count, for "showing 200 of N".
+export function useTasksWithTotal(filter: TasksFilter = {}) {
+  return useQuery(tasksQueryOptions(filter));
 }
 
 export interface CreateProjectInput {
@@ -1178,6 +1346,7 @@ export function useUpdateTask(projectId: number) {
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: queryKeys.overview });
+      invalidateProjectHealth(qc, projectId);
       // The Daily Review page's attention lists let a TAM change a task's
       // status inline (daily-review-v2-spec.md §6.3) — keep that cache in
       // sync too.
@@ -1227,6 +1396,7 @@ export function useDeleteTask(projectId: number) {
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: queryKeys.overview });
+      invalidateProjectHealth(qc, projectId);
       // Same rationale as useUpdateTask above — a deleted task can drop out
       // of the Daily Review page's overdue-tasks attention list.
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
@@ -1276,6 +1446,7 @@ export function useCreateTask(projectId: number) {
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: queryKeys.overview });
+      invalidateProjectHealth(qc, projectId);
       // A new task can be created directly under an epic (§6 "Add story…"
       // inline create) — keep that epic's progress (done/total) in sync.
       qc.invalidateQueries({ queryKey: queryKeys.projectEpics(projectId) });
@@ -1301,6 +1472,7 @@ export function useDuplicateTask(projectId: number) {
         qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) }),
         qc.invalidateQueries({ queryKey: ["tasks"] }),
         qc.invalidateQueries({ queryKey: queryKeys.overview }),
+        invalidateProjectHealth(qc, projectId),
         // Same rationale as useUpdateTask/useDeleteTask above — a duplicated
         // task can newly appear in the Daily Review page's attention lists.
         qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot }),
@@ -1470,6 +1642,7 @@ export function useDuplicateSection(projectId: number) {
         qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) }),
         qc.invalidateQueries({ queryKey: ["tasks"] }),
         qc.invalidateQueries({ queryKey: queryKeys.overview }),
+        invalidateProjectHealth(qc, projectId),
         qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot }),
         // The section's duplicated tasks keep their `epicId` (§4) — their
         // epics' done/total counts can change. Which epics is unknown here
@@ -1599,6 +1772,7 @@ export function useCreateRisk(projectId: number) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projectRisks(projectId) });
+      invalidateProjectHealth(qc, projectId);
     },
   });
 }
@@ -1625,6 +1799,7 @@ export function useUpdateRisk(projectId: number) {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projectRisks(projectId) });
+      invalidateProjectHealth(qc, projectId);
       // Same rationale as useUpdateTask above — open risks are
       // inline-editable from the Daily Review page's attention lists too.
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
@@ -1639,6 +1814,7 @@ export function useDeleteRisk(projectId: number) {
       apiRequest<void>(`/risks/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projectRisks(projectId) });
+      invalidateProjectHealth(qc, projectId);
       // Same rationale as useUpdateRisk above — a deleted risk can drop out
       // of the Daily Review page's open-risks attention list.
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
@@ -1985,6 +2161,7 @@ export function useMarkProjectReviewed(projectId: number) {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.navBadgesRoot });
     },
   });
 }
@@ -2014,6 +2191,7 @@ export function useUnmarkProjectReviewed(projectId: number) {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.navBadgesRoot });
     },
   });
 }
@@ -2068,6 +2246,7 @@ export function useAddCustomerNote(customerId: number) {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
       qc.invalidateQueries({ queryKey: queryKeys.recentNotesRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.customerNotesRoot(customerId) });
     },
   });
 }
@@ -2116,6 +2295,7 @@ export function useUpdateCustomerNote(customerId: number) {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
       qc.invalidateQueries({ queryKey: queryKeys.recentNotesRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.customerNotesRoot(customerId) });
     },
   });
 }
@@ -2147,6 +2327,7 @@ export function useDeleteCustomerNote(customerId: number) {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
       qc.invalidateQueries({ queryKey: queryKeys.recentNotesRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.customerNotesRoot(customerId) });
     },
   });
 }
@@ -2204,6 +2385,13 @@ export function useSaveWeeklyUpdate(customerId: number) {
       // refreshes every limit-bucketed cache entry for this customer, not
       // just the unlimited one.
       qc.invalidateQueries({ queryKey: ["customers", customerId, "weekly-updates"] });
+      // GET /customers carries each customer's `health.weeklyUpdate`, so the
+      // list (key ["customers", today], two segments) and this customer's
+      // detail go stale on a save too.
+      qc.invalidateQueries({
+        predicate: (q) => q.queryKey[0] === "customers" && q.queryKey.length === 2,
+      });
+      qc.invalidateQueries({ queryKey: queryKeys.customer(customerId) });
     },
   });
 }
@@ -2220,6 +2408,21 @@ export function useCustomerWeeklyUpdates(customerId: number | null, limit?: numb
         { signal },
       );
     },
+    enabled: customerId !== null,
+  });
+}
+
+// GET /customers/:id/notes (newest first, `limit` 1-100) — the same rows the
+// Daily Review lists as operations notes.
+export function useCustomerNotes(customerId: number | null, limit: number) {
+  return useQuery({
+    queryKey: customerId
+      ? queryKeys.customerNotes(customerId, limit)
+      : ["customers", "noop", "notes"],
+    queryFn: ({ signal }) =>
+      apiRequest<DailyReviewOpsNote[]>(`/customers/${customerId}/notes?limit=${limit}`, {
+        signal,
+      }),
     enabled: customerId !== null,
   });
 }

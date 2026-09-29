@@ -6,7 +6,9 @@ import {
   type ColumnDef,
   type SortingState,
 } from "@tanstack/react-table";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { Modal } from "@/components/Modal";
+import { ProjectStatusChip } from "@/components/StatusChip";
 import { Tabs } from "@/components/Tabs";
 import { ItopTab } from "@/components/admin/ItopTab";
 import { ApiError } from "@/lib/api";
@@ -32,6 +34,7 @@ import {
 import type { Role } from "@/lib/auth";
 import { PERMISSION_CATALOG, useAuth } from "@/lib/auth";
 import { copyText } from "@/lib/clipboard";
+import { fmtDateTime } from "@/lib/formatDate";
 import { personNameSortingFn } from "@/lib/tableSort";
 import { DataGrid, DataGridContainer } from "@/components/reui/data-grid/data-grid";
 import { DataGridColumnHeader } from "@/components/reui/data-grid/data-grid-column-header";
@@ -108,6 +111,8 @@ function UsersTab() {
   const updateRole = useAdminUpdateRole();
   const setActive = useAdminSetActive();
   const resetPassword = useAdminResetPassword();
+  const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null);
+  const [resettingUser, setResettingUser] = useState<AdminUser | null>(null);
   const [resetResult, setResetResult] = useState<
     { username: string; tempPassword: string } | null
   >(null);
@@ -181,7 +186,7 @@ function UsersTab() {
           className={[
             // text-xs (13px, this theme's own --text-xs override — see
             // index.css) replaces the carried-over text-[13px] magic number.
-            "font-mono text-xs text-on-surface-variant",
+            "text-xs text-on-surface-variant",
             row.original.active ? "" : "opacity-60",
           ].join(" ")}
         >
@@ -232,7 +237,7 @@ function UsersTab() {
               // select renders ~4px shorter, accepted as a density win.
               // font-bold stays explicit — see data-grid-column-header.tsx's
               // comment on why the token's baked-in weight needs the guard.
-              className="rounded-sm border border-outline-variant bg-surface px-2 py-1 font-display text-label-caps font-bold uppercase text-on-surface focus:border-primary focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-sm border border-outline-variant bg-surface px-2 py-1 font-display text-label-caps uppercase text-on-surface focus:border-primary focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-60"
               title={isSelf ? "You cannot change your own role" : undefined}
             >
               {roleOptionsFor(u.role).map((r) => (
@@ -247,7 +252,7 @@ function UsersTab() {
                 // No token matches 10px (the smallest named size is
                 // text-label-caps at 12px) — left as an arbitrary value per
                 // N5 (do not invent a size to fill the gap).
-                className="rounded-full bg-chip-amber-bg px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-chip-amber-text"
+                className="rounded-full bg-chip-amber-bg px-2 py-0.5 font-display text-label-caps leading-4 uppercase text-chip-amber-text"
               >
                 Needs role
               </span>
@@ -283,7 +288,7 @@ function UsersTab() {
       cell: ({ row }) => (
         <span
           className={[
-            "rounded-full px-2 py-0.5 font-display text-label-caps uppercase tracking-wider",
+            "rounded-full px-2 py-0.5 font-display text-label-caps uppercase",
             row.original.active
               ? "bg-chip-emerald-bg text-chip-emerald-text"
               : "bg-surface-container-high text-on-surface-variant opacity-60",
@@ -312,23 +317,23 @@ function UsersTab() {
               type="button"
               onClick={() => handleToggleActive(u)}
               disabled={isSelf}
-              className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 font-semibold"
               title={isSelf ? "You cannot deactivate yourself" : undefined}
             >
               {u.active ? "Deactivate" : "Reactivate"}
             </button>
             <button
               type="button"
-              onClick={() => handleResetPassword(u)}
-              className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
+              onClick={() => setResettingUser(u)}
+              className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-semibold"
             >
               Reset password
             </button>
             <button
               type="button"
-              onClick={() => handleDelete(u)}
+              onClick={() => setDeletingUser(u)}
               disabled={isSelf || deleteUser.isPending}
-              className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-error-container hover:text-on-error-container disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container disabled:cursor-not-allowed disabled:opacity-50 font-semibold"
               title={
                 isSelf
                   ? "You cannot delete yourself"
@@ -412,14 +417,8 @@ function UsersTab() {
   }
 
   async function handleDelete(u: AdminUser) {
+    setDeletingUser(null);
     setError(null);
-    if (
-      !confirm(
-        `Permanently delete ${u.username} (${u.email})? This cannot be undone.`,
-      )
-    ) {
-      return;
-    }
     try {
       await deleteUser.mutateAsync(u.id);
     } catch (err) {
@@ -428,8 +427,8 @@ function UsersTab() {
   }
 
   async function handleResetPassword(u: AdminUser) {
+    setResettingUser(null);
     setError(null);
-    if (!confirm(`Reset password for ${u.username}? Their current password will stop working.`)) return;
     try {
       const res = await resetPassword.mutateAsync(u.id);
       setResetResult({ username: u.username, tempPassword: res.tempPassword });
@@ -484,7 +483,7 @@ function UsersTab() {
           <button
             type="button"
             onClick={() => setResetResult(null)}
-            className="mt-2 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:text-on-surface"
+            className="mt-2 font-display text-sm text-on-surface-variant hover:text-on-surface font-semibold"
           >
             Dismiss
           </button>
@@ -495,7 +494,7 @@ function UsersTab() {
         className="flex flex-wrap items-end gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest p-3"
       >
         <label className="w-full md:flex-1 md:min-w-[160px]">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Email
           </span>
           <input
@@ -507,7 +506,7 @@ function UsersTab() {
           />
         </label>
         <label className="w-full md:flex-1 md:min-w-[120px]">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Username
           </span>
           <input
@@ -520,7 +519,7 @@ function UsersTab() {
           />
         </label>
         <label className="w-full md:flex-1 md:min-w-[140px]">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Password (min 8)
           </span>
           <input
@@ -532,7 +531,7 @@ function UsersTab() {
           />
         </label>
         <label className="w-full md:w-auto md:min-w-[120px]">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Role
           </span>
           <select
@@ -598,6 +597,27 @@ function UsersTab() {
           </DataGridScrollArea>
         </DataGridContainer>
       </DataGrid>
+
+      <ConfirmModal
+        open={deletingUser !== null}
+        onClose={() => setDeletingUser(null)}
+        onConfirm={() => deletingUser && void handleDelete(deletingUser)}
+        title="Delete user"
+        body={`Permanently delete ${deletingUser?.username ?? ""} (${deletingUser?.email ?? ""})? This cannot be undone.`}
+        confirmLabel="Delete"
+        confirmTone="danger"
+        busy={deleteUser.isPending}
+      />
+      <ConfirmModal
+        open={resettingUser !== null}
+        onClose={() => setResettingUser(null)}
+        onConfirm={() => resettingUser && void handleResetPassword(resettingUser)}
+        title="Reset password"
+        body={`Reset password for ${resettingUser?.username ?? ""}? Their current password will stop working.`}
+        confirmLabel="Reset password"
+        confirmTone="warning"
+        busy={resetPassword.isPending}
+      />
     </div>
   );
 }
@@ -605,14 +625,14 @@ function UsersTab() {
 function ProviderChip({ provider }: { provider: "google" | "password" }) {
   if (provider === "google") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 font-display text-[11px] font-semibold text-primary dark:bg-primary/20">
+      <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 font-display text-meta font-semibold text-primary dark:bg-primary/20">
         <span className="material-symbols-outlined text-[12px]">mail</span>
         Google
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-surface-container-high px-2 py-0.5 font-display text-[11px] font-semibold text-on-surface-variant">
+    <span className="inline-flex items-center gap-1 rounded-full bg-surface-container-high px-2 py-0.5 font-display text-meta font-semibold text-on-surface-variant">
       <span className="material-symbols-outlined text-[12px]">key</span>
       Password
     </span>
@@ -646,12 +666,12 @@ function AdminKpi({
   return (
     <div className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
       <div className="flex items-center justify-between">
-        <span className="text-label-caps uppercase tracking-wider text-on-surface-variant">{label}</span>
+        <span className="text-label-caps uppercase text-on-surface-variant">{label}</span>
         <span className={`material-symbols-outlined text-base ${iconColor}`}>{icon}</span>
       </div>
       <div className="mt-2 flex items-baseline gap-2">
-        <span className="font-mono text-3xl font-bold tabular-nums text-on-surface">{value}</span>
-        {hint && <span className="text-[11px] text-on-surface-variant">{hint}</span>}
+        <span className="text-3xl font-bold tabular-nums text-on-surface">{value}</span>
+        {hint && <span className="text-meta text-on-surface-variant">{hint}</span>}
       </div>
     </div>
   );
@@ -732,6 +752,7 @@ function RolesTab() {
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newPerms, setNewPerms] = useState<string[]>([]);
+  const [deletingRole, setDeletingRole] = useState<AdminRole | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editPerms, setEditPerms] = useState<string[]>([]);
@@ -782,7 +803,7 @@ function RolesTab() {
               </span>
             )}
             {r.builtIn && (
-              <span className="ml-2 rounded-full bg-surface-container-high px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+              <span className="ml-2 rounded-full bg-surface-container-high px-2 py-0.5 font-display text-label-caps leading-4 uppercase text-on-surface-variant">
                 Reserved
               </span>
             )}
@@ -820,7 +841,7 @@ function RolesTab() {
             {r.permissions.map((p) => (
               <span
                 key={p}
-                className={`rounded-sm px-1.5 py-0.5 font-mono text-[11px] ${
+                className={`rounded-sm px-1.5 py-0.5 font-mono text-meta ${
                   p === "*"
                     ? "bg-primary/15 text-primary"
                     : "bg-surface-container-high text-on-surface"
@@ -864,14 +885,14 @@ function RolesTab() {
                   type="button"
                   onClick={() => saveEdit(r)}
                   disabled={updatePerms.isPending}
-                  className="rounded-sm bg-primary px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-primary hover:bg-primary-container disabled:opacity-50"
+                  className="rounded-sm bg-primary px-2 py-1 font-display text-sm text-on-primary hover:bg-primary-container disabled:opacity-50 font-semibold"
                 >
                   Save
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditingId(null)}
-                  className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-surface-container"
+                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container font-semibold"
                 >
                   Cancel
                 </button>
@@ -881,15 +902,15 @@ function RolesTab() {
                 <button
                   type="button"
                   onClick={() => startEdit(r)}
-                  className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
+                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-semibold"
                 >
                   Edit
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDelete(r)}
+                  onClick={() => setDeletingRole(r)}
                   disabled={r.builtIn || r.userCount > 0}
-                  className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-error-container hover:text-on-error-container disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container disabled:cursor-not-allowed disabled:opacity-50 font-semibold"
                   title={
                     r.builtIn
                       ? "Reserved role"
@@ -984,7 +1005,7 @@ function RolesTab() {
   }
 
   async function handleDelete(r: AdminRole) {
-    if (!confirm(`Delete role "${r.roleName}"? It currently has no users.`)) return;
+    setDeletingRole(null);
     setError(null);
     try {
       await deleteRole.mutateAsync(r.id);
@@ -1018,7 +1039,7 @@ function RolesTab() {
         className="space-y-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-3"
       >
         <label className="block">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Role name
           </span>
           <input
@@ -1031,7 +1052,7 @@ function RolesTab() {
           />
         </label>
         <div>
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Permissions
           </span>
           <PermissionPicker value={newPerms} onChange={setNewPerms} />
@@ -1082,6 +1103,17 @@ function RolesTab() {
           </DataGridScrollArea>
         </DataGridContainer>
       </DataGrid>
+
+      <ConfirmModal
+        open={deletingRole !== null}
+        onClose={() => setDeletingRole(null)}
+        onConfirm={() => deletingRole && void handleDelete(deletingRole)}
+        title="Delete role"
+        body={`Delete role "${deletingRole?.roleName ?? ""}"? It currently has no users.`}
+        confirmLabel="Delete"
+        confirmTone="danger"
+        busy={deleteRole.isPending}
+      />
     </div>
   );
 }
@@ -1146,7 +1178,7 @@ function SignInTab() {
                 </span>
                 <span
                   className={[
-                    "rounded-full px-2 py-0.5 font-display text-[11px] font-semibold uppercase tracking-wider",
+                    "rounded-full px-2 py-0.5 font-display text-label-caps leading-4 font-semibold uppercase",
                     connected
                       ? "bg-chip-emerald-bg text-chip-emerald-text"
                       : halfConfigured
@@ -1171,7 +1203,7 @@ function SignInTab() {
           <button
             type="button"
             onClick={() => setModalOpen(true)}
-            className="rounded-sm bg-primary px-4 py-1.5 font-display text-[12px] font-bold uppercase tracking-wider text-on-primary hover:bg-primary-container"
+            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container"
           >
             {connected ? "Manage" : "Connect"}
           </button>
@@ -1181,7 +1213,7 @@ function SignInTab() {
           <div className="mt-4 grid gap-3 border-t border-outline-variant pt-4 sm:grid-cols-2">
             <ClientIdField id={data.googleClientId!} />
             <div>
-              <div className="mb-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+              <div className="mb-1 font-display text-label-caps uppercase text-on-surface-variant">
                 Allowed domains
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -1198,15 +1230,13 @@ function SignInTab() {
           </div>
         )}
 
-        <div className="mt-4 border-t border-outline-variant pt-3 text-[11px] text-on-surface-variant">
+        <div className="mt-4 border-t border-outline-variant pt-3 text-xs text-on-surface-variant">
           {data.updatedBy ? (
             <>
               Last updated by{" "}
               <span className="font-semibold">{data.updatedBy.username}</span>{" "}
               on{" "}
-              <span className="font-mono">
-                {new Date(data.updatedAt).toLocaleString()}
-              </span>
+              <span>{fmtDateTime(data.updatedAt)}</span>
             </>
           ) : (
             <>Not yet edited since the database was seeded.</>
@@ -1231,13 +1261,13 @@ function ClientIdField({ id }: { id: string }) {
   return (
     <div>
       <div className="mb-1 flex items-center gap-2">
-        <span className="font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+        <span className="font-display text-label-caps uppercase text-on-surface-variant">
           Client ID
         </span>
         <button
           type="button"
           onClick={() => setRevealed((v) => !v)}
-          className="font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface"
+          className="font-display text-xs font-semibold text-on-surface-variant hover:text-on-surface"
         >
           {revealed ? "Hide" : "Reveal"}
         </button>
@@ -1275,6 +1305,7 @@ function SignInModal({
   const [domains, setDomains] = useState<string[]>(initialDomains);
   const [newDomain, setNewDomain] = useState("");
   const [showClientId, setShowClientId] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Reset draft whenever the modal opens, so reopening after Save shows the
@@ -1336,14 +1367,8 @@ function SignInModal({
   }
 
   async function disconnect() {
+    setConfirmDisconnect(false);
     setError(null);
-    if (
-      !confirm(
-        "Disconnect Google sign-in? Users with Google-only accounts won't be able to sign in until you reconnect.",
-      )
-    ) {
-      return;
-    }
     try {
       await update.mutateAsync({
         googleClientId: null,
@@ -1355,10 +1380,13 @@ function SignInModal({
     }
   }
 
+  // Modal.tsx's per-instance Escape listener would otherwise close this form
+  // together with the disconnect confirm; keep the form open underneath.
   return (
+    <>
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={confirmDisconnect ? () => {} : onClose}
       title="Configure Google sign-in"
       widthClass="max-w-xl"
       footer={
@@ -1366,9 +1394,9 @@ function SignInModal({
           {(initialClientId || initialDomains.length > 0) && (
             <button
               type="button"
-              onClick={disconnect}
+              onClick={() => setConfirmDisconnect(true)}
               disabled={update.isPending}
-              className="mr-auto rounded-sm px-3 py-1.5 font-display text-[12px] font-bold uppercase tracking-wider text-error hover:bg-error-container disabled:opacity-50"
+              className="mr-auto rounded-sm px-3 py-1.5 font-display text-xs font-semibold text-error hover:bg-error-container disabled:opacity-50"
             >
               Disconnect
             </button>
@@ -1377,7 +1405,7 @@ function SignInModal({
             type="button"
             onClick={onClose}
             disabled={update.isPending}
-            className="rounded-sm px-3 py-1.5 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface-variant hover:bg-surface-container"
+            className="rounded-sm px-3 py-1.5 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container"
           >
             Cancel
           </button>
@@ -1385,7 +1413,7 @@ function SignInModal({
             type="button"
             onClick={save}
             disabled={!dirty || update.isPending}
-            className="rounded-sm bg-primary px-4 py-1.5 font-display text-[12px] font-bold uppercase tracking-wider text-on-primary hover:bg-primary-container disabled:opacity-50"
+            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-50"
           >
             {update.isPending ? "Saving…" : "Save"}
           </button>
@@ -1425,13 +1453,13 @@ function SignInModal({
         <div>
           <label className="block">
             <span className="mb-1 flex items-center justify-between gap-2">
-              <span className="font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+              <span className="font-display text-label-caps uppercase text-on-surface-variant">
                 Google OAuth Client ID
               </span>
               <button
                 type="button"
                 onClick={() => setShowClientId((v) => !v)}
-                className="font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface"
+                className="font-display text-xs font-semibold text-on-surface-variant hover:text-on-surface"
               >
                 {showClientId ? "Hide" : "Show"}
               </button>
@@ -1449,7 +1477,7 @@ function SignInModal({
               className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden"
             />
           </label>
-          <p className="mt-1 text-[11px] text-on-surface-variant">
+          <p className="mt-1 text-xs text-on-surface-variant">
             The Client ID is a public identifier (it ships in any Google
             sign-in button). The Client <em>Secret</em> stays in Google Cloud
             and is never used by Solvro — we verify ID tokens server-side
@@ -1458,7 +1486,7 @@ function SignInModal({
         </div>
 
         <div>
-          <div className="mb-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <div className="mb-1 font-display text-label-caps uppercase text-on-surface-variant">
             Allowed email domains
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1504,7 +1532,7 @@ function SignInModal({
             <button
               type="submit"
               disabled={!newDomain.trim()}
-              className="rounded-sm bg-surface-container-high px-3 py-1.5 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface hover:bg-surface-container-highest disabled:opacity-50"
+              className="rounded-sm bg-surface-container-high px-3 py-1.5 font-display text-xs font-semibold text-on-surface hover:bg-surface-container-highest disabled:opacity-50"
             >
               Add
             </button>
@@ -1512,6 +1540,17 @@ function SignInModal({
         </div>
       </div>
     </Modal>
+    <ConfirmModal
+      open={confirmDisconnect}
+      onClose={() => setConfirmDisconnect(false)}
+      onConfirm={() => void disconnect()}
+      title="Disconnect Google sign-in"
+      body="Disconnect Google sign-in? Users with Google-only accounts won't be able to sign in until you reconnect."
+      confirmLabel="Disconnect"
+      confirmTone="warning"
+      busy={update.isPending}
+    />
+    </>
   );
 }
 
@@ -1589,9 +1628,7 @@ function ProjectsTab() {
       // "alphanumeric" choice as this file's own Users-tab "role" column.
       sortingFn: "alphanumeric",
       cell: ({ row }) => (
-        <span className="rounded-sm bg-surface-container-low px-1.5 py-0.5 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
-          {row.original.status}
-        </span>
+        <ProjectStatusChip status={row.original.status} />
       ),
       meta: { skeleton: <Skeleton className="h-4 w-20 rounded-sm" /> },
     },

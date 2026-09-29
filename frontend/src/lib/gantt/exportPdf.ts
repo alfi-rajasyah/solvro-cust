@@ -18,6 +18,7 @@ import {
   type ConnectorRoute,
   type Rect,
 } from "@/components/gantt-v2/connector-paths";
+import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
 import type { Holiday, TaskDependency } from "@/lib/queries";
 import type { jsPDF as JsPDFInstance } from "jspdf";
 
@@ -48,12 +49,6 @@ interface ExportPdfOpts {
   /** When set, render into this window instead of triggering a download. */
   tabWindow?: Window | null;
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  TODO: "To Do",
-  IN_PROGRESS: "In Progress",
-  DONE: "Done",
-};
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -300,8 +295,8 @@ export function buildTaskTable(
     const line = [
       sectionName,
       `${indent}${r.name}`,
-      t ? STATUS_LABEL[t.status] ?? t.status : "",
-      t?.priority ?? "",
+      t ? TASK_STATUS_LABEL[t.status] ?? t.status : "",
+      t ? PRIORITY_LABEL[t.priority] ?? t.priority : "",
     ];
     if (hasCriticalPath) line.push(r.isCriticalPath ? "Yes" : "");
     line.push(t?.startDate ? fmtIsoDate(parseISODate(t.startDate)) : "");

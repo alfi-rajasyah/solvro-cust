@@ -4,10 +4,11 @@ import { useProjectContext } from "../ProjectDetail";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { EpicPanel } from "@/components/EpicPanel";
 import { Alert, AlertDescription } from "@/components/reui/alert";
+import { CardGridSkeleton, TableSkeleton } from "@/components/skeletons";
 import { TaskStatusChip } from "@/components/StatusChip";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
-import { dayFromIso, formatDisplay } from "@/lib/dateField";
+import { fmtDay } from "@/lib/formatDate";
 import { SECTION_COLOR_PRESETS } from "@/lib/gantt/palette";
 import {
   type Epic,
@@ -16,11 +17,6 @@ import {
   useProjectEpics,
   useUpdateEpic,
 } from "@/lib/queries";
-
-/** `dd/MM/yyyy` via the day-contract helpers (dateField.ts), em-dash for unset — same fallback as TaskPanel's fmtShort. */
-function fmtDate(iso: string | null): string {
-  return formatDisplay(dayFromIso(iso)) || "—";
-}
 
 /**
  * Epics tab (docs/archive/plans/epics-spec.md §6/§7 T3): a table of a project's
@@ -144,7 +140,15 @@ export function ProjectEpics() {
 
   if (isLoading) {
     return (
-      <div className="h-64 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low" />
+      <div className="flex flex-col gap-3">
+        <TableSkeleton
+          rows={5}
+          columns={5}
+          widths={["w-3/4", "w-16", "w-24", "w-16", "w-full"]}
+          className="hidden md:block"
+        />
+        <CardGridSkeleton count={4} gridClassName="grid-cols-1" className="md:hidden" />
+      </div>
     );
   }
 
@@ -208,7 +212,7 @@ export function ProjectEpics() {
               setCreating(false);
               setNewTitle("");
             }}
-            className="font-display text-[12px] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface"
+            className="font-display text-xs font-semibold text-on-surface-variant hover:text-on-surface"
           >
             Cancel
           </button>
@@ -243,23 +247,23 @@ export function ProjectEpics() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-outline-variant bg-surface-container-low text-left">
-                    <th scope="col" className="px-3 py-2 font-display text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+                    <th scope="col" className="px-3 py-2 font-display text-label-caps uppercase text-on-surface-variant">
                       Epic
                     </th>
-                    <th scope="col" className="px-3 py-2 font-display text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+                    <th scope="col" className="px-3 py-2 font-display text-label-caps uppercase text-on-surface-variant">
                       Status
                     </th>
-                    <th scope="col" className="px-3 py-2 font-display text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+                    <th scope="col" className="px-3 py-2 font-display text-label-caps uppercase text-on-surface-variant">
                       Owner
                     </th>
-                    <th scope="col" className="px-3 py-2 font-display text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+                    <th scope="col" className="px-3 py-2 font-display text-label-caps uppercase text-on-surface-variant">
                       Due
                     </th>
-                    <th scope="col" className="px-3 py-2 font-display text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+                    <th scope="col" className="px-3 py-2 font-display text-label-caps uppercase text-on-surface-variant">
                       Progress
                     </th>
                     {canEdit && (
-                      <th scope="col" className="px-3 py-2 text-right font-display text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+                      <th scope="col" className="px-3 py-2 text-right font-display text-label-caps uppercase text-on-surface-variant">
                         Actions
                       </th>
                     )}
@@ -332,7 +336,7 @@ export function ProjectEpics() {
           ) : null
         }
         confirmLabel="Delete"
-        confirmTone="warning"
+        confirmTone="danger"
         busy={deleteEpic.isPending}
       />
     </div>
@@ -504,8 +508,8 @@ function EpicRow(props: RowProps) {
       <td className="px-3 py-2 align-middle text-on-surface-variant">
         {epic.owner?.username ?? "Unassigned"}
       </td>
-      <td className="px-3 py-2 align-middle font-mono text-[12px] text-on-surface-variant">
-        {fmtDate(epic.dueDate)}
+      <td className="px-3 py-2 align-middle text-[12px] text-on-surface-variant">
+        {fmtDay(epic.dueDate) || "—"}
       </td>
       <td className="px-3 py-2 align-middle">
         <ProgressBar done={epic.progress.done} total={epic.progress.total} />
@@ -549,7 +553,7 @@ function EpicCard(props: RowProps) {
         <div className="flex flex-wrap items-center gap-2 text-[12px]">
           <TaskStatusChip status={epic.status} />
           <span className="text-on-surface-variant">{epic.owner?.username ?? "Unassigned"}</span>
-          <span className="font-mono text-on-surface-variant">{fmtDate(epic.dueDate)}</span>
+          <span className="text-on-surface-variant">{fmtDay(epic.dueDate) || "—"}</span>
         </div>
         <div className="mt-2">
           <ProgressBar done={epic.progress.done} total={epic.progress.total} />

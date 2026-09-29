@@ -22,7 +22,7 @@ export function StatsBar({ stats }: { stats: DailyReviewStats }) {
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
       <Stat
         label="Customers reviewed"
-        value={`${stats.reviewedToday.count} / ${stats.reviewedToday.total}`}
+        value={`${stats.reviewedToday.count} of ${stats.reviewedToday.total}`}
         icon="fact_check"
         tone={stats.reviewedToday.count > 0 ? "primary" : "neutral"}
         testId="stat-reviewed-today"
@@ -36,7 +36,7 @@ export function StatsBar({ stats }: { stats: DailyReviewStats }) {
       />
       <Stat
         label="Weekly updates"
-        value={`${stats.weeklyUpdatesDone.count} / ${stats.weeklyUpdatesDone.total}`}
+        value={`${stats.weeklyUpdatesDone.count} of ${stats.weeklyUpdatesDone.total}`}
         icon="summarize"
         tone={weeklyDoneTone}
         testId="stat-weekly-updates"
@@ -78,10 +78,10 @@ function Stat({
   return (
     <div className="rounded-sm border border-outline-variant bg-surface-container-lowest p-3">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">{label}</span>
+        <span className="text-label-caps uppercase text-on-surface-variant">{label}</span>
         <span className={`material-symbols-outlined text-base ${TONE_ICON[tone]}`}>{icon}</span>
       </div>
-      <div className="mt-1 font-mono text-2xl font-bold tabular-nums text-on-surface" data-testid={testId}>
+      <div className="mt-1 text-2xl font-bold tabular-nums text-on-surface" data-testid={testId}>
         {value}
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NAV_COMMANDS, filterNavCommands } from "./navCommands";
+import { NAV_COMMANDS, NAV_GROUPS, filterNavCommands } from "./navCommands";
 
 const none = () => false;
 const wildcard = () => true; // admin: hasPermission(user, anything) === true
@@ -50,5 +50,24 @@ describe("filterNavCommands", () => {
       "/settings",
       "/admin",
     ]);
+  });
+
+  it("assigns every page to a sidebar group, contiguous and in group order", () => {
+    expect(NAV_COMMANDS.map((c) => [c.label, c.group])).toEqual([
+      ["Overview", "Workspace"],
+      ["Projects", "Workspace"],
+      ["Customers", "Workspace"],
+      ["Daily Review", "Cadence"],
+      ["Weekly Sync", "Cadence"],
+      ["Utilization", "Insights"],
+      ["Executive", "Insights"],
+      ["Settings", "System"],
+      ["Admin", "System"],
+    ]);
+    expect(NAV_GROUPS).toEqual(["Workspace", "Cadence", "Insights", "System"]);
+  });
+
+  it("keeps /tasks out of the catalogue", () => {
+    expect(NAV_COMMANDS.some((c) => c.to === "/tasks")).toBe(false);
   });
 });

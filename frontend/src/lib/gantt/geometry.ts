@@ -1,4 +1,6 @@
 import type { Section, Task } from "@/lib/queries";
+import { dateToDay } from "@/lib/dateField";
+import { fmtDay, fmtRange } from "@/lib/formatDate";
 import { DEFAULT_SECTION_COLOR, resolveSectionColors } from "@/lib/gantt/palette";
 
 export type RowKind = "section" | "task" | "subtask";
@@ -55,21 +57,14 @@ export function isoWeekNumber(d: Date): number {
   return Math.ceil(((target.getTime() - yearStart.getTime()) / DAY_MS + 1) / 7);
 }
 
-const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
+/** Tree-pane day label (`21 Aug`) — delegates to the shared formatter. */
 export function fmtDateDDMM(d: Date): string {
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${dd} ${MONTHS[d.getMonth()]}`;
+  return fmtDay(dateToDay(d));
 }
 
+/** Tree-pane range label (`22 – 28 Aug`, `21 Aug`, `From 21 Aug`, `No dates`). */
 export function fmtDateRangeDDMM(start: Date | null, end: Date | null): string {
-  if (!start && !end) return "—";
-  if (start && !end) return fmtDateDDMM(start);
-  if (!start && end) return fmtDateDDMM(end);
-  return `${fmtDateDDMM(start!)} – ${fmtDateDDMM(end!)}`;
+  return fmtRange(dateToDay(start), dateToDay(end));
 }
 
 interface BuildRowsOpts {

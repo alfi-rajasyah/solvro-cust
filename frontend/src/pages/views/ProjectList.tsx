@@ -19,15 +19,19 @@ import { CSS } from "@dnd-kit/utilities";
 import { useSearchParams } from "react-router-dom";
 import { useProjectContext } from "../ProjectDetail";
 import { AssigneeAvatar } from "@/components/AssigneeAvatar";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { CriticalPathMark } from "@/components/CriticalPathMark";
 import { DateField } from "@/components/DateField";
 import { EpicChip } from "@/components/EpicChip";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { SectionReorderModal } from "@/components/SectionReorderModal";
+import { TASK_STATUS_TONE_CLASS } from "@/components/StatusChip";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
-import { commitDraft, dayFromIso, dayToDate } from "@/lib/dateField";
+import { commitDraft, dayFromIso } from "@/lib/dateField";
+import { fmtDay, fmtDue } from "@/lib/formatDate";
+import { TASK_STATUS_LABEL } from "@/lib/labels";
 import {
   type Epic,
   type Priority,
@@ -60,16 +64,6 @@ function nextPriority(p: Priority): Priority {
 }
 
 const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
-const STATUS_LABEL: Record<TaskStatus, string> = {
-  TODO: "To do",
-  IN_PROGRESS: "Active",
-  DONE: "Done",
-};
-const STATUS_TONE_CLASS: Record<TaskStatus, string> = {
-  TODO: "bg-surface-container-high text-on-surface-variant",
-  IN_PROGRESS: "bg-chip-emerald-bg text-chip-emerald-text",
-  DONE: "bg-chip-emerald-bg text-chip-emerald-text",
-};
 
 interface TaskNode {
   task: Task;
@@ -148,6 +142,7 @@ export function ProjectList() {
   const [renamingSectionKey, setRenamingSectionKey] = useState<GroupKey | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [deletingSection, setDeletingSection] = useState<Section | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   // Epic filter (docs/archive/plans/epics-spec.md §6/§7 T6): "" = All (inactive),
   // `null` = "No epic" (task.epicId === null), a number = one project epic —
@@ -255,12 +250,7 @@ export function ProjectList() {
   }
 
   async function handleDeleteSection(s: Section) {
-    if (
-      !confirm(
-        `Delete section "${s.name}"? Tasks in this section keep their data but lose the section link.`,
-      )
-    )
-      return;
+    setDeletingSection(null);
     setActionError(null);
     try {
       await deleteSection.mutateAsync(s.id);
@@ -436,7 +426,7 @@ export function ProjectList() {
             <span className="material-symbols-outlined text-base">filter_alt</span>
             Filter
             {filterActive && (
-              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-on-primary">
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-meta leading-none font-bold text-on-primary">
                 1
               </span>
             )}
@@ -446,7 +436,7 @@ export function ProjectList() {
               <div className="fixed inset-0 z-10" onClick={() => setFilterOpen(false)} />
               <div className="absolute right-0 z-20 mt-2 w-64 rounded-lg border border-outline-variant bg-surface-container-lowest p-3 shadow-overlay">
                 <div className="mb-3">
-                  <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+                  <label className="mb-1 block text-label-caps uppercase text-on-surface-variant">
                     Epic
                   </label>
                   <select
@@ -555,7 +545,7 @@ export function ProjectList() {
                 setRenamingSectionKey(s ? s.id : "none");
                 setRenameValue(s ? s.name : "");
               }}
-              onDelete={handleDeleteSection}
+              onDelete={setDeletingSection}
               onDuplicate={handleDuplicateSection}
               duplicatingSectionId={
                 duplicateSection.isPending ? (duplicateSection.variables ?? null) : null
@@ -586,7 +576,7 @@ export function ProjectList() {
             <button
               type="submit"
               disabled={createSection.isPending || !newSectionName.trim()}
-              className="rounded-sm bg-primary px-2 py-1 font-display text-label-caps uppercase text-on-primary hover:bg-primary-container disabled:opacity-50"
+              className="rounded-sm bg-primary px-2 py-1 font-display text-xs text-on-primary hover:bg-primary-container disabled:opacity-50 font-semibold"
             >
               Add
             </button>
@@ -596,7 +586,7 @@ export function ProjectList() {
                 setAddingSection(false);
                 setNewSectionName("");
               }}
-              className="rounded-sm px-2 py-1 text-[11px] text-on-surface-variant hover:bg-surface-container"
+              className="rounded-sm px-2 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container"
             >
               Cancel
             </button>
@@ -619,6 +609,17 @@ export function ProjectList() {
         projectId={project.id}
         open={reorderingSections}
         onClose={() => setReorderingSections(false)}
+      />
+
+      <ConfirmModal
+        open={deletingSection !== null}
+        onClose={() => setDeletingSection(null)}
+        onConfirm={() => deletingSection && void handleDeleteSection(deletingSection)}
+        title="Delete section"
+        body={`Delete section "${deletingSection?.name ?? ""}"? Tasks in this section keep their data but lose the section link.`}
+        confirmLabel="Delete"
+        confirmTone="danger"
+        busy={deleteSection.isPending}
       />
     </>
   );
@@ -715,11 +716,11 @@ function SectionGroup({
             />
             <button
               type="submit"
-              className="rounded-sm bg-primary px-2 py-0.5 font-display text-label-caps uppercase text-on-primary"
+              className="rounded-sm bg-primary px-2 py-0.5 font-display text-xs text-on-primary font-semibold"
             >
               {section ? "Save" : "Create"}
             </button>
-            <button type="button" onClick={onRenameCancel} className="text-[11px] text-on-surface-variant">
+            <button type="button" onClick={onRenameCancel} className="text-xs font-semibold text-on-surface-variant">
               Cancel
             </button>
           </form>
@@ -733,7 +734,7 @@ function SectionGroup({
             {section?.name ?? "No section"}
           </h3>
         )}
-        <span className="rounded-full bg-surface-container-high px-1.5 py-0 font-mono text-[11px] text-on-surface-variant">
+        <span className="rounded-full bg-surface-container-high px-1.5 py-0 font-mono text-meta text-on-surface-variant">
           {nodes.length}
         </span>
         {canEdit && !isRenaming && (
@@ -909,6 +910,7 @@ function TaskRow({
             canEdit={canEdit}
             startISO={task.startDate}
             dueISO={task.dueDate}
+            done={task.status === "DONE"}
             onSave={(s, d) => onSetDates(task, s, d)}
           />
         </span>
@@ -977,15 +979,15 @@ function TaskRow({
         <div className="flex items-center justify-between gap-2 pl-0">
           <span className="flex items-center gap-1.5">
             <AssigneeAvatar user={task.assignedTo} size="xs" />
-            <span className="text-[11px] text-on-surface-variant">{fmt(task.dueDate)}</span>
+            <span className="text-meta text-on-surface-variant">{fmt(task.dueDate, task.status === "DONE")}</span>
           </span>
           <span
             className={[
-              "rounded-full px-2 py-0.5 font-display text-[11px] font-semibold",
-              STATUS_TONE_CLASS[task.status],
+              "rounded-full px-2 py-0.5 font-display text-meta font-semibold",
+              TASK_STATUS_TONE_CLASS[task.status],
             ].join(" ")}
           >
-            {STATUS_LABEL[task.status]}
+            {TASK_STATUS_LABEL[task.status]}
           </span>
         </div>
       </div>
@@ -1072,7 +1074,7 @@ function SubtaskRow({
           canEdit ? "cursor-pointer" : "cursor-default",
         ].join(" ")}
       >
-        {done && <span className="material-symbols-outlined text-[10px] leading-none">check</span>}
+        {done && <span className="material-symbols-outlined text-meta leading-none">check</span>}
       </button>
       <span className="flex min-w-0 items-center gap-1">
         <span className={["truncate", done ? "text-on-surface-variant line-through" : "text-on-surface"].join(" ")}>
@@ -1148,15 +1150,18 @@ function DueDateEditor({
   canEdit,
   startISO,
   dueISO,
+  done,
   onSave,
 }: {
   canEdit: boolean;
   startISO: string | null;
   dueISO: string | null;
+  /** Finished tasks show the plain date, never "Nd late". */
+  done: boolean;
   onSave: (start: string | null, due: string | null) => void;
 }) {
   if (!canEdit) {
-    return <span className="text-[12px] text-on-surface-variant">{fmt(dueISO)}</span>;
+    return <span className="text-[12px] text-on-surface-variant">{fmt(dueISO, done)}</span>;
   }
 
   const day = dayFromIso(dueISO);
@@ -1168,8 +1173,8 @@ function DueDateEditor({
       value={day}
       onChange={(next) => onSave(startISO, commitDraft(next, dueISO))}
       clearable
-      triggerLabel={fmt(dueISO)}
-      aria-label={day ? `Due date, currently ${fmt(dueISO)}` : "Due date"}
+      triggerLabel={fmt(dueISO, done)}
+      aria-label={day ? `Due date, currently ${fmt(dueISO, done)}` : "Due date"}
     />
   );
 }
@@ -1188,13 +1193,13 @@ function StatusSelect({
   const chip = (
     <span
       className={[
-        "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 font-display text-[11px] font-semibold",
-        STATUS_TONE_CLASS[value],
+        "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 font-display text-meta font-semibold",
+        TASK_STATUS_TONE_CLASS[value],
         canEdit ? "cursor-pointer" : "",
       ].join(" ")}
     >
-      {STATUS_LABEL[value]}
-      {canEdit && <span className="material-symbols-outlined text-[11px]">expand_more</span>}
+      {TASK_STATUS_LABEL[value]}
+      {canEdit && <span className="material-symbols-outlined text-meta">expand_more</span>}
     </span>
   );
 
@@ -1222,7 +1227,7 @@ function StatusSelect({
                   s === value ? "font-bold text-primary" : "text-on-surface",
                 ].join(" ")}
               >
-                {STATUS_LABEL[s]}
+                {TASK_STATUS_LABEL[s]}
               </button>
             ))}
           </div>
@@ -1280,11 +1285,9 @@ function groupBySection(
   return groups;
 }
 
-function fmt(iso: string | null): string {
-  // Derive the day via the UTC date-part
-  // (`dayFromIso`), not a local-time parse of the ISO instant — keeps this
-  // label's day consistent with the tree cell, picker seed, and Gantt bar.
-  const d = dayToDate(dayFromIso(iso));
-  if (!d) return "—";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+function fmt(iso: string | null, done: boolean): string {
+  // The formatters read the UTC date part of the ISO instant, so this label's
+  // day stays consistent with the tree cell, picker seed, and Gantt bar. A
+  // finished task shows the plain date — "Nd late" would misreport it.
+  return (done ? fmtDay(iso) : fmtDue(iso)) || "—";
 }

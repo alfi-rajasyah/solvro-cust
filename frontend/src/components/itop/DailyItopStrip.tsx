@@ -29,6 +29,7 @@
 import { useState } from "react";
 import { Chip } from "@/components/StatusChip";
 import { ApiError } from "@/lib/api";
+import { fmtTime } from "@/lib/formatDate";
 import type { DailyItopCustomer, ItopTicketActionName, ItopTicketRow, ItopTicketTeamOption } from "@/lib/queries";
 import { useItopStatus, useMyItopToken, useTicketAction } from "@/lib/queries";
 import { ActionSheet, type ActionSheetMode } from "./ActionSheet";
@@ -56,9 +57,7 @@ export interface DailyItopStripProps {
 
 function syncedAtLabel(syncedAt: string | null): string | null {
   if (!syncedAt) return null;
-  const d = new Date(syncedAt);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return fmtTime(syncedAt) || null;
 }
 
 export function DailyItopStrip({ itop, onAddToNote }: DailyItopStripProps) {
@@ -78,19 +77,19 @@ export function DailyItopStrip({ itop, onAddToNote }: DailyItopStripProps) {
       className="rounded-sm border border-outline-variant bg-surface-container-lowest px-4 py-3"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span className="rounded-sm bg-surface-container-high px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+        <span className="rounded-sm bg-surface-container-high px-1.5 py-0.5 text-label-caps leading-4 uppercase text-on-surface-variant">
           iTop today
         </span>
         <Chip tone={newChip.tone}>{newChip.label}</Chip>
         <Chip tone={resolvedChip.tone}>{resolvedChip.label}</Chip>
         <Chip tone={slaChip.tone}>{slaChip.label}</Chip>
-        <span className="ml-auto font-mono text-[11px] tabular-nums text-on-surface-variant">
+        <span className="ml-auto font-mono text-meta tabular-nums text-on-surface-variant">
           {itop.counts.ongoing} ongoing{synced ? ` · synced ${synced}` : ""}
         </span>
       </div>
 
       {!onAddToNote && (
-        <p className="mt-1.5 text-[11px] italic text-on-surface-variant">
+        <p className="mt-1.5 text-xs italic text-on-surface-variant">
           Switch to this week to add to a note.
         </p>
       )}
@@ -186,7 +185,7 @@ function DailyItopStripRow({
           type="button"
           onClick={() => runAction("assign_to_me")}
           disabled={actionMutation.isPending}
-          className="shrink-0 text-[11px] font-semibold text-primary hover:underline disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="shrink-0 text-meta font-semibold text-primary hover:underline disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           Assign to me
         </button>
@@ -196,7 +195,7 @@ function DailyItopStripRow({
           type="button"
           onClick={() => setActionSheet({ mode: "resolve", action: "resolve" })}
           disabled={actionMutation.isPending}
-          className="shrink-0 text-[11px] font-semibold text-primary hover:underline disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="shrink-0 text-meta font-semibold text-primary hover:underline disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           Resolve
         </button>
@@ -206,7 +205,7 @@ function DailyItopStripRow({
           type="button"
           onClick={() => onAddToNote(`${ticket.ref} ${ticket.title}`)}
           aria-label={`Add ${ticket.ref} to note`}
-          className="shrink-0 text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="shrink-0 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           Add to note
         </button>

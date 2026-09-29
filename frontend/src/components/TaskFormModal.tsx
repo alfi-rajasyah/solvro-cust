@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { ConfirmModal } from "./ConfirmModal";
 import { DateRangeField } from "./DateRangeField";
 import { Drawer } from "./Drawer";
 import { EpicChip } from "./EpicChip";
@@ -13,6 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { commitDraft, dayFromIso, isoFromDay } from "@/lib/dateField";
+import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
 import {
   type Priority,
   type Task,
@@ -29,16 +31,10 @@ import {
 const PRIORITIES: Priority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 
-const STATUS_LABEL: Record<TaskStatus, string> = {
-  TODO: "To Do",
-  IN_PROGRESS: "In Progress",
-  DONE: "Done",
-};
-
 const PRIORITY_COLOR: Record<Priority, string> = {
-  LOW: "text-on-surface-variant",
-  MEDIUM: "text-amber-600",
-  HIGH: "text-orange-600",
+  LOW: "text-on-surface",
+  MEDIUM: "text-on-surface",
+  HIGH: "text-chip-amber-text",
   URGENT: "text-error",
 };
 
@@ -93,6 +89,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
   // the parent's real `onClose` (which unmounts us) only runs once the
   // exit transition has finished.
   const [closing, setClosing] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const requestClose = useCallback(() => setClosing(true), []);
 
   const editingTask = isEdit ? (props as EditProps).task : null;
@@ -239,14 +236,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
 
   async function handleDelete() {
     if (!isEdit || !editingTask) return;
-    const subtaskWarning =
-      subtasks.length > 0
-        ? `\n\nThis task has ${subtasks.length} subtask(s) which will also be deleted.`
-        : "";
-    const ok = window.confirm(
-      `Delete task "${editingTask.title}"? This cannot be undone.${subtaskWarning}`,
-    );
-    if (!ok) return;
+    setConfirmDeleteOpen(false);
     setError(null);
     try {
       await remove.mutateAsync(editingTask.id);
@@ -274,11 +264,20 @@ export function TaskFormModal(props: TaskFormModalProps) {
     </div>
   );
 
+  // Drawer and Modal each register a document-level Escape listener, so while
+  // the delete confirm is open make the drawer's own Escape/backdrop close a
+  // no-op — only the confirm closes.
+  const subtaskWarning =
+    subtasks.length > 0
+      ? `\n\nThis task has ${subtasks.length} subtask(s) which will also be deleted.`
+      : "";
+
   return (
+    <>
     <Drawer
       open={open}
       closing={closing}
-      onClose={requestClose}
+      onClose={confirmDeleteOpen ? () => {} : requestClose}
       onClosed={onClose}
       title={isEdit ? "Edit task" : "New task"}
       customHeader={customHeader}
@@ -288,7 +287,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
           {isEdit && canEdit && (
             <button
               type="button"
-              onClick={handleDelete}
+              onClick={() => setConfirmDeleteOpen(true)}
               disabled={submitting}
               className="mr-auto rounded-lg border border-error/40 px-3 py-1.5 text-xs font-medium text-error hover:bg-error/10 disabled:opacity-50"
             >
@@ -340,7 +339,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
             >
               {PRIORITIES.map((p) => (
                 <option key={p} value={p}>
-                  {p}
+                  {PRIORITY_LABEL[p]}
                 </option>
               ))}
             </select>
@@ -356,14 +355,14 @@ export function TaskFormModal(props: TaskFormModalProps) {
             >
               {STATUSES.map((s) => (
                 <option key={s} value={s}>
-                  {STATUS_LABEL[s]}
+                  {TASK_STATUS_LABEL[s]}
                 </option>
               ))}
             </select>
           </FieldRow>
 
           {/* Critical Path */}
-          <FieldRow icon={CRITICAL_PATH_GLYPH} label="Critical Path">
+          <FieldRow icon={CRITICAL_PATH_GLYPH} label="Critical path">
             <div className="flex items-center gap-2">
               <Checkbox
                 checked={isCriticalPath}
@@ -408,6 +407,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
               }}
               disabled={!canEdit}
               clearable
+              emptyLabel="Pick start and due"
             />
           </FieldRow>
 
@@ -421,7 +421,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
               disabled={!canEdit}
               className="cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden disabled:cursor-default"
             >
-              <option value="">— Top level —</option>
+              <option value="">Top level</option>
               {possibleParents.map((t) => (
                 <option key={t.id} value={t.id}>
                   T-{String(t.id).padStart(3, "0")} · {t.title}
@@ -440,7 +440,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
               disabled={!canEdit}
               className="cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden disabled:cursor-default"
             >
-              <option value="">— No section —</option>
+              <option value="">No section</option>
               {(sections ?? []).map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -488,7 +488,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
 
         {/* Description */}
         <div>
-          <p className="mb-1.5 text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <p className="mb-1.5 text-label-caps uppercase text-on-surface-variant">
             Description
           </p>
           <textarea
@@ -505,7 +505,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
         {/* Subtasks */}
         {isEdit && editingTask && (
           <div>
-            <p className="mb-1.5 text-label-caps uppercase tracking-wider text-on-surface-variant">
+            <p className="mb-1.5 text-label-caps uppercase text-on-surface-variant">
               Subtasks {subtasks.length > 0 && `· ${subtasks.length}`}
             </p>
             {subtasks.length === 0 ? (
@@ -565,6 +565,17 @@ export function TaskFormModal(props: TaskFormModalProps) {
         )}
       </form>
     </Drawer>
+    <ConfirmModal
+      open={confirmDeleteOpen}
+      onClose={() => setConfirmDeleteOpen(false)}
+      onConfirm={() => void handleDelete()}
+      title="Delete task"
+      body={<span className="whitespace-pre-line">{`Delete task "${editingTask?.title ?? ""}"? This cannot be undone.${subtaskWarning}`}</span>}
+      confirmLabel="Delete"
+      confirmTone="danger"
+      busy={remove.isPending}
+    />
+    </>
   );
 }
 
