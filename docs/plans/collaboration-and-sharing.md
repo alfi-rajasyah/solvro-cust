@@ -30,3 +30,32 @@ Goal: several TAMs work on the same projects and share links to them.
 - L2 — keep the deep link through sign-in. `AuthGuard.tsx` saves `pathname + search + hash` as `from`; `Login.tsx` accepts `from` only when it starts with `/` and not `//` (else `/overview`). Both password and Google paths use it. E2E: signed out → `/projects/:id?task=:tid` → sign in → task panel open.
 - L3 — Copy link. Icon button in the project header and the customer header (copies the current URL incl. tab/query); "Copy task link" in `TaskPanel.tsx` (`/projects/:id?task=:taskId`, absolute URL). Reuse `copyText` (`lib/clipboard.ts`), toast "Link copied".
 - C3a — freshness. `refetchOnWindowFocus: true` + `refetchInterval: 30_000` (visible tab only) on the project-scoped task/board/Gantt queries and the project/customer detail queries. The interval pauses while a board/Gantt drag is active or a mutation is pending, so a refetch never moves a card under the cursor or clobbers an optimistic update.
+
+## Phase 2 tasks and API contract (project members — C1, C2, L1)
+
+Shipped phase 1 in PR #17 (2026-09-30).
+
+### Data
+- New `ProjectMember` (`project_members`): `projectId`, `userId`, `addedById` (nullable, SetNull), `createdAt`; primary key `(projectId, userId)`; index on `userId`; cascade on project and user delete.
+- `projectVisibilityFilter` gains the arm `{ members: { some: { userId: user.sub } } }`. `customerVisibilityFilter` inherits it through its project arm. Members get the same access as the TAM.
+
+### API
+- `GET /projects/:id/members` → `ProjectMember[]` ordered by username, excluding the project's TAM:
+  `{ userId, username, email, avatarUrl: string | null, addedAt: string, addedBy: { id, username } | null }`.
+- `POST /projects/:id/members` body `{ userId }` → 201 with the member (200 when already a member — idempotent). 400 `is_tam` when `userId` is the project's TAM; 400 `user_inactive`; 404 `user_not_found`.
+- `DELETE /projects/:id/members/:userId` → 204 (also when not a member).
+- All three: `project:read` (GET) / `project:write` (POST, DELETE) plus `ensureProjectVisible` — so the TAM, members, customer owners and `project:view-all` users can manage members.
+- `GET /users` adds `active: boolean` and `avatarUrl: string | null` to each row (additive).
+- Task assignment (C2): `POST /projects/:id/tasks` and `PATCH /tasks/:id` — when `assignedToId` names a user who is neither the project's TAM nor a member, the same transaction creates the membership (`addedById` = the acting user). Task responses do not change. The frontend invalidates the members query after any task save that sets `assignedToId`.
+
+### Frontend
+- C1: member avatars next to the TAM in the project header; a Members dialog to add (person picker over active users from `/users`) and remove members. A user who removes themselves and loses access is sent to `/projects`.
+- C2: every assignee picker shows "Assigning this person also adds them to the project." when the picked user is neither the TAM nor a member.
+- L1: blocked-link text on the project and customer pages: "This project doesn't exist or isn't shared with you. Ask the project's TAM to add you as a member." (customer page: "This customer doesn't exist or isn't shared with you."). Keep the 404 behaviour.
+
+### Phase 2 decisions (user, 2026-09-30)
+- Ownership stays with owners: access through membership alone does not allow changing a project's TAM or customer, deleting a project, changing a customer's owner, or deleting a customer. Those need the access a non-member already had (project TAM, customer owner, an unowned customer, or `project:view-all`). Refused with 403 `owner_only`.
+- Removing a member also unassigns their tasks in that project, in the same transaction. `GET /projects/:id/members` rows add `assignedTaskCount: number` so the dialog can warn first.
+- Daily Review (and `/overview/badges`) include projects where the user is a member.
+- Members see the project customer's iTop data, like the TAM (reads use the app token; writes still use the member's own token).
+- Saving a task re-runs C2 only when the assignee actually changes, so removing a member sticks. Task duplication never adds members (it must not re-grant a removed member).
