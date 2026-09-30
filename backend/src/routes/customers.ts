@@ -16,6 +16,7 @@ import { isMonday, parseWeekKey, weekKeyOf } from "../lib/isoWeek.js";
 import { computeProjectHealth } from "../lib/projectHealth.js";
 import {
   customerVisibilityFilter,
+  ensureCustomerOwnerAccess,
   ensureCustomerVisible,
   projectVisibilityFilter,
 } from "../lib/visibility.js";
@@ -451,6 +452,13 @@ customersRouter.patch(
       throw new HttpError(404, "customer_not_found", "Customer not found");
     }
 
+    // Changing the owner is owner-only (a project member sees the customer
+    // through the project, but must not be able to take it over). Re-saving
+    // the current owner — the edit form's steady state — is not a change.
+    if (body.tamId !== undefined && body.tamId !== existing.tamId) {
+      await ensureCustomerOwnerAccess(user, id);
+    }
+
     const data: Prisma.CustomerUpdateInput = {};
     if (body.name !== undefined) data.name = body.name;
     if (body.accountManager !== undefined)
@@ -493,7 +501,7 @@ customersRouter.delete(
   validate("params", idParamSchema),
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
-    await ensureCustomerVisible(req.user!, id);
+    await ensureCustomerOwnerAccess(req.user!, id);
     // onDelete: SetNull on Project.customerId — projects survive, customer link clears.
     await prisma.customer.delete({ where: { id } });
     res.status(204).end();

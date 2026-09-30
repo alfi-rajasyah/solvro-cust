@@ -20,9 +20,9 @@ import { customerVisibilityFilter, projectVisibilityFilter } from "./visibility.
  *
  * `projects` — ACTIVE projects in scope (Decision 9). Owned customer → every
  * ACTIVE project of that customer, whoever the project TAM is. Attached
- * customer → only the caller's own ACTIVE projects. Decision 10: ACTIVE
- * projects with customerId: null and Project.tamId = me (the "No customer"
- * group).
+ * customer → only the caller's own ACTIVE projects (TAM, or member). Decision
+ * 10: ACTIVE projects with customerId: null that the caller is TAM or member
+ * of (the "No customer" group).
  */
 export async function resolveDailyReviewScope(user: JwtPayload) {
   // hasPermission treats "*" as satisfying every permission check, so this
@@ -69,6 +69,12 @@ export async function resolveDailyReviewScope(user: JwtPayload) {
   const ownedIdSet = new Set(ownedIds);
   const attachedIds = candidateCustomerIds.filter((id) => !ownedIdSet.has(id));
 
+  // "The caller's own" projects: TAM of the project, or added to it as a
+  // member (user decision 2026-09-30, docs/archive/plans/collaboration-and-sharing.md).
+  // AND-composed with the customer condition so the two ORs can't collide.
+  const mine: Prisma.ProjectWhereInput = {
+    OR: [{ tamId: user.sub }, { members: { some: { userId: user.sub } } }],
+  };
   const projectWhere: Prisma.ProjectWhereInput = viewAll
     ? { status: "ACTIVE" }
     : {
@@ -77,8 +83,8 @@ export async function resolveDailyReviewScope(user: JwtPayload) {
           {
             OR: [
               { customerId: { in: ownedIds } },
-              { tamId: user.sub, customerId: { in: attachedIds } },
-              { tamId: user.sub, customerId: null },
+              { AND: [mine, { customerId: { in: attachedIds } }] },
+              { AND: [mine, { customerId: null }] },
             ],
           },
         ],
@@ -100,7 +106,7 @@ export async function resolveDailyReviewScope(user: JwtPayload) {
   // has a project in the result above — the customer query's "attached"
   // OR arm admits a customer via ANY project matching
   // projectVisibilityFilter, while the project query only pulls the
-  // caller's own (tamId) projects for an attached customer. Without this
+  // caller's own (TAM or member) projects for an attached customer. Without this
   // prune, a customer the caller can't actually see any project of would
   // render as an empty group and inflate coverage.total. Owned customers
   // always stay, even with zero active projects — they still carry

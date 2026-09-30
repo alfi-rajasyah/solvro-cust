@@ -22,6 +22,7 @@ import {
 } from "../lib/taskOrdering.js";
 import { assertEpicNotOnSubtask, assertValidEpic } from "../lib/epics.js";
 import { duplicateTaskTree } from "../lib/duplicate.js";
+import { ensureAssigneeIsMember } from "../lib/projectMembers.js";
 
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 
@@ -231,6 +232,7 @@ tasksRouter.patch(
         position: true,
         isMilestone: true,
         dueDate: true,
+        assignedToId: true,
       },
     });
 
@@ -289,6 +291,15 @@ tasksRouter.patch(
         epicIdUpdate = body.epicId;
       } else if (body.parentTaskId !== undefined && body.parentTaskId !== null) {
         epicIdUpdate = null;
+      }
+
+      // Assigning someone who cannot see the project adds them as a member
+      // (same transaction as the task write).
+      // Only when the assignee actually changes: the edit form re-sends the
+      // current assignee on every save, and that must not re-add a member who
+      // was removed.
+      if (body.assignedToId != null && body.assignedToId !== current.assignedToId) {
+        await ensureAssigneeIsMember(tx, current.projectId, body.assignedToId, req.user!.sub);
       }
 
       const data: Prisma.TaskUpdateInput = {};

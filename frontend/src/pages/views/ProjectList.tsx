@@ -33,6 +33,8 @@ import { commitDraft, dayFromIso } from "@/lib/dateField";
 import { useDragActivityGuard } from "@/lib/dragActivity";
 import { fmtDay, fmtDue } from "@/lib/formatDate";
 import { TASK_STATUS_LABEL } from "@/lib/labels";
+import { ASSIGN_ADDS_MEMBER_NOTICE } from "@/lib/projectMembers";
+import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
 import {
   type Epic,
   type Priority,
@@ -912,6 +914,7 @@ function TaskRow({
           <AssigneeSelect
             canEdit={canEdit}
             users={users}
+            projectId={task.projectId}
             value={task.assignedToId}
             onChange={(id) => onSetAssignee(task, id)}
           />
@@ -1101,11 +1104,13 @@ function SubtaskRow({
 function AssigneeSelect({
   canEdit,
   users,
+  projectId,
   value,
   onChange,
 }: {
   canEdit: boolean;
   users: { id: number; username: string }[];
+  projectId: number;
   value: number | null;
   onChange: (id: number | null) => void;
 }) {
@@ -1124,37 +1129,63 @@ function AssigneeSelect({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-20 mt-1 max-h-48 w-40 overflow-y-auto rounded-lg border border-outline-variant bg-surface-container-lowest py-1 shadow-overlay">
-            <button
-              type="button"
-              onClick={() => {
-                onChange(null);
-                setOpen(false);
-              }}
-              className="flex w-full items-center px-3 py-1.5 text-left text-xs text-on-surface-variant hover:bg-surface-container"
-            >
-              Unassigned
-            </button>
-            {users.map((u) => (
-              <button
-                key={u.id}
-                type="button"
-                onClick={() => {
-                  onChange(u.id);
-                  setOpen(false);
-                }}
-                className={[
-                  "flex w-full items-center px-3 py-1.5 text-left text-xs hover:bg-surface-container",
-                  u.id === value ? "font-bold text-primary" : "text-on-surface",
-                ].join(" ")}
-              >
-                {u.username}
-              </button>
-            ))}
-          </div>
+          <AssigneeOptions
+            users={users}
+            projectId={projectId}
+            value={value}
+            onPick={(id) => {
+              onChange(id);
+              setOpen(false);
+            }}
+          />
         </>
       )}
     </span>
+  );
+}
+
+// Split out so the membership queries are only observed while a picker is
+// actually open, not once per list row.
+function AssigneeOptions({
+  users,
+  projectId,
+  value,
+  onPick,
+}: {
+  users: { id: number; username: string }[];
+  projectId: number;
+  value: number | null;
+  onPick: (id: number | null) => void;
+}) {
+  const addsMember = useAssigneeMembership(projectId);
+  return (
+    <div className="absolute left-0 top-full z-20 mt-1 max-h-56 w-56 overflow-y-auto rounded-lg border border-outline-variant bg-surface-container-lowest py-1 shadow-overlay">
+      <button
+        type="button"
+        onClick={() => onPick(null)}
+        className="flex w-full items-center px-3 py-1.5 text-left text-xs text-on-surface-variant hover:bg-surface-container"
+      >
+        Unassigned
+      </button>
+      {users.map((u) => (
+        <button
+          key={u.id}
+          type="button"
+          onClick={() => onPick(u.id)}
+          className={[
+            "flex w-full flex-col items-start px-3 py-1.5 text-left text-xs hover:bg-surface-container",
+            u.id === value ? "font-bold text-primary" : "text-on-surface",
+          ].join(" ")}
+        >
+          {u.username}
+          {addsMember(u.id) && (
+            <span className="text-meta font-normal text-on-surface-variant">
+              {ASSIGN_ADDS_MEMBER_NOTICE}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
   );
 }
 

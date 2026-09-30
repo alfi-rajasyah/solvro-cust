@@ -29,6 +29,9 @@ export interface UserSummary {
   email: string;
   role: Role;
   permissions: string[];
+  /** Inactive accounts stay in the list; pickers filter them out. */
+  active: boolean;
+  avatarUrl: string | null;
 }
 
 export interface Label {
@@ -182,10 +185,27 @@ export interface ProjectSummary {
 export interface ProjectDetail extends ProjectSummary {
   /** Present on GET /projects/:id; adds the baseline slip (whole days, null without a baseline). */
   health?: ProjectHealth & { slipDays: number | null };
-  tam: { id: number; username: string; email: string };
-  customer: { id: number; name: string } | null;
+  tam: { id: number; username: string; email: string; avatarUrl?: string | null };
+  /** `tamId` is the customer's owner (null = unowned). */
+  customer: { id: number; name: string; tamId?: number | null } | null;
   baselineLockedBy: { id: number; username: string } | null;
   services: ProjectServiceAssignment[];
+}
+
+/**
+ * A user added to a project besides its TAM (GET /projects/:id/members).
+ * Members have the same access as the TAM
+ * (docs/archive/plans/collaboration-and-sharing.md, C1).
+ */
+export interface ProjectMember {
+  userId: number;
+  username: string;
+  email: string;
+  avatarUrl: string | null;
+  addedAt: string;
+  addedBy: { id: number; username: string } | null;
+  /** Tasks in this project assigned to the member; removing them unassigns these. */
+  assignedTaskCount: number;
 }
 
 export interface Task {
@@ -590,6 +610,7 @@ export const queryKeys = {
   projectTasks: (id: number) => ["projects", id, "tasks"] as const,
   projectLabels: (id: number) => ["projects", id, "labels"] as const,
   projectSections: (id: number) => ["projects", id, "sections"] as const,
+  projectMembers: (id: number) => ["projects", id, "members"] as const,
   // Epics (docs/archive/plans/epics-spec.md §5). `epic` is a standalone top-level
   // key (not nested under `projects`) since the epic detail panel/route can
   // be reached without the project already in scope — mirrors `customer`/
@@ -901,6 +922,67 @@ export function useProjectTasks(id: number | null) {
     queryFn: ({ signal }) =>
       apiRequest<Task[]>(`/projects/${id}/tasks`, { signal }),
     enabled: id !== null,
+  });
+}
+
+export function useProjectMembers(projectId: number | null) {
+  const live = useLiveRefresh();
+  return useQuery({
+    ...live,
+    queryKey: projectId ? queryKeys.projectMembers(projectId) : ["projects", "noop", "members"],
+    queryFn: ({ signal }) =>
+      apiRequest<ProjectMember[]>(`/projects/${projectId}/members`, { signal }),
+    enabled: projectId !== null,
+  });
+}
+
+// Membership changes what the caller (and the member) can see, so beyond the
+// members list they refresh the project lists and this project's detail —
+// the same health-carrying queries a task write refreshes.
+export function useAddProjectMember(projectId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: number) =>
+      apiRequest<ProjectMember>(`/projects/${projectId}/members`, {
+        method: "POST",
+        body: { userId },
+      }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.projectMembers(projectId) });
+      invalidateProjectHealth(qc, projectId);
+    },
+  });
+}
+
+export function useRemoveProjectMember(projectId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: number) =>
+      apiRequest<void>(`/projects/${projectId}/members/${userId}`, { method: "DELETE" }),
+    onMutate: async (userId) => {
+      await qc.cancelQueries({ queryKey: queryKeys.projectMembers(projectId) });
+      const prev = qc.getQueryData<ProjectMember[]>(queryKeys.projectMembers(projectId));
+      if (prev) {
+        qc.setQueryData<ProjectMember[]>(
+          queryKeys.projectMembers(projectId),
+          prev.filter((m) => m.userId !== userId),
+        );
+      }
+      return { prev };
+    },
+    onError: (_err, _userId, ctx) => {
+      if (ctx?.prev) qc.setQueryData(queryKeys.projectMembers(projectId), ctx.prev);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.projectMembers(projectId) });
+      // The server unassigns the removed member's tasks in the same
+      // transaction, so every task view of this project is stale.
+      qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: queryKeys.overview });
+      qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      invalidateProjectHealth(qc, projectId);
+    },
   });
 }
 
@@ -1405,6 +1487,11 @@ export function useUpdateTask(projectId: number) {
     },
     onSettled: (data, _err, { patch }, ctx) => {
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
+      // Assigning a non-member adds them to the project server-side
+      // (collaboration plan C2) — refresh the header's member list.
+      if (patch.assignedToId != null) {
+        qc.invalidateQueries({ queryKey: queryKeys.projectMembers(projectId) });
+      }
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: queryKeys.overview });
       invalidateProjectHealth(qc, projectId);
@@ -1508,6 +1595,10 @@ export function useCreateTask(projectId: number) {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: queryKeys.overview });
       invalidateProjectHealth(qc, projectId);
+      // Same as useUpdateTask: an assignee who is not yet a member becomes one.
+      if (variables.assignedToId != null) {
+        qc.invalidateQueries({ queryKey: queryKeys.projectMembers(projectId) });
+      }
       // A new task can be created directly under an epic (§6 "Add story…"
       // inline create) — keep that epic's progress (done/total) in sync.
       qc.invalidateQueries({ queryKey: queryKeys.projectEpics(projectId) });

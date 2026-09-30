@@ -14,6 +14,7 @@ import { hasPermission, requireAuth, requirePermission } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import {
+  ensureProjectOwnerAccess,
   ensureProjectVisible,
   isCustomerVisible,
   projectVisibilityFilter,
@@ -32,6 +33,7 @@ import {
 } from "../lib/taskOrdering.js";
 import { assertEpicNotOnSubtask, assertValidEpic } from "../lib/epics.js";
 import { computeProjectHealth, computeSlipDays } from "../lib/projectHealth.js";
+import { ensureAssigneeIsMember } from "../lib/projectMembers.js";
 
 // Kanban WIP limits — one optional positive-int cap per top-level status
 // column, or null/absent for "no limit". Visual-only on the board (amber
@@ -84,8 +86,8 @@ const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 // of POST /:id/baseline (previously duplicated three times). Keep list-view
 // includes (GET /, /:id/tasks, etc.) separate — they're intentionally lighter.
 const projectDetailInclude = {
-  tam: { select: { id: true, username: true, email: true } },
-  customer: { select: { id: true, name: true } },
+  tam: { select: { id: true, username: true, email: true, avatarUrl: true } },
+  customer: { select: { id: true, name: true, tamId: true } },
   baselineLockedBy: { select: { id: true, username: true } },
   _count: { select: { tasks: true } },
   services: {
@@ -195,8 +197,9 @@ projectsRouter.get("/:id", validate("params", idParamSchema), validate("query", 
   const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
   const { today } = req.query as unknown as z.infer<typeof projectDetailQuerySchema>;
   // Apply the visibility filter inside the lookup. The previous hand-rolled
-  // `"tamId" in filter` guard was a dead no-op — the filter shape is
-  // `{ OR: [{tamId}, {customer:{tamId}}] }`, so that key never exists — which left this
+  // `"tamId" in filter` guard was a dead no-op — the filter's only top-level
+  // key is `OR` (tamId / customer-owner / member arms), so that key never
+  // exists — which left this
   // endpoint open to IDOR. Returning 404 (not 403) also stops leaking
   // existence, matching every other project-scoped route.
   const project = await prisma.project.findFirst({
@@ -344,6 +347,21 @@ projectsRouter.patch(
     const body = req.body as z.infer<typeof updateProjectSchema>;
     await ensureProjectVisible(req.user!, id);
 
+    // Re-parenting a project (TAM or customer) is owner-only; a member may
+    // still edit everything else. Re-saving the current values is not a change.
+    if (body.tamId !== undefined || body.customerId !== undefined) {
+      const current = await prisma.project.findUniqueOrThrow({
+        where: { id },
+        select: { tamId: true, customerId: true },
+      });
+      if (
+        (body.tamId !== undefined && body.tamId !== current.tamId) ||
+        (body.customerId !== undefined && body.customerId !== current.customerId)
+      ) {
+        await ensureProjectOwnerAccess(req.user!, id);
+      }
+    }
+
     const data: Prisma.ProjectUpdateInput = {};
     if (body.name !== undefined) data.name = body.name;
     if (body.description !== undefined) data.description = body.description;
@@ -373,7 +391,7 @@ projectsRouter.delete(
   validate("params", idParamSchema),
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
-    await ensureProjectVisible(req.user!, id);
+    await ensureProjectOwnerAccess(req.user!, id);
 
     // Hard delete, no soft-delete or undo — the UI confirms first. The schema
     // cascades to the project's tasks (with their subtasks, comments and
@@ -440,6 +458,12 @@ projectsRouter.post(
       if (body.epicId != null) {
         assertEpicNotOnSubtask(body.epicId, body.parentTaskId ?? null);
         await assertValidEpic(tx, id, body.epicId);
+      }
+
+      // Assigning someone who cannot see the project adds them as a member
+      // (same transaction as the task write).
+      if (body.assignedToId != null) {
+        await ensureAssigneeIsMember(tx, id, body.assignedToId, req.user!.sub);
       }
 
       const siblingKey: SiblingKey = {

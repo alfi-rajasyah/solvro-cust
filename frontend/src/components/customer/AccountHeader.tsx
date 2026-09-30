@@ -75,6 +75,7 @@ export function AccountHeader({
   lastUpdate,
   updatesLoaded,
   canMutate,
+  canDelete,
   onEdit,
   onDelete,
   deleting,
@@ -87,6 +88,8 @@ export function AccountHeader({
   /** False while the weekly-update query is still loading (avoids a "none yet" flash). */
   updatesLoaded: boolean;
   canMutate: boolean;
+  /** Owner-only (server: 403 owner_only) — false hides the ⋯ menu that holds Delete. */
+  canDelete: boolean;
   onEdit: () => void;
   onDelete: () => void;
   deleting: boolean;
@@ -161,6 +164,7 @@ export function AccountHeader({
             <span className="material-symbols-outlined text-base">edit</span>
             Edit
           </button>
+          {canDelete && (
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -195,6 +199,7 @@ export function AccountHeader({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          )}
           </>
         )}
       </div>

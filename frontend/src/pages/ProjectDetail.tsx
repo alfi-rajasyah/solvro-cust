@@ -14,6 +14,7 @@ import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { RightSidebar } from "@/components/layout/RightSidebar";
 import { ProjectFormModal } from "@/components/ProjectFormModal";
 import { ProjectHeaderFacts } from "@/components/ProjectHeaderFacts";
+import { ProjectMembersButton } from "@/components/ProjectMembers";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { ProjectPageSkeleton } from "@/components/skeletons";
@@ -28,11 +29,17 @@ import { ApiError } from "@/lib/api";
 import { useNewParam } from "@/hooks/useNewParam";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { GanttExportProvider } from "@/lib/gantt/exportContext";
+import { canOwnProject, saveErrorMessage } from "@/lib/ownerAccess";
 import {
   type ProjectDetail as ProjectDetailType,
   useDeleteProject,
   useProject,
 } from "@/lib/queries";
+
+// The backend answers 404 both for a missing project and for one the caller
+// can't see, so the message covers both (link sharing, C1/L1).
+const PROJECT_BLOCKED_MESSAGE =
+  "This project doesn't exist or isn't shared with you. Ask the project's TAM to add you as a member.";
 
 const TABS = [
   { to: "overview", label: "Overview" },
@@ -107,6 +114,11 @@ export function ProjectDetail() {
   }
 
   const canEdit = hasPermission(user, "project:write");
+  // Members (access via membership alone) can edit but not hand the project
+  // to another TAM/customer or delete it — the server answers 403 owner_only.
+  const customerOwnerId = project?.customer?.tamId;
+  const isOwner = project ? canOwnProject(user, project, customerOwnerId) : false;
+  const canDelete = canEdit && isOwner;
   // ⌘K palette "Add task": opens the create form on whichever tab is showing.
   useNewParam("task", hasPermission(user, "task:write"), () => setNewTaskOpen(true));
 
@@ -118,9 +130,11 @@ export function ProjectDetail() {
     return (
       <Alert variant="destructive">
         <AlertDescription>
-          {error instanceof Error
-            ? error.message
-            : "Project not found or you don't have access."}{" "}
+          {error instanceof ApiError && error.status === 404
+            ? PROJECT_BLOCKED_MESSAGE
+            : error instanceof Error
+              ? error.message
+              : PROJECT_BLOCKED_MESSAGE}{" "}
           <Link to="/projects" className="ml-2 font-bold underline">
             Back to Projects
           </Link>
@@ -137,7 +151,7 @@ export function ProjectDetail() {
       await deleteProject.mutateAsync(project.id);
       navigate("/projects", { replace: true });
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Delete failed.");
+      setActionError(saveErrorMessage(err, "Delete failed."));
     }
   }
 
@@ -161,6 +175,7 @@ export function ProjectDetail() {
             viewport (display:none leaves the accessibility tree), so the
             Context toggle's aria-labels stay unique. */}
         <div className="flex shrink-0 items-center gap-2">
+          <ProjectMembersButton project={project} canManage={canEdit} />
           <CopyLinkButton
             label="Copy link"
             className="h-8 w-8 rounded-lg border border-outline-variant bg-surface-container-lowest hover:bg-surface-container"
@@ -184,7 +199,7 @@ export function ProjectDetail() {
                   title="More project actions"
                   className={[
                     "h-8 w-8 items-center justify-center rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30",
-                    canEdit ? "inline-flex" : "inline-flex md:hidden",
+                    canDelete ? "inline-flex" : "inline-flex md:hidden",
                   ].join(" ")}
                 >
                   <span className="material-symbols-outlined text-base" aria-hidden="true">
@@ -220,7 +235,7 @@ export function ProjectDetail() {
                 </span>
                 {contextOpen ? "Hide project context" : "Show project context"}
               </DropdownMenuItem>
-              {canEdit && (
+              {canDelete && (
                 <DropdownMenuItem
                   variant="destructive"
                   disabled={deleteProject.isPending}
@@ -301,6 +316,7 @@ export function ProjectDetail() {
         open={editOpen}
         onClose={() => setEditOpen(false)}
         project={project}
+        canChangeOwnership={isOwner}
       />
 
       <ConfirmModal

@@ -15,6 +15,27 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-09-30 — Project members
+
+- A project can now be shared with people besides its TAM. Members can open and edit the project, its tasks and its customer, including the customer's iTop tickets; iTop changes still run under each person's own iTop token. New `project_members` table (migration **`backend/prisma/migrations/20260930090000_project_members/`**), and the project visibility rule in **`backend/src/lib/visibility.ts`** now includes members. New endpoints in **`backend/src/routes/projectMembers.ts`**: `GET /projects/:id/members` (each row reports how many of the project's tasks the member has assigned), `POST /projects/:id/members` and `DELETE /projects/:id/members/:userId`. Removing a member also unassigns their tasks in that project. `GET /users` now also returns each user's `active` flag and `avatarUrl`, and the project detail response now includes the TAM's `avatarUrl` and the customer's `tamId`.
+- The project header shows the TAM and member avatars and opens a Members dialog to add or remove people (**`frontend/src/components/ProjectMembers.tsx`**). Removing someone who has assigned tasks asks for confirmation first. Someone who removes themselves returns to the project list. Avatars show profile pictures when one is available (**`frontend/src/components/AssigneeAvatar.tsx`**).
+
+### Changed — 2026-09-30 — Assigning a task adds the assignee to the project
+
+- Assigning a task to an active person who is neither the project's TAM nor a member now adds them to the project's members in the same save, so they can open the task (**`backend/src/lib/projectMembers.ts`**, used by `POST /projects/:id/tasks` and `PATCH /tasks/:id`). The membership is added only when the assignee actually changes, so re-saving a task never re-adds someone who was removed. Unassigning a task does not remove the membership, and duplicating tasks or sections never adds members. The task form, task panel and List view assignee pickers mark people who are not on the project yet, and the member avatars refresh after such an assignment.
+
+### Changed — 2026-09-30 — Ownership stays with owners
+
+- Access through project membership alone does not allow changing a project's TAM or customer, deleting a project, changing a customer's owner, or deleting a customer; those requests return 403 `owner_only` (`ensureProjectOwnerAccess` and `ensureCustomerOwnerAccess` in **`backend/src/lib/visibility.ts`**). The project TAM, the customer's owner, anyone who can see an unowned customer, and users with `project:view-all` keep these actions. Members do not see the delete actions, the edit forms lock the ownership fields for them, and a refused request shows "Only the project's TAM or the customer's owner can do this" (**`frontend/src/lib/ownerAccess.ts`**).
+
+### Changed — 2026-09-30 — Daily Review includes member projects
+
+- The Daily Review, its sidebar badge and the overview counts now include active projects the user was added to as a member, alongside the projects they are TAM of (**`backend/src/lib/dailyReviewScope.ts`**).
+
+### Changed — 2026-09-30 — Clearer message for links you cannot open
+
+- Opening a project or customer link you cannot access now says it doesn't exist or isn't shared with you, and the project page tells you to ask the project's TAM to add you as a member (**`frontend/src/pages/ProjectDetail.tsx`**, **`frontend/src/pages/CustomerDetail.tsx`**). The page still does not reveal whether the item exists.
+
 ### Added — 2026-09-29 — Copy link buttons
 
 - "Copy link" buttons on the project header (**`frontend/src/pages/ProjectDetail.tsx`**) and the customer header (**`frontend/src/components/customer/AccountHeader.tsx`**) copy the current URL, including the tab and query, and a "Copy task link" button in the task panel (**`frontend/src/components/TaskPanel.tsx`**) copies an absolute `/projects/<id>?task=<id>` URL that opens that task. A short "Link copied" confirmation appears next to the button and is announced to screen readers, or "Could not copy link" when the browser blocks clipboard access. Copying on a plain-HTTP deployment no longer moves keyboard focus off the button (**`frontend/src/lib/clipboard.ts`**), which also fixes the existing copy buttons in Admin. The Kanban subtask-reorder end-to-end test (**`e2e/tests/kanban-dnd.spec.ts`**) now finds the drag live region by its id, because the task panel now has a second status region for the copy confirmation. The shared button is the new **`frontend/src/components/CopyLinkButton.tsx`**, built on the existing `copyText` helper. The customer header now shows its action area to users without edit rights too, so they can copy the link; Edit and the options menu stay limited to editors.
