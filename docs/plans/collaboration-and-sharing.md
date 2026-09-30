@@ -77,3 +77,34 @@ Per-field check, not `Task.updatedAt`: a board or list reorder rewrites the `pos
 - Task panel inline edits and the task edit form send `expected` for exactly the fields they change (form: diff against the task it opened with).
 - On `stale_write`: roll back the optimistic change and show an in-app dialog "Someone changed this task after you opened it", listing each conflicting field with their value and yours, and two actions: **Use theirs** (discard mine, refetch) and **Keep mine** (resend the same change without `expected`).
 - Subtask done/undone toggles in the panel stay last-write-wins (a single-click action, like a board move).
+
+## Phase 4 tasks and API contract (activity and notifications — C5a → C5b → C5c)
+
+Shipped phase 3 in PR #19 (2026-09-30). The three items land in order on one branch (one commit each); each wave has a backend and a frontend implementor working against this contract.
+
+### C5a — project activity log
+- **Model** `ActivityEvent` (`activity_events`): `id`, `projectId` (cascade on project delete), `actorId` (nullable, SetNull on user delete), `entityType` (`project` | `task` | `comment` | `risk` | `note` | `member`), `entityId`, `action` (`created` | `updated` | `deleted` | `added` | `removed`), `entityLabel` (short display snapshot at write time, so deleted items still read well: the task title; for a comment, its task's title; for a risk, its description flattened to at most 120 characters, because risks have no title; for a member, the username; null for notes), `changes` (JSON, nullable), `createdAt`. Indexes: `(projectId, createdAt desc)` and `(createdAt)`.
+- **`changes` shape** for `updated`: `{ <field>: { from, to } }` for short scalar fields (title, status, priority, dates as `yyyy-mm-dd`, flags, section/epic/parent ids, assignee as `{ id, username }`). `description` records `{ changed: true }` with no text. Labels record `{ labels: { added: [names], removed: [names] } }`.
+- **Never store note or comment bodies**, and no description text. A note event carries only its id and `visibility`, so the log can never leak an `INTERNAL` note.
+- **Written in the same transaction** as the change, through one helper (`lib/activity.ts#recordActivity(tx, …)`), by: task create/update/delete, comment create (`entityType: comment`, `action: created`, `entityLabel` = the task's title), risk create/update/delete, project note create/update/delete, member add/remove (including the C2 auto-add), and project updates to name, status or customer. Reorder-only task writes (position) record nothing.
+- **API**: `GET /projects/:id/activity?limit=50&before=<eventId>&actorId=<userId>` (`project:read` + `ensureProjectVisible`) → `{ events: [{ id, entityType, entityId, action, entityLabel, changes, createdAt, actor: { id, username, avatarUrl } | null }], nextBefore: number | null }`, newest first.
+- **Retention**: an in-process daily job (pattern of `lib/itop/scheduler.ts`; off under `NODE_ENV=test`) deletes events older than 180 days.
+- **Frontend**: a "Recent activity" section on the project Overview tab — one plain sentence per event ("maya.putri changed the due date of *Configure backup jobs* from 2 Oct to 5 Oct"), actor avatar, relative time, a person filter, and "Load more". Uses `useLiveRefresh`.
+
+### C5b — in-app notifications
+- **Model** `Notification` (`notifications`): `id`, `userId` (cascade), `activityEventId` (cascade — so the 180-day cleanup also removes notifications), `reason` (`assigned` | `commented` | `mentioned`), `readAt` (nullable), `createdAt`. Index `(userId, readAt, createdAt desc)`.
+- **Created in the same transaction** as the event. Triggers: a task assigned to you by someone else (`assigned`); a comment by someone else on a task assigned to you (`commented`); a mention (`mentioned`, C5c). One notification per user per event (a mention on your own assigned task is `mentioned` only). Never notify the actor. Skip users who cannot see the project (use the visibility rules) and inactive users.
+- **API**: `GET /notifications?limit=30&before=<id>` → `{ notifications: [{ id, reason, readAt, createdAt, event: <activity event as above>, projectId, projectName }], nextBefore }`; `GET /notifications/unread-count` → `{ count }`; `POST /notifications/:id/read` → `{ id, readAt }` (404 for another user's or a missing row); `POST /notifications/read-all` → `{ updated }`. A user only ever sees their own rows.
+- **Frontend**: a bell in `TopBar.tsx` with an unread badge (polls the count every 60 s while visible), a dropdown list (newest first, unread marked), clicking an item marks it read and opens `/projects/:id?task=:taskId` (or the project for non-task events), and "Mark all as read". In-app only — no email.
+
+### C5c — @mentions in comments
+- **Model**: `Comment.mentionedUserIds Int[]` (default empty).
+- **API**: `POST` comment accepts `mentionedUserIds: number[]`; the server keeps only ids of active users who can see the project, stores them, and creates `mentioned` notifications. Comment responses include `mentionedUserIds`.
+- **Frontend**: typing `@` in the task-panel comment box opens a picker of the project's TAM and members; picking inserts `@username` and records the id. Comments render recognised `@username` tokens (those whose ids are in `mentionedUserIds`) as name chips.
+
+### Phase 4 decisions (orchestrator, 2026-09-30, from the C5a review)
+- A risk's `entityLabel` carries up to 120 characters of its description. Risks are internal and every reader of the feed can already open them; nothing exports the feed. The guest view (L4, phase 6) must never expose the activity feed.
+- Note `updated` events use `changes: { visibility }` (not `{ from, to }`) and are skipped when the body did not change.
+- Task copies made by "Duplicate task" and "Duplicate section" record a `task created` event per copied top-level task.
+- `itopTicketRef` changes are logged as `{ from, to }`.
+- Admin TAM reassignment is not logged (out of scope for C5a).
