@@ -44,10 +44,10 @@ export function ProjectMembersButton({
         data-testid="project-members-button"
         className="flex h-8 items-center gap-1 rounded-lg border border-outline-variant bg-surface-container-lowest px-2 outline-hidden transition-colors hover:bg-surface-container focus-visible:ring-2 focus-visible:ring-primary/30"
       >
-        <span className="flex items-center -space-x-1.5" data-testid="project-member-avatars">
-          {/* TAM first: the ring separates the overlapping discs. */}
+        <span className="flex items-center gap-0.5" data-testid="project-member-avatars">
+          {/* TAM first. Side by side, not overlapped: two initials need the full disc. */}
           <span className="rounded-full ring-2 ring-surface-container-lowest">
-            <AssigneeAvatar user={project.tam} size="xs" />
+            <AssigneeAvatar user={project.tam} size="sm" />
           </span>
           {visible.map((m) => (
             <span key={m.userId} className="rounded-full ring-2 ring-surface-container-lowest">
@@ -58,7 +58,7 @@ export function ProjectMembersButton({
                   email: m.email,
                   avatarUrl: m.avatarUrl,
                 }}
-                size="xs"
+                size="sm"
               />
             </span>
           ))}
