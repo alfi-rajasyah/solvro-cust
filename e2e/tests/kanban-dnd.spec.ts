@@ -252,8 +252,10 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // within a frame by the initial self-overlap "moved over" line, so
     // match no specific text). The move is observable via Sub one's row
     // being displaced with a CSS transform; retried presses are clamped at
-    // the top of the list, so they are idempotent.
-    const status = panel.getByRole("status");
+    // the top of the list, so they are idempotent. Located by dnd-kit's
+    // `DndLiveRegion-<n>` id, not by role: the panel's Copy task link button
+    // has its own role="status" live region.
+    const status = panel.locator('[id^="DndLiveRegion"]');
     await subTwoHandle.focus();
     await page.keyboard.press("Space");
     await expect(status).not.toBeEmpty();

@@ -41,6 +41,7 @@ import {
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { hasPermission, useAuth } from "@/lib/auth";
+import { useDragActivityGuard } from "@/lib/dragActivity";
 import {
   type Epic,
   type Priority,
@@ -209,6 +210,9 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   // handleDragCancel). A ref, not state, so the write is synchronous within
   // the same call stack — see handleValueChange below for why that matters.
   const isDraggingRef = useRef(false);
+  // Pauses the project queries' 30 s refresh for the gesture's lifetime and
+  // releases it on unmount mid-drag (docs/archive/plans/collaboration-and-sharing.md).
+  const dragActivity = useDragActivityGuard();
 
   const topLevelAll = useMemo(() => (tasks ?? []).filter((t) => t.parentTaskId === null), [tasks]);
   const subtaskMapAll = useMemo(() => {
@@ -316,6 +320,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
 
   function handleDragStart() {
     isDraggingRef.current = true;
+    dragActivity.begin();
     // Freeze: snapshot the current (query-derived) arrangement as the drag's
     // starting point. From here, onValueChange owns `liveColumns` until the
     // drag settles.
@@ -324,6 +329,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
 
   function handleDragEnd() {
     isDraggingRef.current = false;
+    dragActivity.end();
     // Committed (or dropped over nothing, in which case onValueCommit never
     // fires) — resume deriving from query data. onValueCommit already fired
     // the single PATCH for this gesture; the optimistic update + onSettled
@@ -333,6 +339,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
 
   function handleDragCancel() {
     isDraggingRef.current = false;
+    dragActivity.end();
     // Escape/cancel: restoreOnCancel already reset the vendor's own `value`
     // to the pre-drag snapshot (via onValueChange), so resume deriving from
     // query data — identical arrangement, since nothing was ever committed.

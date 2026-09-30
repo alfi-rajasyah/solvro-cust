@@ -15,6 +15,18 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-09-29 — Copy link buttons
+
+- "Copy link" buttons on the project header (**`frontend/src/pages/ProjectDetail.tsx`**) and the customer header (**`frontend/src/components/customer/AccountHeader.tsx`**) copy the current URL, including the tab and query, and a "Copy task link" button in the task panel (**`frontend/src/components/TaskPanel.tsx`**) copies an absolute `/projects/<id>?task=<id>` URL that opens that task. A short "Link copied" confirmation appears next to the button and is announced to screen readers, or "Could not copy link" when the browser blocks clipboard access. Copying on a plain-HTTP deployment no longer moves keyboard focus off the button (**`frontend/src/lib/clipboard.ts`**), which also fixes the existing copy buttons in Admin. The Kanban subtask-reorder end-to-end test (**`e2e/tests/kanban-dnd.spec.ts`**) now finds the drag live region by its id, because the task panel now has a second status region for the copy confirmation. The shared button is the new **`frontend/src/components/CopyLinkButton.tsx`**, built on the existing `copyText` helper. The customer header now shows its action area to users without edit rights too, so they can copy the link; Edit and the options menu stay limited to editors.
+
+### Changed — 2026-09-29 — Project data stays fresh when several people edit it
+
+- Project pages now pick up other people's edits without a reload: the project, its tasks, sections, epics and dependencies, and the customer detail page refresh when you return to the tab and every 30 seconds while the tab is visible. Refreshing pauses while you drag a card, bar or row and while any save is in flight, then resumes on its own once the drag or save finishes. Open Edit project and Edit customer dialogs keep what you have typed, because they now fill their fields only when they open (**`frontend/src/components/ProjectFormModal.tsx`**, **`frontend/src/components/CustomerFormModal.tsx`**). The options are applied per query in **`frontend/src/lib/queries.ts`** (`useLiveRefresh`), so iTop and admin queries do not start polling; drag state is tracked by the new **`frontend/src/lib/dragActivity.ts`**, called from the Kanban (**`frontend/src/components/kanban-v2/SolvroKanban.tsx`**), the List (**`frontend/src/pages/views/ProjectList.tsx`**) and the Gantt (**`frontend/src/components/gantt-v2/SolvroGantt.tsx`**).
+
+### Fixed — 2026-09-29 — Deep links survive sign-in
+
+- Opening a deep link while signed out now returns you to the exact page after sign-in: `/projects/6?task=42` lands on that project with the task panel open, instead of the bare project page (**`frontend/src/components/AuthGuard.tsx`** keeps the query and hash). The destination is accepted only when it is an in-app path, through the new **`frontend/src/lib/safeRedirect.ts`** used by **`frontend/src/pages/Login.tsx`** for both password and Google sign-in. A project's bare URL (`/projects/6`) also keeps `?task=` and any other query through its redirect to the Overview tab (**`frontend/src/App.tsx`**). A link to a task that no longer exists, or that you cannot see, now shows "Task not found" in the task panel instead of loading forever (**`frontend/src/components/TaskPanel.tsx`**).
+
 ### Changed — 2026-09-29 — Professional UI pass (consistency, hierarchy, polish)
 
 A pass over every screen so Solvro reads as one consistent, professional tool: one set of words for statuses and priorities, one day-first date format, sentence-case buttons, clearer page headers, health at a glance on projects and customers, and loading states instead of blank boxes.

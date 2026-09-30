@@ -92,7 +92,11 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
       setWipLimits(wipLimitsToForm(null));
       setExcludeFromPortfolio(false);
     }
-  }, [open, project, user]);
+    // Seed on open / project switch only — `project` gets a fresh identity on
+    // every 30 s refetch (and any task edit moves its `health`), and re-running
+    // this reset wipes in-progress input (docs/archive/plans/collaboration-and-sharing.md).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, project?.id]);
 
   // TAM dropdown lists all users — role names no longer gate who's eligible
   // to be assigned (admin's choice). Anti-self-clutter not done here because

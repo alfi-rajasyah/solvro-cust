@@ -10,6 +10,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { RightSidebar } from "@/components/layout/RightSidebar";
 import { ProjectFormModal } from "@/components/ProjectFormModal";
 import { ProjectHeaderFacts } from "@/components/ProjectHeaderFacts";
@@ -155,11 +156,15 @@ export function ProjectDetail() {
       <div className="mb-3 flex items-start justify-between gap-3 md:gap-4">
         <ProjectHeaderFacts project={project} />
 
-        {/* Below md every action lives in the ⋯ menu; Edit and the Context
-            toggle render as buttons from md up. The two copies never share a
+        {/* Copy link shows at every width. Below md the other actions live in
+            the ⋯ menu; Edit and the Context toggle render as buttons from md up. The two copies never share a
             viewport (display:none leaves the accessibility tree), so the
             Context toggle's aria-labels stay unique. */}
         <div className="flex shrink-0 items-center gap-2">
+          <CopyLinkButton
+            label="Copy link"
+            className="h-8 w-8 rounded-lg border border-outline-variant bg-surface-container-lowest hover:bg-surface-container"
+          />
           {canEdit && (
             <button
               type="button"

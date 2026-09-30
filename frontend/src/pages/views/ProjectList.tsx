@@ -30,6 +30,7 @@ import { TaskFormModal } from "@/components/TaskFormModal";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { commitDraft, dayFromIso } from "@/lib/dateField";
+import { useDragActivityGuard } from "@/lib/dragActivity";
 import { fmtDay, fmtDue } from "@/lib/formatDate";
 import { TASK_STATUS_LABEL } from "@/lib/labels";
 import {
@@ -148,6 +149,10 @@ export function ProjectList() {
   // `null` = "No epic" (task.epicId === null), a number = one project epic —
   // same three-state shape as SolvroKanban.tsx's filterEpicId.
   const [filterEpicId, setFilterEpicId] = useState<number | null | "">("");
+
+  // Pauses the project queries' 30 s refresh while a row/section drag is live
+  // (docs/archive/plans/collaboration-and-sharing.md).
+  const dragActivity = useDragActivityGuard();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -297,6 +302,7 @@ export function ProjectList() {
   }
 
   function handleDragEnd(event: DragEndEvent) {
+    dragActivity.end();
     const { active, over } = event;
     if (!over) return;
     const activeId = String(active.id);
@@ -518,7 +524,13 @@ export function ProjectList() {
           <span>Status</span>
         </div>
 
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={dragActivity.begin}
+          onDragEnd={handleDragEnd}
+          onDragCancel={dragActivity.end}
+        >
           {visibleGrouped.map((g) => (
             <SectionGroup
               key={g.section?.id ?? "none"}

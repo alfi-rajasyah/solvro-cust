@@ -8,6 +8,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useGoogleAuthConfig } from "@/lib/queries";
+import { safeRedirectPath } from "@/lib/safeRedirect";
 import { BrandMark } from "@/components/BrandMark";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 
@@ -40,7 +41,9 @@ export function Login() {
   const { status, login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from ?? "/overview";
+  // Shared by the password path, the Google path and the already-signed-in
+  // redirect below; only an in-app path is accepted.
+  const from = safeRedirectPath((location.state as { from?: unknown } | null)?.from);
 
   // Runtime-fetched OAuth config — clientId comes from the DB (Admin > Sign-in),
   // not the build. `enabled` is true only when both clientId and at least one

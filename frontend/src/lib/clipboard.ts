@@ -9,6 +9,10 @@ export async function copyText(text: string): Promise<void> {
     await navigator.clipboard.writeText(text);
     return;
   }
+  // ta.select() steals focus and removing the textarea leaves it on <body>;
+  // put it back so keyboard users (and an open dialog) keep their place.
+  const previouslyFocused =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const ta = document.createElement("textarea");
   ta.value = text;
   ta.setAttribute("readonly", "");
@@ -22,5 +26,6 @@ export async function copyText(text: string): Promise<void> {
     }
   } finally {
     document.body.removeChild(ta);
+    previouslyFocused?.focus({ preventScroll: true });
   }
 }
