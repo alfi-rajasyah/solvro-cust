@@ -324,13 +324,17 @@ test.describe("date pickers — DateField / DateRangeField", () => {
     // untouched-passthrough (commitDraft/normalizePair), a due-only task's
     // one-sided draft round-trips through react-day-picker's range shape and
     // silently emits (null, null) here, wiping the due date.
-    const [patchRes] = await Promise.all([
-      page.waitForResponse(
-        (r) => r.url().includes(`/api/tasks/${task.id}`) && r.request().method() === "PATCH",
-      ),
-      applyBtn.click(),
-    ]);
-    expect(patchRes.ok()).toBe(true);
+    // The panel only saves a date whose calendar day changed, so an untouched
+    // Apply sends no request at all (it used to re-send both dates unchanged).
+    // Nothing is sent, so nothing can wipe the due date; the readback below
+    // still proves the task is byte-identical.
+    const requests = await captureTaskRequests(page, async () => {
+      await applyBtn.click();
+    });
+    expect(
+      requests.filter((r) => r.method === "PATCH" && r.url.includes(`/api/tasks/${task.id}`)),
+    ).toHaveLength(0);
+    await expect(applyBtn).toBeHidden();
 
     const after = (await getTasks(base, token, projectId)).find((t) => t.id === task.id)!;
     expect(dateOf(after, "startDate")).toBeNull();
@@ -374,24 +378,17 @@ test.describe("date pickers — DateField / DateRangeField", () => {
     const theDay = seededDueIso!.slice(0, 10);
     await page.getByRole("button", { name: dayButtonName(theDay) }).click();
 
-    const [patchRes] = await Promise.all([
-      page.waitForResponse(
-        (r) => r.url().includes(`/api/tasks/${task.id}`) && r.request().method() === "PATCH",
-      ),
-      applyBtn.click(),
-    ]);
-    // NOT the regression guard by itself (fix round, SHOULD-FIX B): the
-    // backend's isMilestone+null-dueDate 400 refine (backend/src/routes/
-    // tasks.ts's `.refine((b) => !(b.isMilestone === true && b.dueDate ===
-    // null), ...)`) only fires when `isMilestone` is ITSELF present in the
-    // PATCH body — and `TaskPanel`'s dates-apply handler
-    // (`TaskPanel.tsx`'s `onSave={(s, e) => patch({ startDate: s, dueDate:
-    // e })}`) never sends `isMilestone`. So if the wipe-class bug this test
-    // guards against reappeared, this PATCH would still 200 (silently
-    // persisting `{ startDate: null, dueDate: null }`), not 400 — this
-    // assert would stay green either way. The readback assertions below are
-    // the actual guard: they're what would turn red on a reintroduced wipe.
-    expect(patchRes.ok()).toBe(true);
+    // The re-click leaves the draft unchanged, so no date's calendar day
+    // differs and the panel sends no request — nothing that could wipe the
+    // dates. The readback below is the guard: it turns red if a reintroduced
+    // wipe ever reaches the server.
+    const requests = await captureTaskRequests(page, async () => {
+      await applyBtn.click();
+    });
+    expect(
+      requests.filter((r) => r.method === "PATCH" && r.url.includes(`/api/tasks/${task.id}`)),
+    ).toHaveLength(0);
+    await expect(applyBtn).toBeHidden();
 
     const after = (await getTasks(base, token, projectId)).find((t) => t.id === task.id)!;
     expect(dateOf(after, "startDate")).toBe(seededStartIso); // byte-identical — no wipe

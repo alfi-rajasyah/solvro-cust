@@ -59,3 +59,21 @@ Shipped phase 1 in PR #17 (2026-09-30).
 - Daily Review (and `/overview/badges`) include projects where the user is a member.
 - Members see the project customer's iTop data, like the TAM (reads use the app token; writes still use the member's own token).
 - Saving a task re-runs C2 only when the assignee actually changes, so removing a member sticks. Task duplication never adds members (it must not re-grant a removed member).
+
+## Phase 3 tasks and API contract (conflict warning — C4)
+
+Shipped phase 2 in PR #18 (2026-09-30).
+
+### Decision (user, 2026-09-30)
+Per-field check, not `Task.updatedAt`: a board or list reorder rewrites the `position` of every sibling task (`lib/taskOrdering.ts`), so a whole-row timestamp would raise false warnings on tasks nobody edited. The client sends the value it last saw for each field it changes; the save fails only when someone changed that same field. Two people editing different fields never conflict. No schema change.
+
+### API — `PATCH /tasks/:id`
+- New optional body field `expected`: an object with the value the client last saw for any of these fields: `title`, `description`, `status`, `priority`, `startDate`, `dueDate`, `assignedToId`, `sectionId`, `epicId`, `parentTaskId`, `isMilestone`, `isCriticalPath`, `labelIds` (compared as a set). Dates compare as calendar days under the existing date contract (`lib/dateField.ts`); `null` means "was empty".
+- Inside the write transaction, the server locks the task row (`SELECT … FOR UPDATE`) before comparing, so two concurrent saves cannot both pass the check.
+- On any mismatch: 409 with code `stale_write` and `details: { conflicts: [{ field, expected, current }], task: <current task in the same shape as a normal PATCH response> }`. Nothing is written.
+- `expected` absent → today's behaviour (last write wins). Board, List and Gantt edits and drags keep sending no `expected`.
+
+### Frontend
+- Task panel inline edits and the task edit form send `expected` for exactly the fields they change (form: diff against the task it opened with).
+- On `stale_write`: roll back the optimistic change and show an in-app dialog "Someone changed this task after you opened it", listing each conflicting field with their value and yours, and two actions: **Use theirs** (discard mine, refetch) and **Keep mine** (resend the same change without `expected`).
+- Subtask done/undone toggles in the panel stay last-write-wins (a single-click action, like a board move).

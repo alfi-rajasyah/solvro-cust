@@ -9,6 +9,7 @@ import { ensureTaskVisible, projectVisibilityFilter } from "../lib/visibility.js
 import {
   isValidDayString,
   overdueBoundary,
+  utcMidnightOf,
   utcMidnightOfDayString,
 } from "../lib/dateBoundary.js";
 import {
@@ -25,6 +26,35 @@ import { duplicateTaskTree } from "../lib/duplicate.js";
 import { ensureAssigneeIsMember } from "../lib/projectMembers.js";
 
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
+
+// The value the client last saw for each field it is about to change (per-field
+// optimistic check, see the PATCH handler). Each entry validates like the
+// matching update field; `null` means "was empty".
+const expectedTaskSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  description: z.string().max(2000).nullable().optional(),
+  status: z.nativeEnum(TaskStatus).optional(),
+  priority: z.nativeEnum(Priority).optional(),
+  startDate: z.coerce.date().nullable().optional(),
+  dueDate: z.coerce.date().nullable().optional(),
+  assignedToId: z.number().int().positive().nullable().optional(),
+  sectionId: z.number().int().positive().nullable().optional(),
+  epicId: z.number().int().positive().nullable().optional(),
+  parentTaskId: z.number().int().positive().nullable().optional(),
+  isMilestone: z.boolean().optional(),
+  isCriticalPath: z.boolean().optional(),
+  labelIds: z.array(z.number().int().positive()).optional(),
+});
+type ExpectedTask = z.infer<typeof expectedTaskSchema>;
+
+// The shape every task write returns; the stale_write 409 carries the current
+// task in this same shape.
+const taskResponseInclude = {
+  assignedTo: { select: { id: true, username: true, email: true } },
+  labels: true,
+  section: { select: { id: true, name: true, position: true, color: true } },
+  _count: { select: { subtasks: true, comments: true } },
+} satisfies Prisma.TaskInclude;
 
 const updateTaskSchema = z
   .object({
@@ -58,6 +88,8 @@ const updateTaskSchema = z
       .regex(/^[A-Z]{1,3}-\d{4,8}$/)
       .nullable()
       .optional(),
+    // Per-field optimistic check: absent = last write wins.
+    expected: expectedTaskSchema.optional(),
   })
   .refine((b) => !(b.isMilestone === true && b.dueDate === null), {
     message: "A milestone requires a due date",
@@ -109,6 +141,55 @@ const tasksListQuerySchema = z
 const createCommentSchema = z.object({
   body: z.string().min(1).max(5000),
 });
+
+type StaleConflict = { field: string; expected: unknown; current: unknown };
+
+// Dates compare as calendar (UTC) days per lib/dateBoundary.ts, so a legacy
+// row holding a non-midnight instant equals the same day sent as midnight.
+const dayOf = (d: Date | null): number | null => (d === null ? null : utcMidnightOf(d).getTime());
+
+/**
+ * Compares the client's `expected` values against the locked task row.
+ * Only fields present in `expected` are compared; `labelIds` as a set.
+ */
+function findStaleFields(
+  expected: ExpectedTask,
+  current: Prisma.TaskGetPayload<{ include: typeof taskResponseInclude }>,
+): StaleConflict[] {
+  const conflicts: StaleConflict[] = [];
+  const scalarFields = [
+    "title",
+    "description",
+    "status",
+    "priority",
+    "assignedToId",
+    "sectionId",
+    "epicId",
+    "parentTaskId",
+    "isMilestone",
+    "isCriticalPath",
+  ] as const;
+  for (const field of scalarFields) {
+    const want = expected[field];
+    if (want !== undefined && want !== current[field]) {
+      conflicts.push({ field, expected: want, current: current[field] });
+    }
+  }
+  for (const field of ["startDate", "dueDate"] as const) {
+    const want = expected[field];
+    if (want !== undefined && dayOf(want) !== dayOf(current[field])) {
+      conflicts.push({ field, expected: want, current: current[field] });
+    }
+  }
+  if (expected.labelIds !== undefined) {
+    const want = new Set(expected.labelIds);
+    const have = current.labels.map((l) => l.id).sort((a, b) => a - b);
+    if (want.size !== have.length || have.some((lid) => !want.has(lid))) {
+      conflicts.push({ field: "labelIds", expected: expected.labelIds, current: have });
+    }
+  }
+  return conflicts;
+}
 
 function buildVisibilityWhere(user: JwtPayload): Prisma.TaskWhereInput {
   const projectWhere = projectVisibilityFilter(user);
@@ -236,39 +317,72 @@ tasksRouter.patch(
       },
     });
 
-    const nextStatus = body.status ?? current.status;
-    const nextParentTaskId =
-      body.parentTaskId !== undefined ? body.parentTaskId : current.parentTaskId;
-
-    const oldKey: SiblingKey = {
-      projectId: current.projectId,
-      parentTaskId: current.parentTaskId,
+    // Everything below that depends on the task's pre-write state. Derived from
+    // the pre-transaction read here; when `expected` is present it is derived
+    // again from the row read under lock, so a concurrent writer cannot make
+    // the ordering / milestone / assignee logic act on stale values.
+    const derive = (cur: typeof current) => {
+      const nextParentTaskId =
+        body.parentTaskId !== undefined ? body.parentTaskId : cur.parentTaskId;
+      const oldKey: SiblingKey = { projectId: cur.projectId, parentTaskId: cur.parentTaskId };
+      const newKey: SiblingKey = { projectId: cur.projectId, parentTaskId: nextParentTaskId };
+      return {
+        cur,
+        nextStatus: body.status ?? cur.status,
+        nextParentTaskId,
+        oldKey,
+        newKey,
+        // A patch only re-orders when it sets an explicit position OR moves the
+        // task to a different sibling list (i.e. a re-parent). A status-only
+        // change is NOT a reorder for any task, top-level or subtask: sibling
+        // lists are keyed on parentTaskId alone (status doesn't partition them),
+        // so siblingKeyEquals reports the keys equal and the row keeps its slot.
+        // Previously a top-level task's key included status, so any status
+        // change re-appended the row to the end of its destination column —
+        // that's the exact behavior this task removes.
+        touchesOrdering: body.position !== undefined || !siblingKeyEquals(oldKey, newKey),
+      };
     };
-    const newKey: SiblingKey = {
-      projectId: current.projectId,
-      parentTaskId: nextParentTaskId,
-    };
-
-    // A patch only re-orders when it sets an explicit position OR moves the
-    // task to a different sibling list (i.e. a re-parent). A status-only
-    // change is NOT a reorder for any task, top-level or subtask: sibling
-    // lists are keyed on parentTaskId alone (status doesn't partition them),
-    // so siblingKeyEquals reports the keys equal and the row keeps its slot.
-    // Previously a top-level task's key included status, so any status
-    // change re-appended the row to the end of its destination column —
-    // that's the exact behavior this task removes.
-    const touchesOrdering =
-      body.position !== undefined || !siblingKeyEquals(oldKey, newKey);
+    let state = derive(current);
 
     const updated = await prisma.$transaction(async (tx) => {
+      // Per-field optimistic check, before anything is written: lock the row so
+      // two concurrent saves cannot both pass the comparison, then reject if
+      // any field the client says it last saw has since changed. Throwing rolls
+      // the transaction back, so nothing (incl. the assignee-membership side
+      // effect) lands.
+      if (body.expected !== undefined) {
+        // FOR NO KEY UPDATE, not FOR UPDATE: it still excludes another
+        // `expected` save (and plain UPDATEs), but does not conflict with the
+        // FOR KEY SHARE an FK check takes — a labels-only write (DELETE +
+        // INSERT on the join table, never an UPDATE of this row), a comment or
+        // a subtask insert. FOR UPDATE deadlocked against those (40P01 -> 500).
+        await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${id} FOR NO KEY UPDATE`;
+        const locked = await tx.task.findUniqueOrThrow({
+          where: { id },
+          include: taskResponseInclude,
+        });
+        const conflicts = findStaleFields(body.expected, locked);
+        if (conflicts.length > 0) {
+          throw new HttpError(
+            409,
+            "stale_write",
+            "Task was changed by someone else after it was loaded",
+            { conflicts, task: locked },
+          );
+        }
+        state = derive(locked);
+      }
+      const { cur, nextStatus, nextParentTaskId, oldKey, newKey, touchesOrdering } = state;
+
       if (nextParentTaskId !== null) {
-        await assertValidParent(tx, current.projectId, id, nextParentTaskId);
+        await assertValidParent(tx, cur.projectId, id, nextParentTaskId);
       }
       if (body.sectionId != null) {
-        await assertSectionInProject(tx, current.projectId, body.sectionId);
+        await assertSectionInProject(tx, cur.projectId, body.sectionId);
       }
       if (body.labelIds && body.labelIds.length > 0) {
-        await assertLabelsInProject(tx, current.projectId, body.labelIds);
+        await assertLabelsInProject(tx, cur.projectId, body.labelIds);
       }
 
       // An explicit epicId is validated the same way create is (400
@@ -286,7 +400,7 @@ tasksRouter.patch(
       if (body.epicId !== undefined) {
         if (body.epicId !== null) {
           assertEpicNotOnSubtask(body.epicId, nextParentTaskId);
-          await assertValidEpic(tx, current.projectId, body.epicId);
+          await assertValidEpic(tx, cur.projectId, body.epicId);
         }
         epicIdUpdate = body.epicId;
       } else if (body.parentTaskId !== undefined && body.parentTaskId !== null) {
@@ -298,8 +412,8 @@ tasksRouter.patch(
       // Only when the assignee actually changes: the edit form re-sends the
       // current assignee on every save, and that must not re-add a member who
       // was removed.
-      if (body.assignedToId != null && body.assignedToId !== current.assignedToId) {
-        await ensureAssigneeIsMember(tx, current.projectId, body.assignedToId, req.user!.sub);
+      if (body.assignedToId != null && body.assignedToId !== cur.assignedToId) {
+        await ensureAssigneeIsMember(tx, cur.projectId, body.assignedToId, req.user!.sub);
       }
 
       const data: Prisma.TaskUpdateInput = {};
@@ -313,9 +427,9 @@ tasksRouter.patch(
       if (body.itopTicketRef !== undefined) data.itopTicketRef = body.itopTicketRef;
       // Milestone due-date lockstep: whatever this patch results in, a
       // milestone with a due date must have startDate === dueDate.
-      const willBeMilestone = body.isMilestone ?? current.isMilestone;
+      const willBeMilestone = body.isMilestone ?? cur.isMilestone;
       const effectiveDue =
-        body.dueDate !== undefined ? body.dueDate : current.dueDate;
+        body.dueDate !== undefined ? body.dueDate : cur.dueDate;
       if (willBeMilestone && effectiveDue) data.startDate = effectiveDue;
       if (body.assignedToId !== undefined) {
         data.assignedTo = body.assignedToId === null
@@ -363,12 +477,7 @@ tasksRouter.patch(
         return tx.task.update({
           where: { id },
           data: { position: finalPosition },
-          include: {
-            assignedTo: { select: { id: true, username: true, email: true } },
-            labels: true,
-            section: { select: { id: true, name: true, position: true, color: true } },
-            _count: { select: { subtasks: true, comments: true } },
-          },
+          include: taskResponseInclude,
         });
       }
 
@@ -376,12 +485,7 @@ tasksRouter.patch(
       return tx.task.update({
         where: { id },
         data,
-        include: {
-          assignedTo: { select: { id: true, username: true, email: true } },
-          labels: true,
-          section: { select: { id: true, name: true, position: true, color: true } },
-          _count: { select: { subtasks: true, comments: true } },
-        },
+        include: taskResponseInclude,
       });
     });
 

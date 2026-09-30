@@ -10,6 +10,13 @@ import { apiRequest, apiRequestWithHeaders } from "./api";
 import { useAuth, type Role } from "./auth";
 import { dateToDay, dayFromIso, isoFromDay } from "./dateField";
 import { shouldPauseRefresh, subscribeDragActivity } from "./dragActivity";
+import {
+  labelsFromIds,
+  parseStaleWrite,
+  SupersededWriteError,
+  isSupersededWrite,
+  type TaskExpected,
+} from "./taskConflict";
 import { parseWeekKey } from "./isoWeek";
 
 export type ProjectStatus =
@@ -1439,11 +1446,74 @@ export function reorderTasksLocally(
   });
 }
 
+// One save per task at a time: a second save of the same task waits for the
+// first to commit (its optimistic write still lands immediately). Without it,
+// two quick edits race, and the second's `expected` — read from the first's
+// optimistic state — can reach the server before the first is applied and come
+// back as a false 409. Keyed by task id only, so different tasks (a subtask, a
+// board drag elsewhere) never wait on each other.
+const taskWriteTails = new Map<number, Promise<unknown>>();
+// A save refused with `stale_write` invalidates every save of that task that
+// was already queued behind it AND carried an `expected`: those were built on
+// top of the rejected edit's optimistic state, so they would just conflict
+// with themselves and replace the first dialog. They are dropped unsent
+// (SupersededWriteError) — simpler and safer than re-deriving `expected`,
+// since the user has not yet chosen between theirs and mine. Saves without an
+// `expected` (board drags, toggles) are unaffected, and so is anything queued
+// after the failure (sequence number above the recorded one).
+let taskWriteSeq = 0;
+const taskStaleAt = new Map<number, number>();
+
+function serialiseTaskWrite<T>(
+  id: number,
+  hasExpected: boolean,
+  run: () => Promise<T>,
+): Promise<T> {
+  const seq = ++taskWriteSeq;
+  const result = (taskWriteTails.get(id) ?? Promise.resolve()).then(async () => {
+    if (hasExpected && seq <= (taskStaleAt.get(id) ?? 0)) throw new SupersededWriteError();
+    try {
+      return await run();
+    } catch (err) {
+      if (parseStaleWrite(err)) taskStaleAt.set(id, taskWriteSeq);
+      throw err;
+    }
+  });
+  const tail = result.catch(() => undefined);
+  taskWriteTails.set(id, tail);
+  void tail.then(() => {
+    if (taskWriteTails.get(id) === tail) {
+      taskWriteTails.delete(id);
+      taskStaleAt.delete(id);
+    }
+  });
+  return result;
+}
+
 export function useUpdateTask(projectId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, patch }: { id: number; patch: UpdateTaskInput }) =>
-      apiRequest<Task>(`/tasks/${id}`, { method: "PATCH", body: patch }),
+    mutationKey: ["updateTask", projectId],
+    // `expected` (optional) is the value the caller last saw for each field in
+    // `patch`; the server then answers 409 `stale_write` (see `parseStaleWrite`
+    // in lib/taskConflict.ts) if someone changed one of those fields since.
+    // Board/List/Gantt edits pass none and stay last-write-wins. It travels in
+    // the body only — the optimistic write below never sees it.
+    mutationFn: ({
+      id,
+      patch,
+      expected,
+    }: {
+      id: number;
+      patch: UpdateTaskInput;
+      expected?: TaskExpected;
+    }) =>
+      serialiseTaskWrite(id, expected !== undefined, () =>
+        apiRequest<Task>(`/tasks/${id}`, {
+          method: "PATCH",
+          body: expected ? { ...patch, expected } : patch,
+        }),
+      ),
     onMutate: async ({ id, patch }) => {
       await qc.cancelQueries({ queryKey: queryKeys.projectTasks(projectId) });
       const prev = qc.getQueryData<Task[]>(queryKeys.projectTasks(projectId));
@@ -1477,16 +1547,50 @@ export function useUpdateTask(projectId: number) {
                   } as Task)
                 : t,
             );
-        qc.setQueryData<Task[]>(queryKeys.projectTasks(projectId), next);
+        // `labelIds` in the patch must land on `labels` too — that is what the
+        // panel's chips and its next `expected` read.
+        const withLabels =
+          patch.labelIds === undefined
+            ? next
+            : next.map((t) =>
+                t.id === id
+                  ? {
+                      ...t,
+                      labels: labelsFromIds(
+                        patch.labelIds!,
+                        qc.getQueryData<Label[]>(queryKeys.projectLabels(projectId)),
+                        t.labels,
+                        projectId,
+                      ),
+                    }
+                  : t,
+              );
+        qc.setQueryData<Task[]>(queryKeys.projectTasks(projectId), withLabels);
       }
       return { prev, prevEpicId: current?.epicId ?? null };
     },
-    onError: (_err, _vars, ctx) => {
+    onError: (err, _vars, ctx) => {
+      // A dropped save never changed anything; the refused save before it has
+      // already rolled the cache back, and the last save to settle refetches.
+      if (isSupersededWrite(err)) return;
       if (ctx?.prev)
         qc.setQueryData(queryKeys.projectTasks(projectId), ctx.prev);
     },
-    onSettled: (data, _err, { patch }, ctx) => {
-      qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
+    onSettled: (data, err, { patch }, ctx) => {
+      // While another save is still in flight (this one still counts, hence
+      // > 1) skip the task-list refetch: it would return the server's
+      // in-between state and overwrite the pending optimistic edit, and the
+      // last save to settle refetches anyway. A refused (`stale_write`) or
+      // dropped save is the exception: its rollback must always be followed by
+      // a refetch, whatever else is queued, so the cache repairs from the
+      // server rather than depending on settle order.
+      const mustRefetch = parseStaleWrite(err) !== null || isSupersededWrite(err);
+      if (
+        mustRefetch ||
+        qc.isMutating({ mutationKey: ["updateTask", projectId] }) <= 1
+      ) {
+        qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
+      }
       // Assigning a non-member adds them to the project server-side
       // (collaboration plan C2) — refresh the header's member list.
       if (patch.assignedToId != null) {

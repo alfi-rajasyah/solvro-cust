@@ -11,6 +11,7 @@ import { EpicChip } from "./EpicChip";
 import { InlineDateRangeEditor } from "./InlineDateRangeEditor";
 import { LabelPicker } from "./LabelPicker";
 import { TASK_STATUS_TONE_CLASS } from "./StatusChip";
+import { TaskConflictDialog } from "./TaskConflictDialog";
 import { TaskTicketField } from "@/components/itop/TaskTicketField";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { Sortable, SortableItem, SortableItemHandle } from "@/components/reui/sortable";
@@ -20,9 +21,19 @@ import { fmtAgo, fmtRange } from "@/lib/formatDate";
 import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
 import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
 import {
+  buildExpected,
+  datePatchFromEdit,
+  formatConflictRows,
+  isSupersededWrite,
+  parseStaleWrite,
+  withServerTask,
+  type StaleWrite,
+} from "@/lib/taskConflict";
+import {
   type Priority,
   type Task,
   type TaskStatus,
+  type UpdateTaskInput,
   useAddComment,
   useComments,
   useCreateTask,
@@ -31,6 +42,7 @@ import {
   useItopStatus,
   useProject,
   useProjectEpics,
+  useProjectLabels,
   useProjectSections,
   useProjectTasks,
   useUpdateTask,
@@ -89,6 +101,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const { data: sections } = useProjectSections(projectId);
   const { data: epics, isLoading: epicsLoading } = useProjectEpics(projectId);
   const { data: users } = useUsers();
+  const { data: labels } = useProjectLabels(projectId);
   const assigneeAddsMember = useAssigneeMembership(projectId);
   const updateTask = useUpdateTask(projectId);
   const createTask = useCreateTask(projectId);
@@ -139,6 +152,13 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const [subtaskTitleDraft, setSubtaskTitleDraft] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A save that lost a per-field race (409 `stale_write`): the change that was
+  // refused, and what the server says clashed. Drives TaskConflictDialog.
+  const [conflict, setConflict] = useState<{
+    taskId: number;
+    patch: UpdateTaskInput;
+    stale: StaleWrite;
+  } | null>(null);
 
   const panelRef = useRef<HTMLDivElement | null>(null);
   // One rename edit settles exactly once. Enter, blur, and Escape can each end
@@ -149,14 +169,25 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   // panel: a panel-wide flag left set by one row silently ate the next row's
   // rename.
   const renameSettledRef = useRef(false);
+  // Same guard for the panel's own title editor; reset when it opens.
+  const titleSettledRef = useRef(false);
+  // The task as it was when a title or date edit began. Those editors stay open
+  // for a while and the 30 s live refresh can land meanwhile; `expected` and the
+  // "did anything change" check must measure against what the user started
+  // from, not the refreshed row (which would let their draft silently overwrite
+  // someone else's new value). Single-click edits use the live row.
+  const [editBase, setEditBase] = useState<Task | null>(null);
 
+  // The conflict dialog and the delete confirm are modals with their own
+  // Escape handling — the same keypress must not also close the panel.
+  const modalOpen = conflict !== null || confirmDelete;
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !modalOpen) onClose();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, modalOpen]);
 
   useEffect(() => {
     setEditingTitle(false);
@@ -168,6 +199,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     setMenuOpen(false);
     setStatusMenuOpen(false);
     setError(null);
+    setConflict(null);
   }, [taskId]);
 
   if (!task) {
@@ -196,24 +228,60 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     );
   }
 
-  function patch(body: Parameters<typeof updateTask.mutate>[0]["patch"]) {
+  function patch(body: Parameters<typeof updateTask.mutate>[0]["patch"], base: Task | null = task) {
     if (!task) return;
     setError(null);
-    updateTask.mutate(
-      { id: task.id, patch: body },
-      {
-        onError: (err) => {
-          setError(err instanceof ApiError ? err.message : "Update failed.");
-        },
-      },
-    );
+    const taskId = task.id;
+    // Inline edits are checked against what this panel last showed: `expected`
+    // is the task's current value for exactly the fields in the patch. The
+    // server refuses with 409 `stale_write` when someone changed one of them.
+    // mutateAsync, not mutate(…, { onError }): mutate-level callbacks only fire
+    // for the LATEST call on this hook, so a second quick save would swallow
+    // the first one's conflict.
+    updateTask
+      .mutateAsync({ id: taskId, patch: body, expected: buildExpected(base ?? task, body) })
+      .catch((err: unknown) => {
+        // Dropped behind an earlier refused save: that conflict is the one shown.
+        if (isSupersededWrite(err)) return;
+        const stale = parseStaleWrite(err);
+        if (stale) {
+          // Keep the FIRST conflict if one is already open.
+          setConflict((open) => open ?? { taskId, patch: body, stale });
+          return;
+        }
+        setError(err instanceof ApiError ? err.message : "Update failed.");
+      });
+  }
+
+  // "Keep mine": the same change again, without `expected` — last write wins.
+  function keepMine() {
+    if (!conflict) return;
+    const { taskId, patch: body } = conflict;
+    setConflict(null);
+    setError(null);
+    updateTask.mutateAsync({ id: taskId, patch: body }).catch((err: unknown) => {
+      if (isSupersededWrite(err)) return;
+      setError(err instanceof ApiError ? err.message : "Update failed.");
+    });
+  }
+
+  // "Use theirs": drop my change. The failed save already rolled back the
+  // optimistic edit and refetched the task list, so closing is all that's left.
+  function discardMine() {
+    setConflict(null);
   }
 
   function handleTitleSubmit(e: FormEvent) {
     e.preventDefault();
+    // Enter and blur can both end the same edit (Safari/Firefox blur the input
+    // as it unmounts after Enter) — a second pass would queue a duplicate save
+    // built on the old title and conflict with the first. Settle once per edit.
+    if (titleSettledRef.current) return;
+    titleSettledRef.current = true;
     const trimmed = titleDraft.trim();
     setEditingTitle(false);
-    if (trimmed && trimmed !== task!.title) patch({ title: trimmed });
+    const base = editBase ?? task!;
+    if (trimmed && trimmed !== base.title) patch({ title: trimmed }, base);
   }
 
   async function handleAddSubtask(e: FormEvent) {
@@ -260,14 +328,11 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     const current = subtasks.find((s) => s.id === id);
     if (!current || current.title === trimmed) return;
     setError(null);
-    updateTask.mutate(
-      { id, patch: { title: trimmed } },
-      {
-        onError: (err) => {
-          setError(err instanceof ApiError ? err.message : "Rename failed.");
-        },
-      },
-    );
+    // mutateAsync: a per-call onError is lost if another save on this hook
+    // starts first.
+    updateTask.mutateAsync({ id, patch: { title: trimmed } }).catch((err: unknown) => {
+      setError(err instanceof ApiError ? err.message : "Rename failed.");
+    });
   }
 
   async function handleSubtaskDuplicate(s: Task) {
@@ -455,6 +520,8 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               type="button"
               disabled={!canEdit}
               onClick={() => {
+                titleSettledRef.current = false;
+                setEditBase(task);
                 setTitleDraft(task.title);
                 setEditingTitle(true);
               }}
@@ -523,10 +590,14 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
             <div className="relative">
               {editingDates && canEdit ? (
                 <InlineDateRangeEditor
-                  startISO={task.startDate}
-                  endISO={task.dueDate}
+                  startISO={(editBase ?? task).startDate}
+                  endISO={(editBase ?? task).dueDate}
                   onSave={(s, e) => {
-                    patch({ startDate: s, dueDate: e });
+                    // Only the date(s) that actually changed — the untouched
+                    // one must not conflict on, or revert, someone else's edit.
+                    const base = editBase ?? task;
+                    const body = datePatchFromEdit(base, s, e);
+                    if (Object.keys(body).length > 0) patch(body, base);
                     setEditingDates(false);
                   }}
                   onCancel={() => setEditingDates(false)}
@@ -535,7 +606,10 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                 <button
                   type="button"
                   disabled={!canEdit}
-                  onClick={() => setEditingDates(true)}
+                  onClick={() => {
+                    setEditBase(task);
+                    setEditingDates(true);
+                  }}
                   className="rounded-sm px-1 py-0.5 text-left text-on-surface hover:bg-surface-container-high disabled:cursor-default"
                 >
                   {fmtRange(task.startDate, task.dueDate)}
@@ -892,6 +966,30 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
           </div>
         </div>
       </aside>
+
+      <TaskConflictDialog
+        open={conflict !== null}
+        rows={
+          conflict
+            ? formatConflictRows(
+                conflict.stale.conflicts,
+                conflict.patch,
+                withServerTask(
+                  {
+                    users,
+                    sections,
+                    epics,
+                    labels,
+                    tasks,
+                  },
+                  conflict.stale.task,
+                ),
+              )
+            : []
+        }
+        onUseTheirs={discardMine}
+        onKeepMine={keepMine}
+      />
 
       <ConfirmModal
         open={confirmDelete}
