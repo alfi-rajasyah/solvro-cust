@@ -61,3 +61,6 @@ New UI/
 .claude/agent-memory-local
 .claude/first-run
 .claude/assistant-daemon-state.json
+
+# --- Large local-only QA screenshots from the UI pass; the report and notes beside them are tracked ---
+docs/archive/plans/ui-ux-qa-run/shots/

@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-09-30 — Repository housekeeping
+
+- `.gitignore` keeps the UI-pass QA screenshots (`docs/archive/plans/ui-ux-qa-run/shots/`) out of the repository; the QA report and notes beside them are tracked.
+
 ### Added — 2026-09-30 — Guest links for project timelines
 
 - Project owners (the TAM, the customer's owner, and view-all users who can edit projects) get a Share control in the project header (**`frontend/src/components/ProjectShare.tsx`**). It creates a read-only guest link with an optional label and a 7, 30 or 90 day expiry, shows the link once to copy, lists existing links with their status, and revokes them. Creating and revoking a link is recorded in the project's activity log.
@@ -26,7 +30,7 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ### Security — 2026-09-30 — Tokens kept out of logs
 
-- Request logs no longer contain secrets: guest-link tokens in `/public/share/…` URLs and share-page Referer headers are redacted, and so is the `Authorization` header, which previously logged every signed-in request's bearer token (**`backend/src/http/requestLogger.ts`**). Each request log line also records `clientIp`, the client address the API resolved. nginx no longer writes access-log lines for `/share/` pages or `/api/public/share/` requests (**`frontend/nginx.conf`**).
+- Request logs no longer contain secrets: guest-link tokens in `/public/share/…` URLs and share-page Referer headers are redacted, and so is the `Authorization` header, which previously logged every signed-in request's bearer token (**`backend/src/http/requestLogger.ts`**). After upgrading, rotate `JWT_SECRET` once, because older log files can still hold valid tokens (see **`docs/CONFIGURATION.md`**). Each request log line also records `clientIp`, the client address the API resolved. nginx no longer writes access-log lines for `/share/` pages or `/api/public/share/` requests (**`frontend/nginx.conf`**).
 
 ### Fixed — 2026-09-30 — Stable notification query-count test
 
