@@ -8,6 +8,7 @@ import { validate } from "../http/validate.js";
 import { ensureProjectVisible } from "../lib/visibility.js";
 import { insertManyAfter, type SiblingKey } from "../lib/taskOrdering.js";
 import { duplicateTaskTree } from "../lib/duplicate.js";
+import { recordActivity } from "../lib/activity.js";
 
 // Resolve the section's owning project and 404 if the caller can't see it.
 // Permission alone (`project:write`) doesn't scope the caller to a project, so
@@ -211,6 +212,24 @@ sectionsRouter.post(
         const lastSourceTopLevelId = sourceTaskIds[sourceTaskIds.length - 1];
         const key: SiblingKey = { projectId, parentTaskId: null };
         await insertManyAfter(tx, key, lastSourceTopLevelId, newTopLevelIds);
+
+        // One `task created` event per copied top-level task (subtasks ride
+        // along unlogged), oldest copy first.
+        const copies = await tx.task.findMany({
+          where: { id: { in: newTopLevelIds } },
+          select: { id: true, title: true },
+        });
+        const titleById = new Map(copies.map((c) => [c.id, c.title]));
+        for (const copyId of newTopLevelIds) {
+          await recordActivity(tx, {
+            projectId,
+            actorId: req.user!.sub,
+            entityType: "task",
+            entityId: copyId,
+            action: "created",
+            entityLabel: titleById.get(copyId) ?? null,
+          });
+        }
       }
 
       const finalSection = await tx.section.findUniqueOrThrow({ where: { id: newSection.id } });

@@ -26,6 +26,15 @@ import { HttpError } from "../http/errors.js";
 // that membership alone must not allow (changing a project's TAM or customer,
 // deleting a project, changing/deleting a customer — see the *OwnerAccess
 // helpers below).
+//
+// TWO REPRESENTATIONS OF THE SAME RULE live side by side below:
+// `projectVisibilityFilter` (a Prisma `where`, used by every route) and
+// `canUserSeeProject` (the same arms as a pure predicate over already-loaded
+// project facts, used where many users are checked against ONE project in a
+// fixed number of queries — lib/notifications.ts). Any change to the arms
+// (a new way to see a project) must be made in BOTH; test/notifications.test.ts
+// compares them for the arms that exist today, so extend that test with any
+// new arm.
 export interface VisibilityOptions {
   viaMembership?: boolean;
 }
@@ -43,6 +52,29 @@ export function projectVisibilityFilter(
     arms.push({ members: { some: { userId: user.sub } } });
   }
   return { OR: arms };
+}
+
+/** What `canUserSeeProject` needs to know about one project. */
+export interface ProjectVisibilityFacts {
+  tamId: number | null;
+  /** `Customer.tamId` of the project's customer; null when unowned or no customer. */
+  customerTamId: number | null;
+  /** Members among the users being checked (or all members). */
+  memberIds: ReadonlySet<number>;
+}
+
+/**
+ * Pure counterpart of `projectVisibilityFilter(user)` for one project whose
+ * facts are already loaded: view-all, the project's TAM, the customer's owner,
+ * or a member. Keep the two in step (see the note above them).
+ */
+export function canUserSeeProject(user: JwtPayload, project: ProjectVisibilityFacts): boolean {
+  return (
+    hasPermission(user, "project:view-all") ||
+    project.tamId === user.sub ||
+    project.customerTamId === user.sub ||
+    project.memberIds.has(user.sub)
+  );
 }
 
 // 404-if-not-visible preamble for project-nested routes. Extracted so new

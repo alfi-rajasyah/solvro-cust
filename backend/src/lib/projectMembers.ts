@@ -16,6 +16,9 @@ type Tx = Prisma.TransactionClient | PrismaClient;
  * exactly as before. Callers invoke this only when the assignee actually
  * changes, so re-saving a task never re-adds a member who was removed.
  *
+ * Returns the added member's username when a NEW membership row was created
+ * (so the caller can record the activity event), else null.
+ *
  * Assignment is gated by `task:write` while the members API needs
  * `project:write`, so a user with only `task:write` can still add a member by
  * assigning a task. That is a known, accepted limitation.
@@ -25,19 +28,20 @@ export async function ensureAssigneeIsMember(
   projectId: number,
   assigneeId: number,
   addedById: number,
-): Promise<void> {
+): Promise<{ username: string } | null> {
   const project = await tx.project.findUnique({
     where: { id: projectId },
     select: { tamId: true },
   });
-  if (!project || project.tamId === assigneeId) return;
+  if (!project || project.tamId === assigneeId) return null;
   const assignee = await tx.user.findUnique({
     where: { id: assigneeId },
-    select: { active: true },
+    select: { active: true, username: true },
   });
-  if (!assignee?.active) return;
-  await tx.projectMember.createMany({
+  if (!assignee?.active) return null;
+  const { count } = await tx.projectMember.createMany({
     data: [{ projectId, userId: assigneeId, addedById }],
     skipDuplicates: true,
   });
+  return count === 1 ? { username: assignee.username } : null;
 }

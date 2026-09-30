@@ -11,6 +11,8 @@ import { authRouter } from "./routes/auth.js";
 import { usersRouter } from "./routes/users.js";
 import { projectsRouter } from "./routes/projects.js";
 import { projectMembersRouter } from "./routes/projectMembers.js";
+import { activityRouter } from "./routes/activity.js";
+import { notificationsRouter } from "./routes/notifications.js";
 import { tasksRouter } from "./routes/tasks.js";
 import { overviewRouter } from "./routes/overview.js";
 import { labelsRouter } from "./routes/labels.js";
@@ -63,6 +65,8 @@ export function createApp(): Express {
   app.use("/customers", customersRouter);
   app.use("/projects", projectsRouter);
   app.use("/projects", projectMembersRouter);
+  app.use("/projects", activityRouter);
+  app.use("/notifications", notificationsRouter);
   app.use("/daily-review", dailyReviewRouter);
   app.use("/notes", notesRouter);
   app.use("/tasks", tasksRouter);
