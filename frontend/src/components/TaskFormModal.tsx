@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { AssigneeMembershipNotice } from "./AssigneeMembershipNotice";
 import { ConfirmModal } from "./ConfirmModal";
 import { DateRangeField } from "./DateRangeField";
 import { Drawer } from "./Drawer";
 import { EpicChip } from "./EpicChip";
 import { LabelPicker } from "./LabelPicker";
+import { TaskConflictDialog } from "./TaskConflictDialog";
 import {
   CRITICAL_PATH_GLYPH,
   CRITICAL_PATH_HELPER_TEXT,
@@ -17,12 +18,22 @@ import { hasPermission, useAuth } from "@/lib/auth";
 import { commitDraft, dayFromIso, isoFromDay } from "@/lib/dateField";
 import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
 import {
+  diffTaskForm,
+  fieldsToAdopt,
+  formatConflictRows,
+  parseStaleWrite,
+  withServerTask,
+  type StaleWrite,
+} from "@/lib/taskConflict";
+import {
   type Priority,
   type Task,
   type TaskStatus,
+  type UpdateTaskInput,
   useCreateTask,
   useDeleteTask,
   useProjectEpics,
+  useProjectLabels,
   useProjectSections,
   useProjectTasks,
   useUpdateTask,
@@ -72,6 +83,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
   const { data: projectTasks } = useProjectTasks(open ? projectId : null);
   const { data: sections } = useProjectSections(open ? projectId : null);
   const { data: epics } = useProjectEpics(open ? projectId : null);
+  const { data: labels } = useProjectLabels(open ? projectId : null);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -91,6 +103,16 @@ export function TaskFormModal(props: TaskFormModalProps) {
   // exit transition has finished.
   const [closing, setClosing] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  // A save refused with 409 `stale_write` — see TaskConflictDialog.
+  const [conflict, setConflict] = useState<{
+    taskId: number;
+    patch: UpdateTaskInput;
+    stale: StaleWrite;
+  } | null>(null);
+  // The task exactly as the form opened with it. The `task` prop is the live
+  // cache row and refreshes under the user's hands; the diff and `expected`
+  // must be measured against what the user actually started editing from.
+  const baseTaskRef = useRef<Task | null>(null);
   const requestClose = useCallback(() => setClosing(true), []);
 
   const editingTask = isEdit ? (props as EditProps).task : null;
@@ -99,7 +121,9 @@ export function TaskFormModal(props: TaskFormModalProps) {
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setConflict(null);
     if (editingTask) {
+      baseTaskRef.current = editingTask;
       setTitle(editingTask.title);
       setDescription(editingTask.description ?? "");
       setStatus(editingTask.status);
@@ -182,38 +206,48 @@ export function TaskFormModal(props: TaskFormModalProps) {
     // re-deriving the ISO — see `commitDraft`'s doc in `@/lib/dateField`.
     // Create mode has no original ISO to compare against, so it always
     // derives fresh via `isoFromDay` (UTC midnight of the picked day).
-    const startIso = isEdit && editingTask
-      ? commitDraft(startDate, editingTask.startDate)
-      : isoFromDay(startDate);
-    const dueIso = isEdit && editingTask
-      ? commitDraft(dueDate, editingTask.dueDate)
-      : isoFromDay(dueDate);
+    const base = editingTask ? (baseTaskRef.current ?? editingTask) : null;
+    const startIso = base ? commitDraft(startDate, base.startDate) : isoFromDay(startDate);
+    const dueIso = base ? commitDraft(dueDate, base.dueDate) : isoFromDay(dueDate);
     const parent = parentTaskId === "" ? null : Number(parentTaskId);
     const sec = sectionId === "" ? null : Number(sectionId);
     const assignee = assignedToId === "" ? null : Number(assignedToId);
 
     try {
       if (isEdit && editingTask) {
-        await update.mutateAsync({
-          id: editingTask.id,
-          patch: {
-            title: title.trim(),
-            description: description.trim() || null,
-            status,
-            priority,
-            startDate: startIso,
-            dueDate: dueIso,
-            // Only a real change: a form opened before a member was removed
-            // must not re-send the old assignee (the server would treat
-            // null → old as an assignment and re-add the member).
-            ...(assignee !== editingTask.assignedToId ? { assignedToId: assignee } : {}),
-            parentTaskId: parent,
-            sectionId: sec,
-            epicId: parent === null ? (epicId === "" ? null : Number(epicId)) : null,
-            labelIds,
-            isCriticalPath,
-          },
+        // Send only what changed since the form opened, plus `expected` (the
+        // opening values) for those fields — the server then refuses with 409
+        // `stale_write` if someone else changed the same field meanwhile.
+        // A field the user never touched is never sent, so a concurrent edit
+        // to it can neither conflict nor be overwritten; and an assignee left
+        // alone is not re-sent (a form opened before a member was removed
+        // must not re-add them).
+        const { patch, expected } = diffTaskForm(base ?? editingTask, {
+          title: title.trim(),
+          description: description.trim() || null,
+          status,
+          priority,
+          startDate: startIso,
+          dueDate: dueIso,
+          assignedToId: assignee,
+          parentTaskId: parent,
+          sectionId: sec,
+          epicId: parent === null ? (epicId === "" ? null : Number(epicId)) : null,
+          labelIds,
+          isCriticalPath,
         });
+        if (Object.keys(patch).length === 0) {
+          requestClose();
+          return;
+        }
+        try {
+          await update.mutateAsync({ id: editingTask.id, patch, expected });
+        } catch (err) {
+          const stale = parseStaleWrite(err);
+          if (!stale) throw err;
+          setConflict({ taskId: editingTask.id, patch, stale });
+          return;
+        }
       } else {
         await create.mutateAsync({
           title: title.trim(),
@@ -234,6 +268,46 @@ export function TaskFormModal(props: TaskFormModalProps) {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Save failed.");
     }
+  }
+
+  // "Keep mine": the same change again, without `expected` — last write wins.
+  async function keepMine() {
+    if (!conflict) return;
+    const { taskId, patch } = conflict;
+    setError(null);
+    try {
+      await update.mutateAsync({ id: taskId, patch });
+      setConflict(null);
+      requestClose();
+    } catch (err) {
+      setConflict(null);
+      setError(err instanceof ApiError ? err.message : "Save failed.");
+    }
+  }
+
+  // "Use theirs": the clashing fields take the server's values, as does any
+  // field I never touched (my copy of it is just the old base — keeping it
+  // would overwrite their change on the next save). My other edits stay, the
+  // base moves to the server's task, and the form stays open to save them.
+  function discardMine() {
+    if (!conflict) return;
+    const { stale, patch } = conflict;
+    const t = stale.task;
+    const adopt = fieldsToAdopt(patch, stale.conflicts);
+    if (adopt.has("title")) setTitle(t.title);
+    if (adopt.has("description")) setDescription(t.description ?? "");
+    if (adopt.has("status")) setStatus(t.status);
+    if (adopt.has("priority")) setPriority(t.priority);
+    if (adopt.has("startDate")) setStartDate(dayFromIso(t.startDate) ?? "");
+    if (adopt.has("dueDate")) setDueDate(dayFromIso(t.dueDate) ?? "");
+    if (adopt.has("assignedToId")) setAssignedToId(t.assignedToId ?? "");
+    if (adopt.has("parentTaskId")) setParentTaskId(t.parentTaskId ?? "");
+    if (adopt.has("sectionId")) setSectionId(t.sectionId ?? "");
+    if (adopt.has("epicId")) setEpicId(t.epicId ?? "");
+    if (adopt.has("labelIds")) setLabelIds(t.labels.map((l) => l.id));
+    if (adopt.has("isCriticalPath")) setIsCriticalPath(t.isCriticalPath ?? false);
+    baseTaskRef.current = t;
+    setConflict(null);
   }
 
   const submitting = create.isPending || update.isPending || remove.isPending;
@@ -281,7 +355,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
     <Drawer
       open={open}
       closing={closing}
-      onClose={confirmDeleteOpen ? () => {} : requestClose}
+      onClose={confirmDeleteOpen || conflict ? () => {} : requestClose}
       onClosed={onClose}
       title={isEdit ? "Edit task" : "New task"}
       customHeader={customHeader}
@@ -574,6 +648,30 @@ export function TaskFormModal(props: TaskFormModalProps) {
         )}
       </form>
     </Drawer>
+    <TaskConflictDialog
+      open={conflict !== null}
+      rows={
+        conflict
+          ? formatConflictRows(
+              conflict.stale.conflicts,
+              conflict.patch,
+              withServerTask(
+                {
+                  users,
+                  sections,
+                  epics,
+                  labels,
+                  tasks: projectTasks,
+                },
+                conflict.stale.task,
+              ),
+            )
+          : []
+      }
+      onUseTheirs={discardMine}
+      onKeepMine={() => void keepMine()}
+      busy={update.isPending}
+    />
     <ConfirmModal
       open={confirmDeleteOpen}
       onClose={() => setConfirmDeleteOpen(false)}
