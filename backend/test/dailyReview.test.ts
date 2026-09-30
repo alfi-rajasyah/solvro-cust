@@ -204,6 +204,58 @@ describe("GET /daily-review — scope (Decisions 8-10)", () => {
     expect(res.body.coverage[TODAY].total).toBe(2);
   });
 
+  it("a project the caller is a member of (not TAM) surfaces under its customer, and stops when removed", async () => {
+    const member = await createUserWithRole("TAM");
+    const otherTam = await createUserWithRole("TAM");
+    const customer = await createCustomer({ tamId: otherTam.userId, name: uniq("Member Customer") });
+    const project = await createProject({ tamId: otherTam.userId, customerId: customer.id, status: "ACTIVE", name: uniq("Member Proj") });
+    await prisma.projectMember.create({ data: { projectId: project.id, userId: member.userId } });
+
+    const res = await get(member.token, { week: WEEK, today: TODAY });
+    expect(res.status).toBe(200);
+    const cust = res.body.customers.find((c: any) => c.id === customer.id);
+    expect(cust).toBeDefined();
+    expect(cust.projects.map((p: any) => p.id)).toEqual([project.id]);
+    expect(res.body.coverage[TODAY].total).toBe(1);
+
+    await prisma.projectMember.deleteMany({ where: { projectId: project.id } });
+    const after = await get(member.token, { week: WEEK, today: TODAY });
+    expect(after.body.customers.some((c: any) => c.id === customer.id)).toBe(false);
+  });
+
+  it("a customerless project the caller is a member of lands in the No customer group; a PLANNING one does not", async () => {
+    const member = await createUserWithRole("TAM");
+    const otherTam = await createUserWithRole("TAM");
+    const active = await createProject({ tamId: otherTam.userId, status: "ACTIVE", name: uniq("Member No Customer") });
+    const planning = await createProject({ tamId: otherTam.userId, status: "PLANNING", name: uniq("Member Planning") });
+    await prisma.projectMember.createMany({
+      data: [
+        { projectId: active.id, userId: member.userId },
+        { projectId: planning.id, userId: member.userId },
+      ],
+    });
+
+    const res = await get(member.token, { week: WEEK, today: TODAY });
+    expect(res.status).toBe(200);
+    const ids = res.body.unassignedProjects.map((p: any) => p.id);
+    expect(ids).toContain(active.id);
+    expect(ids).not.toContain(planning.id);
+  });
+
+  it("a member's other projects of the same customer that they are not on stay out", async () => {
+    const member = await createUserWithRole("TAM");
+    const otherTam = await createUserWithRole("TAM");
+    const customer = await createCustomer({ tamId: otherTam.userId, name: uniq("Member Partial Customer") });
+    const mine = await createProject({ tamId: otherTam.userId, customerId: customer.id, status: "ACTIVE", name: uniq("Mine") });
+    const notMine = await createProject({ tamId: otherTam.userId, customerId: customer.id, status: "ACTIVE", name: uniq("Not Mine") });
+    await prisma.projectMember.create({ data: { projectId: mine.id, userId: member.userId } });
+
+    const res = await get(member.token, { week: WEEK, today: TODAY });
+    const ids = allProjectDtos(res.body).map((p: any) => p.id);
+    expect(ids).toContain(mine.id);
+    expect(ids).not.toContain(notMine.id);
+  });
+
   it("ADMIN (wildcard) sees every ACTIVE project", async () => {
     const admin = await createAdminAndToken();
     const tam = await createUserWithRole("TAM");

@@ -64,6 +64,19 @@ describe("GET /overview/badges", () => {
     expect((await badges(tam.token)).body.dailyReviewPending).toBe(0);
   });
 
+  it("counts a customer reached only through a project membership", async () => {
+    const owner = await createUserWithRole("TAM");
+    const member = await createUserWithRole("TAM");
+    const c = await customerFor(owner.userId);
+    const p = await projectFor(owner.userId, c.id);
+
+    expect((await badges(member.token)).body.dailyReviewPending).toBe(0);
+    await prisma.projectMember.create({ data: { projectId: p.id, userId: member.userId } });
+    expect((await badges(member.token)).body.dailyReviewPending).toBe(1);
+    await review(p.id, member.userId);
+    expect((await badges(member.token)).body.dailyReviewPending).toBe(0);
+  });
+
   it("ignores another user's review, a review on another day, and non-ACTIVE projects", async () => {
     const tam = await createUserWithRole("TAM");
     const other = await createUserWithRole("TAM");

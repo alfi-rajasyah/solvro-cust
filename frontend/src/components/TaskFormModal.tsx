@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { AssigneeMembershipNotice } from "./AssigneeMembershipNotice";
 import { ConfirmModal } from "./ConfirmModal";
 import { DateRangeField } from "./DateRangeField";
 import { Drawer } from "./Drawer";
@@ -202,7 +203,10 @@ export function TaskFormModal(props: TaskFormModalProps) {
             priority,
             startDate: startIso,
             dueDate: dueIso,
-            assignedToId: assignee,
+            // Only a real change: a form opened before a member was removed
+            // must not re-send the old assignee (the server would treat
+            // null → old as an assignment and re-add the member).
+            ...(assignee !== editingTask.assignedToId ? { assignedToId: assignee } : {}),
             parentTaskId: parent,
             sectionId: sec,
             epicId: parent === null ? (epicId === "" ? null : Number(epicId)) : null,
@@ -393,6 +397,11 @@ export function TaskFormModal(props: TaskFormModalProps) {
                 </option>
               ))}
             </select>
+            <AssigneeMembershipNotice
+              projectId={projectId}
+              assigneeId={assignedToId === "" ? null : Number(assignedToId)}
+              className="mt-1"
+            />
           </FieldRow>
 
           {/* Dates (merged Start/Due, plan Task 3.5 — one between-style range picker) */}

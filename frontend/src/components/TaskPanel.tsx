@@ -17,6 +17,7 @@ import { Sortable, SortableItem, SortableItemHandle } from "@/components/reui/so
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { fmtAgo, fmtRange } from "@/lib/formatDate";
+import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
 import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
 import {
   type Priority,
@@ -88,6 +89,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const { data: sections } = useProjectSections(projectId);
   const { data: epics, isLoading: epicsLoading } = useProjectEpics(projectId);
   const { data: users } = useUsers();
+  const assigneeAddsMember = useAssigneeMembership(projectId);
   const updateTask = useUpdateTask(projectId);
   const createTask = useCreateTask(projectId);
   const deleteTask = useDeleteTask(projectId);
@@ -472,6 +474,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
             </span>
             <div className="relative">
               {editingAssignee && canEdit ? (
+                <>
                 <select
                   autoFocus
                   value={task.assignedToId ?? ""}
@@ -485,10 +488,20 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                   <option value="">Unassigned</option>
                   {(users ?? []).map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.username}
+                      {`${u.username}${assigneeAddsMember(u.id) ? " (not on project)" : ""}`}
                     </option>
                   ))}
                 </select>
+                {/* This picker saves the moment an option is chosen, so the
+                    warning goes on the options themselves plus this line —
+                    a plain paragraph, not a live region (specs query the
+                    panel by role). */}
+                {(users ?? []).some((u) => assigneeAddsMember(u.id)) && (
+                  <p className="mt-1 text-meta text-on-surface-variant">
+                    People marked “not on project” are added to it when assigned.
+                  </p>
+                )}
+                </>
               ) : (
                 <button
                   type="button"

@@ -16,6 +16,8 @@ export interface DuplicateOverrides {
 // this helper never touches the Comment or TaskDependency tables. itopTicketRef
 // (docs/archive/plans/itop-integration.md Task 4.2) is likewise never
 // selected/copied — a copy must not pin the same iTop ticket as its source.
+// Duplication deliberately never adds ProjectMember rows (unlike assigning via
+// the task routes): a copy must not re-grant a member who was removed.
 // epicId IS carried verbatim (docs/archive/plans/epics-spec.md §4: "lib/duplicate.ts
 // copies keep epicId") — same project, so no cross-project validation is
 // needed here the way routes/tasks.ts and routes/projects.ts need it on a

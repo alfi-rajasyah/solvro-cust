@@ -11,6 +11,7 @@ import { ServiceMappingList } from "@/components/services/ServiceMappingList";
 import { Tabs } from "@/components/Tabs";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
+import { canOwnCustomer, saveErrorMessage } from "@/lib/ownerAccess";
 import {
   type CustomerDetail as CustomerDetailType,
   useCustomer,
@@ -166,11 +167,21 @@ export function CustomerDetail() {
     return (
       <Alert variant="destructive" className="m-6">
         <AlertDescription>
-          Could not load customer{error ? `: ${(error as Error).message}` : "."}
+          {error instanceof ApiError && error.status === 404
+            ? "This customer doesn't exist or isn't shared with you."
+            : `Could not load customer${error ? `: ${(error as Error).message}` : "."}`}
         </AlertDescription>
       </Alert>
     );
   }
+
+  // Members reaching this customer through a project can edit its profile but
+  // not change its owner or delete it (server: 403 owner_only).
+  const canOwn = canOwnCustomer(
+    user,
+    customer,
+    customer.projects.map((p) => p.tamId),
+  );
 
   async function handleDelete() {
     if (!customer) return;
@@ -180,7 +191,7 @@ export function CustomerDetail() {
       await deleteCustomer.mutateAsync(customer.id);
       navigate("/customers");
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Delete failed.");
+      setActionError(saveErrorMessage(err, "Delete failed."));
     }
   }
 
@@ -197,6 +208,7 @@ export function CustomerDetail() {
         lastUpdate={latestUpdate.data?.[0] ?? null}
         updatesLoaded={!latestUpdate.isLoading}
         canMutate={canMutate}
+        canDelete={canOwn}
         onEdit={() => setEditOpen(true)}
         onDelete={() => setConfirmDeleteOpen(true)}
         deleting={deleteCustomer.isPending}
@@ -233,6 +245,7 @@ export function CustomerDetail() {
         open={editOpen}
         onClose={() => setEditOpen(false)}
         customer={customer}
+        canChangeOwner={canOwn}
       />
 
       <ConfirmModal

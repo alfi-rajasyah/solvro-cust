@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Modal } from "./Modal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
-import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { saveErrorMessage } from "@/lib/ownerAccess";
 import { PROJECT_STATUS_LABEL, taskStatusOptions } from "@/lib/labels";
 import {
   type ProjectDetail,
@@ -52,9 +52,21 @@ interface Props {
   /** When supplied, the form opens in edit mode for this project. */
   project?: ProjectDetail | null;
   onSaved?: (id: number) => void;
+  /**
+   * Edit mode only: false for someone with access through membership alone,
+   * who may not change the TAM or customer (server: 403 owner_only). The
+   * customer select is then read-only and neither field is sent.
+   */
+  canChangeOwnership?: boolean;
 }
 
-export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
+export function ProjectFormModal({
+  open,
+  onClose,
+  project,
+  onSaved,
+  canChangeOwnership = true,
+}: Props) {
   const { user } = useAuth();
   const isEdit = Boolean(project);
   const { data: users } = useUsers();
@@ -121,8 +133,12 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
         await update.mutateAsync({
           name: name.trim(),
           description: description.trim() || null,
-          tamId: tamId === "" ? undefined : Number(tamId),
-          customerId: Number(customerId),
+          ...(canChangeOwnership
+            ? {
+                tamId: tamId === "" ? undefined : Number(tamId),
+                customerId: Number(customerId),
+              }
+            : {}),
           status,
           wipLimits: formToWipLimits(wipLimits),
           excludeFromPortfolio,
@@ -142,7 +158,7 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
       }
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Save failed.");
+      setError(saveErrorMessage(err, "Save failed."));
     }
   }
 
@@ -202,7 +218,8 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
             onChange={(e) =>
               setCustomerId(e.target.value === "" ? "" : Number(e.target.value))
             }
-            className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            disabled={isEdit && !canChangeOwnership}
+            className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-70"
           >
             <option value="">
               {customers && customers.length === 0
@@ -214,7 +231,16 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
                 {c.name}
               </option>
             ))}
+            {/* A member may not see the customer in the list; keep it shown. */}
+            {project?.customer && !(customers ?? []).some((c) => c.id === project.customer!.id) && (
+              <option value={project.customer.id}>{project.customer.name}</option>
+            )}
           </select>
+          {isEdit && !canChangeOwnership && (
+            <p className="mt-1 text-meta text-on-surface-variant">
+              Only the project's TAM or the customer's owner can move it to another customer.
+            </p>
+          )}
         </Field>
 
         <Field label="Status">
@@ -231,7 +257,7 @@ export function ProjectFormModal({ open, onClose, project, onSaved }: Props) {
           </select>
         </Field>
 
-        {canPickTam && (
+        {canPickTam && canChangeOwnership && (
           <Field label="Technical Account Manager">
             <select
               value={tamId === "" ? "" : String(tamId)}

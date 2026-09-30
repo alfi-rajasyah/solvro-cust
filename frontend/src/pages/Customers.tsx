@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   getCoreRowModel,
@@ -24,24 +24,42 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ApiError } from "@/lib/api";
 import { useNewParam } from "@/hooks/useNewParam";
 import { hasPermission, useAuth } from "@/lib/auth";
+import { canOwnCustomer, saveErrorMessage } from "@/lib/ownerAccess";
 import { WEEKLY_STATUS_LABEL } from "@/lib/labels";
 import {
   type CustomerSummary,
   useCustomers,
   useDeleteCustomer,
+  useProjects,
 } from "@/lib/queries";
 
 export function Customers() {
   const { user } = useAuth();
   const { data: customers, isLoading, isError, error } = useCustomers();
   const deleteCustomer = useDeleteCustomer();
+  // TAM ids of the visible projects per customer — the "TAM of one of its
+  // projects" arm of customer ownership (the list rows only carry a count).
+  const { data: projects } = useProjects();
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<CustomerSummary | null>(null);
   const [deleting, setDeleting] = useState<CustomerSummary | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const projectTamIdsByCustomer = useMemo(() => {
+    const map = new Map<number, number[]>();
+    for (const p of projects ?? []) {
+      if (p.customerId === null) continue;
+      map.set(p.customerId, [...(map.get(p.customerId) ?? []), p.tamId]);
+    }
+    return map;
+  }, [projects]);
+  // Owner-only actions (change owner, delete) — see lib/ownerAccess.ts.
+  const ownsCustomer = useCallback(
+    (c: CustomerSummary) => canOwnCustomer(user, c, projectTamIdsByCustomer.get(c.id) ?? []),
+    [user, projectTamIdsByCustomer],
+  );
 
   const canMutate = hasPermission(user, "project:write");
   const viewAll = hasPermission(user, "project:view-all");
@@ -53,7 +71,7 @@ export function Customers() {
     try {
       await deleteCustomer.mutateAsync(c.id);
     } catch (err) {
-      setDeleteError(err instanceof ApiError ? err.message : "Delete failed.");
+      setDeleteError(saveErrorMessage(err, "Delete failed."));
     }
   }
 
@@ -125,6 +143,7 @@ export function Customers() {
           canMutate={canMutate}
           onEdit={setEditing}
           onDelete={setDeleting}
+          canOwn={ownsCustomer}
         />
       )}
 
@@ -133,6 +152,7 @@ export function Customers() {
         open={editing !== null}
         onClose={() => setEditing(null)}
         customer={editing}
+        canChangeOwner={editing ? ownsCustomer(editing) : true}
       />
       <ConfirmModal
         open={deleting !== null}
@@ -168,11 +188,14 @@ function CustomersTable({
   canMutate,
   onEdit,
   onDelete,
+  canOwn,
 }: {
   customers: CustomerSummary[];
   canMutate: boolean;
   onEdit: (c: CustomerSummary) => void;
   onDelete: (c: CustomerSummary) => void;
+  /** Owner-only actions (Delete) show only where this is true. */
+  canOwn: (c: CustomerSummary) => boolean;
 }) {
   const navigate = useNavigate();
   // The server returns rows by name; a header click re-sorts client-side.
@@ -331,16 +354,18 @@ function CustomersTable({
                   </span>
                   Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => onDelete(row.original)}
-                  className="text-xs"
-                >
-                  <span className="material-symbols-outlined text-base" aria-hidden="true">
-                    delete
-                  </span>
-                  Delete
-                </DropdownMenuItem>
+                {canOwn(row.original) && (
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => onDelete(row.original)}
+                    className="text-xs"
+                  >
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">
+                      delete
+                    </span>
+                    Delete
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -349,7 +374,7 @@ function CustomersTable({
       });
     }
     return cols;
-  }, [canMutate, onEdit, onDelete]);
+  }, [canMutate, onEdit, onDelete, canOwn]);
 
   const table = useReactTable({
     data: customers,

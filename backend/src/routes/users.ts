@@ -12,6 +12,8 @@ usersRouter.get("/", async (_req, res) => {
       id: true,
       username: true,
       email: true,
+      active: true,
+      avatarUrl: true,
       role: { select: { roleName: true, permissions: true } },
     },
     orderBy: { username: "asc" },
@@ -27,6 +29,8 @@ usersRouter.get("/", async (_req, res) => {
         id: u.id,
         username: u.username,
         email: u.email,
+        active: u.active,
+        avatarUrl: u.avatarUrl,
         role: u.role.roleName,
         permissions,
       };
