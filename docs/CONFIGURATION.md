@@ -80,6 +80,7 @@ Defined and validated in [backend/src/env.ts](backend/src/env.ts) (Zod). All oth
 | `SECRETS_KEY` | **yes** | none | base64 string decoding to **exactly 32 bytes** | AES-256-GCM key for secrets at rest (`backend/src/lib/secretBox.ts`) — currently the iTop application token and, from Phase 5, per-TAM iTop tokens. Generate with `openssl rand -base64 32`. Crashes on startup if unset or the wrong length. **Rotating it invalidates every stored token** — they must be re-entered after a rotation. |
 | `CORS_ORIGIN` | no | `http://localhost:5173` | string | Comma-separated origin allowlist. The literal value `*` (after trim) enables `cors({ origin: true })`. |
 | `LOG_LEVEL` | no | `info` | enum: `fatal` \| `error` \| `warn` \| `info` \| `debug` \| `trace` | Pino level threshold. |
+| `TRUST_PROXY` | no | `1` | hop count `0`-`10`, **or** a comma-separated list of `loopback` / `linklocal` / `uniquelocal` and IPv4/IPv6 addresses or CIDR subnets (e.g. `loopback, uniquelocal`); parsed by [backend/src/http/trustProxy.ts](backend/src/http/trustProxy.ts). **`true` is rejected**, as is anything else unparseable — the backend crashes at startup with a Zod error. | Which `X-Forwarded-For` hops Express believes when it works out the client address (`req.ip`; `app.set("trust proxy", …)` in [backend/src/app.ts](backend/src/app.ts)). Today its only consumer is the per-IP rate limit on the public guest-link API (IPv6 clients are grouped by /56, IPv4 per address). Too few hops puts every visitor in the proxy's bucket; too many lets a client spoof its address (the reason bare `true` is refused). `1` = nginx only (the default, right for the prod stack and the dev stack). With a tunnel or CDN (e.g. cloudflared) in front of nginx, prefer the subnet form `loopback, uniquelocal`: it trusts only proxies on loopback/private addresses, so a client that reaches a directly published `BACKEND_PORT` cannot spoof its address with a forged `X-Forwarded-For` — which a hop count allows. `2` is the simple alternative, with that caveat. For `setup.sh` deploys, set it in `~/solvro/.env` — see [2.13](#213--production-deployment-via-setupsh). |
 | `ITOP_SYNC_DISABLED` | no | `false` | enum: `true` \| `false` | Kill switch for the in-process iTop sync scheduler (`backend/src/lib/itop/scheduler.ts`) — set `true` to turn the background sync off (e.g. a dev stack with no iTop admin config yet, or a maintenance window). Default off means the sync runs whenever iTop is configured. |
 
 > Looking for Google OAuth config (Client ID, allowed domains)? It's **not** an env var — it's admin-managed in the database. See [2.9](#29--auth--rbac-configuration).
@@ -184,6 +185,17 @@ location /api/ {
 
 Backend routers stay mounted at `/auth`, `/projects`, `/tasks`, etc. — **without** an `/api` prefix. If you add a router, do **not** prefix it with `/api`; the proxy handles that.
 
+**Guest links (no access logging)**: [frontend/nginx.conf](frontend/nginx.conf) has two extra `location ^~` blocks, both with `access_log off` because the guest-link token is part of the URL path:
+
+- `/api/public/share/` — proxied to the backend's `/public/share/` exactly like `/api/`, with the same `X-Forwarded-For` / `X-Real-IP` / `X-Forwarded-Proto` headers (this is the hop that `TRUST_PROXY=1` counts).
+- `/share/` — serves the SPA shell (`index.html`, via `rewrite ^ /index.html break`) with `Cache-Control: no-store` and `Referrer-Policy: no-referrer` on the document itself, so no subresource request can carry the token in a `Referer`.
+
+The guest page still loads Google Fonts from Google; the no-referrer policy keeps the token out of those requests.
+
+`access_log off` does **not** cover nginx's `error_log`: when the backend is down or times out, the error-log lines for `/api/public/share/…` can contain the token in the request path. Treat nginx error logs as sensitive (restrict access, don't ship them to shared tooling).
+
+Guest-page navigations (`/share/<token>`) bypass the PWA service-worker cache: [frontend/vite.config.ts](frontend/vite.config.ts) excludes `/share/` (alongside `/api/`) from `navigateFallbackDenylist`, so they always reach nginx and get its `no-store` / `no-referrer` headers instead of a precached app shell.
+
 ### 2.7 — Database migrations
 
 - **Dev**: `npm run prisma:migrate -- --name <slug>` from `backend/`. Always pass `--name`, otherwise it will hang waiting for interactive input.
@@ -239,6 +251,7 @@ Login supports two paths, both minting the same `{sub, role, permissions}` JWT: 
 - **Shared logger**: imported from [backend/src/logger.ts](backend/src/logger.ts) — never `new Logger()` ad hoc.
 - **Level**: controlled by `LOG_LEVEL` env (default `info`; the dev compose stack sets `debug`).
 - **Format**: JSON in prod (default pino), pretty in dev if pino-pretty is wired.
+- **Redaction**: request logging goes through [backend/src/http/requestLogger.ts](backend/src/http/requestLogger.ts), which replaces a guest-link token (`/share/<token>` in the request URL or a `Referer`) with `[redacted]` and masks the `Authorization` header, so neither a token nor a bearer JWT reaches the logs. Each request log line carries `clientIp` (the address `req.ip` resolves to under `TRUST_PROXY`, i.e. what the guest-link rate limit keys on) alongside `remoteAddress` / `remotePort` (the direct socket peer — the proxy, when behind nginx). (nginx separately skips access logging for the guest-link paths — see [2.6](#26--the-api-reverse-proxy-pattern-critical-detail).)
 
 ### 2.11 — Frontend storage & client-side state
 
@@ -276,6 +289,8 @@ The committed `docker-compose.yml` is a **dev** file. Production is bootstrapped
 Backend container command in both cases: `prisma migrate deploy && prisma db seed && node dist/index.js` — see [2.7](#27--database-migrations).
 
 **Ports**: `FRONTEND_PORT` (nginx — serves the SPA and reverse-proxies `/api/*`) and `BACKEND_PORT` (the Express API, published *directly*, not only reachable through nginx) are both bound to `BIND_ADDR` on the host. With the defaults that means only `127.0.0.1:80` and `127.0.0.1:3000` — reachable from the server itself or over an SSH tunnel, not the network. Postgres stays unpublished unless `POSTGRES_PORT` is set, and even then it's forced to `127.0.0.1` regardless of `BIND_ADDR` — the "expose to the network" flag never publishes the database.
+
+**`TRUST_PROXY`**: the generated compose file passes `TRUST_PROXY: "${TRUST_PROXY:-1}"` through to the backend container, read from `~/solvro/.env` (or the environment of the run). The default `1` is right when nginx is the only proxy. If a tunnel or CDN (e.g. cloudflared on the same host or network) sits in front of nginx, set `TRUST_PROXY` to the subnet form `loopback, uniquelocal` (or, simpler, `2`) — otherwise every guest-link visitor shares one rate-limit bucket; the subnet form is preferred because, unlike a hop count, it normally cannot be spoofed by a client that reaches a directly published `BACKEND_PORT`. `1` suits nginx alone. On a **fresh install** `setup.sh` validates a `TRUST_PROXY` given in the environment of the run (hop count `0`-`10`, or a comma list of `loopback` / `linklocal` / `uniquelocal` / IPs / CIDRs; anything else aborts) and saves it, double-quoted, to `~/solvro/.env` — so `TRUST_PROXY="loopback, uniquelocal" bash <(curl …)` persists across later updates. It is not prompted for; if unset, nothing is written and the default `1` applies. On an existing install, edit `~/solvro/.env` and run `docker compose up -d`; quote a list value (`TRUST_PROXY="loopback, uniquelocal"`), because the update path sources `.env` as a shell file and an unquoted value with a space aborts it. See the [2.1](#21--backend-environment-variables) row for accepted values.
 
 Google sign-in still needs a manual post-deploy step, since it's DB-config not env-config (see [2.9](#29--auth--rbac-configuration)): create an OAuth Client ID in Google Cloud Console, then set it + an allowed domain via Admin > Sign-in in the running app — no restart or rebuild needed.
 

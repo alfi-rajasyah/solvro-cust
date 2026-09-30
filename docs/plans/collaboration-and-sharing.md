@@ -108,3 +108,35 @@ Shipped phase 3 in PR #19 (2026-09-30). The three items land in order on one bra
 - Task copies made by "Duplicate task" and "Duplicate section" record a `task created` event per copied top-level task.
 - `itopTicketRef` changes are logged as `{ from, to }`.
 - Admin TAM reassignment is not logged (out of scope for C5a).
+
+## Phase 6 tasks and API contract (guest links — L4)
+
+Shipped phase 4 in PR #20 (2026-09-30). Phase 5 (C3b) stays deferred.
+
+### Decisions (user, 2026-09-30)
+- Only owners create, list and revoke guest links: the project TAM, the customer owner, and `project:view-all` users (`ensureProjectOwnerAccess`). Membership alone cannot share a project externally.
+- A guest sees, per phase (section): its name, start and end dates, and a status — Done, In progress or Not started. Plus milestones (title, date, done). Nothing else.
+- (Orchestrator, from the security review, 2026-09-30) Creating and revoking a link also requires `project:write`; listing requires `project:read`. A read-only role with `project:view-all` (e.g. STAKEHOLDER) can list links but cannot publish a project.
+- The token never reaches logs: the request logger redacts `/public/share/<token>` URLs and share-page referers (and the `Authorization` header), and nginx does not access-log `/share/` or `/api/public/share/`.
+- Proxy trust is configurable with `TRUST_PROXY` (hop count or Express subnet list, default `1` for nginx only; `2` when a tunnel or CDN sits in front of nginx).
+
+### Data
+- `ShareLink` (`share_links`): `id`, `projectId` (cascade), `tokenHash` (SHA-256 hex of the token, unique), `label` (optional, ≤ 80 chars, e.g. "For Nusantara IT"), `createdById` (nullable, SetNull), `createdAt`, `expiresAt`, `revokedAt` (nullable), `lastUsedAt` (nullable).
+- The token is 32 random bytes, base64url. Only its hash is stored; the full link is shown once, at creation.
+
+### Owner API (signed in)
+- `POST /projects/:id/share-links` `{ label?, expiresInDays? }` (1–90, default 30) → 201 `{ id, label, url, expiresAt, createdAt }` — `url` is the full `/share/<token>` link, returned only here.
+- `GET /projects/:id/share-links` → `[{ id, label, createdAt, expiresAt, revokedAt, lastUsedAt, createdBy: { id, username } | null }]` — never the token or hash.
+- `DELETE /projects/:id/share-links/:linkId` → 204 (sets `revokedAt`; idempotent).
+- All three: visibility 404 first, then 403 `owner_only` for member-only access.
+- Creating and revoking record activity events (`entityType: share_link`, `action: created | removed`, `entityLabel` = the label; never the token).
+
+### Public API (no auth)
+- `GET /public/share/:token` → `{ project: { name, customerName, status }, phases: [{ name, startDate, endDate, status: "done" | "in_progress" | "not_started" }], milestones: [{ title, date, done }], generatedAt }`. Phases are the project's sections in order (dates from their tasks' start/due; tasks without a section are not shown as a phase). Milestones are tasks with `isMilestone`.
+- Unknown, expired and revoked tokens all return the same 404. Updates `lastUsedAt` at most once per hour.
+- Rate-limited per IP (in-memory, e.g. 60 requests per minute). Responses send `Cache-Control: no-store` and `X-Robots-Tag: noindex`.
+- **Guardrail:** the payload never contains notes (of either visibility), comments, risks, people, emails, iTop data, activity, or non-milestone task detail. A test builds a project with all of those and asserts none of their text appears in the response.
+
+### Frontend
+- A "Share" control in the project header, shown only to owners: a dialog to create a link (optional label, expiry), show the new link once with Copy, list existing links (label, created by, expiry, last used, revoked) and Revoke.
+- A public page `/share/:token` outside the sign-in guard: project name and customer, phases as a simple timeline or list with dates and status, milestones, "Updated <time>". A clear "This link has expired or is no longer available" page for 404. Works in light and dark, and on a phone.

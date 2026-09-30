@@ -11,6 +11,8 @@ Sub-200ms API response is a non-functional requirement — design queries and in
 - **Validation**: `validate("body" | "params" | "query", schema)` from `src/http/validate.ts`; Zod schemas at the top of the route file; `z.coerce.*` for query/params.
 - **Errors**: throw `new HttpError(status, code, message)` from `src/http/errors.ts`; the global handler renders `{ error, code, details }`.
 - **Logging**: shared pino logger from `src/logger.ts`; honor `LOG_LEVEL`.
+- **Public (unauthenticated) surface**: lives only in `src/routes/publicShare.ts`, mounted in `app.ts` outside every authed router (`requireAuth` never runs there). Any new public route must be rate-limited via `src/http/rateLimit.ts`, answer every failure (unknown, expired, revoked, malformed) with the same uniform 404, set `Cache-Control: no-store` and `X-Robots-Tag: noindex`, and `select` only allow-listed columns — never return a whole row or an unfiltered relation.
+- **Request logging**: goes through `src/http/requestLogger.ts`, which redacts guest-link tokens and the `Authorization` header. Never log a raw URL, `Referer`, or header object that may carry a secret; new secret-bearing paths must be added to its redaction.
 - **Migrations**: always `prisma migrate dev --name <slug>` — never edit committed SQL.
 
 ## Traps
