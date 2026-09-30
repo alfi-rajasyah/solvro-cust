@@ -15,6 +15,7 @@ import { RightSidebar } from "@/components/layout/RightSidebar";
 import { ProjectFormModal } from "@/components/ProjectFormModal";
 import { ProjectHeaderFacts } from "@/components/ProjectHeaderFacts";
 import { ProjectMembersButton } from "@/components/ProjectMembers";
+import { ProjectShareButton } from "@/components/ProjectShare";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { ProjectPageSkeleton } from "@/components/skeletons";
@@ -176,6 +177,9 @@ export function ProjectDetail() {
             Context toggle's aria-labels stay unique. */}
         <div className="flex shrink-0 items-center gap-2">
           <ProjectMembersButton project={project} canManage={canEdit} />
+          {/* Guest links: owners only (TAM, customer owner, view-all) with
+              project:write — the server answers 403 to anyone else. */}
+          {canEdit && isOwner && <ProjectShareButton project={project} />}
           <CopyLinkButton
             label="Copy link"
             className="h-8 w-8 rounded-lg border border-outline-variant bg-surface-container-lowest hover:bg-surface-container"

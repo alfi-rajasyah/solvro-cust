@@ -387,6 +387,14 @@ function buildBody(event: ActivityEvent): Parts {
         ];
       }
       break;
+    case "share_link": {
+      // Never the token: the log holds only the label. Unlabelled links read
+      // "a guest link".
+      const link: Parts = label ? [txt("the guest link "), ent(label)] : [txt("a guest link")];
+      if (event.action === "created") return [txt("created "), ...link];
+      if (event.action === "removed" || event.action === "deleted") return [txt("revoked "), ...link];
+      break;
+    }
     case "project":
       if (event.action === "created") return label ? [txt("created the project "), ent(label)] : [txt("created the project")];
       if (event.action === "updated") {

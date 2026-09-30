@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  MILESTONE_UPCOMING_LABEL,
+  PHASE_STATUS_LABEL,
   PRIORITY_LABEL,
   PROJECT_STATUS_LABEL,
   RISK_CATEGORY_LABEL,
   RISK_STATUS_LABEL,
+  SHARE_LINK_STATUS_LABEL,
   TASK_STATUS_LABEL,
   WEEKLY_HEALTH_LABEL,
   WEEKLY_STATUS_LABEL,
@@ -136,5 +139,18 @@ describe("riskLevel", () => {
     expect(riskLevel(4, 4)).toBe("High");
     expect(riskLevel(5, 5)).toBe("High");
     expect(riskLevelFromScore(16)).toBe("High");
+  });
+});
+
+describe("guest link labels", () => {
+  it("phase words reuse the task status words", () => {
+    expect(PHASE_STATUS_LABEL.done).toBe(TASK_STATUS_LABEL.DONE);
+    expect(PHASE_STATUS_LABEL.in_progress).toBe(TASK_STATUS_LABEL.IN_PROGRESS);
+    expect(PHASE_STATUS_LABEL.not_started).toBe("Not started");
+  });
+
+  it("link status and milestone words", () => {
+    expect(SHARE_LINK_STATUS_LABEL).toEqual({ active: "Active", expired: "Expired", revoked: "Revoked" });
+    expect(MILESTONE_UPCOMING_LABEL).toBe("Upcoming");
   });
 });

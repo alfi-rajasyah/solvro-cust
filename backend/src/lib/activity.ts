@@ -13,7 +13,14 @@ import { utcMidnightOf } from "./dateBoundary.js";
 
 type Tx = Prisma.TransactionClient | PrismaClient;
 
-export type ActivityEntityType = "project" | "task" | "comment" | "risk" | "note" | "member";
+export type ActivityEntityType =
+  | "project"
+  | "task"
+  | "comment"
+  | "risk"
+  | "note"
+  | "member"
+  | "share_link";
 export type ActivityAction = "created" | "updated" | "deleted" | "added" | "removed";
 
 /** JSON object stored in `ActivityEvent.changes`. */

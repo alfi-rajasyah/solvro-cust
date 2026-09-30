@@ -217,7 +217,14 @@ export interface ProjectMember {
   assignedTaskCount: number;
 }
 
-export type ActivityEntityType = "project" | "task" | "comment" | "risk" | "note" | "member";
+export type ActivityEntityType =
+  | "project"
+  | "task"
+  | "comment"
+  | "risk"
+  | "note"
+  | "member"
+  | "share_link";
 export type ActivityAction = "created" | "updated" | "deleted" | "added" | "removed";
 
 /**
@@ -244,6 +251,46 @@ export interface ActivityPage {
   events: ActivityEvent[];
   /** Id to pass as `before` for the next page; null on the last page. */
   nextBefore: number | null;
+}
+
+
+/**
+ * One guest link of a project (GET /projects/:id/share-links). The server never
+ * returns the token or its hash — the full link exists only in the create
+ * response (docs/archive/plans/collaboration-and-sharing.md, L4).
+ */
+export interface ShareLink {
+  id: number;
+  label: string | null;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  createdBy: { id: number; username: string } | null;
+}
+
+/** POST /projects/:id/share-links — `url` is the `/share/<token>` link, shown once. */
+export interface CreatedShareLink {
+  id: number;
+  label: string | null;
+  url: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export type PublicPhaseStatus = "done" | "in_progress" | "not_started";
+
+/** GET /public/share/:token — the whole guest payload; nothing else is ever sent. */
+export interface PublicShare {
+  project: { name: string; customerName: string | null; status: ProjectStatus };
+  phases: {
+    name: string;
+    startDate: string | null;
+    endDate: string | null;
+    status: PublicPhaseStatus;
+  }[];
+  milestones: { title: string; date: string | null; done: boolean }[];
+  generatedAt: string;
 }
 
 export interface Task {
@@ -651,6 +698,11 @@ export const queryKeys = {
   projectLabels: (id: number) => ["projects", id, "labels"] as const,
   projectSections: (id: number) => ["projects", id, "sections"] as const,
   projectMembers: (id: number) => ["projects", id, "members"] as const,
+  // Guest links (docs/archive/plans/collaboration-and-sharing.md, L4).
+  projectShareLinks: (id: number) => ["projects", id, "share-links"] as const,
+  // Public guest view: keyed by token, outside the ["projects", ...] tree so no
+  // project invalidation ever touches it.
+  publicShare: (token: string) => ["public-share", token] as const,
   // Activity log (docs/archive/plans/collaboration-and-sharing.md, C5a); the
   // person filter is part of the key so each filter pages independently.
   projectActivity: (id: number, actorId: number | null = null) =>
@@ -977,6 +1029,64 @@ export function useProjectMembers(projectId: number | null) {
     queryFn: ({ signal }) =>
       apiRequest<ProjectMember[]>(`/projects/${projectId}/members`, { signal }),
     enabled: projectId !== null,
+  });
+}
+
+export function useShareLinks(projectId: number | null, enabled = true) {
+  return useQuery({
+    queryKey: projectId ? queryKeys.projectShareLinks(projectId) : ["projects", "noop", "share-links"],
+    queryFn: ({ signal }) =>
+      apiRequest<ShareLink[]>(`/projects/${projectId}/share-links`, { signal }),
+    enabled: projectId !== null && enabled,
+  });
+}
+
+export function useCreateShareLink(projectId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { label?: string; expiresInDays?: number }) =>
+      apiRequest<CreatedShareLink>(`/projects/${projectId}/share-links`, {
+        method: "POST",
+        body: input,
+      }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.projectShareLinks(projectId) });
+      invalidateProjectActivity(qc, projectId);
+    },
+  });
+}
+
+export function useRevokeShareLink(projectId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (linkId: number) =>
+      apiRequest<void>(`/projects/${projectId}/share-links/${linkId}`, { method: "DELETE" }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.projectShareLinks(projectId) });
+      invalidateProjectActivity(qc, projectId);
+    },
+  });
+}
+
+/**
+ * The public guest view. Sent WITHOUT the Authorization header (`auth: false`)
+ * so a signed-in visitor is treated like any guest; `apiRequest` never signs
+ * anyone out on a 401 (only AuthProvider's own /auth/me call does), so a failed
+ * public read cannot redirect. 404 (expired/revoked/unknown) and 429 are final
+ * answers, so there is no retry.
+ */
+export function usePublicShare(token: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.publicShare(token ?? ""),
+    queryFn: ({ signal }) =>
+      apiRequest<PublicShare>(`/public/share/${encodeURIComponent(token ?? "")}`, {
+        signal,
+        auth: false,
+      }),
+    enabled: !!token,
+    retry: false,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
   });
 }
 

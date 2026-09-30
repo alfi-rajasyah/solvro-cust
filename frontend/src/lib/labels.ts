@@ -3,6 +3,7 @@
 // reads three different ways.
 import type {
   Priority,
+  PublicPhaseStatus,
   ProjectStatus,
   RiskCategory,
   RiskStatus,
@@ -10,6 +11,7 @@ import type {
   WeeklyHealth,
   WeeklyStatus,
 } from "@/lib/queries";
+import type { ShareLinkStatus } from "@/lib/shareLinks";
 
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   TODO: "To do",
@@ -45,6 +47,23 @@ export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
 };
+
+// Guest links (L4): the phase words a guest sees, the owner's link-status
+// words, and the milestone word for a not-yet-done milestone. Words that match
+// a task status reuse it, so "Done" / "In progress" never read two ways.
+export const PHASE_STATUS_LABEL: Record<PublicPhaseStatus, string> = {
+  done: TASK_STATUS_LABEL.DONE,
+  in_progress: TASK_STATUS_LABEL.IN_PROGRESS,
+  not_started: "Not started",
+};
+
+export const SHARE_LINK_STATUS_LABEL: Record<ShareLinkStatus, string> = {
+  active: "Active",
+  expired: "Expired",
+  revoked: "Revoked",
+};
+
+export const MILESTONE_UPCOMING_LABEL = "Upcoming";
 
 // Weekly customer update. NOT_STARTED means no update was written for the
 // week, so it reads "None this week" everywhere it is shown.

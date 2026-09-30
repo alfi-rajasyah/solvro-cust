@@ -15,6 +15,19 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-09-30 — Guest links for project timelines
+
+- Project owners (the TAM, the customer's owner, and view-all users who can edit projects) get a Share control in the project header (**`frontend/src/components/ProjectShare.tsx`**). It creates a read-only guest link with an optional label and a 7, 30 or 90 day expiry, shows the link once to copy, lists existing links with their status, and revokes them. Creating and revoking a link is recorded in the project's activity log.
+- A public page at `/share/<link>` (**`frontend/src/pages/PublicShare.tsx`**), outside sign-in and the app shell, shows the project name, customer and status, each phase with its dates and Done / In progress / Not started status on a timeline, and the milestones. It works signed in or out, in light and dark, and on phones, and shows a clear message for expired, revoked or rate-limited links. It sends no Referer and asks search engines not to index it.
+- New `share_links` table (migration **`backend/prisma/migrations/20260930150000_share_links/`**) storing only a SHA-256 hash of each link's token. Owner endpoints `POST`, `GET` and `DELETE /projects/:id/share-links` (**`backend/src/routes/shareLinks.ts`**) and the public `GET /public/share/:token` (**`backend/src/routes/publicShare.ts`**), which needs no sign-in, is rate-limited per client, sends `Cache-Control: no-store` and `X-Robots-Tag: noindex`, answers the same 404 for unknown, expired, revoked or malformed links, and returns only the fields above — never notes, comments, risks, people, iTop data, activity or other task detail.
+- `TRUST_PROXY` environment variable (backend; passed through by **`setup.sh`**; default `1` for nginx only, `2` when a tunnel or CDN sits in front of nginx, or a list of trusted subnets) sets how many proxy hops are trusted when reading the client address for the guest-link rate limit (**`backend/src/http/trustProxy.ts`**). On a fresh install `setup.sh` checks the value and saves it to `.env`, so it survives updates.
+- The guest-link endpoint's per-client rate limiter (**`backend/src/http/rateLimit.ts`**, new) keeps at most 10,000 clients in memory, evicting the oldest, sweeps expired entries at most once per window, and groups IPv6 clients by their /56 prefix.
+- The service worker no longer serves `/share/` pages from its offline cache (**`frontend/vite.config.ts`**), so guest pages always come from the server with their no-cache, no-referrer and no-index headers.
+
+### Security — 2026-09-30 — Tokens kept out of logs
+
+- Request logs no longer contain secrets: guest-link tokens in `/public/share/…` URLs and share-page Referer headers are redacted, and so is the `Authorization` header, which previously logged every signed-in request's bearer token (**`backend/src/http/requestLogger.ts`**). Each request log line also records `clientIp`, the client address the API resolved. nginx no longer writes access-log lines for `/share/` pages or `/api/public/share/` requests (**`frontend/nginx.conf`**).
+
 ### Fixed — 2026-09-30 — Stable notification query-count test
 
 - The test that checks notification recipients are resolved in a fixed number of database queries (**`backend/test/notifications.test.ts`**) now waits for the database driver's query log to catch up before counting, so it no longer fails intermittently.
