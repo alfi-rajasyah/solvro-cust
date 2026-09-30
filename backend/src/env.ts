@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { z } from "zod";
+import { parseTrustProxy } from "./http/trustProxy.js";
 
 const schema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -20,6 +21,25 @@ const schema = z.object({
     ),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
+  // How many reverse-proxy hops (or which subnets) `req.ip` may trust, i.e.
+  // read from X-Forwarded-For — a hop count ("1" = nginx only, "2" = a tunnel or
+  // CDN in front of nginx) or an Express list ("loopback, uniquelocal"). Feeds
+  // the per-IP rate limit on the public share route.
+  TRUST_PROXY: z
+    .string()
+    .default("1")
+    .transform((value, ctx) => {
+      const parsed = parseTrustProxy(value);
+      if (parsed === null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'TRUST_PROXY must be a hop count (0-10) or a comma-separated list of loopback, linklocal, uniquelocal, IP addresses or CIDR subnets (e.g. "1" or "loopback, uniquelocal")',
+        });
+        return z.NEVER;
+      }
+      return parsed;
+    }),
   // Kill switch for the in-process iTop sync scheduler (lib/itop/scheduler.ts)
   // — e.g. a dev stack with no iTop admin config yet, or a maintenance window.
   // Accepts the common boolean-ish spellings (case-insensitive) since

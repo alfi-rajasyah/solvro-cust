@@ -47,7 +47,10 @@ export default defineConfig({
         // Navigations under /api/ must reach the network, never the cached
         // app shell — the NavigationRoute is registered before the NetworkOnly
         // runtime route, so without this denylist it wins for navigations.
-        navigateFallbackDenylist: [/^\/api\//],
+        // Guest-link navigations (/share/<token>) must also reach nginx, which
+        // sends them no-store + Referrer-Policy: no-referrer; a precached
+        // shell would serve them without those headers.
+        navigateFallbackDenylist: [/^\/api\//, /^\/share\//],
         runtimeCaching: [
           {
             // API responses carry auth state and must always be fresh —

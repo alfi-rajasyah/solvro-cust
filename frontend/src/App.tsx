@@ -13,6 +13,7 @@ import { Login } from "@/pages/Login";
 import { Overview } from "@/pages/Overview";
 import { ProjectDetail } from "@/pages/ProjectDetail";
 import { Projects } from "@/pages/Projects";
+import { PublicShare } from "@/pages/PublicShare";
 import { Settings } from "@/pages/Settings";
 import { Tasks } from "@/pages/Tasks";
 import { Utilization } from "@/pages/Utilization";
@@ -39,6 +40,8 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* Guest link view: outside AuthGuard and the app shell, never redirects. */}
+      <Route path="/share/:token" element={<PublicShare />} />
 
       <Route
         element={
