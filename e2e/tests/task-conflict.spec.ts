@@ -323,27 +323,34 @@ test.describe("task panel title save ordering", () => {
   });
 });
 
+// Opens the edit form from a /tasks row, scoped to the fixture's customer.
+// Two waits matter on a fast (production) build: the Filters popover must be
+// fully gone — while it lingers its focus manager pulls focus back into its
+// own search input and swallows the typing meant for the form — and the form's
+// title input must actually hold focus before the test types into it.
+async function openEditForm(page: Page, customerName: string, projectId: number, title: string) {
+  await page.goto("/tasks", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Filter", exact: true }).click();
+  await page.getByRole("option", { name: "Customer", exact: true }).hover();
+  await page.getByRole("option", { name: customerName, exact: true }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByPlaceholder("Filter...")).toBeHidden();
+  const row = page
+    .locator("tr")
+    .filter({ has: page.locator(`a[href="/projects/${projectId}"]`) })
+    .filter({ has: page.getByText(title, { exact: true }) });
+  await row.getByText(title, { exact: true }).click();
+  const titleInput = page.getByPlaceholder("Task title");
+  await expect(titleInput).toHaveValue(title);
+  await expect(titleInput).toBeFocused();
+}
+
 // The edit form (opened from a /tasks row) sends only the fields the user
 // changed, checked against the task as the form opened — not the live copy.
 test.describe("task edit form conflict warning (desktop)", () => {
   test.beforeEach(async () => {
     test.skip(test.info().project.name !== "desktop", "The /tasks filter toolbar is exercised on desktop");
   });
-
-  async function openEditForm(page: Page, customerName: string, projectId: number, title: string) {
-    await page.goto("/tasks", { waitUntil: "networkidle" });
-    await page.getByRole("button", { name: "Filter", exact: true }).click();
-    await page.getByRole("option", { name: "Customer", exact: true }).hover();
-    await page.getByRole("option", { name: customerName, exact: true }).click();
-    await page.keyboard.press("Escape");
-    await page
-      .locator("tr")
-      .filter({ has: page.locator(`a[href="/projects/${projectId}"]`) })
-      .filter({ has: page.getByText(title, { exact: true }) })
-      .getByText(title, { exact: true })
-      .click();
-    await expect(page.getByPlaceholder("Task title")).toHaveValue(title);
-  }
 
   test("raises the dialog for a field changed on both sides; Keep mine saves it", async ({
     page,
@@ -412,18 +419,8 @@ test.describe("task edit form Use theirs (desktop)", () => {
     const id = stamp();
     const task = await createTask(base, token, projectId, { title: `Keep ${id}` });
     await loginViaUi(page);
-    await page.goto("/tasks", { waitUntil: "networkidle" });
-    await page.getByRole("button", { name: "Filter", exact: true }).click();
-    await page.getByRole("option", { name: "Customer", exact: true }).hover();
-    await page.getByRole("option", { name: customerName, exact: true }).click();
-    await page.keyboard.press("Escape");
-    await page
-      .locator("tr")
-      .filter({ has: page.locator(`a[href="/projects/${projectId}"]`) })
-      .getByText(`Keep ${id}`, { exact: true })
-      .click();
+    await openEditForm(page, customerName, projectId, `Keep ${id}`);
     const titleInput = page.getByPlaceholder("Task title");
-    await expect(titleInput).toHaveValue(`Keep ${id}`);
 
     await patchBehindBack(base, token, task.id, { title: `Theirs ${id}` });
     await titleInput.fill(`Mine ${id}`);
