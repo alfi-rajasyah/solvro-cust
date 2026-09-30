@@ -56,7 +56,8 @@ The frontend has **no runtime env vars**. The compiled bundle uses the literal s
 
 ### Secrets discipline
 
-- `JWT_SECRET` must be at least 32 chars, generated with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`. The default in `.env.example` is **a placeholder that will fail Zod validation** — this is intentional.
+- `JWT_SECRET` must be at least 32 chars, generated with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`.
+- **Rotate `JWT_SECRET` once after upgrading to the release that redacts request logs.** Earlier releases wrote every signed-in request's bearer token into the backend logs, so existing log files can hold tokens that stay valid until they expire. For a `setup.sh` install: put a new value (`openssl rand -hex 48`) in `~/solvro/.env`, run `docker compose up -d backend` in `~/solvro`, and everyone signs in again once. Rotating invalidates every issued token; `SECRETS_KEY` is separate and must not be changed. The default in `.env.example` is **a placeholder that will fail Zod validation** — this is intentional.
 - `SECRETS_KEY` must be a base64 string decoding to exactly 32 bytes, generated with `openssl rand -base64 32`. It's the AES-256-GCM key for secrets at rest (integration tokens — see [2.16](#216--itop-integration)); rotating it invalidates every stored token, which must be re-entered.
 - `POSTGRES_PASSWORD` defaults to `solvro_dev` for local dev. **Rotate before any deployment.**
 - `.env` files are `.gitignored`; only `.env.example` is committed.

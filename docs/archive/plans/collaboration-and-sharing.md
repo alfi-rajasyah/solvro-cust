@@ -1,6 +1,6 @@
 # Collaboration and link sharing
 
-Status: approved 2026-09-29. Live tracker (statuses, PRs, decisions): https://claude.ai/artifact/4YR4dJhjRsEyt98EYfUpDe
+Status: complete 2026-09-30 — every approved item shipped (PRs #17–#22); C3b and X1 stay deferred. Archived 2026-09-30. Approved 2026-09-29. Live tracker (statuses, PRs, decisions): https://claude.ai/artifact/4YR4dJhjRsEyt98EYfUpDe
 Code comments cite this plan as `docs/archive/plans/collaboration-and-sharing.md`.
 
 Goal: several TAMs work on the same projects and share links to them.
