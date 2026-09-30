@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-09-30 — Stable notification query-count test
+
+- The test that checks notification recipients are resolved in a fixed number of database queries (**`backend/test/notifications.test.ts`**) now waits for the database driver's query log to catch up before counting, so it no longer fails intermittently.
+
 ### Added — 2026-09-30 — @mentions in task comments
 
 - Typing `@` in a task's comment box opens a picker of the project's TAM and members (arrow keys, Enter or Tab, Escape, or click). Mentioned people are notified, and their names show as chips in the thread; removing a mention's text before sending drops it (**`frontend/src/components/CommentMentions.tsx`**, **`frontend/src/lib/mentions.ts`**).
