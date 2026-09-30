@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { ConfirmModal } from "./ConfirmModal";
 import { CopyLinkButton } from "./CopyLinkButton";
@@ -17,6 +17,7 @@ import { Alert, AlertDescription } from "@/components/reui/alert";
 import { Sortable, SortableItem, SortableItemHandle } from "@/components/reui/sortable";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
+import { CommentBody, CommentComposer } from "@/components/CommentMentions";
 import { fmtAgo, fmtRange } from "@/lib/formatDate";
 import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
 import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
@@ -43,6 +44,7 @@ import {
   useProject,
   useProjectEpics,
   useProjectLabels,
+  useProjectMembers,
   useProjectSections,
   useProjectTasks,
   useUpdateTask,
@@ -962,7 +964,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
 
           {/* Comments */}
           <div className="mt-5 border-t border-outline-variant pt-4">
-            <PanelComments taskId={task.id} />
+            <PanelComments taskId={task.id} projectId={projectId} />
           </div>
         </div>
       </aside>
@@ -1022,22 +1024,21 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
  * This is the app's only comment UI (the former standalone CommentThread
  * component was never mounted and has been removed).
  */
-function PanelComments({ taskId }: { taskId: number }) {
+function PanelComments({ taskId, projectId }: { taskId: number; projectId: number }) {
   const { data: comments, isLoading, isError, error } = useComments(taskId);
-  const addComment = useAddComment(taskId);
-  const [body, setBody] = useState("");
+  const addComment = useAddComment(taskId, projectId);
+  const { data: project } = useProject(projectId);
+  const { data: members } = useProjectMembers(projectId);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmed = body.trim();
-    if (!trimmed || addComment.isPending) return;
-    try {
-      await addComment.mutateAsync(trimmed);
-      setBody("");
-    } catch {
-      // surfaced via mutation error state below
-    }
-  }
+  // Everyone a comment can mention: the project's TAM and members (the server
+  // stores a self-mention too, it just never notifies the commenter). Chips
+  // render from the comment's returned ids, never from what was picked.
+  const people = useMemo(() => {
+    const byId = new Map<number, { id: number; username: string }>();
+    if (project) byId.set(project.tam.id, { id: project.tam.id, username: project.tam.username });
+    for (const m of members ?? []) byId.set(m.userId, { id: m.userId, username: m.username });
+    return [...byId.values()];
+  }, [project, members]);
 
   return (
     <div className="space-y-3">
@@ -1069,37 +1070,21 @@ function PanelComments({ taskId }: { taskId: number }) {
                   <span className="min-w-0 truncate font-medium text-on-surface">{c.author.username}</span>
                   <span className="shrink-0 text-on-surface-variant">{fmtAgo(c.createdAt)}</span>
                 </div>
-                <p className="whitespace-pre-wrap wrap-break-word text-xs text-on-surface">{c.body}</p>
+                <CommentBody body={c.body} mentionedUserIds={c.mentionedUserIds} users={people} />
               </div>
             </li>
           ))}
         </ol>
       )}
 
-      <form
-        onSubmit={handleSubmit}
-        className="flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2"
-      >
-        <input
-          type="text"
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          maxLength={5000}
-          placeholder="Write a comment…"
-          className="min-w-0 flex-1 border-none bg-transparent text-xs text-on-surface outline-hidden placeholder:text-on-surface-variant/60 focus:outline-hidden"
-        />
-        <button
-          type="submit"
-          disabled={addComment.isPending || !body.trim()}
-          aria-label="Send comment"
-          className="flex shrink-0 items-center text-primary disabled:opacity-40"
-        >
-          <span className="material-symbols-outlined text-[17px]">send</span>
-        </button>
-      </form>
-      {addComment.error && (
-        <p className="text-[12px] text-error">{(addComment.error as Error).message}</p>
-      )}
+      <CommentComposer
+        candidates={people}
+        isPending={addComment.isPending}
+        error={addComment.error ? (addComment.error as Error).message : null}
+        onSend={async (body, mentionedUserIds) => {
+          await addComment.mutateAsync({ body, mentionedUserIds });
+        }}
+      />
     </div>
   );
 }

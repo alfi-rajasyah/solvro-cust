@@ -5,6 +5,7 @@ import { requireAuth, requirePermission } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { ensureProjectVisible } from "../lib/visibility.js";
+import { recordActivity } from "../lib/activity.js";
 
 // Project members (docs/archive/plans/collaboration-and-sharing.md, C1): people
 // added to a project besides its TAM, with the same full access as the TAM
@@ -106,7 +107,7 @@ projectMembersRouter.post(
     }
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { active: true },
+      select: { active: true, username: true },
     });
     if (!user) throw new HttpError(404, "user_not_found", "User not found");
     // Already a member -> idempotent 200, even if the user was deactivated
@@ -123,9 +124,22 @@ projectMembersRouter.post(
 
     // skipDuplicates (ON CONFLICT DO NOTHING) keeps concurrent adds of the
     // same person race-free: exactly one caller sees count 1 (201).
-    const { count } = await prisma.projectMember.createMany({
-      data: [{ projectId: id, userId, addedById: req.user!.sub }],
-      skipDuplicates: true,
+    const { count } = await prisma.$transaction(async (tx) => {
+      const result = await tx.projectMember.createMany({
+        data: [{ projectId: id, userId, addedById: req.user!.sub }],
+        skipDuplicates: true,
+      });
+      if (result.count === 1) {
+        await recordActivity(tx, {
+          projectId: id,
+          actorId: req.user!.sub,
+          entityType: "member",
+          entityId: userId,
+          action: "added",
+          entityLabel: user.username,
+        });
+      }
+      return result;
     });
     const member = await prisma.projectMember.findUniqueOrThrow({
       where: { projectId_userId: { projectId: id, userId } },
@@ -161,10 +175,26 @@ projectMembersRouter.delete(
         where: { id },
         select: { tamId: true },
       });
+      let unassigned = 0;
       if (count > 0 && userId !== project.tamId) {
-        await tx.task.updateMany({
+        ({ count: unassigned } = await tx.task.updateMany({
           where: { projectId: id, assignedToId: userId },
           data: { assignedToId: null },
+        }));
+      }
+      if (count > 0) {
+        const removed = await tx.user.findUnique({
+          where: { id: userId },
+          select: { username: true },
+        });
+        await recordActivity(tx, {
+          projectId: id,
+          actorId: req.user!.sub,
+          entityType: "member",
+          entityId: userId,
+          action: "removed",
+          entityLabel: removed?.username ?? null,
+          changes: unassigned > 0 ? { unassignedTasks: unassigned } : null,
         });
       }
     });

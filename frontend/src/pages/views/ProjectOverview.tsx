@@ -16,6 +16,7 @@ import { useProjectContext } from "../ProjectDetail";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { scoreClass, scoreLevel } from "@/components/RiskFormModal";
+import { ProjectActivity } from "@/components/ProjectActivity";
 import { Chip } from "@/components/StatusChip";
 import { dateToDay, dayFromIso } from "@/lib/dateField";
 import { fmtDay } from "@/lib/formatDate";
@@ -32,6 +33,7 @@ export function ProjectOverview() {
 
   const stats = useMemo(() => computeStats(tasks ?? []), [tasks]);
   const sCurve = useMemo(() => buildSCurve(tasks ?? []), [tasks]);
+  const taskIds = useMemo(() => new Set((tasks ?? []).map((t) => t.id)), [tasks]);
 
   if (isLoading) {
     return (
@@ -162,6 +164,8 @@ export function ProjectOverview() {
           <ProjectNotesPanel projectId={project.id} />
         </div>
       </div>
+
+      <ProjectActivity projectId={project.id} tam={project.tam} taskIds={taskIds} />
     </div>
   );
 }

@@ -24,6 +24,8 @@ import {
 import { assertEpicNotOnSubtask, assertValidEpic } from "../lib/epics.js";
 import { duplicateTaskTree } from "../lib/duplicate.js";
 import { ensureAssigneeIsMember } from "../lib/projectMembers.js";
+import { diffTaskChanges, recordActivity } from "../lib/activity.js";
+import { filterActiveUsersWhoCanSeeProject, notifyForEvent } from "../lib/notifications.js";
 
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 
@@ -138,8 +140,15 @@ const tasksListQuerySchema = z
     path: ["dueFrom"],
   });
 
+// At most 20 mentions per comment; duplicates collapse.
+const MAX_MENTIONS = 20;
 const createCommentSchema = z.object({
   body: z.string().min(1).max(5000),
+  mentionedUserIds: z
+    .array(z.number().int().positive())
+    .max(MAX_MENTIONS)
+    .transform((ids) => [...new Set(ids)])
+    .optional(),
 });
 
 type StaleConflict = { field: string; expected: unknown; current: unknown };
@@ -304,24 +313,18 @@ tasksRouter.patch(
       throw new HttpError(400, "invalid_parent", "Task cannot be its own parent");
     }
 
-    const current = await prisma.task.findUniqueOrThrow({
-      where: { id },
-      select: {
-        projectId: true,
-        status: true,
-        parentTaskId: true,
-        position: true,
-        isMilestone: true,
-        dueDate: true,
-        assignedToId: true,
-      },
-    });
-
     // Everything below that depends on the task's pre-write state. Derived from
-    // the pre-transaction read here; when `expected` is present it is derived
-    // again from the row read under lock, so a concurrent writer cannot make
-    // the ordering / milestone / assignee logic act on stale values.
-    const derive = (cur: typeof current) => {
+    // the row read under lock inside the transaction, so a concurrent writer
+    // cannot make the ordering / milestone / assignee logic (or the activity
+    // diff) act on stale values.
+    const derive = (cur: {
+      projectId: number;
+      status: TaskStatus;
+      parentTaskId: number | null;
+      isMilestone: boolean;
+      dueDate: Date | null;
+      assignedToId: number | null;
+    }) => {
       const nextParentTaskId =
         body.parentTaskId !== undefined ? body.parentTaskId : cur.parentTaskId;
       const oldKey: SiblingKey = { projectId: cur.projectId, parentTaskId: cur.parentTaskId };
@@ -343,36 +346,55 @@ tasksRouter.patch(
         touchesOrdering: body.position !== undefined || !siblingKeyEquals(oldKey, newKey),
       };
     };
-    let state = derive(current);
 
     const updated = await prisma.$transaction(async (tx) => {
-      // Per-field optimistic check, before anything is written: lock the row so
-      // two concurrent saves cannot both pass the comparison, then reject if
-      // any field the client says it last saw has since changed. Throwing rolls
-      // the transaction back, so nothing (incl. the assignee-membership side
+      // Lock the row before reading it, so two concurrent saves serialise and
+      // each one sees (and diffs against) the other's result: the optimistic
+      // check below, the assignee-change detection and the activity event all
+      // work from the locked row. FOR NO KEY UPDATE, not FOR UPDATE: it still
+      // excludes another save (and plain UPDATEs), but does not conflict with
+      // the FOR KEY SHARE an FK check takes — a labels-only write (DELETE +
+      // INSERT on the join table, never an UPDATE of this row), a comment or a
+      // subtask insert. FOR UPDATE deadlocked against those (40P01 -> 500).
+      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${id} FOR NO KEY UPDATE`;
+      const before = await tx.task.findUniqueOrThrow({
+        where: { id },
+        include: taskResponseInclude,
+      });
+      // Per-field optimistic check, before anything is written: reject if any
+      // field the client says it last saw has since changed. Throwing rolls the
+      // transaction back, so nothing (incl. the assignee-membership side
       // effect) lands.
       if (body.expected !== undefined) {
-        // FOR NO KEY UPDATE, not FOR UPDATE: it still excludes another
-        // `expected` save (and plain UPDATEs), but does not conflict with the
-        // FOR KEY SHARE an FK check takes — a labels-only write (DELETE +
-        // INSERT on the join table, never an UPDATE of this row), a comment or
-        // a subtask insert. FOR UPDATE deadlocked against those (40P01 -> 500).
-        await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${id} FOR NO KEY UPDATE`;
-        const locked = await tx.task.findUniqueOrThrow({
-          where: { id },
-          include: taskResponseInclude,
-        });
-        const conflicts = findStaleFields(body.expected, locked);
+        const conflicts = findStaleFields(body.expected, before);
         if (conflicts.length > 0) {
           throw new HttpError(
             409,
             "stale_write",
             "Task was changed by someone else after it was loaded",
-            { conflicts, task: locked },
+            { conflicts, task: before },
           );
         }
-        state = derive(locked);
       }
+      const state = derive(before);
+      const beforeTask = before;
+      // Records the update (skipped when nothing but position changed) in this
+      // same transaction, then hands the row back.
+      const finish = async (after: typeof beforeTask) => {
+        const event = await recordActivity(tx, {
+          projectId: beforeTask.projectId,
+          actorId: req.user!.sub,
+          entityType: "task",
+          entityId: id,
+          action: "updated",
+          entityLabel: after.title,
+          changes: diffTaskChanges(beforeTask, after),
+        });
+        // Notifies a newly assigned user (the row lock above means two
+        // overlapping identical assigns see one change, so one notification).
+        await notifyForEvent(tx, event);
+        return after;
+      };
       const { cur, nextStatus, nextParentTaskId, oldKey, newKey, touchesOrdering } = state;
 
       if (nextParentTaskId !== null) {
@@ -413,7 +435,22 @@ tasksRouter.patch(
       // current assignee on every save, and that must not re-add a member who
       // was removed.
       if (body.assignedToId != null && body.assignedToId !== cur.assignedToId) {
-        await ensureAssigneeIsMember(tx, cur.projectId, body.assignedToId, req.user!.sub);
+        const added = await ensureAssigneeIsMember(
+          tx,
+          cur.projectId,
+          body.assignedToId,
+          req.user!.sub,
+        );
+        if (added) {
+          await recordActivity(tx, {
+            projectId: cur.projectId,
+            actorId: req.user!.sub,
+            entityType: "member",
+            entityId: body.assignedToId,
+            action: "added",
+            entityLabel: added.username,
+          });
+        }
       }
 
       const data: Prisma.TaskUpdateInput = {};
@@ -474,19 +511,23 @@ tasksRouter.patch(
           newKey,
           body.position,
         );
-        return tx.task.update({
-          where: { id },
-          data: { position: finalPosition },
-          include: taskResponseInclude,
-        });
+        return finish(
+          await tx.task.update({
+            where: { id },
+            data: { position: finalPosition },
+            include: taskResponseInclude,
+          }),
+        );
       }
 
       if (body.status !== undefined) data.status = body.status;
-      return tx.task.update({
-        where: { id },
-        data,
-        include: taskResponseInclude,
-      });
+      return finish(
+        await tx.task.update({
+          where: { id },
+          data,
+          include: taskResponseInclude,
+        }),
+      );
     });
 
     res.json(updated);
@@ -500,7 +541,22 @@ tasksRouter.delete(
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
     await ensureTaskVisible(req.user!, id);
-    await prisma.task.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      const task = await tx.task.findUnique({
+        where: { id },
+        select: { projectId: true, title: true },
+      });
+      if (!task) throw new HttpError(404, "not_found", "Task not found");
+      await tx.task.delete({ where: { id } });
+      await recordActivity(tx, {
+        projectId: task.projectId,
+        actorId: req.user!.sub,
+        entityType: "task",
+        entityId: id,
+        action: "deleted",
+        entityLabel: task.title,
+      });
+    });
     res.status(204).end();
   },
 );
@@ -538,7 +594,7 @@ tasksRouter.post(
       const key: SiblingKey = { projectId: source.projectId, parentTaskId: source.parentTaskId };
       await insertManyAfter(tx, key, id, [newId]);
 
-      return tx.task.findUniqueOrThrow({
+      const copy = await tx.task.findUniqueOrThrow({
         where: { id: newId },
         include: {
           assignedTo: { select: { id: true, username: true, email: true } },
@@ -547,6 +603,16 @@ tasksRouter.post(
           _count: { select: { subtasks: true, comments: true } },
         },
       });
+      // One event for the copy itself (its subtasks ride along unlogged).
+      await recordActivity(tx, {
+        projectId: source.projectId,
+        actorId: req.user!.sub,
+        entityType: "task",
+        entityId: newId,
+        action: "created",
+        entityLabel: copy.title,
+      });
+      return copy;
     });
 
     res.status(201).json(newTask);
@@ -575,15 +641,45 @@ tasksRouter.post(
   validate("body", createCommentSchema),
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
-    const { body } = req.body as z.infer<typeof createCommentSchema>;
+    const { body, mentionedUserIds: requestedMentions = [] } = req.body as z.infer<
+      typeof createCommentSchema
+    >;
     await ensureTaskVisible(req.user!, id);
-    const comment = await prisma.comment.create({
-      data: {
-        taskId: id,
-        authorId: req.user!.sub,
-        body,
-      },
-      include: { author: { select: { id: true, username: true, email: true } } },
+    const comment = await prisma.$transaction(async (tx) => {
+      const task = await tx.task.findUnique({
+        where: { id },
+        select: { projectId: true, title: true, assignedToId: true },
+      });
+      if (!task) throw new HttpError(404, "not_found", "Task not found");
+      // Keep only mentions of active users who can see the project; unknown,
+      // inactive and hidden ids are dropped silently. A self-mention is kept
+      // (so the chip renders) — notifyForEvent never notifies the actor.
+      const visible = await filterActiveUsersWhoCanSeeProject(tx, task.projectId, requestedMentions);
+      const mentionedUserIds = requestedMentions.filter((uid) => visible.has(uid));
+      const created = await tx.comment.create({
+        data: {
+          taskId: id,
+          authorId: req.user!.sub,
+          body,
+          mentionedUserIds,
+        },
+        include: { author: { select: { id: true, username: true, email: true } } },
+      });
+      // Never the comment body or the mention ids: the event carries the
+      // comment id and the task it belongs to (so the log can link to it).
+      const event = await recordActivity(tx, {
+        projectId: task.projectId,
+        actorId: req.user!.sub,
+        entityType: "comment",
+        entityId: created.id,
+        action: "created",
+        entityLabel: task.title,
+        changes: { taskId: id },
+      });
+      // The task's current assignee hears about a comment by someone else.
+      // Mentions win over `commented` for the same user (one row per event).
+      await notifyForEvent(tx, event, { taskAssigneeId: task.assignedToId, mentionedUserIds });
+      return created;
     });
     res.status(201).json(comment);
   },

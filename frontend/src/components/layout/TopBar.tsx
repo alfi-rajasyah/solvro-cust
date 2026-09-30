@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { useCustomer, useProject } from "@/lib/queries";
 import { buildCrumbs, matchRoute } from "@/lib/routeMeta";
 import { useTheme } from "@/lib/theme";
+import { NotificationBell } from "./NotificationBell";
 import { useSidebar } from "./SidebarContext";
 
 export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
@@ -151,6 +152,8 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
         >
           <span className="material-symbols-outlined text-[20px]">help</span>
         </Link>
+
+        <NotificationBell />
 
         <button
           type="button"

@@ -122,6 +122,8 @@ model User {
   itopTokenExpiresAt     DateTime?             @map("itop_token_expires_at")
   projectMemberships     ProjectMember[]       @relation("ProjectMemberUser")
   projectMembersAdded    ProjectMember[]       @relation("ProjectMemberAddedBy")
+  activityEvents         ActivityEvent[]
+  notifications          Notification[]
 
   @@index([roleId])
   @@map("users")
@@ -210,6 +212,7 @@ model Project {
   services             ProjectService[]
   reviews              ProjectReview[]
   members              ProjectMember[]
+  activityEvents       ActivityEvent[]
 
   @@index([tamId])
   @@index([customerId])
@@ -234,6 +237,52 @@ model ProjectMember {
   @@id([projectId, userId])
   @@index([userId])
   @@map("project_members")
+}
+
+// Append-only project activity log (docs/archive/plans/collaboration-and-sharing.md, C5a):
+// one row per write, recorded in the same transaction as the change through
+// lib/activity.ts#recordActivity. `entityLabel` is a display snapshot taken at
+// write time so a deleted item still reads well. `changes` holds short scalar
+// diffs only — NEVER a note or comment body or description text (an INTERNAL
+// note must not leak through the log). `actorId` is nulled when the user is
+// deleted; rows older than 180 days are removed by lib/activityCleanup.ts.
+model ActivityEvent {
+  id            Int            @id @default(autoincrement())
+  projectId     Int            @map("project_id")
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actorId       Int?           @map("actor_id")
+  actor         User?          @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  entityType    String         @map("entity_type")
+  entityId      Int            @map("entity_id")
+  action        String
+  entityLabel   String?        @map("entity_label")
+  changes       Json?          @db.JsonB
+  createdAt     DateTime       @default(now()) @map("created_at")
+  notifications Notification[]
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([createdAt])
+  @@map("activity_events")
+}
+
+// In-app notification (docs/archive/plans/collaboration-and-sharing.md, C5b): one
+// row per (recipient, activity event), created in the same transaction as the
+// event by lib/notifications.ts#notifyForEvent. Cascades from the event, so the
+// 180-day activity cleanup removes notifications too. `reason` is `assigned` |
+// `commented` | `mentioned`.
+model Notification {
+  id              Int           @id @default(autoincrement())
+  userId          Int           @map("user_id")
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activityEventId Int           @map("activity_event_id")
+  activityEvent   ActivityEvent @relation(fields: [activityEventId], references: [id], onDelete: Cascade)
+  reason          String
+  readAt          DateTime?     @map("read_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  @@index([userId, readAt, createdAt(sort: Desc)])
+  @@index([activityEventId])
+  @@map("notifications")
 }
 
 model Customer {
@@ -466,6 +515,9 @@ model Comment {
   authorId  Int      @map("author_id")
   author    User     @relation(fields: [authorId], references: [id])
   body      String   @db.Text
+  // Users @mentioned in the body: only active users who could see the project
+  // when the comment was written (routes/tasks.ts filters before storing).
+  mentionedUserIds Int[] @default([]) @map("mentioned_user_ids")
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([taskId])

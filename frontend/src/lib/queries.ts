@@ -1,5 +1,7 @@
 import { useCallback, useSyncExternalStore } from "react";
 import {
+  useInfiniteQuery,
+  type InfiniteData,
   useMutation,
   useQueries,
   useQuery,
@@ -215,6 +217,35 @@ export interface ProjectMember {
   assignedTaskCount: number;
 }
 
+export type ActivityEntityType = "project" | "task" | "comment" | "risk" | "note" | "member";
+export type ActivityAction = "created" | "updated" | "deleted" | "added" | "removed";
+
+/**
+ * One row of a project's activity log (GET /projects/:id/activity). `changes`
+ * is loosely typed on purpose: `{ <field>: { from, to } }` for updates,
+ * `{ description: { changed: true } }`, `{ labels: { added, removed } }` — and
+ * it never carries note/comment bodies or description text
+ * (docs/archive/plans/collaboration-and-sharing.md, C5a). `lib/activityText.ts`
+ * turns it into a sentence and tolerates any shape.
+ */
+export interface ActivityEvent {
+  id: number;
+  entityType: ActivityEntityType;
+  entityId: number;
+  action: ActivityAction;
+  /** Display snapshot taken at write time (null for notes). */
+  entityLabel: string | null;
+  changes: Record<string, unknown> | null;
+  createdAt: string;
+  actor: { id: number; username: string; avatarUrl: string | null } | null;
+}
+
+export interface ActivityPage {
+  events: ActivityEvent[];
+  /** Id to pass as `before` for the next page; null on the last page. */
+  nextBefore: number | null;
+}
+
 export interface Task {
   id: number;
   projectId: number;
@@ -292,6 +323,8 @@ export interface Comment {
   body: string;
   createdAt: string;
   author: { id: number; username: string; email: string };
+  /** Users the comment @mentions, as the server stored them (empty when none). */
+  mentionedUserIds?: number[];
 }
 
 // Mirrors backend/src/lib/portfolio.ts (PortfolioProjectRow) — org-wide
@@ -618,6 +651,10 @@ export const queryKeys = {
   projectLabels: (id: number) => ["projects", id, "labels"] as const,
   projectSections: (id: number) => ["projects", id, "sections"] as const,
   projectMembers: (id: number) => ["projects", id, "members"] as const,
+  // Activity log (docs/archive/plans/collaboration-and-sharing.md, C5a); the
+  // person filter is part of the key so each filter pages independently.
+  projectActivity: (id: number, actorId: number | null = null) =>
+    ["projects", id, "activity", actorId ?? "all"] as const,
   // Epics (docs/archive/plans/epics-spec.md §5). `epic` is a standalone top-level
   // key (not nested under `projects`) since the epic detail panel/route can
   // be reached without the project already in scope — mirrors `customer`/
@@ -943,6 +980,154 @@ export function useProjectMembers(projectId: number | null) {
   });
 }
 
+export const ACTIVITY_PAGE_SIZE = 20;
+export const ACTIVITY_MAX_PAGES = 5;
+
+/** Newest-first activity, paged by the `before` event id; `actorId` narrows to one person. */
+export function useProjectActivity(
+  projectId: number | null,
+  { actorId = null }: { actorId?: number | null } = {},
+) {
+  const live = useLiveRefresh();
+  return useInfiniteQuery({
+    ...live,
+    queryKey: projectId
+      ? queryKeys.projectActivity(projectId, actorId)
+      : ["projects", "noop", "activity"],
+    queryFn: ({ signal, pageParam }) => {
+      const params = new URLSearchParams({ limit: String(ACTIVITY_PAGE_SIZE) });
+      if (pageParam !== null) params.set("before", String(pageParam));
+      if (actorId !== null) params.set("actorId", String(actorId));
+      return apiRequest<ActivityPage>(`/projects/${projectId}/activity?${params}`, { signal });
+    },
+    initialPageParam: null as number | null,
+    // Every refetch (30 s tick, invalidation) re-walks all loaded pages one
+    // after another, so the log stops offering "Load more" after
+    // ACTIVITY_MAX_PAGES pages (100 events). React Query's `maxPages` is not
+    // used: it evicts the FIRST (newest) page when paging forward, which would
+    // drop the latest events off the top of the list.
+    getNextPageParam: (last, all) =>
+      all.length >= ACTIVITY_MAX_PAGES ? undefined : last.nextBefore,
+    enabled: projectId !== null,
+  });
+}
+
+// ---- In-app notifications (docs/archive/plans/collaboration-and-sharing.md, C5b)
+
+export type NotificationReason = "assigned" | "commented" | "mentioned";
+
+export interface AppNotification {
+  id: number;
+  reason: NotificationReason;
+  readAt: string | null;
+  createdAt: string;
+  event: ActivityEvent;
+  projectId: number;
+  projectName: string;
+}
+
+export interface NotificationsPage {
+  notifications: AppNotification[];
+  nextBefore: number | null;
+}
+
+export const NOTIFICATIONS_PAGE_SIZE = 30;
+const NOTIFICATIONS_LIST_KEY = ["notifications", "list"] as const;
+const NOTIFICATIONS_COUNT_KEY = ["notifications", "unread-count"] as const;
+
+/**
+ * Unread badge count. Polls every 60 s while the tab is visible and refetches
+ * on focus (`staleTime: 0` so a focus always asks the server).
+ */
+export function useUnreadNotificationCount() {
+  return useQuery({
+    queryKey: NOTIFICATIONS_COUNT_KEY,
+    queryFn: ({ signal }) =>
+      apiRequest<{ count: number }>("/notifications/unread-count", { signal }).then((r) => r.count),
+    staleTime: 0,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
+}
+
+/** Newest-first notifications, paged by the `before` id; mount it only while the list is open. */
+export function useNotifications() {
+  return useInfiniteQuery({
+    queryKey: NOTIFICATIONS_LIST_KEY,
+    queryFn: ({ signal, pageParam }) => {
+      const params = new URLSearchParams({ limit: String(NOTIFICATIONS_PAGE_SIZE) });
+      if (pageParam !== null) params.set("before", String(pageParam));
+      return apiRequest<NotificationsPage>(`/notifications?${params}`, { signal });
+    },
+    initialPageParam: null as number | null,
+    getNextPageParam: (last) => last.nextBefore,
+    staleTime: 0,
+  });
+}
+
+function invalidateNotifications(qc: QueryClient) {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: NOTIFICATIONS_LIST_KEY }),
+    qc.invalidateQueries({ queryKey: NOTIFICATIONS_COUNT_KEY }),
+  ]);
+}
+
+type NotificationsData = InfiniteData<NotificationsPage, number | null>;
+
+export function useMarkNotificationRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiRequest<{ id: number; readAt: string }>(`/notifications/${id}/read`, { method: "POST" }),
+    // Optimistic: the badge and the row flip at once; a failed write rolls back.
+    onMutate: async (id) => {
+      await Promise.all([
+        qc.cancelQueries({ queryKey: NOTIFICATIONS_LIST_KEY }),
+        qc.cancelQueries({ queryKey: NOTIFICATIONS_COUNT_KEY }),
+      ]);
+      const prevList = qc.getQueryData<NotificationsData>(NOTIFICATIONS_LIST_KEY);
+      const prevCount = qc.getQueryData<number>(NOTIFICATIONS_COUNT_KEY);
+      const wasUnread = prevList?.pages.some((p) =>
+        p.notifications.some((n) => n.id === id && n.readAt === null),
+      );
+      const now = new Date().toISOString();
+      if (prevList) {
+        qc.setQueryData<NotificationsData>(NOTIFICATIONS_LIST_KEY, {
+          ...prevList,
+          pages: prevList.pages.map((p) => ({
+            ...p,
+            notifications: p.notifications.map((n) =>
+              n.id === id && n.readAt === null ? { ...n, readAt: now } : n,
+            ),
+          })),
+        });
+      }
+      if (wasUnread && prevCount !== undefined) {
+        qc.setQueryData<number>(NOTIFICATIONS_COUNT_KEY, Math.max(0, prevCount - 1));
+      }
+      return { prevList, prevCount };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.prevList) qc.setQueryData(NOTIFICATIONS_LIST_KEY, ctx.prevList);
+      if (ctx?.prevCount !== undefined) qc.setQueryData(NOTIFICATIONS_COUNT_KEY, ctx.prevCount);
+    },
+    onSettled: () => {
+      invalidateNotifications(qc);
+    },
+  });
+}
+
+export function useMarkAllNotificationsRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiRequest<{ updated: number }>("/notifications/read-all", { method: "POST" }),
+    onSettled: () => {
+      invalidateNotifications(qc);
+    },
+  });
+}
+
 // Membership changes what the caller (and the member) can see, so beyond the
 // members list they refresh the project lists and this project's detail —
 // the same health-carrying queries a task write refreshes.
@@ -957,6 +1142,7 @@ export function useAddProjectMember(projectId: number) {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projectMembers(projectId) });
       invalidateProjectHealth(qc, projectId);
+      invalidateProjectActivity(qc, projectId);
     },
   });
 }
@@ -989,6 +1175,7 @@ export function useRemoveProjectMember(projectId: number) {
       qc.invalidateQueries({ queryKey: queryKeys.overview });
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
       invalidateProjectHealth(qc, projectId);
+      invalidateProjectActivity(qc, projectId);
     },
   });
 }
@@ -1015,6 +1202,17 @@ export function useProjectLabels(id: number | null) {
 // non-day string or extra segments instead.
 const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const isDayKey = (v: unknown): boolean => typeof v === "string" && DAY_KEY_RE.test(v);
+
+// Every write the activity log records refreshes the log at once (all person
+// filters, via the key prefix).
+function invalidateProjectActivity(qc: QueryClient, projectId: number) {
+  return qc.invalidateQueries({
+    predicate: ({ queryKey: k }) =>
+      k[0] === "projects" &&
+      k[2] === "activity" &&
+      k[1] === projectId,
+  });
+}
 
 function invalidateProjectHealth(qc: QueryClient, projectId: number) {
   return Promise.all([
@@ -1155,6 +1353,7 @@ export function useUpdateProject(id: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["projects"] });
       qc.invalidateQueries({ queryKey: queryKeys.project(id) });
+      invalidateProjectActivity(qc, id);
       qc.invalidateQueries({ queryKey: queryKeys.overview });
       qc.invalidateQueries({ queryKey: queryKeys.customers });
       // excludeFromPortfolio changes reshape the executive roll-up too.
@@ -1599,6 +1798,7 @@ export function useUpdateTask(projectId: number) {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: queryKeys.overview });
       invalidateProjectHealth(qc, projectId);
+      invalidateProjectActivity(qc, projectId);
       // The Daily Review page's attention lists let a TAM change a task's
       // status inline (daily-review-v2-spec.md §6.3) — keep that cache in
       // sync too.
@@ -1649,6 +1849,7 @@ export function useDeleteTask(projectId: number) {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: queryKeys.overview });
       invalidateProjectHealth(qc, projectId);
+      invalidateProjectActivity(qc, projectId);
       // Same rationale as useUpdateTask above — a deleted task can drop out
       // of the Daily Review page's overdue-tasks attention list.
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
@@ -1699,6 +1900,7 @@ export function useCreateTask(projectId: number) {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: queryKeys.overview });
       invalidateProjectHealth(qc, projectId);
+      invalidateProjectActivity(qc, projectId);
       // Same as useUpdateTask: an assignee who is not yet a member becomes one.
       if (variables.assignedToId != null) {
         qc.invalidateQueries({ queryKey: queryKeys.projectMembers(projectId) });
@@ -1729,6 +1931,7 @@ export function useDuplicateTask(projectId: number) {
         qc.invalidateQueries({ queryKey: ["tasks"] }),
         qc.invalidateQueries({ queryKey: queryKeys.overview }),
         invalidateProjectHealth(qc, projectId),
+        invalidateProjectActivity(qc, projectId),
         // Same rationale as useUpdateTask/useDeleteTask above — a duplicated
         // task can newly appear in the Daily Review page's attention lists.
         qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot }),
@@ -1902,6 +2105,7 @@ export function useDuplicateSection(projectId: number) {
         qc.invalidateQueries({ queryKey: queryKeys.overview }),
         invalidateProjectHealth(qc, projectId),
         qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot }),
+        invalidateProjectActivity(qc, projectId),
         // The section's duplicated tasks keep their `epicId` (§4) — their
         // epics' done/total counts can change. Which epics is unknown here
         // (the response is just `{ section, taskCount }`), so bust every
@@ -2033,6 +2237,7 @@ export function useCreateRisk(projectId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projectRisks(projectId) });
       invalidateProjectHealth(qc, projectId);
+      invalidateProjectActivity(qc, projectId);
     },
   });
 }
@@ -2060,6 +2265,7 @@ export function useUpdateRisk(projectId: number) {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projectRisks(projectId) });
       invalidateProjectHealth(qc, projectId);
+      invalidateProjectActivity(qc, projectId);
       // Same rationale as useUpdateTask above — open risks are
       // inline-editable from the Daily Review page's attention lists too.
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
@@ -2075,6 +2281,7 @@ export function useDeleteRisk(projectId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projectRisks(projectId) });
       invalidateProjectHealth(qc, projectId);
+      invalidateProjectActivity(qc, projectId);
       // Same rationale as useUpdateRisk above — a deleted risk can drop out
       // of the Daily Review page's open-risks attention list.
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
@@ -2307,6 +2514,7 @@ export function useAddProjectNote(projectId: number) {
       // Every visibility/window-bucketed key for this project (see
       // queryKeys.projectNotes's doc) — not just the "all, unwindowed" one.
       qc.invalidateQueries({ queryKey: ["projects", projectId, "notes"] });
+      invalidateProjectActivity(qc, projectId);
     },
   });
 }
@@ -2349,6 +2557,7 @@ export function useUpdateProjectNote(projectId: number) {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
       qc.invalidateQueries({ queryKey: queryKeys.recentNotesRoot });
       qc.invalidateQueries({ queryKey: ["projects", projectId, "notes"] });
+      invalidateProjectActivity(qc, projectId);
     },
   });
 }
@@ -2381,6 +2590,7 @@ export function useDeleteProjectNote(projectId: number) {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
       qc.invalidateQueries({ queryKey: queryKeys.recentNotesRoot });
       qc.invalidateQueries({ queryKey: ["projects", projectId, "notes"] });
+      invalidateProjectActivity(qc, projectId);
     },
   });
 }
@@ -2687,16 +2897,17 @@ export function useCustomerNotes(customerId: number | null, limit: number) {
   });
 }
 
-export function useAddComment(taskId: number) {
+export function useAddComment(taskId: number, projectId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: string) =>
+    mutationFn: ({ body, mentionedUserIds }: { body: string; mentionedUserIds?: number[] }) =>
       apiRequest<Comment>(`/tasks/${taskId}/comments`, {
         method: "POST",
-        body: { body },
+        body: mentionedUserIds && mentionedUserIds.length > 0 ? { body, mentionedUserIds } : { body },
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.comments(taskId) });
+      invalidateProjectActivity(qc, projectId);
     },
   });
 }

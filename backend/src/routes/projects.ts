@@ -34,6 +34,13 @@ import {
 import { assertEpicNotOnSubtask, assertValidEpic } from "../lib/epics.js";
 import { computeProjectHealth, computeSlipDays } from "../lib/projectHealth.js";
 import { ensureAssigneeIsMember } from "../lib/projectMembers.js";
+import {
+  diffProjectChanges,
+  recordActivity,
+  shortLabel,
+  taskCreatedChanges,
+} from "../lib/activity.js";
+import { notifyForEvent } from "../lib/notifications.js";
 
 // Kanban WIP limits — one optional positive-int cap per top-level status
 // column, or null/absent for "no limit". Visual-only on the board (amber
@@ -380,7 +387,27 @@ projectsRouter.patch(
       data.excludeFromPortfolio = body.excludeFromPortfolio;
     }
 
-    const updated = await prisma.project.update({ where: { id }, data });
+    const updated = await prisma.$transaction(async (tx) => {
+      // Lock first so a concurrent save serialises and the diff is against the
+      // row this write actually replaced.
+      await tx.$queryRaw`SELECT id FROM projects WHERE id = ${id} FOR NO KEY UPDATE`;
+      const before = await tx.project.findUniqueOrThrow({
+        where: { id },
+        select: { name: true, status: true, customerId: true },
+      });
+      const result = await tx.project.update({ where: { id }, data });
+      // Only name, status and customer are logged; a re-save records nothing.
+      await recordActivity(tx, {
+        projectId: id,
+        actorId: req.user!.sub,
+        entityType: "project",
+        entityId: id,
+        action: "updated",
+        entityLabel: result.name,
+        changes: diffProjectChanges(before, result),
+      });
+      return result;
+    });
     res.json(updated);
   },
 );
@@ -463,7 +490,17 @@ projectsRouter.post(
       // Assigning someone who cannot see the project adds them as a member
       // (same transaction as the task write).
       if (body.assignedToId != null) {
-        await ensureAssigneeIsMember(tx, id, body.assignedToId, req.user!.sub);
+        const added = await ensureAssigneeIsMember(tx, id, body.assignedToId, req.user!.sub);
+        if (added) {
+          await recordActivity(tx, {
+            projectId: id,
+            actorId: req.user!.sub,
+            entityType: "member",
+            entityId: body.assignedToId,
+            action: "added",
+            entityLabel: added.username,
+          });
+        }
       }
 
       const siblingKey: SiblingKey = {
@@ -472,7 +509,7 @@ projectsRouter.post(
       };
       const position = await countSiblings(tx, siblingKey);
 
-      return tx.task.create({
+      const created = await tx.task.create({
         data: {
           projectId: id,
           title: body.title,
@@ -504,6 +541,17 @@ projectsRouter.post(
           _count: { select: { subtasks: true, comments: true } },
         },
       });
+      const event = await recordActivity(tx, {
+        projectId: id,
+        actorId: req.user!.sub,
+        entityType: "task",
+        entityId: created.id,
+        action: "created",
+        entityLabel: created.title,
+        changes: taskCreatedChanges(created),
+      });
+      await notifyForEvent(tx, event);
+      return created;
     });
     res.status(201).json(task);
   },
@@ -664,17 +712,28 @@ projectsRouter.post(
     await ensureProjectVisible(req.user!, id);
 
     const body = req.body as z.infer<typeof createRiskSchema>;
-    const risk = await prisma.risk.create({
-      data: {
+    const risk = await prisma.$transaction(async (tx) => {
+      const created = await tx.risk.create({
+        data: {
+          projectId: id,
+          description: body.description,
+          category: body.category ?? "INTERNAL",
+          probability: body.probability ?? 1,
+          impact: body.impact ?? 1,
+          status: body.status ?? "OPEN",
+          mitigationPlan: body.mitigationPlan ?? null,
+          contingencyPlan: body.contingencyPlan ?? null,
+        },
+      });
+      await recordActivity(tx, {
         projectId: id,
-        description: body.description,
-        category: body.category ?? "INTERNAL",
-        probability: body.probability ?? 1,
-        impact: body.impact ?? 1,
-        status: body.status ?? "OPEN",
-        mitigationPlan: body.mitigationPlan ?? null,
-        contingencyPlan: body.contingencyPlan ?? null,
-      },
+        actorId: req.user!.sub,
+        entityType: "risk",
+        entityId: created.id,
+        action: "created",
+        entityLabel: shortLabel(created.description),
+      });
+      return created;
     });
     res.status(201).json(risk);
   },
@@ -760,17 +819,29 @@ projectsRouter.post(
     await ensureProjectVisible(req.user!, id);
 
     const body = req.body as z.infer<typeof createNoteSchema>;
-    const note = await prisma.projectNote.create({
-      data: {
+    const note = await prisma.$transaction(async (tx) => {
+      const created = await tx.projectNote.create({
+        data: {
+          projectId: id,
+          authorId: req.user!.sub,
+          noteDate: body.noteDate
+            ? utcMidnightOfDayString(body.noteDate)
+            : utcMidnightOf(Date.now()),
+          body: body.body,
+          visibility: body.visibility ?? "INTERNAL",
+        },
+        include: { author: { select: { id: true, username: true } } },
+      });
+      // Note events carry the id and visibility only — never the body.
+      await recordActivity(tx, {
         projectId: id,
-        authorId: req.user!.sub,
-        noteDate: body.noteDate
-          ? utcMidnightOfDayString(body.noteDate)
-          : utcMidnightOf(Date.now()),
-        body: body.body,
-        visibility: body.visibility ?? "INTERNAL",
-      },
-      include: { author: { select: { id: true, username: true } } },
+        actorId: req.user!.sub,
+        entityType: "note",
+        entityId: created.id,
+        action: "created",
+        changes: { visibility: created.visibility },
+      });
+      return created;
     });
     res.status(201).json(note);
   },
@@ -794,10 +865,24 @@ projectsRouter.patch(
       throw new HttpError(403, "not_note_author", "Only the author may edit this note");
     }
 
-    const updated = await prisma.projectNote.update({
-      where: { id: noteId },
-      data: { body: body.body },
-      include: { author: { select: { id: true, username: true } } },
+    const updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.projectNote.update({
+        where: { id: noteId },
+        data: { body: body.body },
+        include: { author: { select: { id: true, username: true } } },
+      });
+      // A save that left the body unchanged is not an edit worth logging.
+      if (body.body !== note.body) {
+        await recordActivity(tx, {
+          projectId: id,
+          actorId: req.user!.sub,
+          entityType: "note",
+          entityId: noteId,
+          action: "updated",
+          changes: { visibility: result.visibility },
+        });
+      }
+      return result;
     });
     res.json(updated);
   },
@@ -823,7 +908,17 @@ projectsRouter.delete(
       );
     }
 
-    await prisma.projectNote.delete({ where: { id: noteId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.projectNote.delete({ where: { id: noteId } });
+      await recordActivity(tx, {
+        projectId: id,
+        actorId: req.user!.sub,
+        entityType: "note",
+        entityId: noteId,
+        action: "deleted",
+        changes: { visibility: note.visibility },
+      });
+    });
     res.status(204).send();
   },
 );
