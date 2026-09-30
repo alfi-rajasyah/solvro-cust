@@ -581,11 +581,20 @@ describe("@mentions", () => {
       log: [{ emit: "event", level: "query" }],
     });
     try {
-      let queries = 0;
-      logged.$on("query", () => {
-        queries += 1;
+      // Prisma delivers query-log events asynchronously: the implicit
+      // transaction's COMMIT that `createMany` issues can be logged AFTER the
+      // awaited call has already resolved, so counting right after the call
+      // sometimes attributed it to the next measurement (7 vs 8 in CI). Events
+      // do arrive in order, so we flush by running a marker statement and
+      // waiting until its own event shows up: everything before it is complete.
+      const MARKER = "SELECT 'query-log-flush' AS marker";
+      let seen: string[] = [];
+      let onMarker: (() => void) | undefined;
+      logged.$on("query", (e) => {
+        if (e.query.includes("query-log-flush")) onMarker?.();
+        else seen.push(e.query);
       });
-      const count = async (ids: number[]) => {
+      const measure = async (ids: number[]) => {
         const event = await recordActivity(prisma, {
           projectId: project.id,
           actorId: tam.userId,
@@ -593,18 +602,31 @@ describe("@mentions", () => {
           entityId: 1,
           action: "created",
         });
-        queries = 0;
+        seen = [];
         const created = await notifyForEvent(logged, event, { mentionedUserIds: ids });
-        return { created, queries };
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const flushed = new Promise<void>((resolve, reject) => {
+          onMarker = resolve;
+          timer = setTimeout(() => reject(new Error("query log never delivered the marker")), 5_000);
+        });
+        try {
+          await logged.$queryRawUnsafe(MARKER);
+          await flushed;
+        } finally {
+          clearTimeout(timer);
+        }
+        return { created, statements: [...seen] };
       };
-      const one = await count([other.userId]);
-      const twenty = await count(crowd.map((u) => u.userId));
+      const one = await measure([other.userId]);
+      const twenty = await measure(crowd.map((u) => u.userId));
       expect(one.created).toBe(1);
       expect(twenty.created).toBe(20);
-      expect(twenty.queries).toBe(one.queries);
-      // Prisma splits the nested user->role and project->customer/members reads
-      // into separate statements, so "fixed" is a handful, not literally three.
-      expect(twenty.queries).toBeLessThanOrEqual(8);
+      // The point: statement count does not grow with the number of mentions...
+      expect(twenty.statements).toHaveLength(one.statements.length);
+      // ...and stays a handful: Prisma splits the nested user->role and
+      // project->customer/members reads into separate statements (5 reads),
+      // plus createMany's implicit BEGIN / INSERT / COMMIT.
+      expect(twenty.statements.length).toBeLessThanOrEqual(8);
     } finally {
       await logged.$disconnect();
     }
