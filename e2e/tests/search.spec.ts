@@ -149,8 +149,8 @@ test.describe("global search palette", () => {
   // palette's remote items on `hasQuery` precisely so a reopen can never
   // show a previous session's rows again. Prove it end-to-end: search
   // successfully, close, reopen, and confirm the previous hit is gone and
-  // only the Pages group (rendered unconditionally for an empty query)
-  // remains. Group headers are targeted via `data-slot="autocomplete-group-
+  // only the Pages and Actions groups (rendered unconditionally for an
+  // empty query, for a user who may create) remain. Group headers are targeted via `data-slot="autocomplete-group-
   // label"` rather than getByText("Pages"/"Projects"/...) — with an empty
   // query, filterNavCommands returns every permitted page (including one
   // literally labeled "Projects"), so a plain text query for a group name
@@ -183,7 +183,7 @@ test.describe("global search palette", () => {
     // empty the instant the fresh instance mounts with query="".
     await expect(dialog.getByText(target.title, { exact: true })).toHaveCount(0);
     const groupLabels = dialog.locator('[data-slot="autocomplete-group-label"]');
-    await expect(groupLabels).toHaveText(["Pages"]);
+    await expect(groupLabels).toHaveText(["Pages", "Actions"]);
   });
 
   test("mobile: TopBar search icon opens the palette", async ({ page }, testInfo) => {

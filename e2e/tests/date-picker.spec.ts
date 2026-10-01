@@ -81,8 +81,8 @@ function ordinal(n: number): string {
  * `labelDayButton` (node_modules/react-day-picker/dist/esm/labels/labelDayButton.js)
  * builds each day button's aria-label from exactly this format, via its own
  * bundled `enUS` locale, which is independent of the host/browser's Intl
- * locale (unlike `fmtShort`/`fmt`'s `toLocaleDateString(undefined, ...)`
- * elsewhere in this app). Reimplemented here instead of depending on
+ * locale (unlike the app's own day-first `lib/formatDate.ts` output).
+ * Reimplemented here instead of depending on
  * `date-fns` directly — it isn't a dependency of the e2e package, and adding
  * one is out of this task's scope. Verified byte-for-byte against
  * `date-fns`'s own output for every day-of-month 1-31 across several months
@@ -324,13 +324,17 @@ test.describe("date pickers — DateField / DateRangeField", () => {
     // untouched-passthrough (commitDraft/normalizePair), a due-only task's
     // one-sided draft round-trips through react-day-picker's range shape and
     // silently emits (null, null) here, wiping the due date.
-    const [patchRes] = await Promise.all([
-      page.waitForResponse(
-        (r) => r.url().includes(`/api/tasks/${task.id}`) && r.request().method() === "PATCH",
-      ),
-      applyBtn.click(),
-    ]);
-    expect(patchRes.ok()).toBe(true);
+    // The panel only saves a date whose calendar day changed, so an untouched
+    // Apply sends no request at all (it used to re-send both dates unchanged).
+    // Nothing is sent, so nothing can wipe the due date; the readback below
+    // still proves the task is byte-identical.
+    const requests = await captureTaskRequests(page, async () => {
+      await applyBtn.click();
+    });
+    expect(
+      requests.filter((r) => r.method === "PATCH" && r.url.includes(`/api/tasks/${task.id}`)),
+    ).toHaveLength(0);
+    await expect(applyBtn).toBeHidden();
 
     const after = (await getTasks(base, token, projectId)).find((t) => t.id === task.id)!;
     expect(dateOf(after, "startDate")).toBeNull();
@@ -374,24 +378,17 @@ test.describe("date pickers — DateField / DateRangeField", () => {
     const theDay = seededDueIso!.slice(0, 10);
     await page.getByRole("button", { name: dayButtonName(theDay) }).click();
 
-    const [patchRes] = await Promise.all([
-      page.waitForResponse(
-        (r) => r.url().includes(`/api/tasks/${task.id}`) && r.request().method() === "PATCH",
-      ),
-      applyBtn.click(),
-    ]);
-    // NOT the regression guard by itself (fix round, SHOULD-FIX B): the
-    // backend's isMilestone+null-dueDate 400 refine (backend/src/routes/
-    // tasks.ts's `.refine((b) => !(b.isMilestone === true && b.dueDate ===
-    // null), ...)`) only fires when `isMilestone` is ITSELF present in the
-    // PATCH body — and `TaskPanel`'s dates-apply handler
-    // (`TaskPanel.tsx`'s `onSave={(s, e) => patch({ startDate: s, dueDate:
-    // e })}`) never sends `isMilestone`. So if the wipe-class bug this test
-    // guards against reappeared, this PATCH would still 200 (silently
-    // persisting `{ startDate: null, dueDate: null }`), not 400 — this
-    // assert would stay green either way. The readback assertions below are
-    // the actual guard: they're what would turn red on a reintroduced wipe.
-    expect(patchRes.ok()).toBe(true);
+    // The re-click leaves the draft unchanged, so no date's calendar day
+    // differs and the panel sends no request — nothing that could wipe the
+    // dates. The readback below is the guard: it turns red if a reintroduced
+    // wipe ever reaches the server.
+    const requests = await captureTaskRequests(page, async () => {
+      await applyBtn.click();
+    });
+    expect(
+      requests.filter((r) => r.method === "PATCH" && r.url.includes(`/api/tasks/${task.id}`)),
+    ).toHaveLength(0);
+    await expect(applyBtn).toBeHidden();
 
     const after = (await getTasks(base, token, projectId)).find((t) => t.id === task.id)!;
     expect(dateOf(after, "startDate")).toBe(seededStartIso); // byte-identical — no wipe
@@ -787,16 +784,24 @@ test.describe("date pickers — Jakarta timezone regression (UTC-midnight day co
     expect(dateOf(afterApply, "dueDate")).toBe(`${endDay}T00:00:00.000Z`);
 
     // Reload onto a clean list view (no `?task=` panel in the way) and check
-    // the row's due-date label reads day 6. The expected label is computed
-    // via `page.evaluate` using the app's own
-    // `toLocaleDateString(undefined, { month: "short", day: "numeric" })`
-    // call (ProjectList.tsx's `fmt`) so the expectation is whatever the SAME
-    // browser/Intl would actually produce, rather than a guess at
-    // Chromium's default locale baked into this Node process.
+    // the row's due-date label reads day 6. The List row renders `fmtDue`
+    // (lib/formatDate.ts): "Today" / "Tomorrow" / "Nd late" relative to the
+    // browser's local today, else day-first "6 Oct". The expectation is
+    // derived from the same browser clock with plain arithmetic (both sides
+    // as UTC day numbers, so DST can't skew the day difference).
     const expectedDueLabel = await page.evaluate(
-      ({ y, m, d }) =>
-        new Date(y, m, d).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-      { y: Number(year), m: monthIndex, d: 6 },
+      ({ y, m, d, abbr }) => {
+        const now = new Date();
+        const diff = Math.round(
+          (Date.UTC(y, m, d) - Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())) /
+            86_400_000,
+        );
+        if (diff === 0) return "Today";
+        if (diff === 1) return "Tomorrow";
+        if (diff < 0) return `${-diff}d late`;
+        return y === now.getFullYear() ? `${d} ${abbr}` : `${d} ${abbr} ${y}`;
+      },
+      { y: Number(year), m: monthIndex, d: 6, abbr: monthName.slice(0, 3) },
     );
 
     await page.goto(`/projects/${projectId}/list`, { waitUntil: "networkidle" });
@@ -841,7 +846,7 @@ test.describe("date pickers — Jakarta timezone regression (UTC-midnight day co
         { y: Number(year), m: monthIndex, d: 6 },
       );
       await expect(treeRow.getByTitle("Click to edit dates")).toHaveText(
-        `05 ${abbrev} – 06 ${abbrev}${overdue ? " (overdue)" : ""}`,
+        `5 – 6 ${abbrev}${overdue ? " (overdue)" : ""}`,
       );
     }
 

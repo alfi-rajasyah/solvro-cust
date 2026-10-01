@@ -1,17 +1,13 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ProjectStatusChip } from "@/components/StatusChip";
+import { formatElapsed, useRunningItopTimer } from "@/components/itop/useTicketTimer";
 import { useAuth } from "@/lib/auth";
-import { useProject } from "@/lib/queries";
+import { useCustomer, useProject } from "@/lib/queries";
+import { buildCrumbs, matchRoute } from "@/lib/routeMeta";
 import { useTheme } from "@/lib/theme";
+import { NotificationBell } from "./NotificationBell";
 import { useSidebar } from "./SidebarContext";
-
-const PAGE_TITLES: Record<string, string> = {
-  overview: "Overview",
-  projects: "My Projects",
-  customers: "Customers",
-  tasks: "Tasks",
-};
 
 export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
   const { user, logout } = useAuth();
@@ -20,16 +16,22 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  // Global "a timer is running somewhere" indicator (Task 7.1,
+  // docs/archive/plans/itop-integration.md) — read-only, no gate needed
+  // beyond "is one stored at all": a running timer implies whoever started
+  // it already passed TicketTimer.tsx's own canAct check.
+  const runningTimer = useRunningItopTimer();
 
-  const segments = location.pathname.split("/").filter(Boolean);
-  const projectId =
-    segments[0] === "projects" && segments[1] && /^\d+$/.test(segments[1])
-      ? Number(segments[1])
-      : null;
-  const { data: project } = useProject(projectId);
-
-  const segment = segments[0] ?? "overview";
-  const title = PAGE_TITLES[segment] ?? "Solvro";
+  // Same query keys as ProjectDetail / CustomerDetail, so the bar reads the
+  // cache those pages fill and never triggers a second request.
+  const route = matchRoute(location.pathname);
+  const { data: project } = useProject(route.projectId);
+  const { data: customer } = useCustomer(route.customerId);
+  const crumbs = buildCrumbs(location.pathname, {
+    projectName: project?.name,
+    projectCustomer: project?.customer,
+    customerName: customer?.name,
+  });
 
   const initials = user
     ? user.username
@@ -59,25 +61,63 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
         <span className="material-symbols-outlined">menu</span>
       </button>
 
-      {projectId && project ? (
-        <div className="flex min-w-0 items-center gap-2">
-          <Link
-            to="/projects"
-            className="shrink-0 text-[13px] text-on-surface-variant hover:text-on-surface"
-          >
-            Projects
-          </Link>
-          <span className="text-on-surface-variant">/</span>
-          <span className="truncate text-[15px] font-semibold text-on-surface">
-            {project.name}
-          </span>
+      <nav aria-label="Breadcrumb" className="min-w-0">
+        <ol className="flex min-w-0 items-center gap-2">
+          {crumbs.map((crumb, i) => {
+            const last = i === crumbs.length - 1;
+            // Below md only the current page shows, so the bar never
+            // overflows at 375px next to the search/help/theme/user cluster.
+            return (
+              <li
+                key={`${i}-${crumb.label}`}
+                className={`min-w-0 items-center gap-2 ${last ? "flex" : "hidden md:flex"}`}
+              >
+                {i > 0 && (
+                  <span aria-hidden="true" className="hidden text-on-surface-variant md:inline">
+                    /
+                  </span>
+                )}
+                {last ? (
+                  <span
+                    aria-current="page"
+                    title={crumb.label}
+                    className="truncate text-[15px] font-semibold text-on-surface"
+                  >
+                    {crumb.label}
+                  </span>
+                ) : (
+                  <Link
+                    to={crumb.to ?? "/"}
+                    title={crumb.label}
+                    className="max-w-40 truncate text-[13px] text-on-surface-variant hover:text-on-surface"
+                  >
+                    {crumb.label}
+                  </Link>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
+      {route.kind === "project" && project && (
+        <span className="hidden shrink-0 md:inline-flex">
           <ProjectStatusChip status={project.status} />
-        </div>
-      ) : (
-        <span className="truncate text-[15px] font-semibold text-on-surface">{title}</span>
+        </span>
       )}
 
       <div className="ml-auto flex items-center gap-3">
+        {runningTimer && (
+          <Link
+            to={`/customers/${runningTimer.timer.customerId}?tab=tickets&ticket=${runningTimer.timer.ticketId}`}
+            aria-label={`Timer running on ${runningTimer.timer.ref}`}
+            title={`Timer running on ${runningTimer.timer.ref}`}
+            className="hidden items-center gap-1 rounded-sm border border-outline-variant px-2 py-1 font-mono text-meta text-on-surface-variant hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:flex"
+          >
+            <span className="material-symbols-outlined text-[14px]">timer</span>
+            {formatElapsed(runningTimer.elapsedSeconds)}
+          </Link>
+        )}
+
         <button
           type="button"
           onClick={onOpenSearch}
@@ -90,7 +130,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
           <span className="flex-1 text-left text-[13px] text-on-surface-variant">
             Search projects, tasks, customers…
           </span>
-          <span className="rounded-sm border border-outline-variant bg-surface-container-low px-1.5 py-0.5 font-mono text-[10px] text-on-surface-variant">
+          <span className="rounded-sm border border-outline-variant bg-surface-container-low px-1.5 py-0.5 font-mono text-meta text-on-surface-variant">
             ⌘K
           </span>
         </button>
@@ -103,6 +143,17 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
         >
           <span className="material-symbols-outlined text-[20px]">search</span>
         </button>
+
+        <Link
+          to="/help"
+          aria-label="Help"
+          title="Help"
+          className="flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        >
+          <span className="material-symbols-outlined text-[20px]">help</span>
+        </Link>
+
+        <NotificationBell />
 
         <button
           type="button"
@@ -129,7 +180,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
               <span className="text-[12px] font-semibold leading-tight text-on-surface">
                 {user?.username ?? "Guest"}
               </span>
-              <span className="text-[10px] font-bold uppercase leading-tight tracking-wider text-on-surface-variant">
+              <span className="text-label-caps uppercase leading-tight text-on-surface-variant">
                 {user?.role ?? ""}
               </span>
             </div>
@@ -148,7 +199,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
               <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-sm border border-outline-variant bg-surface-container-lowest py-1 shadow-overlay">
                 <div className="border-b border-outline-variant px-3 py-2 text-[12px] text-on-surface-variant">
                   <div className="font-medium text-on-surface">{user?.email}</div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider">
+                  <div className="text-label-caps uppercase">
                     {user?.role}
                   </div>
                 </div>

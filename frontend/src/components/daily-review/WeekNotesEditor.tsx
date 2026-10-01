@@ -13,7 +13,7 @@
 // collapsed shell with nothing in it would be useless. The caller keys this
 // component by the week (e.g. `days[0]`) so switching weeks remounts it
 // fresh rather than carrying stale collapsed/expanded state across weeks.
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Textarea } from "@/components/ui/textarea";
@@ -60,6 +60,20 @@ export interface WeekNotesEditorProps<N extends WeekNoteBase> {
   /** Set (by the page's "first card" only) when a day-strip click should scroll/focus this day's row. */
   focusDay?: string | null;
   focusToken?: number;
+  /**
+   * Set (e.g. by the iTop daily strip's "Add to note" button, via
+   * OperationsCard) to append `text` to today's draft note. A fresh `token`
+   * re-triggers the effect even when `text` repeats (e.g. the same ticket
+   * added twice) — see DailyItopStrip.tsx. The owner (OperationsCard) is
+   * responsible for clearing this back to `null` via
+   * `onPendingInsertApplied` once applied — this component only tracks
+   * "did I already act on THIS `pendingInsert` object", not "has this ever
+   * been applied", so a caller that never clears it would see the insert
+   * re-fire the moment this editor remounts (e.g. on a week switch, which
+   * remounts it fresh via the `key={days[0]}` at both call sites).
+   */
+  pendingInsert?: { text: string; token: number } | null;
+  onPendingInsertApplied?: () => void;
 }
 
 type ActiveEdit = { kind: "add"; day: string } | { kind: "edit"; noteId: number };
@@ -96,12 +110,15 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
   deletePending,
   focusDay,
   focusToken,
+  pendingInsert,
+  onPendingInsertApplied,
 }: WeekNotesEditorProps<N>) {
   // Today's row is a persistent, always-visible "add" input — kept in its
   // own state so it's never clobbered by opening/closing an edit/add
   // operation on a past day (and vice versa).
   const [todayBody, setTodayBody] = useState("");
   const [todayExtra, setTodayExtra] = useState<WeekNoteExtra>(EMPTY_EXTRA);
+  const todayTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [activeEdit, setActiveEdit] = useState<ActiveEdit | null>(null);
   const [editBody, setEditBody] = useState("");
@@ -150,6 +167,26 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
     // just `focusDay`) is the dependency that matters here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusDay, focusToken, weekExpanded, dismissedFocusToken]);
+
+  useEffect(() => {
+    if (!pendingInsert) return;
+    setTodayBody((prev) => (prev.trim().length > 0 ? `${prev}\n${pendingInsert.text}` : pendingInsert.text));
+    // Today's row is always rendered regardless of `weekExpanded` (it's
+    // filtered into `visibleDays` unconditionally below), but expand the
+    // week too so the freshly-appended text sits in its full context rather
+    // than a collapsed shell.
+    setWeekExpanded(true);
+    // The textarea may not be mounted/updated yet on this same tick — wait a
+    // frame so `todayTextareaRef` has the latest DOM node before focusing.
+    requestAnimationFrame(() => todayTextareaRef.current?.focus());
+    // Tell the owner this insert was applied so it clears `pendingInsert`
+    // back to `null` — this effect has no memory of its own across a
+    // remount (e.g. a week switch, which recreates this whole component via
+    // the `key={days[0]}` both call sites use), so a caller that never
+    // clears it would see this same insert re-apply on the next mount.
+    onPendingInsertApplied?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingInsert]);
 
   function toggleWeek() {
     // Dismiss the in-flight focus token when COLLAPSING, or the effect
@@ -200,7 +237,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+        <span className="text-label-caps uppercase text-on-surface-variant">
           This week
         </span>
         <button
@@ -208,7 +245,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
           onClick={toggleWeek}
           aria-expanded={weekExpanded}
           aria-controls={rowsId}
-          className="text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           {weekExpanded
             ? "Hide week"
@@ -232,7 +269,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
               tabIndex={-1}
               className="flex flex-col gap-2 py-2.5 outline-none first:pt-0 last:pb-0 md:flex-row md:gap-3"
             >
-              <div className="shrink-0 pt-1 font-mono text-xs tabular-nums text-on-surface-variant md:w-16">
+              <div className="shrink-0 pt-1 text-xs tabular-nums text-on-surface-variant md:w-16">
                 {dayLabel(day)}
               </div>
               <div className="min-w-0 flex-1 space-y-2">
@@ -259,14 +296,14 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
                       <div className="min-w-0 flex-1">
                         {renderPrefix?.(note)}
                         <p className="whitespace-pre-wrap text-sm text-on-surface">{note.body}</p>
-                        <p className="text-[11px] text-on-surface-variant">{note.author.username}</p>
+                        <p className="text-meta text-on-surface-variant">{note.author.username}</p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         {note.author.id === currentUserId && (
                           <button
                             type="button"
                             onClick={() => startEdit(note)}
-                            className="text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                            className="text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                           >
                             Edit
                           </button>
@@ -275,7 +312,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
                           <button
                             type="button"
                             onClick={() => handleDelete(note.id)}
-                            className="text-[11px] font-semibold text-error hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                            className="text-meta font-semibold text-error hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                           >
                             Delete
                           </button>
@@ -291,7 +328,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
                     <button
                       type="button"
                       onClick={() => startAdd(day)}
-                      className="shrink-0 text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                      className="shrink-0 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                     >
                       Add
                     </button>
@@ -302,7 +339,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
                   <button
                     type="button"
                     onClick={() => startAdd(day)}
-                    className="text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                    className="text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                   >
                     + Add another note
                   </button>
@@ -336,6 +373,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
                     ariaLabel={ariaLabel}
                     onSave={saveToday}
                     saving={addPending}
+                    textareaRef={todayTextareaRef}
                   />
                 )}
               </div>
@@ -351,7 +389,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
         title="Delete note"
         body="Delete this note? This can't be undone."
         confirmLabel="Delete"
-        confirmTone="warning"
+        confirmTone="danger"
       />
     </div>
   );
@@ -371,6 +409,7 @@ function NoteEditorForm({
   onDelete,
   saving,
   deleting,
+  textareaRef,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -385,12 +424,15 @@ function NoteEditorForm({
   onDelete?: () => void;
   saving?: boolean;
   deleting?: boolean;
+  /** Only passed for the persistent "today" row — see WeekNotesEditor's `pendingInsert` effect. */
+  textareaRef?: Ref<HTMLTextAreaElement>;
 }) {
   const disabled = value.trim().length === 0 || saving || (extraValid ? !extraValid(extra) : false);
   return (
     <div className="space-y-2 rounded-sm border border-outline-variant bg-surface p-2">
       {renderExtraFields?.(extra, onExtraChange)}
       <Textarea
+        ref={textareaRef}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
@@ -405,7 +447,7 @@ function NoteEditorForm({
         className="min-h-16"
       />
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <KbdGroup className="text-[11px] text-on-surface-variant">
+        <KbdGroup className="text-meta text-on-surface-variant">
           <Kbd>⌘</Kbd>
           <Kbd>↵</Kbd>
           <span className="ml-1">saves</span>

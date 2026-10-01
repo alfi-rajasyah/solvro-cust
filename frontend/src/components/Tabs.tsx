@@ -18,9 +18,10 @@ export function Tabs<K extends string>({ items, active, onChange }: TabsProps<K>
           <button
             key={item.key}
             type="button"
+            aria-current={isActive ? "true" : undefined}
             onClick={() => onChange(item.key)}
             className={[
-              "-mb-px border-b-2 px-4 py-2 font-display text-[13px] font-bold uppercase tracking-wider transition-colors",
+              "-mb-px border-b-2 px-4 py-2 font-display text-sm font-semibold transition-colors",
               isActive
                 ? "border-primary text-primary"
                 : "border-transparent text-on-surface-variant hover:text-on-surface",

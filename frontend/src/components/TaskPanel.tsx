@@ -1,27 +1,50 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { ConfirmModal } from "./ConfirmModal";
+import { CopyLinkButton } from "./CopyLinkButton";
 import {
   CRITICAL_PATH_GLYPH,
   CRITICAL_PATH_HELPER_TEXT,
   CRITICAL_PATH_LABEL,
 } from "./CriticalPathMark";
+import { EpicChip } from "./EpicChip";
 import { InlineDateRangeEditor } from "./InlineDateRangeEditor";
 import { LabelPicker } from "./LabelPicker";
+import { TASK_STATUS_TONE_CLASS } from "./StatusChip";
+import { TaskConflictDialog } from "./TaskConflictDialog";
+import { TaskTicketField } from "@/components/itop/TaskTicketField";
 import { Alert, AlertDescription } from "@/components/reui/alert";
+import { Sortable, SortableItem, SortableItemHandle } from "@/components/reui/sortable";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
-import { dayFromIso, dayToDate } from "@/lib/dateField";
-import { Sortable, SortableItem, SortableItemHandle } from "@/components/reui/sortable";
+import { CommentBody, CommentComposer } from "@/components/CommentMentions";
+import { fmtAgo, fmtRange } from "@/lib/formatDate";
+import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
+import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
+import {
+  buildExpected,
+  datePatchFromEdit,
+  formatConflictRows,
+  isSupersededWrite,
+  parseStaleWrite,
+  withServerTask,
+  type StaleWrite,
+} from "@/lib/taskConflict";
 import {
   type Priority,
   type Task,
   type TaskStatus,
+  type UpdateTaskInput,
   useAddComment,
   useComments,
   useCreateTask,
   useDeleteTask,
   useDuplicateTask,
+  useItopStatus,
+  useProject,
+  useProjectEpics,
+  useProjectLabels,
+  useProjectMembers,
   useProjectSections,
   useProjectTasks,
   useUpdateTask,
@@ -29,24 +52,8 @@ import {
 } from "@/lib/queries";
 
 const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
-const STATUS_LABEL: Record<TaskStatus, string> = {
-  TODO: "To do",
-  IN_PROGRESS: "In progress",
-  DONE: "Done",
-};
-const STATUS_TONE_CLASS: Record<TaskStatus, string> = {
-  TODO: "bg-surface-container-high text-on-surface-variant",
-  IN_PROGRESS: "bg-chip-emerald-bg text-chip-emerald-text",
-  DONE: "bg-chip-emerald-bg text-chip-emerald-text",
-};
 
 const PRIORITY_ORDER: Priority[] = ["LOW", "MEDIUM", "HIGH"];
-const PRIORITY_LABEL: Record<Priority, string> = {
-  LOW: "Low",
-  MEDIUM: "Medium",
-  HIGH: "High",
-  URGENT: "Urgent",
-};
 const PRIORITY_ICON_CLASS: Record<Priority, string> = {
   LOW: "text-on-surface-variant",
   MEDIUM: "text-chip-amber-text",
@@ -58,14 +65,6 @@ function nextPriority(p: Priority): Priority {
   const idx = PRIORITY_ORDER.indexOf(p);
   if (idx === -1) return "LOW";
   return PRIORITY_ORDER[(idx + 1) % PRIORITY_ORDER.length];
-}
-
-function fmtShort(iso: string | null): string {
-  // Derive the day via the UTC date-part,
-  // not a local-time parse of the ISO instant.
-  const d = dayToDate(dayFromIso(iso));
-  if (!d) return "—";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 interface TaskPanelProps {
@@ -89,10 +88,23 @@ interface TaskPanelProps {
 export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelProps) {
   const { user } = useAuth();
   const canEdit = hasPermission(user, "task:write");
+  // Gates the "iTop ticket" row below — an install with no iTop connection
+  // never sees the row at all (TaskTicketField.tsx repeats the same check
+  // for its own inner rendering, but the label span here needs it too, or
+  // an unconfigured install would show a label with no paired grid cell).
+  const itopConfigured = useItopStatus().data?.configured ?? false;
+  // Task 7.2, docs/archive/plans/itop-integration.md: TaskTicketField's
+  // "Create in iTop" affordance needs the task's project's customer id — a
+  // task itself has no customer of its own, so this is the one extra fetch
+  // this panel needs for that field.
+  const { data: project } = useProject(projectId);
 
   const { data: tasks } = useProjectTasks(projectId);
   const { data: sections } = useProjectSections(projectId);
+  const { data: epics, isLoading: epicsLoading } = useProjectEpics(projectId);
   const { data: users } = useUsers();
+  const { data: labels } = useProjectLabels(projectId);
+  const assigneeAddsMember = useAssigneeMembership(projectId);
   const updateTask = useUpdateTask(projectId);
   const createTask = useCreateTask(projectId);
   const deleteTask = useDeleteTask(projectId);
@@ -115,6 +127,20 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const isSubtask = parentId !== null;
   const parentTask = parentId === null ? null : ((tasks ?? []).find((t) => t.id === parentId) ?? null);
 
+  // Epics (docs/archive/plans/epics-spec.md §6 "Task surfaces"). A subtask never
+  // carries its own epicId (backend invariant, §4) — its breadcrumb shows the
+  // PARENT's epic instead, read from the same tasks cache the breadcrumb
+  // already uses for the parent's title.
+  const taskEpic = task && task.epicId !== null ? (epics ?? []).find((e) => e.id === task.epicId) ?? null : null;
+  const parentEpic =
+    parentTask && parentTask.epicId !== null
+      ? (epics ?? []).find((e) => e.id === parentTask.epicId) ?? null
+      : null;
+  // The task carries an epicId but the epics query hasn't resolved yet — show
+  // a placeholder rather than "No epic", which would be actively wrong for
+  // the instant between the task query and the epics query settling.
+  const taskEpicPending = task !== null && task.epicId !== null && epicsLoading;
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -122,11 +148,19 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const [editingDates, setEditingDates] = useState(false);
   const [editingAssignee, setEditingAssignee] = useState(false);
   const [editingSection, setEditingSection] = useState(false);
+  const [editingEpic, setEditingEpic] = useState(false);
   const [newSubtask, setNewSubtask] = useState("");
   const [editingSubtaskId, setEditingSubtaskId] = useState<number | null>(null);
   const [subtaskTitleDraft, setSubtaskTitleDraft] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A save that lost a per-field race (409 `stale_write`): the change that was
+  // refused, and what the server says clashed. Drives TaskConflictDialog.
+  const [conflict, setConflict] = useState<{
+    taskId: number;
+    patch: UpdateTaskInput;
+    stale: StaleWrite;
+  } | null>(null);
 
   const panelRef = useRef<HTMLDivElement | null>(null);
   // One rename edit settles exactly once. Enter, blur, and Escape can each end
@@ -137,34 +171,52 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   // panel: a panel-wide flag left set by one row silently ate the next row's
   // rename.
   const renameSettledRef = useRef(false);
+  // Same guard for the panel's own title editor; reset when it opens.
+  const titleSettledRef = useRef(false);
+  // The task as it was when a title or date edit began. Those editors stay open
+  // for a while and the 30 s live refresh can land meanwhile; `expected` and the
+  // "did anything change" check must measure against what the user started
+  // from, not the refreshed row (which would let their draft silently overwrite
+  // someone else's new value). Single-click edits use the live row.
+  const [editBase, setEditBase] = useState<Task | null>(null);
 
+  // The conflict dialog and the delete confirm are modals with their own
+  // Escape handling — the same keypress must not also close the panel.
+  const modalOpen = conflict !== null || confirmDelete;
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !modalOpen) onClose();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, modalOpen]);
 
   useEffect(() => {
     setEditingTitle(false);
     setEditingDates(false);
     setEditingAssignee(false);
     setEditingSection(false);
+    setEditingEpic(false);
     setEditingSubtaskId(null);
     setMenuOpen(false);
     setStatusMenuOpen(false);
     setError(null);
+    setConflict(null);
   }, [taskId]);
 
   if (!task) {
+    // `tasks` undefined = still loading; once it has loaded, a missing task was
+    // deleted (or is not visible to this user) — say so instead of spinning.
+    const notFound = tasks !== undefined;
     return (
       <aside
         ref={panelRef}
         className="fixed right-0 top-14 bottom-0 z-40 flex w-full flex-col border-l border-outline-variant bg-surface-container px-5 py-4 md:w-[380px]"
       >
         <div className="flex items-center justify-between">
-          <span className="text-sm text-on-surface-variant">Loading task…</span>
+          <span className="text-sm text-on-surface-variant">
+            {notFound ? "Task not found" : "Loading task…"}
+          </span>
           <button
             type="button"
             onClick={onClose}
@@ -178,24 +230,60 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     );
   }
 
-  function patch(body: Parameters<typeof updateTask.mutate>[0]["patch"]) {
+  function patch(body: Parameters<typeof updateTask.mutate>[0]["patch"], base: Task | null = task) {
     if (!task) return;
     setError(null);
-    updateTask.mutate(
-      { id: task.id, patch: body },
-      {
-        onError: (err) => {
-          setError(err instanceof ApiError ? err.message : "Update failed.");
-        },
-      },
-    );
+    const taskId = task.id;
+    // Inline edits are checked against what this panel last showed: `expected`
+    // is the task's current value for exactly the fields in the patch. The
+    // server refuses with 409 `stale_write` when someone changed one of them.
+    // mutateAsync, not mutate(…, { onError }): mutate-level callbacks only fire
+    // for the LATEST call on this hook, so a second quick save would swallow
+    // the first one's conflict.
+    updateTask
+      .mutateAsync({ id: taskId, patch: body, expected: buildExpected(base ?? task, body) })
+      .catch((err: unknown) => {
+        // Dropped behind an earlier refused save: that conflict is the one shown.
+        if (isSupersededWrite(err)) return;
+        const stale = parseStaleWrite(err);
+        if (stale) {
+          // Keep the FIRST conflict if one is already open.
+          setConflict((open) => open ?? { taskId, patch: body, stale });
+          return;
+        }
+        setError(err instanceof ApiError ? err.message : "Update failed.");
+      });
+  }
+
+  // "Keep mine": the same change again, without `expected` — last write wins.
+  function keepMine() {
+    if (!conflict) return;
+    const { taskId, patch: body } = conflict;
+    setConflict(null);
+    setError(null);
+    updateTask.mutateAsync({ id: taskId, patch: body }).catch((err: unknown) => {
+      if (isSupersededWrite(err)) return;
+      setError(err instanceof ApiError ? err.message : "Update failed.");
+    });
+  }
+
+  // "Use theirs": drop my change. The failed save already rolled back the
+  // optimistic edit and refetched the task list, so closing is all that's left.
+  function discardMine() {
+    setConflict(null);
   }
 
   function handleTitleSubmit(e: FormEvent) {
     e.preventDefault();
+    // Enter and blur can both end the same edit (Safari/Firefox blur the input
+    // as it unmounts after Enter) — a second pass would queue a duplicate save
+    // built on the old title and conflict with the first. Settle once per edit.
+    if (titleSettledRef.current) return;
+    titleSettledRef.current = true;
     const trimmed = titleDraft.trim();
     setEditingTitle(false);
-    if (trimmed && trimmed !== task!.title) patch({ title: trimmed });
+    const base = editBase ?? task!;
+    if (trimmed && trimmed !== base.title) patch({ title: trimmed }, base);
   }
 
   async function handleAddSubtask(e: FormEvent) {
@@ -242,14 +330,11 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     const current = subtasks.find((s) => s.id === id);
     if (!current || current.title === trimmed) return;
     setError(null);
-    updateTask.mutate(
-      { id, patch: { title: trimmed } },
-      {
-        onError: (err) => {
-          setError(err instanceof ApiError ? err.message : "Rename failed.");
-        },
-      },
-    );
+    // mutateAsync: a per-call onError is lost if another save on this hook
+    // starts first.
+    updateTask.mutateAsync({ id, patch: { title: trimmed } }).catch((err: unknown) => {
+      setError(err instanceof ApiError ? err.message : "Rename failed.");
+    });
   }
 
   async function handleSubtaskDuplicate(s: Task) {
@@ -308,12 +393,12 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               disabled={!canEdit}
               onClick={() => setStatusMenuOpen((v) => !v)}
               className={[
-                "inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-display text-[11px] font-semibold",
-                STATUS_TONE_CLASS[task.status],
+                "inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-display text-meta font-semibold",
+                TASK_STATUS_TONE_CLASS[task.status],
                 canEdit ? "cursor-pointer" : "cursor-default",
               ].join(" ")}
             >
-              {STATUS_LABEL[task.status]}
+              {TASK_STATUS_LABEL[task.status]}
               {canEdit && (
                 <span className="material-symbols-outlined text-[13px]">expand_more</span>
               )}
@@ -335,7 +420,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         s === task.status ? "font-bold text-primary" : "text-on-surface",
                       ].join(" ")}
                     >
-                      {STATUS_LABEL[s]}
+                      {TASK_STATUS_LABEL[s]}
                     </button>
                   ))}
                 </div>
@@ -343,6 +428,11 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
             )}
           </div>
           <span className="flex-1" />
+          <CopyLinkButton
+            label="Copy task link"
+            getUrl={() => `${window.location.origin}/projects/${projectId}?task=${taskId}`}
+            className="rounded-sm p-1 hover:bg-surface-container-high"
+          />
           <div className="relative">
             <button
               type="button"
@@ -399,16 +489,19 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {/* Parent breadcrumb — the only way back out of a subtask. */}
           {parentTask && (
-            <button
-              type="button"
-              onClick={() => onOpenTask(parentTask.id)}
-              className="mb-1 flex max-w-full items-center gap-0.5 rounded-sm text-[11px] text-on-surface-variant hover:text-primary outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              <span className="material-symbols-outlined text-[13px]" aria-hidden="true">
-                arrow_back
-              </span>
-              <span className="truncate">{parentTask.title}</span>
-            </button>
+            <div className="mb-1 flex max-w-full items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => onOpenTask(parentTask.id)}
+                className="flex min-w-0 items-center gap-0.5 rounded-sm text-meta text-on-surface-variant hover:text-primary outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <span className="material-symbols-outlined text-[13px]" aria-hidden="true">
+                  arrow_back
+                </span>
+                <span className="truncate">{parentTask.title}</span>
+              </button>
+              {parentEpic && <EpicChip epic={parentEpic} compact />}
+            </div>
           )}
 
           {/* Title + subtitle */}
@@ -429,6 +522,8 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               type="button"
               disabled={!canEdit}
               onClick={() => {
+                titleSettledRef.current = false;
+                setEditBase(task);
                 setTitleDraft(task.title);
                 setEditingTitle(true);
               }}
@@ -438,16 +533,17 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
             </button>
           )}
           {task.section && (
-            <p className="mt-0.5 text-[11px] text-on-surface-variant">in {sectionName}</p>
+            <p className="mt-0.5 text-meta text-on-surface-variant">in {sectionName}</p>
           )}
 
           {/* Meta grid */}
           <div className="mt-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2.5 text-sm">
-            <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
               Assignee
             </span>
             <div className="relative">
               {editingAssignee && canEdit ? (
+                <>
                 <select
                   autoFocus
                   value={task.assignedToId ?? ""}
@@ -461,10 +557,20 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                   <option value="">Unassigned</option>
                   {(users ?? []).map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.username}
+                      {`${u.username}${assigneeAddsMember(u.id) ? " (not on project)" : ""}`}
                     </option>
                   ))}
                 </select>
+                {/* This picker saves the moment an option is chosen, so the
+                    warning goes on the options themselves plus this line —
+                    a plain paragraph, not a live region (specs query the
+                    panel by role). */}
+                {(users ?? []).some((u) => assigneeAddsMember(u.id)) && (
+                  <p className="mt-1 text-meta text-on-surface-variant">
+                    People marked “not on project” are added to it when assigned.
+                  </p>
+                )}
+                </>
               ) : (
                 <button
                   type="button"
@@ -480,16 +586,20 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               )}
             </div>
 
-            <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
               Dates
             </span>
             <div className="relative">
               {editingDates && canEdit ? (
                 <InlineDateRangeEditor
-                  startISO={task.startDate}
-                  endISO={task.dueDate}
+                  startISO={(editBase ?? task).startDate}
+                  endISO={(editBase ?? task).dueDate}
                   onSave={(s, e) => {
-                    patch({ startDate: s, dueDate: e });
+                    // Only the date(s) that actually changed — the untouched
+                    // one must not conflict on, or revert, someone else's edit.
+                    const base = editBase ?? task;
+                    const body = datePatchFromEdit(base, s, e);
+                    if (Object.keys(body).length > 0) patch(body, base);
                     setEditingDates(false);
                   }}
                   onCancel={() => setEditingDates(false)}
@@ -498,15 +608,18 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                 <button
                   type="button"
                   disabled={!canEdit}
-                  onClick={() => setEditingDates(true)}
+                  onClick={() => {
+                    setEditBase(task);
+                    setEditingDates(true);
+                  }}
                   className="rounded-sm px-1 py-0.5 text-left text-on-surface hover:bg-surface-container-high disabled:cursor-default"
                 >
-                  {fmtShort(task.startDate)} – {fmtShort(task.dueDate)}
+                  {fmtRange(task.startDate, task.dueDate)}
                 </button>
               )}
             </div>
 
-            <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
               Priority
             </span>
             <button
@@ -524,7 +637,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               <span className="text-on-surface">{PRIORITY_LABEL[task.priority]}</span>
             </button>
 
-            <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
               Type
             </span>
             <button
@@ -544,7 +657,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               </span>
             </button>
 
-            <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
               {CRITICAL_PATH_LABEL}
             </span>
             <button
@@ -563,7 +676,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               <span className="text-on-surface">{task.isCriticalPath ? "Yes" : "No"}</span>
             </button>
 
-            <span className="self-center font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
               Section
             </span>
             <div className="relative">
@@ -602,11 +715,80 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                 </button>
               )}
             </div>
+
+            {/* Epic — hidden entirely on a subtask (§4: epicId is only ever
+                set on a top-level task; the parent's epic shows in the
+                breadcrumb above instead). */}
+            {!isSubtask && (
+              <>
+                <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
+                  Epic
+                </span>
+                <div className="relative">
+                  {editingEpic && canEdit ? (
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        autoFocus
+                        value={task.epicId ?? ""}
+                        onChange={(e) => {
+                          patch({ epicId: e.target.value === "" ? null : Number(e.target.value) });
+                          setEditingEpic(false);
+                        }}
+                        onBlur={() => setEditingEpic(false)}
+                        className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden"
+                      >
+                        <option value="">No epic</option>
+                        {(epics ?? []).map((e) => (
+                          <option key={e.id} value={e.id}>
+                            {e.title}
+                          </option>
+                        ))}
+                      </select>
+                      {taskEpic && <EpicChip epic={taskEpic} compact />}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!canEdit || taskEpicPending}
+                      onClick={() => setEditingEpic(true)}
+                      className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
+                    >
+                      {taskEpicPending ? (
+                        <span
+                          aria-hidden="true"
+                          className="h-4 w-16 animate-pulse rounded-full bg-surface-container-high"
+                        />
+                      ) : taskEpic ? (
+                        <EpicChip epic={taskEpic} compact />
+                      ) : (
+                        <span className="text-on-surface">No epic</span>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+
+            {itopConfigured && (
+              <>
+                <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
+                  iTop ticket
+                </span>
+                <TaskTicketField
+                  itopTicketRef={task.itopTicketRef}
+                  canEdit={canEdit}
+                  customerId={project?.customerId ?? null}
+                  taskTitle={task.title}
+                  taskDescription={task.description}
+                  onSave={(ref) => patch({ itopTicketRef: ref })}
+                />
+              </>
+            )}
           </div>
 
           {/* Labels */}
           <div className="mt-4">
-            <p className="mb-1.5 font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <p className="mb-1.5 font-display text-label-caps uppercase text-on-surface-variant">
               Labels
             </p>
             <LabelPicker
@@ -619,7 +801,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
           {/* Subtasks — hidden entirely on a subtask (max depth is 1). */}
           {!isSubtask && (
             <div className="mt-4">
-              <p className="mb-1.5 font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+              <p className="mb-1.5 font-display text-label-caps uppercase text-on-surface-variant">
                 Subtasks {subtasks.length > 0 && `${subtasksDone}/${subtasks.length}`}
               </p>
               <Sortable
@@ -668,7 +850,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                       ].join(" ")}
                     >
                       {s.status === "DONE" && (
-                        <span className="material-symbols-outlined text-[11px] leading-none">
+                        <span className="material-symbols-outlined text-meta leading-none">
                           check
                         </span>
                       )}
@@ -782,10 +964,34 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
 
           {/* Comments */}
           <div className="mt-5 border-t border-outline-variant pt-4">
-            <PanelComments taskId={task.id} />
+            <PanelComments taskId={task.id} projectId={projectId} />
           </div>
         </div>
       </aside>
+
+      <TaskConflictDialog
+        open={conflict !== null}
+        rows={
+          conflict
+            ? formatConflictRows(
+                conflict.stale.conflicts,
+                conflict.patch,
+                withServerTask(
+                  {
+                    users,
+                    sections,
+                    epics,
+                    labels,
+                    tasks,
+                  },
+                  conflict.stale.task,
+                ),
+              )
+            : []
+        }
+        onUseTheirs={discardMine}
+        onKeepMine={keepMine}
+      />
 
       <ConfirmModal
         open={confirmDelete}
@@ -805,7 +1011,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
           </>
         }
         confirmLabel="Delete"
-        confirmTone="warning"
+        confirmTone="danger"
         busy={deleteTask.isPending}
       />
     </>
@@ -818,26 +1024,25 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
  * This is the app's only comment UI (the former standalone CommentThread
  * component was never mounted and has been removed).
  */
-function PanelComments({ taskId }: { taskId: number }) {
+function PanelComments({ taskId, projectId }: { taskId: number; projectId: number }) {
   const { data: comments, isLoading, isError, error } = useComments(taskId);
-  const addComment = useAddComment(taskId);
-  const [body, setBody] = useState("");
+  const addComment = useAddComment(taskId, projectId);
+  const { data: project } = useProject(projectId);
+  const { data: members } = useProjectMembers(projectId);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmed = body.trim();
-    if (!trimmed || addComment.isPending) return;
-    try {
-      await addComment.mutateAsync(trimmed);
-      setBody("");
-    } catch {
-      // surfaced via mutation error state below
-    }
-  }
+  // Everyone a comment can mention: the project's TAM and members (the server
+  // stores a self-mention too, it just never notifies the commenter). Chips
+  // render from the comment's returned ids, never from what was picked.
+  const people = useMemo(() => {
+    const byId = new Map<number, { id: number; username: string }>();
+    if (project) byId.set(project.tam.id, { id: project.tam.id, username: project.tam.username });
+    for (const m of members ?? []) byId.set(m.userId, { id: m.userId, username: m.username });
+    return [...byId.values()];
+  }, [project, members]);
 
   return (
     <div className="space-y-3">
-      <h3 className="font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+      <h3 className="font-display text-label-caps uppercase text-on-surface-variant">
         Comments {comments && comments.length > 0 && `· ${comments.length}`}
       </h3>
 
@@ -863,52 +1068,23 @@ function PanelComments({ taskId }: { taskId: number }) {
               <div className="min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2">
                 <div className="mb-0.5 flex items-center justify-between gap-2 text-[12px]">
                   <span className="min-w-0 truncate font-medium text-on-surface">{c.author.username}</span>
-                  <span className="shrink-0 text-on-surface-variant">{relativeTime(c.createdAt)}</span>
+                  <span className="shrink-0 text-on-surface-variant">{fmtAgo(c.createdAt)}</span>
                 </div>
-                <p className="whitespace-pre-wrap wrap-break-word text-xs text-on-surface">{c.body}</p>
+                <CommentBody body={c.body} mentionedUserIds={c.mentionedUserIds} users={people} />
               </div>
             </li>
           ))}
         </ol>
       )}
 
-      <form
-        onSubmit={handleSubmit}
-        className="flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2"
-      >
-        <input
-          type="text"
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          maxLength={5000}
-          placeholder="Write a comment…"
-          className="min-w-0 flex-1 border-none bg-transparent text-xs text-on-surface outline-hidden placeholder:text-on-surface-variant/60 focus:outline-hidden"
-        />
-        <button
-          type="submit"
-          disabled={addComment.isPending || !body.trim()}
-          aria-label="Send comment"
-          className="flex shrink-0 items-center text-primary disabled:opacity-40"
-        >
-          <span className="material-symbols-outlined text-[17px]">send</span>
-        </button>
-      </form>
-      {addComment.error && (
-        <p className="text-[12px] text-error">{(addComment.error as Error).message}</p>
-      )}
+      <CommentComposer
+        candidates={people}
+        isPending={addComment.isPending}
+        error={addComment.error ? (addComment.error as Error).message : null}
+        onSend={async (body, mentionedUserIds) => {
+          await addComment.mutateAsync({ body, mentionedUserIds });
+        }}
+      />
     </div>
   );
-}
-
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const diffMs = Date.now() - then;
-  const diffMin = Math.round(diffMs / 60_000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.round(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return new Date(iso).toLocaleDateString();
 }

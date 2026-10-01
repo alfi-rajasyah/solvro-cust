@@ -1,24 +1,24 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AdminGuard } from "@/components/AdminGuard";
 import { AuthGuard } from "@/components/AuthGuard";
 import { ExecutiveGuard } from "@/components/ExecutiveGuard";
-import { PipelineGuard } from "@/components/PipelineGuard";
 import { Shell } from "@/components/layout/Shell";
 import { Admin } from "@/pages/Admin";
 import { CustomerDetail } from "@/pages/CustomerDetail";
 import { Customers } from "@/pages/Customers";
 import { DailyReview } from "@/pages/DailyReview";
 import { Executive } from "@/pages/Executive";
+import { Help } from "@/pages/Help";
 import { Login } from "@/pages/Login";
-import { OpportunityDetail } from "@/pages/OpportunityDetail";
 import { Overview } from "@/pages/Overview";
-import { Pipeline } from "@/pages/Pipeline";
 import { ProjectDetail } from "@/pages/ProjectDetail";
 import { Projects } from "@/pages/Projects";
+import { PublicShare } from "@/pages/PublicShare";
 import { Settings } from "@/pages/Settings";
 import { Tasks } from "@/pages/Tasks";
+import { Utilization } from "@/pages/Utilization";
 import { WeeklySync } from "@/pages/WeeklySync";
-import { WorkLogs } from "@/pages/WorkLogs";
+import { ProjectEpics } from "@/pages/views/ProjectEpics";
 import { ProjectGantt } from "@/pages/views/ProjectGantt";
 import { ProjectKanban } from "@/pages/views/ProjectKanban";
 import { ProjectList } from "@/pages/views/ProjectList";
@@ -27,10 +27,21 @@ import { ProjectRisks } from "@/pages/views/ProjectRisks";
 import { ProjectServices } from "@/pages/views/ProjectServices";
 import { ProjectTimeline } from "@/pages/views/ProjectTimeline";
 
+/**
+ * `/projects/:id` → its Overview tab. Carries `?task=` (and any other query or
+ * hash) across the redirect so a shared task link still opens the panel.
+ */
+function ProjectIndexRedirect() {
+  const { search, hash } = useLocation();
+  return <Navigate to={{ pathname: "overview", search, hash }} replace />;
+}
+
 export function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* Guest link view: outside AuthGuard and the app shell, never redirects. */}
+      <Route path="/share/:token" element={<PublicShare />} />
 
       <Route
         element={
@@ -43,11 +54,12 @@ export function App() {
         <Route path="overview" element={<Overview />} />
         <Route path="projects" element={<Projects />} />
         <Route path="projects/:id" element={<ProjectDetail />}>
-          <Route index element={<Navigate to="overview" replace />} />
+          <Route index element={<ProjectIndexRedirect />} />
           <Route path="overview" element={<ProjectOverview />} />
           <Route path="list" element={<ProjectList />} />
           <Route path="kanban" element={<ProjectKanban />} />
           <Route path="gantt" element={<ProjectGantt />} />
+          <Route path="epics" element={<ProjectEpics />} />
           <Route path="timeline" element={<ProjectTimeline />} />
           <Route path="risks" element={<ProjectRisks />} />
           <Route path="services" element={<ProjectServices />} />
@@ -57,23 +69,8 @@ export function App() {
         <Route path="daily-review" element={<DailyReview />} />
         <Route path="weekly-sync" element={<WeeklySync />} />
         <Route path="tasks" element={<Tasks />} />
-        <Route path="work-logs" element={<WorkLogs />} />
-        <Route
-          path="pipeline"
-          element={
-            <PipelineGuard>
-              <Pipeline />
-            </PipelineGuard>
-          }
-        />
-        <Route
-          path="pipeline/:id"
-          element={
-            <PipelineGuard>
-              <OpportunityDetail />
-            </PipelineGuard>
-          }
-        />
+        <Route path="utilization" element={<Utilization />} />
+        <Route path="work-logs" element={<Navigate to="/utilization" replace />} />
         <Route
           path="executive"
           element={
@@ -83,6 +80,7 @@ export function App() {
           }
         />
         <Route path="settings" element={<Settings />} />
+        <Route path="help" element={<Help />} />
         <Route
           path="admin"
           element={

@@ -19,7 +19,7 @@ adminRouter.use(requireAuth, requireAdmin);
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 
 // Phase 1 of the role-name teardown: visibility and the admin gate are now
-// permission-based, so ADMIN/SA/TAM/STAKEHOLDER are ordinary admin-managed
+// permission-based, so ADMIN/TAM/STAKEHOLDER are ordinary admin-managed
 // roles (renamable/deletable, subject to the anti-lockout guard). Only
 // PENDING is still protected: first-time Google sign-in still resolves it
 // by name (Phase 2 replaces that with a configurable default role).
@@ -56,7 +56,7 @@ adminRouter.get("/users", async (_req, res) => {
       googleSub: true,
       avatarUrl: true,
       role: { select: { roleName: true } },
-      _count: { select: { projectsAsTAM: true, projectsAsSA: true } },
+      _count: { select: { projectsAsTAM: true } },
     },
   });
   res.json(
@@ -70,7 +70,6 @@ adminRouter.get("/users", async (_req, res) => {
       provider: u.googleSub ? "google" : "password",
       avatarUrl: u.avatarUrl,
       projectsAsTAM: u._count.projectsAsTAM,
-      projectsAsSA: u._count.projectsAsSA,
     })),
   );
 });
@@ -125,7 +124,6 @@ adminRouter.post(
       provider: "password",
       avatarUrl: null,
       projectsAsTAM: 0,
-      projectsAsSA: 0,
     });
   },
 );
@@ -217,7 +215,6 @@ adminRouter.delete(
         _count: {
           select: {
             projectsAsTAM: true,
-            projectsAsSA: true,
             projectBaselinesLocked: true,
             assignedTasks: true,
             comments: true,
@@ -237,8 +234,6 @@ adminRouter.delete(
     const blockers: string[] = [];
     if (target._count.projectsAsTAM > 0)
       blockers.push(`${target._count.projectsAsTAM} project(s) as TAM`);
-    if (target._count.projectsAsSA > 0)
-      blockers.push(`${target._count.projectsAsSA} project(s) as SA`);
     if (target._count.projectBaselinesLocked > 0)
       blockers.push(`${target._count.projectBaselinesLocked} locked baseline(s)`);
     if (target._count.assignedTasks > 0)
@@ -535,7 +530,6 @@ adminRouter.get("/projects", async (_req, res) => {
   const projects = await prisma.project.findMany({
     orderBy: { updatedAt: "desc" },
     include: {
-      sa: { select: { id: true, username: true } },
       tam: { select: { id: true, username: true } },
       customer: { select: { id: true, name: true } },
       _count: { select: { tasks: true } },
@@ -570,7 +564,6 @@ adminRouter.put(
       where: { id: projectId },
       data: { tamId: newTamId },
       include: {
-        sa: { select: { id: true, username: true } },
         tam: { select: { id: true, username: true } },
         customer: { select: { id: true, name: true } },
         _count: { select: { tasks: true } },

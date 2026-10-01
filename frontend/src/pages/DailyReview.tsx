@@ -9,15 +9,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { computeDailyReviewStats, firstProjectId as firstProjectIdOf, weekNumberLabel } from "@/lib/dailyReviewStats";
 import { dateToDay } from "@/lib/dateField";
+import { fmtDayLong } from "@/lib/formatDate";
 import { formatWeekRange, parseWeekKey, shiftWeek, weekKeyOf } from "@/lib/isoWeek";
-import { useDailyReview } from "@/lib/queries";
-
-const TODAY_FMT = new Intl.DateTimeFormat(undefined, {
-  weekday: "long",
-  month: "long",
-  day: "numeric",
-  year: "numeric",
-});
+import { type DailyItopCustomer, useDailyReview, useItopDaily } from "@/lib/queries";
 
 interface FocusRequest {
   day: string;
@@ -53,6 +47,23 @@ export function DailyReview() {
 
   const { data, isLoading, isError, error } = useDailyReview(week);
 
+  // Daily Review's iTop strip (Task 2.2): one fetch for the whole page, keyed
+  // by the resolved "today" (not the viewed week — the strip always shows
+  // today's operations picture regardless of which week is on screen), then
+  // sliced per customer below. `enabled: Boolean(data)` avoids firing before
+  // `data.today` is known; the fallback date only matters for the disabled
+  // query's key shape. A 404/error here (iTop not configured, or the dev
+  // backend not caught up yet) just leaves `itopDaily` undefined — no strip
+  // renders, nothing else on the page is affected.
+  const { data: itopDaily } = useItopDaily(data?.today ?? dateToDay(new Date())!, {
+    enabled: Boolean(data),
+  });
+  const itopByCustomer = useMemo(() => {
+    const map = new Map<number, DailyItopCustomer>();
+    itopDaily?.customers.forEach((c) => map.set(c.customerId, c));
+    return map;
+  }, [itopDaily]);
+
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
 
   const stats = useMemo(() => (data ? computeDailyReviewStats(data) : null), [data]);
@@ -75,7 +86,7 @@ export function DailyReview() {
         <div>
           <h1 className="font-display text-2xl font-bold text-on-surface">Daily Review</h1>
           <p className="text-sm text-on-surface-variant">
-            {TODAY_FMT.format(new Date())}
+            {fmtDayLong(dateToDay(new Date()))}
             {user?.username ? ` — ${user.username}` : ""}. Your customers, their active projects, and each
             customer's weekly update.
           </p>
@@ -91,10 +102,10 @@ export function DailyReview() {
             <span className="material-symbols-outlined text-lg">chevron_left</span>
           </button>
           <div className="text-center">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <div className="text-label-caps uppercase text-on-surface-variant">
               Week {weekNumberLabel(week)}
             </div>
-            <div className="font-mono text-xs tabular-nums text-on-surface">{formatWeekRange(week)}</div>
+            <div className="text-xs tabular-nums text-on-surface">{formatWeekRange(week)}</div>
           </div>
           <button
             type="button"
@@ -144,6 +155,7 @@ export function DailyReview() {
               canDeleteAny={canDeleteAny}
               firstProjectId={firstProjectId}
               focusRequest={focusRequest}
+              itop={itopByCustomer.get(customer.id)}
             />
           ))}
 

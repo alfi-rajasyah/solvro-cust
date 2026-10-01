@@ -51,6 +51,7 @@ interface TaskRow {
   assignedToId: number | null;
   parentTaskId: number | null;
   sectionId: number | null;
+  epicId: number | null;
   position: number;
   labels: { id: number; name: string }[];
   assignedTo: { id: number; username: string; email: string } | null;
@@ -79,6 +80,7 @@ async function createTask(
     parentTaskId: number;
     sectionId: number;
     labelIds: number[];
+    epicId: number;
   }> = {},
 ): Promise<TaskRow> {
   const res = await post(`/projects/${projectId}/tasks`, token, {
@@ -97,6 +99,12 @@ async function createSection(projectId: number, token: string, name: string): Pr
 
 async function createLabel(projectId: number, token: string, name: string): Promise<number> {
   const res = await post(`/projects/${projectId}/labels`, token, { name });
+  expect(res.status).toBe(201);
+  return res.body.id as number;
+}
+
+async function createEpic(projectId: number, token: string, title: string): Promise<number> {
+  const res = await post(`/projects/${projectId}/epics`, token, { title });
   expect(res.status).toBe(201);
   return res.body.id as number;
 }
@@ -183,6 +191,24 @@ describe("POST /tasks/:id/duplicate", () => {
       email: otherUser.email,
     });
     expect(copy.section).toEqual({ id: section, name: "Kickoff", position: 0, color: "#94a3b8" });
+  });
+
+  // docs/archive/plans/epics-spec.md §4: "lib/duplicate.ts copies keep epicId (same
+  // project)." Covered separately from the big verbatim test above so a
+  // failure here reads unambiguously as an epic-copy regression.
+  it("keeps epicId on the copy", async () => {
+    const projectId = await createProject(admin.userId);
+    const epic = await createEpic(projectId, admin.token, "Sprint 1");
+    const source = await createTask(projectId, admin.token, {
+      title: "Has an epic",
+      epicId: epic,
+    });
+    expect(source.epicId).toBe(epic);
+
+    const res = await duplicateTask(source.id, admin.token);
+    expect(res.status).toBe(201);
+    const copy = res.body as TaskRow;
+    expect(copy.epicId).toBe(epic);
   });
 
   it("comments are never copied", async () => {

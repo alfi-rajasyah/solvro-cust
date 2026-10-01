@@ -6,17 +6,23 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   const { status } = useAuth();
   const location = useLocation();
 
-  if (status === "loading") {
-    return (
-      <div className="flex h-full items-center justify-center text-on-surface-variant">
-        Loading…
-      </div>
-    );
-  }
+  if (status === "loading") return <AuthLoading />;
 
   if (status !== "authenticated") {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    // Keep the query and hash so a deep link such as /projects/6?task=42
+    // survives the sign-in round trip.
+    const from = location.pathname + location.search + location.hash;
+    return <Navigate to="/login" replace state={{ from }} />;
   }
 
   return <>{children}</>;
+}
+
+/** Placeholder while the signed-in user is still being confirmed. */
+export function AuthLoading() {
+  return (
+    <div className="flex h-full items-center justify-center text-on-surface-variant">
+      Loading…
+    </div>
+  );
 }

@@ -28,6 +28,8 @@ interface DateRangeFieldProps {
   defaultOpen?: boolean;
   /** Extra classes on the trigger button. */
   className?: string;
+  /** Trigger text when both sides are unset (default: an em dash). */
+  emptyLabel?: string;
   "aria-label"?: string;
 }
 
@@ -86,11 +88,15 @@ const variantClasses = {
 } as const;
 
 const footerButtonClasses =
-  "rounded-sm px-1.5 py-0.5 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-surface-container";
+  "rounded-sm px-1.5 py-0.5 font-display text-sm text-on-surface-variant hover:bg-surface-container font-semibold";
 
 /** `formatDisplay(start) – formatDisplay(end)`, em-dash placeholder per missing side. */
-function formatRangeDisplay(start: string | null, end: string | null): string {
-  if (!start && !end) return "—";
+function formatRangeDisplay(
+  start: string | null,
+  end: string | null,
+  emptyLabel = "—",
+): string {
+  if (!start && !end) return emptyLabel;
   return `${formatDisplay(start) || "—"} – ${formatDisplay(end) || "—"}`;
 }
 
@@ -150,6 +156,7 @@ export function DateRangeField({
   clearable = false,
   defaultOpen = false,
   className,
+  emptyLabel,
   "aria-label": ariaLabel,
 }: DateRangeFieldProps) {
   const [open, setOpen] = useState(defaultOpen);
@@ -255,9 +262,14 @@ export function DateRangeField({
         type="button"
         disabled={disabled}
         aria-label={ariaLabel ?? defaultAriaLabel}
-        className={cn(triggerBaseClasses, variantClasses[variant], className)}
+        className={cn(
+          triggerBaseClasses,
+          variantClasses[variant],
+          !start && !end && "font-normal text-on-surface-variant",
+          className,
+        )}
       >
-        {formatRangeDisplay(start, end)}
+        {formatRangeDisplay(start, end, emptyLabel)}
       </PopoverTrigger>
       <PopoverContent
         align="start"
@@ -316,7 +328,7 @@ export function DateRangeField({
               <button
                 type="button"
                 onClick={handleApply}
-                className="rounded-sm bg-primary px-2 py-0.5 font-display text-label-caps uppercase tracking-wider text-on-primary hover:bg-primary-container"
+                className="rounded-sm bg-primary px-2 py-0.5 font-display text-sm text-on-primary hover:bg-primary-container font-semibold"
               >
                 Apply
               </button>

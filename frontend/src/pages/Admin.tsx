@@ -6,16 +6,16 @@ import {
   type ColumnDef,
   type SortingState,
 } from "@tanstack/react-table";
-import { AssigneeAvatar } from "@/components/AssigneeAvatar";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { Modal } from "@/components/Modal";
-import { Chip } from "@/components/StatusChip";
+import { ProjectStatusChip } from "@/components/StatusChip";
 import { Tabs } from "@/components/Tabs";
+import { ItopTab } from "@/components/admin/ItopTab";
 import { ApiError } from "@/lib/api";
 import {
   type AdminProject,
   type AdminRole,
   type AdminUser,
-  type PipelineImportLogEntry,
   useAdminCreateRole,
   useAdminCreateUser,
   useAdminDeleteRole,
@@ -29,12 +29,12 @@ import {
   useAdminUpdateRolePermissions,
   useAdminUsers,
   useAuthSettings,
-  usePipelineImports,
   useUpdateAuthSettings,
 } from "@/lib/queries";
 import type { Role } from "@/lib/auth";
 import { PERMISSION_CATALOG, useAuth } from "@/lib/auth";
 import { copyText } from "@/lib/clipboard";
+import { fmtDateTime } from "@/lib/formatDate";
 import { personNameSortingFn } from "@/lib/tableSort";
 import { DataGrid, DataGridContainer } from "@/components/reui/data-grid/data-grid";
 import { DataGridColumnHeader } from "@/components/reui/data-grid/data-grid-column-header";
@@ -42,14 +42,14 @@ import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll
 import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type Tab = "users" | "roles" | "signin" | "projects" | "pipeline";
+type Tab = "users" | "roles" | "signin" | "projects" | "itop";
 
 const TAB_ITEMS: ReadonlyArray<{ key: Tab; label: string }> = [
   { key: "users", label: "Users" },
   { key: "roles", label: "Roles" },
   { key: "signin", label: "Sign-in" },
   { key: "projects", label: "Project Override" },
-  { key: "pipeline", label: "Pipeline" },
+  { key: "itop", label: "iTop" },
 ];
 
 // Domain regex matches the backend validator (PATCH /admin/settings/auth).
@@ -64,9 +64,6 @@ const EMPTY_USERS: AdminUser[] = [];
 // tabs' own DataGrids (T1 migration).
 const EMPTY_ROLES: AdminRole[] = [];
 const EMPTY_PROJECTS: AdminProject[] = [];
-// Same rationale as EMPTY_USERS above, for the Pipeline tab's own DataGrid
-// (M4.19).
-const EMPTY_IMPORTS: PipelineImportLogEntry[] = [];
 
 export function Admin() {
   const [tab, setTab] = useState<Tab>("users");
@@ -89,7 +86,7 @@ export function Admin() {
         {tab === "roles" && <RolesTab />}
         {tab === "signin" && <SignInTab />}
         {tab === "projects" && <ProjectsTab />}
-        {tab === "pipeline" && <PipelineTab />}
+        {tab === "itop" && <ItopTab />}
       </div>
     </div>
   );
@@ -114,6 +111,8 @@ function UsersTab() {
   const updateRole = useAdminUpdateRole();
   const setActive = useAdminSetActive();
   const resetPassword = useAdminResetPassword();
+  const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null);
+  const [resettingUser, setResettingUser] = useState<AdminUser | null>(null);
   const [resetResult, setResetResult] = useState<
     { username: string; tempPassword: string } | null
   >(null);
@@ -162,7 +161,7 @@ function UsersTab() {
       // Checkpoint B) requires every string column to declare an explicit
       // sortingFn. Shared helper: see lib/tableSort.ts for the full
       // ≤10-row auto-detection rationale (also used by CustomerDetail.tsx's
-      // TAM/SA columns).
+      // own "tam" column).
       sortingFn: personNameSortingFn,
       cell: ({ row }) => (
         <span
@@ -187,7 +186,7 @@ function UsersTab() {
           className={[
             // text-xs (13px, this theme's own --text-xs override — see
             // index.css) replaces the carried-over text-[13px] magic number.
-            "font-mono text-xs text-on-surface-variant",
+            "text-xs text-on-surface-variant",
             row.original.active ? "" : "opacity-60",
           ].join(" ")}
         >
@@ -238,7 +237,7 @@ function UsersTab() {
               // select renders ~4px shorter, accepted as a density win.
               // font-bold stays explicit — see data-grid-column-header.tsx's
               // comment on why the token's baked-in weight needs the guard.
-              className="rounded-sm border border-outline-variant bg-surface px-2 py-1 font-display text-label-caps font-bold uppercase text-on-surface focus:border-primary focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-sm border border-outline-variant bg-surface px-2 py-1 font-display text-label-caps uppercase text-on-surface focus:border-primary focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-60"
               title={isSelf ? "You cannot change your own role" : undefined}
             >
               {roleOptionsFor(u.role).map((r) => (
@@ -253,7 +252,7 @@ function UsersTab() {
                 // No token matches 10px (the smallest named size is
                 // text-label-caps at 12px) — left as an arbitrary value per
                 // N5 (do not invent a size to fill the gap).
-                className="rounded-full bg-chip-amber-bg px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-chip-amber-text"
+                className="rounded-full bg-chip-amber-bg px-2 py-0.5 font-display text-label-caps leading-4 uppercase text-chip-amber-text"
               >
                 Needs role
               </span>
@@ -265,18 +264,13 @@ function UsersTab() {
     },
     {
       id: "projects",
-      // Sorts by projectsAsTAM only — the cell displays "TAM / SA" as a
-      // single combined string, but there's no single natural sort order
-      // over a pair, so clicking this header orders by the TAM count (the
-      // first of the two numbers shown), same as the pre-DataGrid table's
-      // implicit column order never having offered a "sort by SA" option.
       accessorFn: (row) => row.projectsAsTAM,
       header: ({ column }) => (
-        <DataGridColumnHeader column={column} title="Projects (TAM/SA)" />
+        <DataGridColumnHeader column={column} title="Projects (TAM)" />
       ),
       cell: ({ row }) => (
         <span className={row.original.active ? undefined : "opacity-60"}>
-          {row.original.projectsAsTAM} / {row.original.projectsAsSA}
+          {row.original.projectsAsTAM}
         </span>
       ),
       meta: {
@@ -294,7 +288,7 @@ function UsersTab() {
       cell: ({ row }) => (
         <span
           className={[
-            "rounded-full px-2 py-0.5 font-display text-label-caps uppercase tracking-wider",
+            "rounded-full px-2 py-0.5 font-display text-label-caps uppercase",
             row.original.active
               ? "bg-chip-emerald-bg text-chip-emerald-text"
               : "bg-surface-container-high text-on-surface-variant opacity-60",
@@ -323,23 +317,23 @@ function UsersTab() {
               type="button"
               onClick={() => handleToggleActive(u)}
               disabled={isSelf}
-              className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 font-semibold"
               title={isSelf ? "You cannot deactivate yourself" : undefined}
             >
               {u.active ? "Deactivate" : "Reactivate"}
             </button>
             <button
               type="button"
-              onClick={() => handleResetPassword(u)}
-              className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
+              onClick={() => setResettingUser(u)}
+              className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-semibold"
             >
               Reset password
             </button>
             <button
               type="button"
-              onClick={() => handleDelete(u)}
+              onClick={() => setDeletingUser(u)}
               disabled={isSelf || deleteUser.isPending}
-              className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-error-container hover:text-on-error-container disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container disabled:cursor-not-allowed disabled:opacity-50 font-semibold"
               title={
                 isSelf
                   ? "You cannot delete yourself"
@@ -423,14 +417,8 @@ function UsersTab() {
   }
 
   async function handleDelete(u: AdminUser) {
+    setDeletingUser(null);
     setError(null);
-    if (
-      !confirm(
-        `Permanently delete ${u.username} (${u.email})? This cannot be undone.`,
-      )
-    ) {
-      return;
-    }
     try {
       await deleteUser.mutateAsync(u.id);
     } catch (err) {
@@ -439,8 +427,8 @@ function UsersTab() {
   }
 
   async function handleResetPassword(u: AdminUser) {
+    setResettingUser(null);
     setError(null);
-    if (!confirm(`Reset password for ${u.username}? Their current password will stop working.`)) return;
     try {
       const res = await resetPassword.mutateAsync(u.id);
       setResetResult({ username: u.username, tempPassword: res.tempPassword });
@@ -453,7 +441,7 @@ function UsersTab() {
   const adminCount = rows.filter((u) => u.role === "ADMIN").length;
   const pendingCount = rows.filter((u) => u.role === "PENDING").length;
   const customRoleCount = (roles ?? []).filter(
-    (r) => !["ADMIN", "TAM", "SA", "STAKEHOLDER", "PENDING"].includes(r.roleName),
+    (r) => !["ADMIN", "TAM", "STAKEHOLDER", "PENDING"].includes(r.roleName),
   ).length;
 
   return (
@@ -495,7 +483,7 @@ function UsersTab() {
           <button
             type="button"
             onClick={() => setResetResult(null)}
-            className="mt-2 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:text-on-surface"
+            className="mt-2 font-display text-sm text-on-surface-variant hover:text-on-surface font-semibold"
           >
             Dismiss
           </button>
@@ -506,7 +494,7 @@ function UsersTab() {
         className="flex flex-wrap items-end gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest p-3"
       >
         <label className="w-full md:flex-1 md:min-w-[160px]">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Email
           </span>
           <input
@@ -518,7 +506,7 @@ function UsersTab() {
           />
         </label>
         <label className="w-full md:flex-1 md:min-w-[120px]">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Username
           </span>
           <input
@@ -531,7 +519,7 @@ function UsersTab() {
           />
         </label>
         <label className="w-full md:flex-1 md:min-w-[140px]">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Password (min 8)
           </span>
           <input
@@ -543,7 +531,7 @@ function UsersTab() {
           />
         </label>
         <label className="w-full md:w-auto md:min-w-[120px]">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Role
           </span>
           <select
@@ -609,6 +597,27 @@ function UsersTab() {
           </DataGridScrollArea>
         </DataGridContainer>
       </DataGrid>
+
+      <ConfirmModal
+        open={deletingUser !== null}
+        onClose={() => setDeletingUser(null)}
+        onConfirm={() => deletingUser && void handleDelete(deletingUser)}
+        title="Delete user"
+        body={`Permanently delete ${deletingUser?.username ?? ""} (${deletingUser?.email ?? ""})? This cannot be undone.`}
+        confirmLabel="Delete"
+        confirmTone="danger"
+        busy={deleteUser.isPending}
+      />
+      <ConfirmModal
+        open={resettingUser !== null}
+        onClose={() => setResettingUser(null)}
+        onConfirm={() => resettingUser && void handleResetPassword(resettingUser)}
+        title="Reset password"
+        body={`Reset password for ${resettingUser?.username ?? ""}? Their current password will stop working.`}
+        confirmLabel="Reset password"
+        confirmTone="warning"
+        busy={resetPassword.isPending}
+      />
     </div>
   );
 }
@@ -616,14 +625,14 @@ function UsersTab() {
 function ProviderChip({ provider }: { provider: "google" | "password" }) {
   if (provider === "google") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 font-display text-[11px] font-semibold text-primary dark:bg-primary/20">
+      <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 font-display text-meta font-semibold text-primary dark:bg-primary/20">
         <span className="material-symbols-outlined text-[12px]">mail</span>
         Google
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-surface-container-high px-2 py-0.5 font-display text-[11px] font-semibold text-on-surface-variant">
+    <span className="inline-flex items-center gap-1 rounded-full bg-surface-container-high px-2 py-0.5 font-display text-meta font-semibold text-on-surface-variant">
       <span className="material-symbols-outlined text-[12px]">key</span>
       Password
     </span>
@@ -657,12 +666,12 @@ function AdminKpi({
   return (
     <div className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
       <div className="flex items-center justify-between">
-        <span className="text-label-caps uppercase tracking-wider text-on-surface-variant">{label}</span>
+        <span className="text-label-caps uppercase text-on-surface-variant">{label}</span>
         <span className={`material-symbols-outlined text-base ${iconColor}`}>{icon}</span>
       </div>
       <div className="mt-2 flex items-baseline gap-2">
-        <span className="font-mono text-3xl font-bold tabular-nums text-on-surface">{value}</span>
-        {hint && <span className="text-[11px] text-on-surface-variant">{hint}</span>}
+        <span className="text-3xl font-bold tabular-nums text-on-surface">{value}</span>
+        {hint && <span className="text-meta text-on-surface-variant">{hint}</span>}
       </div>
     </div>
   );
@@ -743,6 +752,7 @@ function RolesTab() {
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newPerms, setNewPerms] = useState<string[]>([]);
+  const [deletingRole, setDeletingRole] = useState<AdminRole | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editPerms, setEditPerms] = useState<string[]>([]);
@@ -793,7 +803,7 @@ function RolesTab() {
               </span>
             )}
             {r.builtIn && (
-              <span className="ml-2 rounded-full bg-surface-container-high px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+              <span className="ml-2 rounded-full bg-surface-container-high px-2 py-0.5 font-display text-label-caps leading-4 uppercase text-on-surface-variant">
                 Reserved
               </span>
             )}
@@ -831,7 +841,7 @@ function RolesTab() {
             {r.permissions.map((p) => (
               <span
                 key={p}
-                className={`rounded-sm px-1.5 py-0.5 font-mono text-[11px] ${
+                className={`rounded-sm px-1.5 py-0.5 font-mono text-meta ${
                   p === "*"
                     ? "bg-primary/15 text-primary"
                     : "bg-surface-container-high text-on-surface"
@@ -875,14 +885,14 @@ function RolesTab() {
                   type="button"
                   onClick={() => saveEdit(r)}
                   disabled={updatePerms.isPending}
-                  className="rounded-sm bg-primary px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-primary hover:bg-primary-container disabled:opacity-50"
+                  className="rounded-sm bg-primary px-2 py-1 font-display text-sm text-on-primary hover:bg-primary-container disabled:opacity-50 font-semibold"
                 >
                   Save
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditingId(null)}
-                  className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-surface-container"
+                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container font-semibold"
                 >
                   Cancel
                 </button>
@@ -892,15 +902,15 @@ function RolesTab() {
                 <button
                   type="button"
                   onClick={() => startEdit(r)}
-                  className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
+                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-semibold"
                 >
                   Edit
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDelete(r)}
+                  onClick={() => setDeletingRole(r)}
                   disabled={r.builtIn || r.userCount > 0}
-                  className="rounded-sm px-2 py-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-error-container hover:text-on-error-container disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container disabled:cursor-not-allowed disabled:opacity-50 font-semibold"
                   title={
                     r.builtIn
                       ? "Reserved role"
@@ -995,7 +1005,7 @@ function RolesTab() {
   }
 
   async function handleDelete(r: AdminRole) {
-    if (!confirm(`Delete role "${r.roleName}"? It currently has no users.`)) return;
+    setDeletingRole(null);
     setError(null);
     try {
       await deleteRole.mutateAsync(r.id);
@@ -1012,8 +1022,8 @@ function RolesTab() {
         access.{" "}
         <code className="font-mono text-on-surface">project:view-all</code>{" "}
         reveals every project — without it, users only see projects where
-        they're the assigned SA or TAM. The last full-access admin can't be
-        removed.{" "}
+        they're the assigned TAM, or that belong to a customer they own. The
+        last full-access admin can't be removed.{" "}
         <code className="font-mono text-on-surface">PENDING</code> is reserved
         (Google first-login landing role).
       </p>
@@ -1029,7 +1039,7 @@ function RolesTab() {
         className="space-y-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-3"
       >
         <label className="block">
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Role name
           </span>
           <input
@@ -1042,7 +1052,7 @@ function RolesTab() {
           />
         </label>
         <div>
-          <span className="mb-1 block font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Permissions
           </span>
           <PermissionPicker value={newPerms} onChange={setNewPerms} />
@@ -1093,6 +1103,17 @@ function RolesTab() {
           </DataGridScrollArea>
         </DataGridContainer>
       </DataGrid>
+
+      <ConfirmModal
+        open={deletingRole !== null}
+        onClose={() => setDeletingRole(null)}
+        onConfirm={() => deletingRole && void handleDelete(deletingRole)}
+        title="Delete role"
+        body={`Delete role "${deletingRole?.roleName ?? ""}"? It currently has no users.`}
+        confirmLabel="Delete"
+        confirmTone="danger"
+        busy={deleteRole.isPending}
+      />
     </div>
   );
 }
@@ -1157,7 +1178,7 @@ function SignInTab() {
                 </span>
                 <span
                   className={[
-                    "rounded-full px-2 py-0.5 font-display text-[11px] font-semibold uppercase tracking-wider",
+                    "rounded-full px-2 py-0.5 font-display text-label-caps leading-4 font-semibold uppercase",
                     connected
                       ? "bg-chip-emerald-bg text-chip-emerald-text"
                       : halfConfigured
@@ -1182,7 +1203,7 @@ function SignInTab() {
           <button
             type="button"
             onClick={() => setModalOpen(true)}
-            className="rounded-sm bg-primary px-4 py-1.5 font-display text-[12px] font-bold uppercase tracking-wider text-on-primary hover:bg-primary-container"
+            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container"
           >
             {connected ? "Manage" : "Connect"}
           </button>
@@ -1192,7 +1213,7 @@ function SignInTab() {
           <div className="mt-4 grid gap-3 border-t border-outline-variant pt-4 sm:grid-cols-2">
             <ClientIdField id={data.googleClientId!} />
             <div>
-              <div className="mb-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+              <div className="mb-1 font-display text-label-caps uppercase text-on-surface-variant">
                 Allowed domains
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -1209,15 +1230,13 @@ function SignInTab() {
           </div>
         )}
 
-        <div className="mt-4 border-t border-outline-variant pt-3 text-[11px] text-on-surface-variant">
+        <div className="mt-4 border-t border-outline-variant pt-3 text-xs text-on-surface-variant">
           {data.updatedBy ? (
             <>
               Last updated by{" "}
               <span className="font-semibold">{data.updatedBy.username}</span>{" "}
               on{" "}
-              <span className="font-mono">
-                {new Date(data.updatedAt).toLocaleString()}
-              </span>
+              <span>{fmtDateTime(data.updatedAt)}</span>
             </>
           ) : (
             <>Not yet edited since the database was seeded.</>
@@ -1242,13 +1261,13 @@ function ClientIdField({ id }: { id: string }) {
   return (
     <div>
       <div className="mb-1 flex items-center gap-2">
-        <span className="font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+        <span className="font-display text-label-caps uppercase text-on-surface-variant">
           Client ID
         </span>
         <button
           type="button"
           onClick={() => setRevealed((v) => !v)}
-          className="font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface"
+          className="font-display text-xs font-semibold text-on-surface-variant hover:text-on-surface"
         >
           {revealed ? "Hide" : "Reveal"}
         </button>
@@ -1286,6 +1305,7 @@ function SignInModal({
   const [domains, setDomains] = useState<string[]>(initialDomains);
   const [newDomain, setNewDomain] = useState("");
   const [showClientId, setShowClientId] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Reset draft whenever the modal opens, so reopening after Save shows the
@@ -1347,14 +1367,8 @@ function SignInModal({
   }
 
   async function disconnect() {
+    setConfirmDisconnect(false);
     setError(null);
-    if (
-      !confirm(
-        "Disconnect Google sign-in? Users with Google-only accounts won't be able to sign in until you reconnect.",
-      )
-    ) {
-      return;
-    }
     try {
       await update.mutateAsync({
         googleClientId: null,
@@ -1366,10 +1380,13 @@ function SignInModal({
     }
   }
 
+  // Modal.tsx's per-instance Escape listener would otherwise close this form
+  // together with the disconnect confirm; keep the form open underneath.
   return (
+    <>
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={confirmDisconnect ? () => {} : onClose}
       title="Configure Google sign-in"
       widthClass="max-w-xl"
       footer={
@@ -1377,9 +1394,9 @@ function SignInModal({
           {(initialClientId || initialDomains.length > 0) && (
             <button
               type="button"
-              onClick={disconnect}
+              onClick={() => setConfirmDisconnect(true)}
               disabled={update.isPending}
-              className="mr-auto rounded-sm px-3 py-1.5 font-display text-[12px] font-bold uppercase tracking-wider text-error hover:bg-error-container disabled:opacity-50"
+              className="mr-auto rounded-sm px-3 py-1.5 font-display text-xs font-semibold text-error hover:bg-error-container disabled:opacity-50"
             >
               Disconnect
             </button>
@@ -1388,7 +1405,7 @@ function SignInModal({
             type="button"
             onClick={onClose}
             disabled={update.isPending}
-            className="rounded-sm px-3 py-1.5 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface-variant hover:bg-surface-container"
+            className="rounded-sm px-3 py-1.5 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container"
           >
             Cancel
           </button>
@@ -1396,7 +1413,7 @@ function SignInModal({
             type="button"
             onClick={save}
             disabled={!dirty || update.isPending}
-            className="rounded-sm bg-primary px-4 py-1.5 font-display text-[12px] font-bold uppercase tracking-wider text-on-primary hover:bg-primary-container disabled:opacity-50"
+            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-50"
           >
             {update.isPending ? "Saving…" : "Save"}
           </button>
@@ -1436,13 +1453,13 @@ function SignInModal({
         <div>
           <label className="block">
             <span className="mb-1 flex items-center justify-between gap-2">
-              <span className="font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+              <span className="font-display text-label-caps uppercase text-on-surface-variant">
                 Google OAuth Client ID
               </span>
               <button
                 type="button"
                 onClick={() => setShowClientId((v) => !v)}
-                className="font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface"
+                className="font-display text-xs font-semibold text-on-surface-variant hover:text-on-surface"
               >
                 {showClientId ? "Hide" : "Show"}
               </button>
@@ -1460,7 +1477,7 @@ function SignInModal({
               className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden"
             />
           </label>
-          <p className="mt-1 text-[11px] text-on-surface-variant">
+          <p className="mt-1 text-xs text-on-surface-variant">
             The Client ID is a public identifier (it ships in any Google
             sign-in button). The Client <em>Secret</em> stays in Google Cloud
             and is never used by Solvro — we verify ID tokens server-side
@@ -1469,7 +1486,7 @@ function SignInModal({
         </div>
 
         <div>
-          <div className="mb-1 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
+          <div className="mb-1 font-display text-label-caps uppercase text-on-surface-variant">
             Allowed email domains
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1515,7 +1532,7 @@ function SignInModal({
             <button
               type="submit"
               disabled={!newDomain.trim()}
-              className="rounded-sm bg-surface-container-high px-3 py-1.5 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface hover:bg-surface-container-highest disabled:opacity-50"
+              className="rounded-sm bg-surface-container-high px-3 py-1.5 font-display text-xs font-semibold text-on-surface hover:bg-surface-container-highest disabled:opacity-50"
             >
               Add
             </button>
@@ -1523,6 +1540,17 @@ function SignInModal({
         </div>
       </div>
     </Modal>
+    <ConfirmModal
+      open={confirmDisconnect}
+      onClose={() => setConfirmDisconnect(false)}
+      onConfirm={() => void disconnect()}
+      title="Disconnect Google sign-in"
+      body="Disconnect Google sign-in? Users with Google-only accounts won't be able to sign in until you reconnect."
+      confirmLabel="Disconnect"
+      confirmTone="warning"
+      busy={update.isPending}
+    />
+    </>
   );
 }
 
@@ -1582,8 +1610,8 @@ function ProjectsTab() {
       header: ({ column }) => <DataGridColumnHeader column={column} title="Customer" />,
       // Customer names are entity/company names, not person names — same
       // "alphanumeric" bucket as the "project" column above, not
-      // personNameSortingFn (that's reserved for real usernames — see the
-      // "sa" column below and lib/tableSort.ts's own doc comment).
+      // personNameSortingFn (that's reserved for real usernames — see
+      // lib/tableSort.ts's own doc comment).
       sortingFn: "alphanumeric",
       cell: ({ row }) => (
         <span className="text-on-surface-variant">
@@ -1593,22 +1621,6 @@ function ProjectsTab() {
       meta: { skeleton: <Skeleton className="h-3.5 w-28" /> },
     },
     {
-      id: "sa",
-      // "" fallback for the same reason as CustomerDetail.tsx's own "sa"
-      // column — required for personNameSortingFn's localeCompare.
-      accessorFn: (row) => row.sa?.username ?? "",
-      header: ({ column }) => <DataGridColumnHeader column={column} title="SA" />,
-      // A real username — same personNameSortingFn choice and rationale as
-      // CustomerDetail.tsx's "sa"/"tam" columns.
-      sortingFn: personNameSortingFn,
-      cell: ({ row }) => (
-        <span className="text-on-surface-variant">
-          {row.original.sa?.username ?? "—"}
-        </span>
-      ),
-      meta: { skeleton: <Skeleton className="h-3.5 w-20" /> },
-    },
-    {
       id: "status",
       accessorKey: "status",
       header: ({ column }) => <DataGridColumnHeader column={column} title="Status" />,
@@ -1616,9 +1628,7 @@ function ProjectsTab() {
       // "alphanumeric" choice as this file's own Users-tab "role" column.
       sortingFn: "alphanumeric",
       cell: ({ row }) => (
-        <span className="rounded-sm bg-surface-container-low px-1.5 py-0.5 font-display text-label-caps uppercase tracking-wider text-on-surface-variant">
-          {row.original.status}
-        </span>
+        <ProjectStatusChip status={row.original.status} />
       ),
       meta: { skeleton: <Skeleton className="h-4 w-20 rounded-sm" /> },
     },
@@ -1745,231 +1755,3 @@ function ProjectsTab() {
     </div>
   );
 }
-
-// ---- Pipeline tab (import history, M4.19) ---------------------------------
-//
-// Read-only history of every Excel/CSV import run against the Pipeline board
-// (PRD §2.9) — `PipelineImportDialog.tsx` is the write side. Its data source,
-// GET /opportunities/imports, is gated on `pipeline:view` rather than an
-// admin-only permission: it deliberately lives on the opportunities router
-// (backend/src/routes/opportunities.ts) so the spine `routes/admin.ts` stays
-// untouched. This tab is still admin-only in practice because the whole
-// `/admin` route is behind `AdminGuard` — the permission check on the
-// endpoint itself is a secondary, meaningfully-restrictive gate, not the
-// only one.
-
-function PipelineTab() {
-  const { data: imports, isLoading, isError } = usePipelineImports();
-  // Loading-safe fallback — same rationale as UsersTab/RolesTab/ProjectsTab's
-  // own `rows` above.
-  const rows = imports ?? EMPTY_IMPORTS;
-  // No default sort — same rationale as the other three tabs' pilots. The
-  // backend already orders by createdAt desc (take 100), so the unsorted
-  // table reads newest-run-first without any client-side sort applied.
-  const [sorting, setSorting] = useState<SortingState>([]);
-
-  // Not wrapped in useMemo, for the same reason as the other three tabs'
-  // columns: this table has no resizing/pinning/visibility state for a
-  // stale columns identity to disturb, and there are no handlers to close
-  // over here at all (this tab is read-only, unlike Users/Roles/Projects).
-  const columns: ColumnDef<PipelineImportLogEntry>[] = [
-    {
-      id: "when",
-      // Numeric accessor for correct chronological sort — no explicit
-      // sortingFn needed (decision 7's ≤10-row auto-detect gap is a
-      // string-column problem; TanStack's number auto-detect is reliable).
-      accessorFn: (row) => new Date(row.createdAt).getTime(),
-      header: ({ column }) => <DataGridColumnHeader column={column} title="When" />,
-      // House datetime rendering for this admin surface — same
-      // `new Date(...).toLocaleString()` this file already uses for the
-      // Sign-in tab's "Last updated" stamp (SignInTab, above).
-      cell: ({ row }) => (
-        <span className="font-mono text-xs text-on-surface-variant">
-          {new Date(row.original.createdAt).toLocaleString()}
-        </span>
-      ),
-      meta: { skeleton: <Skeleton className="h-3.5 w-32" /> },
-    },
-    {
-      id: "who",
-      // "" fallback so the sort comparator always sees a string — same
-      // convention as ProjectsTab's "sa" column and CustomerDetail.tsx's own
-      // SA/TAM columns.
-      accessorFn: (row) => row.user?.username ?? "",
-      header: ({ column }) => <DataGridColumnHeader column={column} title="Imported by" />,
-      // Person-name column — explicit sortingFn per lib/tableSort.ts's own
-      // rationale, same choice as PipelineList.tsx's "pic" column.
-      sortingFn: personNameSortingFn,
-      cell: ({ row }) => {
-        const user = row.original.user;
-        if (!user) return <span className="text-on-surface-variant/60">—</span>;
-        return (
-          <span className="flex min-w-0 items-center gap-1.5">
-            <AssigneeAvatar user={user} size="xs" />
-            <span className="truncate text-on-surface">{user.username}</span>
-          </span>
-        );
-      },
-      meta: { skeleton: <Skeleton className="h-5 w-24" /> },
-    },
-    {
-      id: "totalRows",
-      accessorKey: "totalRows",
-      header: ({ column }) => <DataGridColumnHeader column={column} title="Total" />,
-      cell: ({ row }) => (
-        <span className="font-mono text-[13px] tabular-nums text-on-surface">
-          {row.original.totalRows}
-        </span>
-      ),
-      meta: {
-        headerClassName: "text-right",
-        cellClassName: "text-right",
-        skeleton: <Skeleton className="ml-auto h-3.5 w-8" />,
-      },
-    },
-    {
-      id: "validCount",
-      accessorKey: "validCount",
-      header: ({ column }) => <DataGridColumnHeader column={column} title="Imported" />,
-      // text-primary — same meaning-color as PipelineImportDialog's own
-      // "done" step summary (validCount there is also text-primary).
-      cell: ({ row }) => (
-        <span className="font-mono text-[13px] tabular-nums text-primary">
-          {row.original.validCount}
-        </span>
-      ),
-      meta: {
-        headerClassName: "text-right",
-        cellClassName: "text-right",
-        skeleton: <Skeleton className="ml-auto h-3.5 w-8" />,
-      },
-    },
-    {
-      id: "skipCount",
-      accessorKey: "skipCount",
-      header: ({ column }) => <DataGridColumnHeader column={column} title="Skipped" />,
-      // text-warning — same meaning-color as PipelineImportDialog's own
-      // "done" step summary (skipCount there is also text-warning).
-      cell: ({ row }) => (
-        <span className="font-mono text-[13px] tabular-nums text-warning">
-          {row.original.skipCount}
-        </span>
-      ),
-      meta: {
-        headerClassName: "text-right",
-        cellClassName: "text-right",
-        skeleton: <Skeleton className="ml-auto h-3.5 w-8" />,
-      },
-    },
-    {
-      id: "invalidCount",
-      accessorKey: "invalidCount",
-      header: ({ column }) => <DataGridColumnHeader column={column} title="Invalid" />,
-      // text-error — same meaning-color as PipelineImportDialog's own "done"
-      // step summary (invalidCount there is also text-error).
-      cell: ({ row }) => (
-        <span className="font-mono text-[13px] tabular-nums text-error">
-          {row.original.invalidCount}
-        </span>
-      ),
-      meta: {
-        headerClassName: "text-right",
-        cellClassName: "text-right",
-        skeleton: <Skeleton className="ml-auto h-3.5 w-8" />,
-      },
-    },
-    {
-      id: "status",
-      // Numeric accessor (OK=1/ERROR=0) — same "sort enum by outcome"
-      // convention as UsersTab's own "status" column (active ? 1 : 0).
-      accessorFn: (row) => (row.status === "OK" ? 1 : 0),
-      header: ({ column }) => <DataGridColumnHeader column={column} title="Status" />,
-      // Shared Chip (StatusChip.tsx) per the dispatch brief: OK → emerald,
-      // ERROR → rose.
-      cell: ({ row }) => (
-        <Chip tone={row.original.status === "OK" ? "emerald" : "rose"}>
-          {row.original.status}
-        </Chip>
-      ),
-      meta: { skeleton: <Skeleton className="h-4 w-14 rounded-full" /> },
-    },
-    {
-      id: "error",
-      header: ({ column }) => <DataGridColumnHeader column={column} title="Error" />,
-      // Free-text detail column, not a meaningful sort key — same
-      // "interactive/non-primitive column" exemption as RolesTab's
-      // "permissions" column and ProjectsTab's "reassign" column.
-      enableSorting: false,
-      cell: ({ row }) => {
-        const msg = row.original.errorMessage;
-        if (!msg) return <span className="text-on-surface-variant/60">—</span>;
-        // Truncated in the grid; full text on hover via `title` per the
-        // dispatch brief.
-        return (
-          <span className="block max-w-[280px] truncate text-error" title={msg}>
-            {msg}
-          </span>
-        );
-      },
-      meta: { skeleton: <Skeleton className="h-3.5 w-40" /> },
-    },
-  ];
-
-  const table = useReactTable({
-    data: rows,
-    columns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getRowId: (row) => row.id,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    // Pagination stays OFF (Checkpoint B, binding for every DataGrid table
-    // this phase). `pageSize` here only sizes the loading-skeleton row count.
-    initialState: { pagination: { pageSize: 8 } },
-  });
-
-  // Same isError-only short-circuit as the other three tabs: a fetch failure
-  // means there's nothing else on this tab worth rendering.
-  if (isError) return <p className="text-error">Failed to load import history.</p>;
-
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-on-surface-variant">
-        Every Excel/CSV import run against the Pipeline board, newest first.
-        Read-only — imports themselves happen from the board's Import button.
-      </p>
-      <DataGrid
-        table={table}
-        recordCount={rows.length}
-        isLoading={isLoading}
-        loadingMode="skeleton"
-        emptyMessage="No import runs yet."
-        tableLayout={{
-          dense: true,
-          rowBorder: true,
-          headerBorder: true,
-          headerBackground: false,
-          // SOLVRO PATCH — see Tasks.tsx's DataGrid pilot (reui-data-grid.md
-          // Checkpoint B, decision 6): "auto" sizes columns to content
-          // instead of TanStack's untouched 150px "fixed" default.
-          width: "auto",
-        }}
-        tableClassNames={{
-          // SOLVRO PATCH — Checkpoint B decision 2: the grid's own
-          // `headerBackground` boolean resolves to the wrong token; pinned
-          // here instead, same as every other DataGrid table this phase.
-          header: "bg-surface-container-low",
-        }}
-      >
-        {/* SOLVRO PATCH — Level-1 hairline (DESIGN.md §4), same phase-wide
-            convention as every other DataGrid table on this page. */}
-        <DataGridContainer className="rounded-sm border border-outline-variant bg-surface-container-lowest">
-          <DataGridScrollArea>
-            <DataGridTable />
-          </DataGridScrollArea>
-        </DataGridContainer>
-      </DataGrid>
-    </div>
-  );
-}
-

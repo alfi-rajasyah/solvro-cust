@@ -14,6 +14,7 @@ import { hasPermission, requireAuth, requirePermission } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import {
+  ensureProjectOwnerAccess,
   ensureProjectVisible,
   isCustomerVisible,
   projectVisibilityFilter,
@@ -30,6 +31,16 @@ import {
   countSiblings,
   type SiblingKey,
 } from "../lib/taskOrdering.js";
+import { assertEpicNotOnSubtask, assertValidEpic } from "../lib/epics.js";
+import { computeProjectHealth, computeSlipDays } from "../lib/projectHealth.js";
+import { ensureAssigneeIsMember } from "../lib/projectMembers.js";
+import {
+  diffProjectChanges,
+  recordActivity,
+  shortLabel,
+  taskCreatedChanges,
+} from "../lib/activity.js";
+import { notifyForEvent } from "../lib/notifications.js";
 
 // Kanban WIP limits — one optional positive-int cap per top-level status
 // column, or null/absent for "no limit". Visual-only on the board (amber
@@ -45,7 +56,6 @@ const wipLimitsSchema = z
 export const createProjectSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
-  saId: z.number().int().positive().optional(),
   tamId: z.number().int().positive().optional(),
   customerId: z.number().int().positive(),
   status: z.nativeEnum(ProjectStatus).optional(),
@@ -57,16 +67,25 @@ const updateProjectSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
   status: z.nativeEnum(ProjectStatus).optional(),
-  saId: z.number().int().positive().nullable().optional(),
   tamId: z.number().int().positive().optional(),
   customerId: z.number().int().positive().optional(),
   wipLimits: wipLimitsSchema.optional(),
   excludeFromPortfolio: z.boolean().optional(),
 });
 
+// Caller's local calendar day ("yyyy-MM-dd") — the overdue boundary for the
+// `health` block (lib/dateBoundary.ts). Optional; falls back to the UTC day.
+const healthTodaySchema = z
+  .string()
+  .refine(isValidDayString, { message: "today must be a valid yyyy-MM-dd date" })
+  .optional();
+
 const projectListQuerySchema = z.object({
   customerId: z.coerce.number().int().positive().optional(),
+  today: healthTodaySchema,
 });
+
+const projectDetailQuerySchema = z.object({ today: healthTodaySchema });
 
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 
@@ -74,9 +93,8 @@ const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 // of POST /:id/baseline (previously duplicated three times). Keep list-view
 // includes (GET /, /:id/tasks, etc.) separate — they're intentionally lighter.
 const projectDetailInclude = {
-  sa: { select: { id: true, username: true, email: true } },
-  tam: { select: { id: true, username: true, email: true } },
-  customer: { select: { id: true, name: true } },
+  tam: { select: { id: true, username: true, email: true, avatarUrl: true } },
+  customer: { select: { id: true, name: true, tamId: true } },
   baselineLockedBy: { select: { id: true, username: true } },
   _count: { select: { tasks: true } },
   services: {
@@ -99,6 +117,7 @@ const createTaskSchema = z
     parentTaskId: z.number().int().positive().nullable().optional(),
     sectionId: z.number().int().positive().nullable().optional(),
     labelIds: z.array(z.number().int().positive()).optional(),
+    epicId: z.number().int().positive().nullable().optional(),
   })
   .refine((b) => !b.isMilestone || b.dueDate != null, {
     message: "A milestone requires a due date",
@@ -109,6 +128,15 @@ const createSectionSchema = z.object({
   name: z.string().min(1).max(100),
   position: z.number().int().min(0).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+});
+
+const createEpicSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  ownerId: z.number().int().positive().nullable().optional(),
+  startDate: z.coerce.date().nullable().optional(),
+  dueDate: z.coerce.date().nullable().optional(),
 });
 
 const taskListQuerySchema = z.object({
@@ -123,7 +151,9 @@ export const projectsRouter = Router();
 projectsRouter.use(requireAuth);
 
 projectsRouter.get("/", validate("query", projectListQuerySchema), async (req, res) => {
-  const { customerId } = req.query as unknown as z.infer<typeof projectListQuerySchema>;
+  const { customerId, today } = req.query as unknown as z.infer<
+    typeof projectListQuerySchema
+  >;
   const where: Prisma.ProjectWhereInput = projectVisibilityFilter(req.user!);
   if (customerId) where.customerId = customerId;
   const projects = await prisma.project.findMany({
@@ -131,12 +161,17 @@ projectsRouter.get("/", validate("query", projectListQuerySchema), async (req, r
     orderBy: { updatedAt: "desc" },
     include: {
       _count: { select: { tasks: true } },
-      sa: { select: { id: true, username: true } },
       tam: { select: { id: true, username: true } },
       customer: { select: { id: true, name: true } },
     },
   });
-  res.json(projects);
+  // Health for exactly the projects the visibility filter returned — one
+  // fixed-cost batch (lib/projectHealth.ts), not a query per project.
+  const health = await computeProjectHealth(
+    projects.map((p) => p.id),
+    today,
+  );
+  res.json(projects.map((p) => ({ ...p, health: health.get(p.id) })));
 });
 
 projectsRouter.post(
@@ -154,7 +189,6 @@ projectsRouter.post(
       data: {
         name: body.name,
         description: body.description,
-        saId: body.saId,
         tamId,
         customerId: body.customerId,
         status: body.status ?? "PLANNING",
@@ -166,11 +200,13 @@ projectsRouter.post(
   },
 );
 
-projectsRouter.get("/:id", validate("params", idParamSchema), async (req, res) => {
+projectsRouter.get("/:id", validate("params", idParamSchema), validate("query", projectDetailQuerySchema), async (req, res) => {
   const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
+  const { today } = req.query as unknown as z.infer<typeof projectDetailQuerySchema>;
   // Apply the visibility filter inside the lookup. The previous hand-rolled
-  // `"tamId" in filter` guard was a dead no-op — the filter shape is
-  // `{ OR: [{tamId}, {saId}, {customer:{tamId}}] }`, so that key never exists — which left this
+  // `"tamId" in filter` guard was a dead no-op — the filter's only top-level
+  // key is `OR` (tamId / customer-owner / member arms), so that key never
+  // exists — which left this
   // endpoint open to IDOR. Returning 404 (not 403) also stops leaking
   // existence, matching every other project-scoped route.
   const project = await prisma.project.findFirst({
@@ -179,7 +215,24 @@ projectsRouter.get("/:id", validate("params", idParamSchema), async (req, res) =
   });
   if (!project) throw new HttpError(404, "not_found", "Project not found");
 
-  res.json(project);
+  // slipDays needs the project's own due/baseline dates; computeSlipDays
+  // returns null without a baseline lock, so skip the read in that case.
+  const [healthByProject, slipTasks] = await Promise.all([
+    computeProjectHealth([id], today),
+    project.baselineLockedAt
+      ? prisma.task.findMany({
+          where: { projectId: id },
+          select: { dueDate: true, baselineDueDate: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  res.json({
+    ...project,
+    health: {
+      ...healthByProject.get(id)!,
+      slipDays: computeSlipDays(project.baselineLockedAt, slipTasks),
+    },
+  });
 });
 
 const lockBaselineSchema = z.object({
@@ -301,13 +354,25 @@ projectsRouter.patch(
     const body = req.body as z.infer<typeof updateProjectSchema>;
     await ensureProjectVisible(req.user!, id);
 
+    // Re-parenting a project (TAM or customer) is owner-only; a member may
+    // still edit everything else. Re-saving the current values is not a change.
+    if (body.tamId !== undefined || body.customerId !== undefined) {
+      const current = await prisma.project.findUniqueOrThrow({
+        where: { id },
+        select: { tamId: true, customerId: true },
+      });
+      if (
+        (body.tamId !== undefined && body.tamId !== current.tamId) ||
+        (body.customerId !== undefined && body.customerId !== current.customerId)
+      ) {
+        await ensureProjectOwnerAccess(req.user!, id);
+      }
+    }
+
     const data: Prisma.ProjectUpdateInput = {};
     if (body.name !== undefined) data.name = body.name;
     if (body.description !== undefined) data.description = body.description;
     if (body.status !== undefined) data.status = body.status;
-    if (body.saId !== undefined) {
-      data.sa = body.saId === null ? { disconnect: true } : { connect: { id: body.saId } };
-    }
     if (body.tamId !== undefined) data.tam = { connect: { id: body.tamId } };
     if (body.customerId !== undefined) {
       if (!(await isCustomerVisible(req.user!, body.customerId))) {
@@ -322,7 +387,27 @@ projectsRouter.patch(
       data.excludeFromPortfolio = body.excludeFromPortfolio;
     }
 
-    const updated = await prisma.project.update({ where: { id }, data });
+    const updated = await prisma.$transaction(async (tx) => {
+      // Lock first so a concurrent save serialises and the diff is against the
+      // row this write actually replaced.
+      await tx.$queryRaw`SELECT id FROM projects WHERE id = ${id} FOR NO KEY UPDATE`;
+      const before = await tx.project.findUniqueOrThrow({
+        where: { id },
+        select: { name: true, status: true, customerId: true },
+      });
+      const result = await tx.project.update({ where: { id }, data });
+      // Only name, status and customer are logged; a re-save records nothing.
+      await recordActivity(tx, {
+        projectId: id,
+        actorId: req.user!.sub,
+        entityType: "project",
+        entityId: id,
+        action: "updated",
+        entityLabel: result.name,
+        changes: diffProjectChanges(before, result),
+      });
+      return result;
+    });
     res.json(updated);
   },
 );
@@ -333,14 +418,12 @@ projectsRouter.delete(
   validate("params", idParamSchema),
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
-    await ensureProjectVisible(req.user!, id);
+    await ensureProjectOwnerAccess(req.user!, id);
 
     // Hard delete, no soft-delete or undo — the UI confirms first. The schema
     // cascades to the project's tasks (with their subtasks, comments and
     // dependencies), sections, labels, risks, notes, reviews and service
-    // assignments. A won deal linked through Opportunity.projectId keeps its
-    // row and loses the link (onDelete: SetNull), so the pipeline history
-    // survives the project it handed off to.
+    // assignments.
     await prisma.project.delete({ where: { id } });
     res.status(204).end();
   },
@@ -399,6 +482,26 @@ projectsRouter.post(
       if (body.labelIds && body.labelIds.length > 0) {
         await assertLabelsInProject(tx, id, body.labelIds);
       }
+      if (body.epicId != null) {
+        assertEpicNotOnSubtask(body.epicId, body.parentTaskId ?? null);
+        await assertValidEpic(tx, id, body.epicId);
+      }
+
+      // Assigning someone who cannot see the project adds them as a member
+      // (same transaction as the task write).
+      if (body.assignedToId != null) {
+        const added = await ensureAssigneeIsMember(tx, id, body.assignedToId, req.user!.sub);
+        if (added) {
+          await recordActivity(tx, {
+            projectId: id,
+            actorId: req.user!.sub,
+            entityType: "member",
+            entityId: body.assignedToId,
+            action: "added",
+            entityLabel: added.username,
+          });
+        }
+      }
 
       const siblingKey: SiblingKey = {
         projectId: id,
@@ -406,7 +509,7 @@ projectsRouter.post(
       };
       const position = await countSiblings(tx, siblingKey);
 
-      return tx.task.create({
+      const created = await tx.task.create({
         data: {
           projectId: id,
           title: body.title,
@@ -425,6 +528,7 @@ projectsRouter.post(
           assignedToId: body.assignedToId ?? null,
           parentTaskId: body.parentTaskId ?? null,
           sectionId: body.sectionId ?? null,
+          epicId: body.epicId ?? null,
           position,
           labels: body.labelIds && body.labelIds.length > 0
             ? { connect: body.labelIds.map((lid) => ({ id: lid })) }
@@ -437,6 +541,17 @@ projectsRouter.post(
           _count: { select: { subtasks: true, comments: true } },
         },
       });
+      const event = await recordActivity(tx, {
+        projectId: id,
+        actorId: req.user!.sub,
+        entityType: "task",
+        entityId: created.id,
+        action: "created",
+        entityLabel: created.title,
+        changes: taskCreatedChanges(created),
+      });
+      await notifyForEvent(tx, event);
+      return created;
     });
     res.status(201).json(task);
   },
@@ -481,6 +596,86 @@ projectsRouter.post(
   },
 );
 
+// Project-scoped epics — see docs/archive/plans/epics-spec.md §4-5. Item-scoped
+// PATCH/DELETE/GET-detail live in routes/epics.ts; collection routes stay
+// here for URL nesting, mirroring sections.
+projectsRouter.get(
+  "/:id/epics",
+  validate("params", idParamSchema),
+  async (req, res) => {
+    const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
+    await ensureProjectVisible(req.user!, id);
+
+    const epics = await prisma.epic.findMany({
+      where: { projectId: id },
+      orderBy: [{ position: "asc" }, { id: "asc" }],
+      include: { owner: { select: { id: true, username: true, email: true } } },
+    });
+
+    // One groupBy over top-level tasks carrying an epicId in this project —
+    // never N+1 (acceptance criterion in docs/archive/plans/epics-spec.md §7 T1).
+    // Subtasks are excluded: progress counts stories, not their subtasks.
+    const counts = await prisma.task.groupBy({
+      by: ["epicId", "status"],
+      where: { projectId: id, epicId: { not: null }, parentTaskId: null },
+      _count: { _all: true },
+    });
+    const progressByEpic = new Map<number, { done: number; total: number }>();
+    for (const row of counts) {
+      const epicId = row.epicId!;
+      const entry = progressByEpic.get(epicId) ?? { done: 0, total: 0 };
+      entry.total += row._count._all;
+      if (row.status === "DONE") entry.done += row._count._all;
+      progressByEpic.set(epicId, entry);
+    }
+
+    res.json(
+      epics.map((epic) => ({
+        ...epic,
+        progress: progressByEpic.get(epic.id) ?? { done: 0, total: 0 },
+      })),
+    );
+  },
+);
+
+projectsRouter.post(
+  "/:id/epics",
+  requirePermission("project:write"),
+  validate("params", idParamSchema),
+  validate("body", createEpicSchema),
+  async (req, res) => {
+    const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
+    const body = req.body as z.infer<typeof createEpicSchema>;
+    await ensureProjectVisible(req.user!, id);
+
+    // Appends at the end. Epics have no re-pack on delete (unlike tasks'
+    // countSiblings, which is safe because DELETE /tasks/:id never re-packs
+    // either, but nothing here re-packs the epic list after a delete), so a
+    // plain count would collide with — or land before — an existing epic
+    // once any earlier epic has been deleted (count != max position + 1).
+    // max(position) + 1 mirrors the sections POST /:id/sections above.
+    const max = await prisma.epic.aggregate({
+      where: { projectId: id },
+      _max: { position: true },
+    });
+    const position = (max._max.position ?? -1) + 1;
+    const epic = await prisma.epic.create({
+      data: {
+        projectId: id,
+        title: body.title,
+        description: body.description ?? null,
+        ownerId: body.ownerId ?? null,
+        startDate: body.startDate ?? null,
+        dueDate: body.dueDate ?? null,
+        position,
+        ...(body.color !== undefined && { color: body.color }),
+      },
+      include: { owner: { select: { id: true, username: true, email: true } } },
+    });
+    res.status(201).json({ ...epic, progress: { done: 0, total: 0 } });
+  },
+);
+
 // Project-scoped risks
 const createRiskSchema = z.object({
   description: z.string().min(1).max(2000),
@@ -517,17 +712,28 @@ projectsRouter.post(
     await ensureProjectVisible(req.user!, id);
 
     const body = req.body as z.infer<typeof createRiskSchema>;
-    const risk = await prisma.risk.create({
-      data: {
+    const risk = await prisma.$transaction(async (tx) => {
+      const created = await tx.risk.create({
+        data: {
+          projectId: id,
+          description: body.description,
+          category: body.category ?? "INTERNAL",
+          probability: body.probability ?? 1,
+          impact: body.impact ?? 1,
+          status: body.status ?? "OPEN",
+          mitigationPlan: body.mitigationPlan ?? null,
+          contingencyPlan: body.contingencyPlan ?? null,
+        },
+      });
+      await recordActivity(tx, {
         projectId: id,
-        description: body.description,
-        category: body.category ?? "INTERNAL",
-        probability: body.probability ?? 1,
-        impact: body.impact ?? 1,
-        status: body.status ?? "OPEN",
-        mitigationPlan: body.mitigationPlan ?? null,
-        contingencyPlan: body.contingencyPlan ?? null,
-      },
+        actorId: req.user!.sub,
+        entityType: "risk",
+        entityId: created.id,
+        action: "created",
+        entityLabel: shortLabel(created.description),
+      });
+      return created;
     });
     res.status(201).json(risk);
   },
@@ -538,7 +744,7 @@ projectsRouter.post(
 // and is the only visibility any customer-facing output may ever surface.
 // Plain calendar day ("yyyy-MM-dd", no time/zone) — noteDate/reviewDate are
 // `@db.Date` columns for exactly this reason. Same house day-string helper
-// routes/tasks.ts and routes/opportunities.ts use (lib/dateBoundary.ts).
+// routes/tasks.ts uses (lib/dateBoundary.ts).
 const dayStringSchema = z
   .string()
   .refine(isValidDayString, { message: "Must be a valid yyyy-MM-dd date" });
@@ -613,17 +819,29 @@ projectsRouter.post(
     await ensureProjectVisible(req.user!, id);
 
     const body = req.body as z.infer<typeof createNoteSchema>;
-    const note = await prisma.projectNote.create({
-      data: {
+    const note = await prisma.$transaction(async (tx) => {
+      const created = await tx.projectNote.create({
+        data: {
+          projectId: id,
+          authorId: req.user!.sub,
+          noteDate: body.noteDate
+            ? utcMidnightOfDayString(body.noteDate)
+            : utcMidnightOf(Date.now()),
+          body: body.body,
+          visibility: body.visibility ?? "INTERNAL",
+        },
+        include: { author: { select: { id: true, username: true } } },
+      });
+      // Note events carry the id and visibility only — never the body.
+      await recordActivity(tx, {
         projectId: id,
-        authorId: req.user!.sub,
-        noteDate: body.noteDate
-          ? utcMidnightOfDayString(body.noteDate)
-          : utcMidnightOf(Date.now()),
-        body: body.body,
-        visibility: body.visibility ?? "INTERNAL",
-      },
-      include: { author: { select: { id: true, username: true } } },
+        actorId: req.user!.sub,
+        entityType: "note",
+        entityId: created.id,
+        action: "created",
+        changes: { visibility: created.visibility },
+      });
+      return created;
     });
     res.status(201).json(note);
   },
@@ -647,10 +865,24 @@ projectsRouter.patch(
       throw new HttpError(403, "not_note_author", "Only the author may edit this note");
     }
 
-    const updated = await prisma.projectNote.update({
-      where: { id: noteId },
-      data: { body: body.body },
-      include: { author: { select: { id: true, username: true } } },
+    const updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.projectNote.update({
+        where: { id: noteId },
+        data: { body: body.body },
+        include: { author: { select: { id: true, username: true } } },
+      });
+      // A save that left the body unchanged is not an edit worth logging.
+      if (body.body !== note.body) {
+        await recordActivity(tx, {
+          projectId: id,
+          actorId: req.user!.sub,
+          entityType: "note",
+          entityId: noteId,
+          action: "updated",
+          changes: { visibility: result.visibility },
+        });
+      }
+      return result;
     });
     res.json(updated);
   },
@@ -676,7 +908,17 @@ projectsRouter.delete(
       );
     }
 
-    await prisma.projectNote.delete({ where: { id: noteId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.projectNote.delete({ where: { id: noteId } });
+      await recordActivity(tx, {
+        projectId: id,
+        actorId: req.user!.sub,
+        entityType: "note",
+        entityId: noteId,
+        action: "deleted",
+        changes: { visibility: note.visibility },
+      });
+    });
     res.status(204).send();
   },
 );

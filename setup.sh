@@ -23,6 +23,10 @@
 #   FRONTEND_PORT   website     (default 80)
 #   BACKEND_PORT    API         (default 3000)
 #   POSTGRES_PORT   database    (default: NOT published — stays private)
+#   TRUST_PROXY     proxy hops the API trusts for the client IP (default 1 =
+#                   the bundled nginx only; 2 when a tunnel or CDN sits in
+#                   front of it; or a comma list of loopback/linklocal/
+#                   uniquelocal/IPs/CIDRs). Saved to .env when set.
 # To change BIND_ADDR / frontend / backend later, edit ~/solvro/.env and
 # `docker compose up -d`. Changing whether/where Postgres is published
 # requires re-running this script.
@@ -67,6 +71,25 @@ is_ipv4() {
   local IFS=. octet
   for octet in $1; do
     (( 10#$octet >= 0 && 10#$octet <= 255 )) || return 1
+  done
+  return 0
+}
+
+# Light check of TRUST_PROXY: a hop count 0-10, or a comma list of
+# loopback / linklocal / uniquelocal / IPv4 / IPv6 addresses or CIDRs. The
+# backend (src/http/trustProxy.ts) validates it fully; this only fails early.
+is_trust_proxy() {
+  local value="$1" entry
+  if [[ "$value" =~ ^[0-9]+$ ]]; then
+    (( 10#$value <= 10 ))
+    return
+  fi
+  local IFS=,
+  for entry in $value; do
+    entry="${entry//[[:space:]]/}"
+    [[ "$entry" =~ ^(loopback|linklocal|uniquelocal)$ \
+      || "$entry" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}(/[0-9]{1,2})?$ \
+      || "$entry" =~ ^[0-9a-fA-F:.]*:[0-9a-fA-F:.]*(/[0-9]{1,3})?$ ]] || return 1
   done
   return 0
 }
@@ -142,8 +165,10 @@ COMPOSE_HEAD
       DATABASE_URL: postgresql://solvro:${POSTGRES_PASSWORD}@postgres:5432/solvro?schema=public
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: 8h
+      SECRETS_KEY: ${SECRETS_KEY}
       CORS_ORIGIN: "*"
       LOG_LEVEL: info
+      TRUST_PROXY: "${TRUST_PROXY:-1}"
     ports:
       - "${BIND_ADDR:-127.0.0.1}:${BACKEND_PORT:-3000}:3000"
     command: >
@@ -176,6 +201,12 @@ if [[ -f "$ENV_FILE" ]]; then
   # shellcheck disable=SC1090
   . "$ENV_FILE"
   set +a
+  # Older installs predate SECRETS_KEY (secrets-at-rest for integration
+  # tokens) — generate it once and append, never overwriting an existing value.
+  if [[ -z "${SECRETS_KEY:-}" ]]; then
+    SECRETS_KEY=$(openssl rand -base64 32)
+    echo "SECRETS_KEY=$SECRETS_KEY" >> "$ENV_FILE"
+  fi
   write_compose_file
   docker compose pull
   docker compose up -d
@@ -242,6 +273,7 @@ FRONTEND_PORT="${FRONTEND_PORT:-}"
 BACKEND_PORT="${BACKEND_PORT:-}"
 POSTGRES_PORT="${POSTGRES_PORT:-}"
 BIND_ADDR="${BIND_ADDR:-}"
+TRUST_PROXY="${TRUST_PROXY:-}"
 
 if [[ -r /dev/tty ]]; then
   [[ -z "$FRONTEND_PORT" ]] && \
@@ -285,20 +317,31 @@ is_ipv4 "$BIND_ADDR" || {
   echo "ERROR: BIND_ADDR must be an IPv4 address (e.g. 127.0.0.1, 0.0.0.0, 192.168.1.10) — got '$BIND_ADDR'."
   exit 1
 }
+if [[ -n "$TRUST_PROXY" ]]; then
+  is_trust_proxy "$TRUST_PROXY" || {
+    echo "ERROR: TRUST_PROXY must be a hop count 0-10 or a comma list of loopback, linklocal, uniquelocal, IP addresses or CIDRs (got '$TRUST_PROXY')."
+    exit 1
+  }
+fi
 
 # hex (not base64): base64's `/` `+` `=` are unsafe in the DATABASE_URL
 # userinfo and truncate it (P1013 "invalid port number"). 24 bytes = 192 bits.
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 JWT_SECRET=$(openssl rand -hex 48)
+# Base64 (not hex): SECRETS_KEY must decode to exactly 32 bytes for AES-256-GCM (backend/src/env.ts).
+SECRETS_KEY=$(openssl rand -base64 32)
 
 cat > "$ENV_FILE" <<EOF
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 JWT_SECRET=$JWT_SECRET
+SECRETS_KEY=$SECRETS_KEY
 BIND_ADDR=$BIND_ADDR
 FRONTEND_PORT=$FRONTEND_PORT
 BACKEND_PORT=$BACKEND_PORT
 EOF
 [[ -n "$POSTGRES_PORT" ]] && echo "POSTGRES_PORT=$POSTGRES_PORT" >> "$ENV_FILE"
+# Quoted: the value may hold spaces ("loopback, uniquelocal") and .env is sourced by bash on update.
+[[ -n "$TRUST_PROXY" ]] && echo "TRUST_PROXY=\"$TRUST_PROXY\"" >> "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
 write_compose_file

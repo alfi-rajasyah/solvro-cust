@@ -28,11 +28,11 @@ async function createCustomer(authToken = token): Promise<number> {
   return res.body.id as number;
 }
 
-async function createProject(customerId: number, authToken = token, saId = userId): Promise<number> {
+async function createProject(customerId: number, authToken = token): Promise<number> {
   const res = await request(app)
     .post("/projects")
     .set("Authorization", `Bearer ${authToken}`)
-    .send({ name: `Project ${Date.now()}-${Math.random()}`, saId, customerId });
+    .send({ name: `Project ${Date.now()}-${Math.random()}`, customerId });
   expect(res.status).toBe(201);
   return res.body.id as number;
 }
@@ -135,9 +135,9 @@ describe("PUT /projects/:id/services", () => {
     expect(putRes.status).toBe(403);
   });
 
-  it("hides the project from a TAM who isn't assigned as its tam/sa (404, not 403)", async () => {
+  it("hides the project from a TAM who isn't assigned as its tam (404, not 403)", async () => {
     const customerId = await createCustomer();
-    const projectId = await createProject(customerId); // saId = admin's userId, tamId defaults to admin too
+    const projectId = await createProject(customerId); // tamId defaults to admin
 
     const otherTam = await createUserWithRole("TAM");
     const putRes = await request(app)

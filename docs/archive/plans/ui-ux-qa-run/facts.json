@@ -1,0 +1,44 @@
+{
+  "date": "29 September 2026",
+  "lead": "A scripted walkthrough of every Solvro screen on the finished UI pass: signed in as the admin demo user, on the demo workspace (4 customers, 6 projects, 59 tasks), at 1440×900 in dark and light themes and at 390×844 on a phone. Every step was screenshotted and checked for console errors, failed API calls and horizontal overflow, then looked at by eye.",
+  "verdict_title": "Ready for your review and commit approval",
+  "verdict": "All 38 walkthrough steps pass with no console errors, no failed API calls and no horizontal overflow. The first walkthrough found six visual defects; all six are fixed and confirmed in the final walkthrough below. The full end-to-end suite passes except the four PWA tests, which fail on the dev server by design.",
+  "stats": [
+    {"value": "38 / 38", "label": "walkthrough steps pass", "tone": "good"},
+    {"value": "0", "label": "console errors", "tone": "good"},
+    {"value": "0", "label": "failed API calls", "tone": "good"},
+    {"value": "0", "label": "pages with horizontal overflow", "tone": "good"},
+    {"value": "190", "label": "e2e tests pass (4 PWA fail by design)", "tone": "good"},
+    {"value": "17 / 17", "label": "quality gates pass", "tone": "good"},
+    {"value": "6", "label": "defects found in QA, all fixed", "tone": "warn"}
+  ],
+  "fixed": [
+    {"id": "08-task-panel", "title": "Project header facts overlapped with the task panel open", "what": "With the side panel open, “7 of 17” ran into the Health fact. The facts row now wraps whole facts onto a second line instead of squeezing them."},
+    {"id": "23-palette", "title": "Command palette list ran past its box", "what": "With Pages and Actions both listed, the last action drew below the palette's border. The list now scrolls inside the palette."},
+    {"id": "16-daily-review", "title": "Daily Review still showed raw values and mixed type", "what": "Weekly health read “RED”, the baseline chip was in capitals, risk chips used raw colours and monospace, and counters read “0 / 3”. It now shows Red, No baseline, theme-aware risk chips and “0 of 3”."},
+    {"id": "03-sidebar-collapsed", "title": "Collapsed-sidebar tooltip was clipped", "what": "The tooltip sat against the rail and its first letter was cut off. It now opens clear of the rail with even padding."},
+    {"id": "09-task-form", "title": "Task form kept old placeholders and colours", "what": "Empty fields read “—” and “— Top level —”, and Medium priority was orange. They now read Pick start and due, Top level, No section, Critical path, with neutral Medium."},
+    {"id": "05-02-project-kanban", "title": "Two page headings after the sidebar started expanded", "what": "The sidebar's Solvro wordmark was a second page heading on every screen. It is now plain text, so each page has one heading."}
+  ],
+  "checks": [
+    {"name": "Quality gates (typechecks, unit tests in two time zones, smoke, guardrails, spine review)", "result": "17 / 17", "note": "Backend and frontend typecheck, backend tests on the isolated test database, frontend tests in UTC and Asia/Jakarta, Playwright smoke, CHANGELOG and guardrail checks"},
+    {"name": "End-to-end suite, desktop and phone", "result": "190 pass", "note": "4 PWA tests fail on the dev server by design; 6 drag-and-drop or iTop tests passed on retry (logged in docs/ISSUES.md)"},
+    {"name": "Code review", "result": "3 passes", "note": "Phase reviews found 2 blockers and 10 should-fix items; all were fixed before this walkthrough"},
+    {"name": "Walkthrough console and network", "result": "0 errors", "note": "No console errors, no 4xx/5xx API responses across 38 steps"}
+  ],
+  "timings": [
+    {"endpoint": "GET /projects", "ms": "5"},
+    {"endpoint": "GET /customers", "ms": "4"},
+    {"endpoint": "GET /tasks?open=true&sort=due", "ms": "6–7"},
+    {"endpoint": "GET /overview", "ms": "6–9"},
+    {"endpoint": "GET /overview/badges", "ms": "4"}
+  ],
+  "known": [
+    {"title": "Kanban card indent on desktop.", "detail": "The drag grip is hidden until hover on mouse devices but still reserves its space, so card titles start with a small gap on the left."},
+    {"title": "Drag-and-drop tests can be flaky.", "detail": "Four drag tests passed on retry; the sidebar now starts expanded at 1440 px, which narrows the board and is a suspect. Recorded in docs/ISSUES.md."},
+    {"title": "Tasks list stops at 200 rows.", "detail": "The page says “Showing 200 of N” when more match; paging is deferred."},
+    {"title": "Drawer focus handling.", "detail": "Dialogs now trap and return focus; the side drawer does not, because it is deliberately non-modal. Needs a decision."},
+    {"title": "iTop screens not exercised.", "detail": "iTop is not connected on the dev stack, so the Tickets tab and Utilization data states are covered only by their e2e tests."}
+  ],
+  "footer": "Walkthrough: scripted Playwright run against the dev stack (Vite on :5173), demo data reloaded before the run. Screenshots open full size in a new tab."
+}

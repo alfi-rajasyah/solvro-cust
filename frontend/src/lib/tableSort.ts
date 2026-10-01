@@ -8,7 +8,7 @@ import type { Row, RowData } from "@tanstack/react-table";
 // accented characters and uppercase-first names to the wrong place — e.g. an
 // uppercase "Z..." name would sort before every lowercase name instead of
 // landing alphabetically near the end, where a human reader expects it.
-// Every person-name column (TAM/SA usernames, admin usernames/emails, ...)
+// Every person-name column (TAM usernames, admin usernames/emails, ...)
 // declares this sortingFn explicitly instead of relying on auto-detection.
 //
 // Column-agnostic via `row.getValue(columnId)` rather than a hardcoded

@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 
 interface ModalProps {
   open: boolean;
@@ -22,6 +23,7 @@ export function Modal({
   widthClass = "max-w-lg",
 }: ModalProps) {
   useBodyScrollLock(open);
+  const { ref: dialogRef, onKeyDown: onDialogKeyDown } = useDialogFocus(open);
 
   useEffect(() => {
     if (!open) return;
@@ -40,10 +42,13 @@ export function Modal({
       onMouseDown={onClose}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
+        onKeyDown={onDialogKeyDown}
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`flex max-h-screen w-full ${widthClass} flex-col rounded-none border-outline-variant bg-surface-container-lowest shadow-overlay md:h-auto md:max-h-[calc(100vh-2rem)] md:rounded-sm md:border`}
+        className={`focus:outline-hidden flex max-h-screen w-full ${widthClass} flex-col rounded-none border-outline-variant bg-surface-container-lowest shadow-overlay md:h-auto md:max-h-[calc(100vh-2rem)] md:rounded-sm md:border`}
         onMouseDown={(e) => e.stopPropagation()}
       >
         {customHeader !== undefined ? (

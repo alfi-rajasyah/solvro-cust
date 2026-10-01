@@ -115,7 +115,7 @@ function useLabelFits(title: string) {
   return { containerRef, measureRef, fits };
 }
 
-const LABEL_TEXT_CLASSNAME = "truncate text-[11px] font-medium leading-none";
+const LABEL_TEXT_CLASSNAME = "truncate text-meta font-medium leading-none";
 
 // Plan B Task 6 — connect dots. Visual spec adapted from the old engine
 // (frontend/src/components/gantt/GanttBar.tsx:424-441,463-494): a 12px
@@ -438,7 +438,7 @@ export function SolvroBar({ occurrence, segment, isSelected, canEdit }: SolvroBa
       <span
         ref={measureRef}
         aria-hidden
-        className="pointer-events-none invisible absolute whitespace-nowrap text-[11px] font-medium"
+        className="pointer-events-none invisible absolute whitespace-nowrap text-meta font-medium"
       >
         {title}
       </span>

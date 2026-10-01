@@ -3,8 +3,8 @@ import { extendTailwindMerge } from "tailwind-merge";
 
 // SOLVRO PATCH (reui-data-grid.md pilot fix round) — plain `twMerge` ships a
 // hardcoded default `theme.text` scale (xs/sm/base/lg/xl/2xl/...) that has no
-// knowledge of this project's six named `@theme` typography roles
-// (`index.css:94-113`: h1, h2, body-lg, body-sm, data-mono, label-caps).
+// knowledge of this project's seven named `@theme` typography roles
+// (`index.css`: h1, h2, body-lg, body-sm, data-mono, label-caps, meta).
 // Two concrete bugs followed from that gap, found live while building the
 // Tasks.tsx DataGrid pilot:
 //   1. `text-label-caps` didn't dedupe against a stock `text-sm`/`text-xs`
@@ -22,7 +22,7 @@ import { extendTailwindMerge } from "tailwind-merge";
 //      `cn()` call — a two-tone DataGrid header was the observable symptom.
 // `extendTailwindMerge`'s `theme.text` extension point is exactly the list
 // `font-size`'s validator checks against (`from-theme.ts` + the `font-size`
-// classGroup in `default-config.ts`) — registering these six names there
+// classGroup in `default-config.ts`) — registering these seven names there
 // makes twMerge recognize them as font-size utilities FIRST, so they never
 // reach the color fallback, and standard `text-{size}` conflict resolution
 // (already proven safe via `text-xs` overriding Button's `text-sm`) now
@@ -34,7 +34,7 @@ import { extendTailwindMerge } from "tailwind-merge";
 const twMerge = extendTailwindMerge({
   extend: {
     theme: {
-      text: ["h1", "h2", "body-lg", "body-sm", "data-mono", "label-caps"],
+      text: ["h1", "h2", "body-lg", "body-sm", "data-mono", "label-caps", "meta"],
     },
   },
 });

@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useCallback, useMemo, useState, type FormEvent } from "react";
 import {
   DndContext,
   KeyboardSensor,
@@ -19,15 +19,24 @@ import { CSS } from "@dnd-kit/utilities";
 import { useSearchParams } from "react-router-dom";
 import { useProjectContext } from "../ProjectDetail";
 import { AssigneeAvatar } from "@/components/AssigneeAvatar";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { CriticalPathMark } from "@/components/CriticalPathMark";
 import { DateField } from "@/components/DateField";
+import { EpicChip } from "@/components/EpicChip";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { SectionReorderModal } from "@/components/SectionReorderModal";
+import { TASK_STATUS_TONE_CLASS } from "@/components/StatusChip";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
-import { commitDraft, dayFromIso, dayToDate } from "@/lib/dateField";
+import { commitDraft, dayFromIso } from "@/lib/dateField";
+import { useDragActivityGuard } from "@/lib/dragActivity";
+import { fmtDay, fmtDue } from "@/lib/formatDate";
+import { TASK_STATUS_LABEL } from "@/lib/labels";
+import { ASSIGN_ADDS_MEMBER_NOTICE } from "@/lib/projectMembers";
+import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
 import {
+  type Epic,
   type Priority,
   type Section,
   type Task,
@@ -35,6 +44,7 @@ import {
   useCreateSection,
   useDeleteSection,
   useDuplicateSection,
+  useProjectEpics,
   useProjectSections,
   useProjectTasks,
   useUpdateSection,
@@ -57,16 +67,6 @@ function nextPriority(p: Priority): Priority {
 }
 
 const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
-const STATUS_LABEL: Record<TaskStatus, string> = {
-  TODO: "To do",
-  IN_PROGRESS: "Active",
-  DONE: "Done",
-};
-const STATUS_TONE_CLASS: Record<TaskStatus, string> = {
-  TODO: "bg-surface-container-high text-on-surface-variant",
-  IN_PROGRESS: "bg-chip-emerald-bg text-chip-emerald-text",
-  DONE: "bg-chip-emerald-bg text-chip-emerald-text",
-};
 
 interface TaskNode {
   task: Task;
@@ -117,11 +117,22 @@ export function ProjectList() {
   const { data: tasks, isLoading: tasksLoading, isError, error } = useProjectTasks(project.id);
   const { data: sections, isLoading: sectionsLoading } = useProjectSections(project.id);
   const { data: users } = useUsers();
+  const { data: epics } = useProjectEpics(project.id);
   const updateTask = useUpdateTask(project.id);
   const createSection = useCreateSection(project.id);
   const updateSection = useUpdateSection(project.id);
   const deleteSection = useDeleteSection(project.id);
   const duplicateSection = useDuplicateSection(project.id);
+
+  // Built once from useProjectEpics, keyed by Epic.id — passed down to
+  // TaskRow the same way `users` is, so rows never call a per-row hook to
+  // look up their epic (docs/archive/plans/epics-spec.md §6/§7 T6, mirrors
+  // SolvroKanban.tsx's epicMap).
+  const epicMap = useMemo(() => {
+    const map = new Map<number, Epic>();
+    for (const e of epics ?? []) map.set(e.id, e);
+    return map;
+  }, [epics]);
 
   const [collapsed, setCollapsed] = useState<Set<GroupKey>>(new Set());
   const [createTaskCtx, setCreateTaskCtx] = useState<{
@@ -134,6 +145,16 @@ export function ProjectList() {
   const [renamingSectionKey, setRenamingSectionKey] = useState<GroupKey | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [deletingSection, setDeletingSection] = useState<Section | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  // Epic filter (docs/archive/plans/epics-spec.md §6/§7 T6): "" = All (inactive),
+  // `null` = "No epic" (task.epicId === null), a number = one project epic —
+  // same three-state shape as SolvroKanban.tsx's filterEpicId.
+  const [filterEpicId, setFilterEpicId] = useState<number | null | "">("");
+
+  // Pauses the project queries' 30 s refresh while a row/section drag is live
+  // (docs/archive/plans/collaboration-and-sharing.md).
+  const dragActivity = useDragActivityGuard();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -146,7 +167,35 @@ export function ProjectList() {
   // for display; within a rendered section group, sorting by (position, id)
   // is not a stand-in for the real order, it *is* the canonical order
   // projected onto that section (position is globally unique per project).
+  //
+  // `grouped` itself stays unfiltered — it's built straight from `tasks`
+  // (also the unfiltered source `handleDragEnd` below reads directly for its
+  // reorder math, via its own `topLevelOrdered`/siblings derivations, never
+  // through `grouped`). Epic filtering only ever hides rows from the
+  // rendered `visibleGrouped` projection below — mirrors SolvroKanban.tsx's
+  // `topLevelAll` (unfiltered, drop-math source) vs `derivedColumns`
+  // (filtered, render-only) split.
   const grouped = useMemo(() => groupBySection(tasks ?? [], sections ?? []), [tasks, sections]);
+
+  const isTaskVisible = useCallback(
+    (task: Task) => {
+      if (filterEpicId !== "") {
+        if (filterEpicId === null) {
+          if (task.epicId !== null) return false;
+        } else if (task.epicId !== filterEpicId) {
+          return false;
+        }
+      }
+      return true;
+    },
+    [filterEpicId],
+  );
+  const filterActive = filterEpicId !== "";
+
+  const visibleGrouped = useMemo(
+    () => grouped.map((g) => ({ ...g, tasks: g.tasks.filter((n) => isTaskVisible(n.task)) })),
+    [grouped, isTaskVisible],
+  );
 
   function openTask(id: number) {
     setSearchParams(
@@ -208,12 +257,7 @@ export function ProjectList() {
   }
 
   async function handleDeleteSection(s: Section) {
-    if (
-      !confirm(
-        `Delete section "${s.name}"? Tasks in this section keep their data but lose the section link.`,
-      )
-    )
-      return;
+    setDeletingSection(null);
     setActionError(null);
     try {
       await deleteSection.mutateAsync(s.id);
@@ -260,6 +304,7 @@ export function ProjectList() {
   }
 
   function handleDragEnd(event: DragEndEvent) {
+    dragActivity.end();
     const { active, over } = event;
     if (!over) return;
     const activeId = String(active.id);
@@ -375,6 +420,63 @@ export function ProjectList() {
   return (
     <>
       <div className="mb-3 flex items-center justify-end gap-2">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setFilterOpen((v) => !v)}
+            className={[
+              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-display text-xs font-semibold transition-colors",
+              filterActive
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container",
+            ].join(" ")}
+          >
+            <span className="material-symbols-outlined text-base">filter_alt</span>
+            Filter
+            {filterActive && (
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-meta leading-none font-bold text-on-primary">
+                1
+              </span>
+            )}
+          </button>
+          {filterOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setFilterOpen(false)} />
+              <div className="absolute right-0 z-20 mt-2 w-64 rounded-lg border border-outline-variant bg-surface-container-lowest p-3 shadow-overlay">
+                <div className="mb-3">
+                  <label className="mb-1 block text-label-caps uppercase text-on-surface-variant">
+                    Epic
+                  </label>
+                  <select
+                    value={filterEpicId === "" ? "" : filterEpicId === null ? "none" : String(filterEpicId)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setFilterEpicId(v === "" ? "" : v === "none" ? null : Number(v));
+                    }}
+                    className="w-full rounded-lg border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden"
+                  >
+                    <option value="">All</option>
+                    <option value="none">No epic</option>
+                    {(epics ?? []).map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {filterActive && (
+                  <button
+                    type="button"
+                    onClick={() => setFilterEpicId("")}
+                    className="text-xs font-semibold text-primary hover:underline"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
         {canEdit && (sections?.length ?? 0) >= 2 && (
           <button
             type="button"
@@ -424,8 +526,14 @@ export function ProjectList() {
           <span>Status</span>
         </div>
 
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          {grouped.map((g) => (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={dragActivity.begin}
+          onDragEnd={handleDragEnd}
+          onDragCancel={dragActivity.end}
+        >
+          {visibleGrouped.map((g) => (
             <SectionGroup
               key={g.section?.id ?? "none"}
               section={g.section}
@@ -433,6 +541,7 @@ export function ProjectList() {
               collapsed={collapsed.has(groupKeyOf(g.section?.id ?? null))}
               canEdit={canEdit}
               users={users ?? []}
+              epicMap={epicMap}
               onToggle={() => toggleGroup(groupKeyOf(g.section?.id ?? null))}
               onAddTask={() =>
                 setCreateTaskCtx({ sectionId: g.section?.id ?? null, parentTaskId: null })
@@ -450,7 +559,7 @@ export function ProjectList() {
                 setRenamingSectionKey(s ? s.id : "none");
                 setRenameValue(s ? s.name : "");
               }}
-              onDelete={handleDeleteSection}
+              onDelete={setDeletingSection}
               onDuplicate={handleDuplicateSection}
               duplicatingSectionId={
                 duplicateSection.isPending ? (duplicateSection.variables ?? null) : null
@@ -481,7 +590,7 @@ export function ProjectList() {
             <button
               type="submit"
               disabled={createSection.isPending || !newSectionName.trim()}
-              className="rounded-sm bg-primary px-2 py-1 font-display text-label-caps uppercase text-on-primary hover:bg-primary-container disabled:opacity-50"
+              className="rounded-sm bg-primary px-2 py-1 font-display text-xs text-on-primary hover:bg-primary-container disabled:opacity-50 font-semibold"
             >
               Add
             </button>
@@ -491,7 +600,7 @@ export function ProjectList() {
                 setAddingSection(false);
                 setNewSectionName("");
               }}
-              className="rounded-sm px-2 py-1 text-[11px] text-on-surface-variant hover:bg-surface-container"
+              className="rounded-sm px-2 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container"
             >
               Cancel
             </button>
@@ -515,6 +624,17 @@ export function ProjectList() {
         open={reorderingSections}
         onClose={() => setReorderingSections(false)}
       />
+
+      <ConfirmModal
+        open={deletingSection !== null}
+        onClose={() => setDeletingSection(null)}
+        onConfirm={() => deletingSection && void handleDeleteSection(deletingSection)}
+        title="Delete section"
+        body={`Delete section "${deletingSection?.name ?? ""}"? Tasks in this section keep their data but lose the section link.`}
+        confirmLabel="Delete"
+        confirmTone="danger"
+        busy={deleteSection.isPending}
+      />
     </>
   );
 }
@@ -525,6 +645,7 @@ interface SectionGroupProps {
   collapsed: boolean;
   canEdit: boolean;
   users: { id: number; username: string }[];
+  epicMap: Map<number, Epic>;
   onToggle: () => void;
   onAddTask: () => void;
   onAddSubtask: (parentId: number) => void;
@@ -551,6 +672,7 @@ function SectionGroup({
   collapsed,
   canEdit,
   users,
+  epicMap,
   onToggle,
   onAddTask,
   onAddSubtask,
@@ -608,11 +730,11 @@ function SectionGroup({
             />
             <button
               type="submit"
-              className="rounded-sm bg-primary px-2 py-0.5 font-display text-label-caps uppercase text-on-primary"
+              className="rounded-sm bg-primary px-2 py-0.5 font-display text-xs text-on-primary font-semibold"
             >
               {section ? "Save" : "Create"}
             </button>
-            <button type="button" onClick={onRenameCancel} className="text-[11px] text-on-surface-variant">
+            <button type="button" onClick={onRenameCancel} className="text-xs font-semibold text-on-surface-variant">
               Cancel
             </button>
           </form>
@@ -626,7 +748,7 @@ function SectionGroup({
             {section?.name ?? "No section"}
           </h3>
         )}
-        <span className="rounded-full bg-surface-container-high px-1.5 py-0 font-mono text-[11px] text-on-surface-variant">
+        <span className="rounded-full bg-surface-container-high px-1.5 py-0 font-mono text-meta text-on-surface-variant">
           {nodes.length}
         </span>
         {canEdit && !isRenaming && (
@@ -673,6 +795,7 @@ function SectionGroup({
               node={node}
               canEdit={canEdit}
               users={users}
+              epicMap={epicMap}
               onAddSubtask={onAddSubtask}
               onOpenTask={onOpenTask}
               onToggleDone={onToggleDone}
@@ -707,6 +830,7 @@ function TaskRow({
   node,
   canEdit,
   users,
+  epicMap,
   onAddSubtask,
   onOpenTask,
   onToggleDone,
@@ -718,6 +842,7 @@ function TaskRow({
   node: TaskNode;
   canEdit: boolean;
   users: { id: number; username: string }[];
+  epicMap: Map<number, Epic>;
   onAddSubtask: (parentId: number) => void;
   onOpenTask: (id: number) => void;
   onToggleDone: (t: Task) => void;
@@ -727,6 +852,7 @@ function TaskRow({
   onSetDates: (t: Task, start: string | null, due: string | null) => void;
 }) {
   const { task, subtasks } = node;
+  const epic = task.epicId !== null ? epicMap.get(task.epicId) : undefined;
   const [expanded, setExpanded] = useState(subtasks.length > 0);
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
     useSortable({ id: rowId(task.id), disabled: !canEdit });
@@ -781,12 +907,14 @@ function TaskRow({
           >
             {task.title}
           </span>
+          {epic && <EpicChip epic={epic} compact className="shrink-0" />}
         </span>
 
         <span onClick={(e) => e.stopPropagation()}>
           <AssigneeSelect
             canEdit={canEdit}
             users={users}
+            projectId={task.projectId}
             value={task.assignedToId}
             onChange={(id) => onSetAssignee(task, id)}
           />
@@ -797,6 +925,7 @@ function TaskRow({
             canEdit={canEdit}
             startISO={task.startDate}
             dueISO={task.dueDate}
+            done={task.status === "DONE"}
             onSave={(s, d) => onSetDates(task, s, d)}
           />
         </span>
@@ -857,18 +986,23 @@ function TaskRow({
           </span>
           {task.isCriticalPath && <CriticalPathMark variant="glyph" />}
         </div>
+        {epic && (
+          <div className="flex items-center gap-1.5 pl-0">
+            <EpicChip epic={epic} compact />
+          </div>
+        )}
         <div className="flex items-center justify-between gap-2 pl-0">
           <span className="flex items-center gap-1.5">
             <AssigneeAvatar user={task.assignedTo} size="xs" />
-            <span className="text-[11px] text-on-surface-variant">{fmt(task.dueDate)}</span>
+            <span className="text-meta text-on-surface-variant">{fmt(task.dueDate, task.status === "DONE")}</span>
           </span>
           <span
             className={[
-              "rounded-full px-2 py-0.5 font-display text-[11px] font-semibold",
-              STATUS_TONE_CLASS[task.status],
+              "rounded-full px-2 py-0.5 font-display text-meta font-semibold",
+              TASK_STATUS_TONE_CLASS[task.status],
             ].join(" ")}
           >
-            {STATUS_LABEL[task.status]}
+            {TASK_STATUS_LABEL[task.status]}
           </span>
         </div>
       </div>
@@ -955,7 +1089,7 @@ function SubtaskRow({
           canEdit ? "cursor-pointer" : "cursor-default",
         ].join(" ")}
       >
-        {done && <span className="material-symbols-outlined text-[10px] leading-none">check</span>}
+        {done && <span className="material-symbols-outlined text-meta leading-none">check</span>}
       </button>
       <span className="flex min-w-0 items-center gap-1">
         <span className={["truncate", done ? "text-on-surface-variant line-through" : "text-on-surface"].join(" ")}>
@@ -970,11 +1104,13 @@ function SubtaskRow({
 function AssigneeSelect({
   canEdit,
   users,
+  projectId,
   value,
   onChange,
 }: {
   canEdit: boolean;
   users: { id: number; username: string }[];
+  projectId: number;
   value: number | null;
   onChange: (id: number | null) => void;
 }) {
@@ -993,37 +1129,63 @@ function AssigneeSelect({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-20 mt-1 max-h-48 w-40 overflow-y-auto rounded-lg border border-outline-variant bg-surface-container-lowest py-1 shadow-overlay">
-            <button
-              type="button"
-              onClick={() => {
-                onChange(null);
-                setOpen(false);
-              }}
-              className="flex w-full items-center px-3 py-1.5 text-left text-xs text-on-surface-variant hover:bg-surface-container"
-            >
-              Unassigned
-            </button>
-            {users.map((u) => (
-              <button
-                key={u.id}
-                type="button"
-                onClick={() => {
-                  onChange(u.id);
-                  setOpen(false);
-                }}
-                className={[
-                  "flex w-full items-center px-3 py-1.5 text-left text-xs hover:bg-surface-container",
-                  u.id === value ? "font-bold text-primary" : "text-on-surface",
-                ].join(" ")}
-              >
-                {u.username}
-              </button>
-            ))}
-          </div>
+          <AssigneeOptions
+            users={users}
+            projectId={projectId}
+            value={value}
+            onPick={(id) => {
+              onChange(id);
+              setOpen(false);
+            }}
+          />
         </>
       )}
     </span>
+  );
+}
+
+// Split out so the membership queries are only observed while a picker is
+// actually open, not once per list row.
+function AssigneeOptions({
+  users,
+  projectId,
+  value,
+  onPick,
+}: {
+  users: { id: number; username: string }[];
+  projectId: number;
+  value: number | null;
+  onPick: (id: number | null) => void;
+}) {
+  const addsMember = useAssigneeMembership(projectId);
+  return (
+    <div className="absolute left-0 top-full z-20 mt-1 max-h-56 w-56 overflow-y-auto rounded-lg border border-outline-variant bg-surface-container-lowest py-1 shadow-overlay">
+      <button
+        type="button"
+        onClick={() => onPick(null)}
+        className="flex w-full items-center px-3 py-1.5 text-left text-xs text-on-surface-variant hover:bg-surface-container"
+      >
+        Unassigned
+      </button>
+      {users.map((u) => (
+        <button
+          key={u.id}
+          type="button"
+          onClick={() => onPick(u.id)}
+          className={[
+            "flex w-full flex-col items-start px-3 py-1.5 text-left text-xs hover:bg-surface-container",
+            u.id === value ? "font-bold text-primary" : "text-on-surface",
+          ].join(" ")}
+        >
+          {u.username}
+          {addsMember(u.id) && (
+            <span className="text-meta font-normal text-on-surface-variant">
+              {ASSIGN_ADDS_MEMBER_NOTICE}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -1031,15 +1193,18 @@ function DueDateEditor({
   canEdit,
   startISO,
   dueISO,
+  done,
   onSave,
 }: {
   canEdit: boolean;
   startISO: string | null;
   dueISO: string | null;
+  /** Finished tasks show the plain date, never "Nd late". */
+  done: boolean;
   onSave: (start: string | null, due: string | null) => void;
 }) {
   if (!canEdit) {
-    return <span className="text-[12px] text-on-surface-variant">{fmt(dueISO)}</span>;
+    return <span className="text-[12px] text-on-surface-variant">{fmt(dueISO, done)}</span>;
   }
 
   const day = dayFromIso(dueISO);
@@ -1051,8 +1216,8 @@ function DueDateEditor({
       value={day}
       onChange={(next) => onSave(startISO, commitDraft(next, dueISO))}
       clearable
-      triggerLabel={fmt(dueISO)}
-      aria-label={day ? `Due date, currently ${fmt(dueISO)}` : "Due date"}
+      triggerLabel={fmt(dueISO, done)}
+      aria-label={day ? `Due date, currently ${fmt(dueISO, done)}` : "Due date"}
     />
   );
 }
@@ -1071,13 +1236,13 @@ function StatusSelect({
   const chip = (
     <span
       className={[
-        "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 font-display text-[11px] font-semibold",
-        STATUS_TONE_CLASS[value],
+        "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 font-display text-meta font-semibold",
+        TASK_STATUS_TONE_CLASS[value],
         canEdit ? "cursor-pointer" : "",
       ].join(" ")}
     >
-      {STATUS_LABEL[value]}
-      {canEdit && <span className="material-symbols-outlined text-[11px]">expand_more</span>}
+      {TASK_STATUS_LABEL[value]}
+      {canEdit && <span className="material-symbols-outlined text-meta">expand_more</span>}
     </span>
   );
 
@@ -1105,7 +1270,7 @@ function StatusSelect({
                   s === value ? "font-bold text-primary" : "text-on-surface",
                 ].join(" ")}
               >
-                {STATUS_LABEL[s]}
+                {TASK_STATUS_LABEL[s]}
               </button>
             ))}
           </div>
@@ -1163,11 +1328,9 @@ function groupBySection(
   return groups;
 }
 
-function fmt(iso: string | null): string {
-  // Derive the day via the UTC date-part
-  // (`dayFromIso`), not a local-time parse of the ISO instant — keeps this
-  // label's day consistent with the tree cell, picker seed, and Gantt bar.
-  const d = dayToDate(dayFromIso(iso));
-  if (!d) return "—";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+function fmt(iso: string | null, done: boolean): string {
+  // The formatters read the UTC date part of the ISO instant, so this label's
+  // day stays consistent with the tree cell, picker seed, and Gantt bar. A
+  // finished task shows the plain date — "Nd late" would misreport it.
+  return (done ? fmtDay(iso) : fmtDue(iso)) || "—";
 }

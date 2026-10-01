@@ -7,7 +7,8 @@ import {
   barFillHex,
   type ColorByMode,
 } from "./palette";
-import type { Holiday } from "@/lib/queries";
+import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
+import type { Epic, Holiday } from "@/lib/queries";
 
 interface ExportExcelOpts {
   projectName: string;
@@ -16,13 +17,14 @@ interface ExportExcelOpts {
   chartEnd: Date;
   holidays: Holiday[];
   colorBy: ColorByMode;
+  // Epics (docs/archive/plans/epics-spec.md §6 last bullet, §7 T7): the Tasks
+  // sheet's "Epic" column needs epic titles, which don't live on `Row` or
+  // `Task` (only `Task.epicId` does) — the caller passes the project's
+  // epics the same way it passes `holidays`. Optional + defaults to `[]` so
+  // a caller that hasn't wired `useProjectEpics` through yet still compiles
+  // and just renders an empty Epic column.
+  epics?: Epic[];
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  TODO: "To Do",
-  IN_PROGRESS: "In Progress",
-  DONE: "Done",
-};
 
 const MONTHS_SHORT = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -48,16 +50,22 @@ function argb(hex: string, alpha = "FF"): string {
 
 /**
  * Builds the Tasks sheet's column defs + per-row cell values — "Section /
- * Title / Status / Priority / [Critical Path] / Start / Due". Pure and
- * synchronous (no ExcelJS workbook needed) so exportExcel.test.ts can assert
- * on the sheet's actual input directly — mirrors exportPdf.ts's
+ * Epic / Title / Status / Priority / [Critical Path] / Start / Due". Pure
+ * and synchronous (no ExcelJS workbook needed) so exportExcel.test.ts can
+ * assert on the sheet's actual input directly — mirrors exportPdf.ts's
  * `buildTaskTable`.
  *
  * Critical Path column (plan §3, empty-project rule): added only when at
  * least one row in `rows` carries the mark — a project with no marked task
  * gets the exact same 6-column sheet as before the mark shipped.
+ *
+ * Epic column (docs/archive/plans/epics-spec.md §6 last bullet, §7 T7): always
+ * present, right after Section. `Task.epicId` is only ever set on a
+ * top-level task (§4) — a subtask row inherits its parent's epic for
+ * display by walking `parentRowId` back to the parent task row, the same
+ * pattern `sectionLookup` already uses for the Section column.
  */
-export function buildTasksSheet(rows: Row[]): {
+export function buildTasksSheet(rows: Row[], epics: Epic[] = []): {
   columns: Array<{ header: string; key: string; width: number }>;
   rows: Array<Record<string, string>>;
   hasCriticalPath: boolean;
@@ -67,10 +75,16 @@ export function buildTasksSheet(rows: Row[]): {
   for (const r of rows) {
     if (r.kind === "section") sectionLookup.set(r.id, r.name);
   }
+  const epicTitleById = new Map<number, string>(epics.map((e) => [e.id, e.title]));
+  const epicIdByTaskRowId = new Map<string, number | null>();
+  for (const r of rows) {
+    if (r.kind === "task") epicIdByTaskRowId.set(r.id, r.task?.epicId ?? null);
+  }
   const hasCriticalPath = taskRows.some((r) => r.isCriticalPath);
 
   const columns = [
     { header: "Section", key: "section", width: 24 },
+    { header: "Epic", key: "epic", width: 20 },
     { header: "Title", key: "title", width: 48 },
     { header: "Status", key: "status", width: 14 },
     { header: "Priority", key: "priority", width: 12 },
@@ -85,11 +99,16 @@ export function buildTasksSheet(rows: Row[]): {
     const t = r.task;
     const sectionName = r.parentRowId ? sectionLookup.get(r.parentRowId) ?? "" : "";
     const indent = r.kind === "subtask" ? "  └ " : "";
+    const epicId = r.kind === "subtask"
+      ? (r.parentRowId ? epicIdByTaskRowId.get(r.parentRowId) ?? null : null)
+      : t?.epicId ?? null;
+    const epicTitle = epicId !== null ? epicTitleById.get(epicId) ?? "" : "";
     return {
       section: sectionName,
+      epic: epicTitle,
       title: `${indent}${r.name}`,
-      status: t ? STATUS_LABEL[t.status] ?? t.status : "",
-      priority: t?.priority ?? "",
+      status: t ? TASK_STATUS_LABEL[t.status] ?? t.status : "",
+      priority: t ? PRIORITY_LABEL[t.priority] ?? t.priority : "",
       ...(hasCriticalPath ? { criticalPath: r.isCriticalPath ? "Yes" : "" } : {}),
       start: t?.startDate ? fmtIsoDate(parseISODate(t.startDate)) : "",
       due: t?.dueDate ? fmtIsoDate(parseISODate(t.dueDate)) : "",
@@ -100,7 +119,7 @@ export function buildTasksSheet(rows: Row[]): {
 }
 
 export async function exportGanttToExcel(opts: ExportExcelOpts): Promise<void> {
-  const { projectName, rows, chartStart, chartEnd, holidays, colorBy } = opts;
+  const { projectName, rows, chartStart, chartEnd, holidays, colorBy, epics = [] } = opts;
   const ExcelJS = (await import("exceljs")).default;
 
   const workbook = new ExcelJS.Workbook();
@@ -108,7 +127,7 @@ export async function exportGanttToExcel(opts: ExportExcelOpts): Promise<void> {
   workbook.created = new Date();
 
   // ────────── Sheet 1: Tasks ──────────
-  const { columns: taskColumns, rows: taskSheetRows } = buildTasksSheet(rows);
+  const { columns: taskColumns, rows: taskSheetRows } = buildTasksSheet(rows, epics);
   // Zipped 1:1 with `taskSheetRows` (both filter `rows` the same way, see
   // buildTasksSheet) — only used here for the priority cell's fill/font,
   // which stays an ExcelJS-side concern rather than plain cell data.

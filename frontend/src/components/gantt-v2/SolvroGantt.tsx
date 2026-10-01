@@ -9,6 +9,8 @@ import {
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { dateToDay } from "@/lib/dateField";
+import { usePointerPressActivity } from "@/lib/dragActivity";
+import { fmtDateTime } from "@/lib/formatDate";
 import { useGanttExport } from "@/lib/gantt/exportContext";
 import { addDays, buildRows, rowsDateRange, startOfDay, type Row } from "@/lib/gantt/geometry";
 import {
@@ -27,6 +29,7 @@ import {
   useDuplicateTask,
   useHolidays,
   useProjectDependencies,
+  useProjectEpics,
   useProjectSections,
   useProjectTasks,
   useUpdateSection,
@@ -71,6 +74,7 @@ import {
   sectionNodeId,
   taskNodeId,
 } from "./adapter";
+import { TableSkeleton } from "@/components/skeletons";
 import { GanttOverlay } from "./GanttOverlay";
 import { SolvroBar } from "./SolvroBar";
 import {
@@ -343,9 +347,15 @@ export function SolvroGantt(props: SolvroGanttProps) {
   const { user } = useAuth();
   // Ported verbatim from GanttFrame.tsx:86-87.
   const canEdit = hasPermission(user, "task:write");
+  // Pauses the project queries' 30 s refresh while a bar move/resize, row
+  // reorder or connect-dot drag is live (the vendored engine has no
+  // start/end callbacks) — docs/archive/plans/collaboration-and-sharing.md.
+  usePointerPressActivity("[data-slot=gantt]", canEdit);
 
   const { data: tasks = [], isLoading, isError, error } = useProjectTasks(projectId);
   const { data: sections = [] } = useProjectSections(projectId);
+  // Epics feed only the Excel export's "Epic" column (exportExcel.ts).
+  const { data: epics = [] } = useProjectEpics(projectId);
   // Plan B Task 6 — the overlay (connectors, drag-create, baselines) is the
   // consumer this query was wired ahead of in Task 4/5; now actually used.
   const { data: dependencies = [] } = useProjectDependencies(projectId);
@@ -484,7 +494,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
   // The lock/reset flow lives in the Context panel
   // (components/layout/RightSidebar.tsx, 2026-08-31); the toolbar only
   // toggles the ghosts and reports the lock state in the toggle's tooltip.
-  const baselineLockedAtPretty = baselineLockedAt ? new Date(baselineLockedAt).toLocaleString() : null;
+  const baselineLockedAtPretty = baselineLockedAt ? fmtDateTime(baselineLockedAt) : null;
 
   const resources = useMemo(() => buildResources(tasks, sections), [tasks, sections]);
   const events = useMemo<GanttEvent<Task>[]>(
@@ -884,6 +894,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
             chartEnd: end,
             holidays,
             colorBy,
+            epics,
           });
         } catch (err) {
           setActionError(err instanceof Error ? err.message : "Excel export failed.");
@@ -936,7 +947,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
       },
     });
     return () => register(null);
-  }, [register, projectName, allRows, allDateRange, holidays, colorBy, dependencies]);
+  }, [register, projectName, allRows, allDateRange, holidays, colorBy, dependencies, epics]);
 
   const runExport = useCallback(
     async (kind: "excel" | "pdf") => {
@@ -1203,7 +1214,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
               place. The trigger shares the segmented shell and
               TOOLBAR_ITEM_HEIGHT of every other group; the `render` element
               carries all visual content (house pattern — see
-              OpportunityDetail.tsx, reui/gantt/gantt-nav.tsx). */}
+              reui/gantt/gantt-nav.tsx). */}
           <DropdownMenu>
             <div className="inline-flex overflow-hidden rounded-md bg-surface-container-low p-0.5">
               <DropdownMenuTrigger
@@ -1215,7 +1226,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                       "inline-flex items-center gap-1.5 rounded-sm pl-2.5 pr-1.5 font-display text-[11.5px] font-medium text-on-surface outline-hidden transition-colors hover:text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
                     )}
                   >
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                    <span className="text-meta text-on-surface-variant">
                       Color by
                     </span>
                     {COLOR_BY_LABELS[colorBy]}
@@ -1268,7 +1279,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                   Key label) now always renders; only the per-mode `legend`
                   list inside it stays conditional. */}
               <DropdownMenuGroup aria-label="Color key">
-                <DropdownMenuLabel className="pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                <DropdownMenuLabel className="pb-1 pt-1.5 text-label-caps uppercase text-on-surface-variant">
                   Key
                 </DropdownMenuLabel>
                 <div data-testid="gantt-legend" className="flex flex-col gap-1 px-2 pb-1.5">
@@ -1377,7 +1388,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
           <button
             type="submit"
             disabled={createSection.isPending || !newSectionName.trim()}
-            className="rounded-sm bg-primary px-2 py-1 font-display text-label-caps uppercase text-on-primary hover:bg-primary-container disabled:opacity-50"
+            className="rounded-sm bg-primary px-2 py-1 font-display text-xs text-on-primary hover:bg-primary-container disabled:opacity-50 font-semibold"
           >
             Add
           </button>
@@ -1387,7 +1398,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
               setAddingSection(false);
               setNewSectionName("");
             }}
-            className="rounded-sm px-2 py-1 text-[11px] text-on-surface-variant hover:bg-surface-container"
+            className="rounded-sm px-2 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container"
           >
             Cancel
           </button>
@@ -1401,7 +1412,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
       )}
 
       {isLoading && (
-        <div className="m-3 h-64 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low" />
+        <TableSkeleton rows={8} columns={3} widths={["w-3/4", "w-16", "w-16"]} className="m-3" />
       )}
       {isError && (
         <Alert variant="destructive" className="m-3">
@@ -1747,7 +1758,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
           </>
         }
         confirmLabel="Delete"
-        confirmTone="warning"
+        confirmTone="danger"
         busy={deleteTask.isPending}
       />
 

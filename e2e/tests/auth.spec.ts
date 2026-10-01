@@ -45,3 +45,44 @@ test.describe("auth", () => {
     await expect(page).not.toHaveURL(/login/i);
   });
 });
+
+// A full page load right after sign-in used to bounce admin pages to
+// Overview: the guard read the localStorage user before /auth/me answered,
+// and that cached copy could be missing or stale. The guard now waits for
+// the server's answer before it denies access.
+test.describe("auth: admin guard on a fresh page load", () => {
+  // page.route below must not be bypassed by the PWA service worker.
+  test.use({ serviceWorkers: "block" });
+
+  test("an admin page opened with no cached user stays on the admin page", async ({ page }) => {
+    await loginViaUi(page);
+    // Simulate the race deterministically: no cached user, and a slow /auth/me.
+    await page.evaluate(() => localStorage.removeItem("solvro.user"));
+    await page.route("**/auth/me", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      await route.continue();
+    });
+    await page.goto("/admin");
+    await expect(page.getByRole("heading", { level: 1, name: /admin/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page).toHaveURL(/\/admin/);
+  });
+
+  test("an admin page opened right after sign-in stays on the admin page", async ({ page }) => {
+    await page.goto("/", { waitUntil: "networkidle" });
+    await page.fill('input[type="email"]', ADMIN_EMAIL);
+    await page.fill('input[type="password"]', ADMIN_PASSWORD);
+    await page.click('button[type="submit"]');
+    await page.waitForURL((url) => !url.pathname.includes("login"), { timeout: 10_000 });
+    // Sign-in stores the user next to the session token, so a full page load
+    // from here already has both.
+    const stored = await page.evaluate(() => ({
+      token: localStorage.getItem("solvro.token"),
+      user: localStorage.getItem("solvro.user"),
+    }));
+    expect(stored.token).not.toBeNull();
+    expect(stored.user).not.toBeNull();
+    await page.goto("/admin");
+    await expect(page.getByRole("heading", { level: 1, name: /admin/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page).toHaveURL(/\/admin/);
+  });
+});

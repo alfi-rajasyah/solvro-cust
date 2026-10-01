@@ -341,7 +341,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
                   Draft from this week
                 </button>
               </div>
-              <p className="text-[11px] text-on-surface-variant">
+              <p className="text-xs text-on-surface-variant">
                 One row in Monday&rsquo;s table per achievement, with its own Outstanding issue, Lesson learned,
                 Next week focus and decision. The draft starts from this week&rsquo;s Mid-week highlights, then
                 adds Thursday to Sunday&rsquo;s notes. Title: one line, 200 characters max.
@@ -363,7 +363,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
                   className="space-y-2.5 rounded-sm border border-outline-variant bg-surface-container-low p-3"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-display text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+                    <span className="font-display text-label-caps uppercase text-on-surface-variant">
                       Achievement {n}
                     </span>
                     <button
@@ -468,7 +468,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
                 Add achievement
               </button>
               {state.achievements.length >= MAX_ACHIEVEMENTS && (
-                <p className="text-[11px] text-on-surface-variant">20 achievements max.</p>
+                <p className="text-xs text-on-surface-variant">20 achievements max.</p>
               )}
             </div>
           </div>

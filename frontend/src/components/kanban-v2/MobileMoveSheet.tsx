@@ -7,13 +7,10 @@
 // visual, and needs its own column-label list rather than sharing
 // SolvroKanban.tsx's (adapter.ts/commitMapper.ts stay untouched by this
 // task — see plan T8 scope note).
+import { taskStatusOptions } from "@/lib/labels";
 import type { Task, TaskStatus } from "@/lib/queries";
 
-const COLUMNS: { id: TaskStatus; label: string }[] = [
-  { id: "TODO", label: "To Do" },
-  { id: "IN_PROGRESS", label: "In Progress" },
-  { id: "DONE", label: "Done" },
-];
+const COLUMNS = taskStatusOptions;
 
 export function MobileMoveSheet({
   task,
@@ -32,17 +29,17 @@ export function MobileMoveSheet({
         onMouseDown={(e) => e.stopPropagation()}
       >
         <p className="mb-1 truncate text-sm font-bold text-on-surface">{task.title}</p>
-        <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
+        <p className="mb-3 text-label-caps uppercase text-on-surface-variant">
           Move to
         </p>
         <ul className="space-y-1">
           {COLUMNS.map((col) => {
-            const checked = task.status === col.id;
+            const checked = task.status === col.value;
             return (
-              <li key={col.id}>
+              <li key={col.value}>
                 <button
                   type="button"
-                  onClick={() => onMove(col.id)}
+                  onClick={() => onMove(col.value)}
                   className={[
                     "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm",
                     checked ? "text-primary" : "text-on-surface",
@@ -54,7 +51,7 @@ export function MobileMoveSheet({
                       checked ? "border-primary bg-primary text-white" : "border-outline-variant",
                     ].join(" ")}
                   >
-                    {checked && <span className="material-symbols-outlined text-[11px] leading-none">check</span>}
+                    {checked && <span className="material-symbols-outlined text-meta leading-none">check</span>}
                   </span>
                   {col.label}
                 </button>

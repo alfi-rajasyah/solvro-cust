@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "re
 import { ConfirmModal } from "./ConfirmModal";
 import { Modal } from "./Modal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
-import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
+import { saveErrorMessage } from "@/lib/ownerAccess";
 import {
   type CustomerInput,
   type CustomerSummary,
@@ -16,9 +16,15 @@ interface Props {
   open: boolean;
   onClose: () => void;
   customer?: CustomerSummary | null;
+  /**
+   * Edit mode only: false for someone who reaches the customer through a
+   * project membership alone. They may not change its owner (server: 403
+   * owner_only), so the TAM select is read-only and `tamId` is not sent.
+   */
+  canChangeOwner?: boolean;
 }
 
-export function CustomerFormModal({ open, onClose, customer }: Props) {
+export function CustomerFormModal({ open, onClose, customer, canChangeOwner = true }: Props) {
   const isEdit = Boolean(customer);
   const create = useCreateCustomer();
   const update = useUpdateCustomer(customer?.id ?? 0);
@@ -83,7 +89,12 @@ export function CustomerFormModal({ open, onClose, customer }: Props) {
       setInitialTam(initial);
       setDescription("");
     }
-  }, [open, customer, user, viewAll]);
+    // Seed on open / customer switch only — `customer` gets a fresh identity on
+    // every 30 s refetch, and re-running this reset wipes in-progress input
+    // (docs/archive/plans/collaboration-and-sharing.md). `user?.id` and
+    // `viewAll` are the only other inputs (create-mode TAM default).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, customer?.id, user?.id, viewAll]);
 
   async function performSave(payload: CustomerInput) {
     setError(null);
@@ -98,7 +109,7 @@ export function CustomerFormModal({ open, onClose, customer }: Props) {
       onClose();
     } catch (err) {
       setConfirmReassignOpen(false);
-      setError(err instanceof ApiError ? err.message : "Save failed.");
+      setError(saveErrorMessage(err, "Save failed."));
     }
   }
 
@@ -119,7 +130,7 @@ export function CustomerFormModal({ open, onClose, customer }: Props) {
       solutionArchitect: solutionArchitect.trim() || undefined,
       // Always sent (never omitted) so clearing the select back to
       // "— none —" actually unassigns the TAM instead of being dropped.
-      tamId: tam ? Number(tam) : null,
+      ...(isEdit && !canChangeOwner ? {} : { tamId: tam ? Number(tam) : null }),
       description: description.trim(),
     };
     // Decision 5: a non-view-all user handing the customer to someone else
@@ -129,6 +140,7 @@ export function CustomerFormModal({ open, onClose, customer }: Props) {
     // other TAM there is also a handover away from the caller's reach.
     const reassignsAwayFromSelf =
       isEdit &&
+      canChangeOwner &&
       !viewAll &&
       user != null &&
       tam !== "" &&
@@ -221,7 +233,8 @@ export function CustomerFormModal({ open, onClose, customer }: Props) {
             <select
               value={tam}
               onChange={(e) => setTam(e.target.value)}
-              className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+              disabled={isEdit && !canChangeOwner}
+              className="w-full disabled:cursor-not-allowed disabled:opacity-70 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
             >
               {/* Always selectable for a view-all user; for a non-view-all
                   user only when it's the customer's current value on edit
@@ -236,6 +249,11 @@ export function CustomerFormModal({ open, onClose, customer }: Props) {
                 </option>
               ))}
             </select>
+            {isEdit && !canChangeOwner && (
+              <p className="mt-1 text-meta text-on-surface-variant">
+                Only the customer's owner can change this.
+              </p>
+            )}
           </Field>
         </div>
 

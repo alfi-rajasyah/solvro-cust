@@ -113,6 +113,7 @@ typography:
     body-sm: { fontSize: 15px, fontWeight: '450', lineHeight: '1.5' }
     data-mono: { fontSize: 13px, fontWeight: '500', lineHeight: '1.4', letterSpacing: -0.01em }
     label-caps: { fontSize: 12px, fontWeight: '700', lineHeight: '1', letterSpacing: 0.05em, transform: uppercase }
+    meta: { fontSize: 12px, fontWeight: '500', lineHeight: '1.35' }
 radii:
   sm: 0.125rem
   DEFAULT: 0.25rem
@@ -218,7 +219,7 @@ Background + text pair per tone, both flip with theme:
 
 ## 2. Typography
 
-Single typeface app-wide: **Source Sans 3**, loaded 300–700 variable range, aliased to both `font-display` and `font-body` via `--font-display`/`--font-body` in the `@theme` block of `index.css` — there is no separate display face. `font-mono` is **not remapped**; it keeps Tailwind's default monospace stack. It's used ad hoc for dates, IDs, and version/build tags (Gantt date columns, `InlineDateRangeEditor`, the TopBar build tag) — it is not a formally named design role like `data-mono` below.
+Single typeface app-wide: **Source Sans 3**, loaded 300–700 variable range, aliased to both `font-display` and `font-body` via `--font-display`/`--font-body` in the `@theme` block of `index.css` — there is no separate display face. `font-mono` is **not remapped**; it keeps Tailwind's default monospace stack. It's used ad hoc for IDs, counts, and version/build tags (the TopBar build tag, ticket refs, project ID badges) and inside the date-picker trigger inputs (`DateField`/`DateRangeField`); the Gantt tree's date columns (`TreeCells.tsx`) use the body font, not mono — it is not a formally named design role like `data-mono` below.
 
 ### Base scale (overrides Tailwind defaults, +1px across the board)
 
@@ -243,10 +244,11 @@ Single typeface app-wide: **Source Sans 3**, loaded 300–700 variable range, al
 | `text-body-sm` | 15px | 450 | 1.5 | — | default body text — applied app-wide via `body { @apply ... font-body text-body-sm }` in `index.css` |
 | `text-data-mono` | 13px | 500 | 1.4 | -0.01em | tabular numerics in IDs and data columns |
 | `text-label-caps` | 12px | 700 | 1 | 0.05em | uppercase micro-headers, column labels — pair with `uppercase` utility, transform is not baked into the class itself |
+| `text-meta` | 12px | 500 | 1.35 | — | chips, badges, secondary meta — sentence case, no uppercase transform |
 
 Body weight is **450**, not the CSS-default 400 — this only renders correctly because the variable font's 300–700 range is loaded; a static 400-weight fallback would round down.
 
-These six named roles are also registered as `font-size` keys in the `tailwind-merge` config (`extendTailwindMerge`'s `theme.text` list in `frontend/src/lib/utils.ts`'s `cn()` helper) — without that registration, `twMerge`'s default classifier doesn't recognize `text-h1`/`text-label-caps`/etc. as size utilities, so an unmatched name falls through to the color-utility validator and can silently evict (or be evicted by) a real `text-{color}` class combined with it in the same `cn()` call. Any future named role must be added to that list too, or it inherits the same latent bug.
+These seven named roles are also registered as `font-size` keys in the `tailwind-merge` config (`extendTailwindMerge`'s `theme.text` list in `frontend/src/lib/utils.ts`'s `cn()` helper) — without that registration, `twMerge`'s default classifier doesn't recognize `text-h1`/`text-label-caps`/etc. as size utilities, so an unmatched name falls through to the color-utility validator and can silently evict (or be evicted by) a real `text-{color}` class combined with it in the same `cn()` call. Any future named role must be added to that list too, or it inherits the same latent bug.
 
 ---
 
@@ -289,10 +291,12 @@ This value is **fixed** — it does not flip between themes (unlike every color 
 | Command palette | `CommandPalette.tsx` (⌘K global search overlay, Modal-convention shell) |
 | Drawer | `Drawer.tsx` |
 | Task detail panel | `TaskPanel.tsx` |
-| Dropdown menus | `TopBar.tsx` user menu, `ProjectList.tsx` filter/sort menus, `SolvroGantt.tsx`'s Export (Excel/PDF) dropdown (`SolvroGantt.tsx:1309`, hand-rolled `absolute top-full` popover, restyled from `shadow-lg` in the Gantt visual refresh phase, 2026-08-03) |
+| Ticket detail panel | `TicketPanel.tsx` (right-side iTop ticket panel on the customer Tickets tab, `fixed right-0 top-14 bottom-0` same as the task panel) |
+| Epic detail panel | `EpicPanel.tsx` (right-side panel on the Epics tab, deep-linked via `?epic=<id>`, `fixed right-0 top-14 bottom-0` same shell as the task and ticket panels; added in the Epics phase, 2026-09-24) |
+| Dropdown menus | `TopBar.tsx` user menu, `layout/NotificationBell.tsx` notifications popover (TopBar bell; base-ui Popover via `ui/popover.tsx` on `bg-popover`, `shadow-overlay!` because the vendored popup ships `shadow-md`, Phase 4 "Activity and notifications", 2026-09-30), `ProjectList.tsx` filter/sort menus, `SolvroGantt.tsx`'s Export (Excel/PDF) dropdown (`SolvroGantt.tsx:1348`, hand-rolled `absolute top-full` popover, restyled from `shadow-lg` in the Gantt visual refresh phase, 2026-08-03) and its `DropdownMenuContent` actions menu (`SolvroGantt.tsx:1251`, `shadow-overlay!`), `SolvroKanban.tsx`'s row menu (~`:126`) and filter popover (~`:477`), `TaskPanel.tsx`'s two inline menus (~`:334`, `:368`), and the ⋯ action menus on `pages/ProjectDetail.tsx` (project actions), `pages/Customers.tsx` (row menu) and `components/customer/AccountHeader.tsx` — those three are `ui/dropdown-menu.tsx` popups using `shadow-overlay!` (`!` for the same reason as `DateRangeField.tsx`: the vendored popup's stock `shadow-md` must not win) |
 | Context menu | `ui/context-menu.tsx` (`ContextMenuContent` and `ContextMenuSubContent`, both — z-index moved onto the Positioner per the Popover z-index convention below) — Gantt tree row action menu (Edit/Add subtask/Delete), first consumed by `SolvroGantt.tsx`'s `renderResourceMenu` (right-click or hover "…" button); restyled from `shadow-lg`/`shadow-md` in the Gantt visual refresh phase, 2026-08-03 |
-| Popovers | `TreeCells.tsx`'s `SectionColorCell` color picker (`TreeCells.tsx:76-104`; corrected 2026-08-03 — the old `GanttListRow.tsx` this row used to cite no longer exists), `DateField.tsx` calendar popover, `DateRangeField.tsx` calendar popover (paired START/DUE between-style range picker, user add-on 2026-07-28, plan Task 3.5; mounted via the now-shell-less `InlineDateRangeEditor.tsx` wrapper in `TaskPanel.tsx`'s DATES editor and the Gantt tree's `TreeCells.tsx`, and directly in `TaskFormModal.tsx`'s merged "Dates" row) — uses `shadow-overlay!` (`!important`, added in a fix round so the sanctioned shadow doesn't silently lose to the vendored Popover's default `shadow-md` depending on stylesheet load order); `DateField.tsx`'s own popup was deliberately left as plain `shadow-overlay` (out of scope for that fix round) — a known parity gap between the two sibling components |
-| Drag overlay | dragging card state: `ProjectKanban.tsx` (via `kanban-v2/cards.tsx`) and the Pipeline board's `pipeline/OpportunityCard.tsx` — the same byte-identical treatment |
+| Popovers | `TreeCells.tsx`'s `SectionColorCell` color picker (`TreeCells.tsx:76-104`; corrected 2026-08-03 — the old `GanttListRow.tsx` this row used to cite no longer exists), `DateField.tsx` calendar popover, `DateRangeField.tsx` calendar popover (paired START/DUE between-style range picker, user add-on 2026-07-28, plan Task 3.5; mounted via the now-shell-less `InlineDateRangeEditor.tsx` wrapper in `TaskPanel.tsx`'s DATES editor and the Gantt tree's `TreeCells.tsx`, and directly in `TaskFormModal.tsx`'s merged "Dates" row) — uses `shadow-overlay!` (`!important`, added in a fix round so the sanctioned shadow doesn't silently lose to the vendored Popover's default `shadow-md` depending on stylesheet load order); `DateField.tsx`'s own popup was deliberately left as plain `shadow-overlay` (out of scope for that fix round) — a known parity gap between the two sibling components; `CommentMentions.tsx`'s @mention picker listbox (task-panel comment composer; hand-rolled `absolute bottom-full` div on `bg-surface-container-lowest` with `border-outline-variant`, `rounded-sm`, plain `shadow-overlay`, Phase 4, 2026-09-30); `ProjectEpics.tsx`'s `ColorDot` color picker (`ProjectEpics.tsx:358-413`, `shadow-overlay` div at line 393 — a clone of `TreeCells.tsx`'s `SectionColorCell` popover pattern, added in the Epics phase, 2026-09-24) |
+| Drag overlay | dragging card state: `ProjectKanban.tsx` (via `kanban-v2/cards.tsx`); the iTop ticket board's `TicketCard.tsx` (`components/itop/board/`, on the vendored `reui/kanban` engine — columns are iTop's own lifecycle, not Solvro's To do / In progress / Done, and escalation renders as a chip on the card, never its own column; no optimistic move — a card only moves once the mapped iTop action succeeds) |
 | Right context panel | `RightSidebar.tsx` |
 
 > Implementation note: `RightSidebar.tsx` is in the whitelist by design intent (it's a floating overlay layer, same as Drawer), but as of this writing it does **not** apply the `shadow-overlay` class — it relies on `border-l border-outline-variant` + `backdrop-blur-md` only. Don't flag this as a violation; flag it as a gap if you're implementing elevation work in that file.
@@ -313,12 +317,12 @@ Nothing else gets a shadow. No card shadows, no hover-lift shadows, no focus-rin
 | **`IN_PROGRESS` chip tone is misleadingly named "blue"** | `TaskStatusChip`'s `blue` tone renders `bg-primary/10 text-primary dark:bg-primary/20` — it is **green-tinted**, not literal blue. Same for `ProjectStatusChip`'s `PLANNING`/`COMPLETED` tones, which also use the `blue` tone class. Don't "fix" this by pointing it at an actual blue token — it's intentional, per `StatusChip.tsx`. |
 | **`.ai-glow` is retired, not reserved** | Amber (`#f59e0b`) inner-border + outer glow was reserved exclusively for blueprint-generated (AI Breakdown) task cards; that concept is cancelled along with the Secure Ingestion Port. `.ai-glow` does not exist anywhere in `frontend/src/` — do not introduce it for other status highlights without a new design decision. |
 | **Icons are Material Symbols Outlined** | Loaded via Google Fonts in `index.html` (`opsz,wght,FILL,GRAD@24,400,0,0`), rendered with the `.material-symbols-outlined` class (variation settings pinned in `index.css`). Design/mockup tooling that can't render icon-font ligatures (e.g. Paper canvases) must substitute inline SVGs — this does not change the in-app convention. |
-| **Compact data-grid mode** | Implemented via the vendored data grid's `tableLayout={{ dense: true }}` (`frontend/src/components/reui/data-grid/`), used on the Admin Users, Tasks, and CustomerDetail Overview grids: reduced cell padding/row height, and dense body/footer cells step down to `text-xs` (13px) — the nearest sanctioned token to a 12px body size, since no dedicated 12px body-text token exists (`text-label-caps` is reserved for uppercase labels). Column headers always render at `text-label-caps` (12px/700/uppercase) regardless of dense/default. Any hand-rolled table still needs this pattern applied by hand — check the specific component before assuming it's wired. |
+| **Compact data-grid mode** | Implemented via the vendored data grid's `tableLayout={{ dense: true }}` (`frontend/src/components/reui/data-grid/`), used on the Admin Users, Tasks, and CustomerDetail Overview grids: reduced cell padding/row height, and dense body/footer cells step down to `text-xs` (13px); the sanctioned 12px sentence-case token is `text-meta` (`text-label-caps` is reserved for uppercase labels). Column headers always render at `text-label-caps` (12px/700/uppercase) regardless of dense/default. Any hand-rolled table still needs this pattern applied by hand — check the specific component before assuming it's wired. |
 | **Drag-drop insert-before indicator** | Corrected 2026-08-03 — the old `GanttListRow.tsx` this row used to cite no longer exists. The indicator is now the vendored engine's own `data-slot="gantt-reorder-indicator"` (`reui/gantt/gantt-view.tsx:2234-2257`): a caret head + 1px hairline pinned to the drop boundary, `border-s-primary`/`bg-primary` when the proposed drop is valid, `border-s-destructive`/`bg-destructive` when not. No `// SOLVRO PATCH` marker on this block — stock upstream engine behavior, not Solvro-authored, and `SolvroGantt.tsx` doesn't override `canReorderResource` to scope which rows can trigger it. |
 
 ### Status chip tone table
 
-`CHIP_BASE` = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-display text-[11px] font-semibold leading-[18px]` (`StatusChip.tsx`).
+`CHIP_BASE` = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-display text-meta font-semibold leading-[18px]` (`StatusChip.tsx`).
 
 | Chip | Status | Tone | Renders as |
 |---|---|---|---|
@@ -337,6 +341,8 @@ Nothing else gets a shadow. No card shadows, no hover-lift shadows, no focus-rin
 | | WON | emerald | `bg-chip-emerald-bg text-chip-emerald-text` |
 | | DROP | rose | `bg-chip-rose-bg text-chip-rose-text` |
 | | HOLD | amber + `pause_circle` glyph | `bg-chip-amber-bg text-chip-amber-text` (icon disambiguates from DELIVER_PROPOSAL) |
+
+`LabelChip.tsx` and `EpicChip.tsx` are not tone chips: the user-chosen colour is a 8px dot plus a `color-mix(… 14%, transparent)` background tint, and the text is always `text-on-surface` (so any stored colour stays readable in both themes). Both use the same `text-meta font-semibold leading-[18px]` rhythm as `CHIP_BASE`; `EpicChip` also truncates at `max-w-[160px]`.
 
 The generic `Chip` export takes any of `emerald` / `amber` / `rose` / `violet` / `blue` / `gray` directly for one-off use (risk scores, priority badges, etc.).
 

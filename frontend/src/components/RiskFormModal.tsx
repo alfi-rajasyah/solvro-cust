@@ -2,26 +2,17 @@ import { useEffect, useState } from "react";
 import { Modal } from "./Modal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import {
+  riskCategoryOptions,
+  riskLevelFromScore,
+  riskStatusOptions,
+} from "@/lib/labels";
+import {
   type Risk,
   type RiskCategory,
   type RiskStatus,
   useCreateRisk,
   useUpdateRisk,
 } from "@/lib/queries";
-
-const CATEGORIES: { value: RiskCategory; label: string }[] = [
-  { value: "EXTERNAL", label: "External" },
-  { value: "INTERNAL", label: "Internal" },
-  { value: "TECHNICAL", label: "Technical" },
-  { value: "ORGANIZATIONAL", label: "Organizational" },
-  { value: "FINANCIAL", label: "Financial" },
-];
-
-const STATUSES: { value: RiskStatus; label: string }[] = [
-  { value: "OPEN", label: "Open" },
-  { value: "MITIGATED", label: "Mitigated" },
-  { value: "CLOSED", label: "Closed" },
-];
 
 const SCALE = [1, 2, 3, 4, 5];
 
@@ -154,7 +145,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
               onChange={(e) => setCategory(e.target.value as RiskCategory)}
               className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden"
             >
-              {CATEGORIES.map((c) => (
+              {riskCategoryOptions.map((c) => (
                 <option key={c.value} value={c.value}>
                   {c.label}
                 </option>
@@ -170,7 +161,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
               onChange={(e) => setStatus(e.target.value as RiskStatus)}
               className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden"
             >
-              {STATUSES.map((s) => (
+              {riskStatusOptions.map((s) => (
                 <option key={s.value} value={s.value}>
                   {s.label}
                 </option>
@@ -218,13 +209,13 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
             </label>
             <div
               className={[
-                "flex h-[38px] items-center justify-center rounded-sm border px-3 font-mono text-sm font-bold tabular-nums",
+                "flex h-[38px] items-center justify-center rounded-sm border px-3 text-sm font-bold tabular-nums",
                 scoreClass(score),
               ].join(" ")}
             >
               {score}{" "}
-              <span className="ml-2 font-display text-label-caps uppercase tracking-wider">
-                {scoreLevel(score)}
+              <span className="ml-2 font-display text-label-caps uppercase">
+                {riskLevelFromScore(score)}
               </span>
             </div>
           </div>
@@ -264,16 +255,14 @@ function scaleLabel(n: number): string {
   return ["", "Very Low", "Low", "Medium", "High", "Very High"][n] ?? "";
 }
 
-export function scoreLevel(score: number): "Low" | "Medium" | "High" {
-  if (score <= 8) return "Low";
-  if (score <= 15) return "Medium";
-  return "High";
-}
+// The level thresholds live in lib/labels.ts (riskLevel); re-exported here so
+// existing importers keep working.
+export { riskLevelFromScore as scoreLevel };
 
 export function scoreClass(score: number): string {
   if (score <= 8)
-    return "border-emerald-300 bg-emerald-50 text-emerald-700";
+    return "border-transparent bg-chip-emerald-bg text-chip-emerald-text";
   if (score <= 15)
-    return "border-amber-300 bg-amber-50 text-amber-800";
-  return "border-error/40 bg-error-container text-on-error-container";
+    return "border-transparent bg-chip-amber-bg text-chip-amber-text";
+  return "border-transparent bg-chip-rose-bg text-chip-rose-text";
 }

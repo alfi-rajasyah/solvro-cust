@@ -29,6 +29,7 @@ Data lives in one Docker volume, `solvro_pgdata`.
 |---|---|---|
 | `POSTGRES_PASSWORD` | generated | Database password. Changing it after install breaks the database login. |
 | `JWT_SECRET` | generated | Signs login sessions. Changing it signs everyone out. |
+| `SECRETS_KEY` | generated | Encrypts integration tokens at rest (currently the iTop connection token). Changing it invalidates every stored token — they must be re-entered. |
 | `BIND_ADDR` | prompt | Interface the website and API bind to. `127.0.0.1` local only, `0.0.0.0` all interfaces, or one LAN IP. |
 | `FRONTEND_PORT` | prompt | Website port. Default `80`. |
 | `BACKEND_PORT` | prompt | API port. Default `3000`. |
@@ -46,6 +47,7 @@ The compose file sets these on the backend container. They are not meant to be e
 | `PORT` | `3000` | Container-internal port. |
 | `DATABASE_URL` | `postgresql://solvro:…@postgres:5432/solvro` | Built from `POSTGRES_PASSWORD`. |
 | `JWT_SECRET` | from `.env` | |
+| `SECRETS_KEY` | from `.env` | AES-256-GCM key for secrets at rest (iTop token). |
 | `JWT_EXPIRES_IN` | `8h` | Session length. |
 | `CORS_ORIGIN` | `*` | Which browser origins may call the API directly. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
@@ -57,7 +59,7 @@ Google sign-in is **not** configured by environment variables. See section 6.
 On every start the backend runs, in order:
 
 1. `prisma migrate deploy` — applies any schema migrations the new version ships. Upgrades need no manual database step.
-2. `prisma db seed` — makes sure the five built-in roles (`ADMIN`, `TAM`, `SA`, `STAKEHOLDER`, `PENDING`) and the sign-in settings row exist. The seed creates no users.
+2. `prisma db seed` — makes sure the four built-in roles (`ADMIN`, `TAM`, `STAKEHOLDER`, `PENDING`) and the sign-in settings row exist. The seed creates no users.
 3. The API.
 
 The installer waits up to 2 minutes for `GET /health` on the API port, then creates the admin user.

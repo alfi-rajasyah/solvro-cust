@@ -21,6 +21,8 @@ import { ProjectStatusChip } from "@/components/StatusChip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { dueDateLabel } from "@/lib/dailyReviewStats";
 import { dayFromIso } from "@/lib/dateField";
+import { fmtTime } from "@/lib/formatDate";
+import { riskStatusOptions, taskStatusOptions } from "@/lib/labels";
 import {
   type DailyReviewProject,
   type RiskStatus,
@@ -34,8 +36,6 @@ import {
   useUpdateTask,
 } from "@/lib/queries";
 import { WeekNotesEditor } from "./WeekNotesEditor";
-
-const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
 
 type ScheduleTone = "rose" | "emerald" | "neutral";
 
@@ -51,18 +51,6 @@ function scheduleChip(project: DailyReviewProject): { label: string; tone: Sched
   if (project.slipDays < 0) return { label: `${-project.slipDays}d ahead`, tone: "emerald" };
   return { label: "On schedule", tone: "emerald" };
 }
-
-const TASK_STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
-  { value: "TODO", label: "To do" },
-  { value: "IN_PROGRESS", label: "In progress" },
-  { value: "DONE", label: "Done" },
-];
-
-const RISK_STATUS_OPTIONS: { value: RiskStatus; label: string }[] = [
-  { value: "OPEN", label: "Open" },
-  { value: "MITIGATED", label: "Mitigated" },
-  { value: "CLOSED", label: "Closed" },
-];
 
 export interface ProjectCardProps {
   project: DailyReviewProject;
@@ -152,7 +140,7 @@ export function ProjectCard({
             {bodyExpanded ? "expand_less" : "expand_more"}
           </span>
         </button>
-        <span className="rounded-sm bg-surface-container-high px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+        <span className="rounded-sm bg-surface-container-high px-1.5 py-0.5 text-label-caps leading-4 uppercase text-on-surface-variant">
           Project
         </span>
         <Link
@@ -163,7 +151,7 @@ export function ProjectCard({
         </Link>
         <ProjectStatusChip status={project.status} />
         <span
-          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${SCHEDULE_CLASS[schedule.tone]}`}
+          className={`rounded-full px-2 py-0.5 text-meta font-semibold ${SCHEDULE_CLASS[schedule.tone]}`}
           title="Schedule variance vs. locked baseline"
         >
           {schedule.label}
@@ -181,9 +169,9 @@ export function ProjectCard({
               onClick={() => setConfirmUnmark(true)}
               className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
-              <span className="flex items-center gap-1 rounded-full bg-chip-emerald-bg px-2 py-0.5 text-[11px] font-bold text-chip-emerald-text">
+              <span className="flex items-center gap-1 rounded-full bg-chip-emerald-bg px-2 py-0.5 text-meta font-bold text-chip-emerald-text">
                 <span className="material-symbols-outlined text-sm">check_circle</span>
-                Reviewed {TIME_FMT.format(new Date(reviewToday.createdAt))}
+                Reviewed {fmtTime(reviewToday.createdAt)}
               </span>
             </button>
           ) : (
@@ -191,7 +179,7 @@ export function ProjectCard({
               type="button"
               onClick={() => markReviewed.mutate({ reviewDate: today })}
               disabled={markReviewed.isPending}
-              className="rounded-sm border border-outline-variant px-2.5 py-1 text-[11px] font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="rounded-sm border border-outline-variant px-2.5 py-1 text-meta font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               Mark reviewed
             </button>
@@ -227,7 +215,7 @@ export function ProjectCard({
                   onClick={() => setAttentionExpanded((v) => !v)}
                   aria-expanded={attentionExpanded}
                   aria-controls={attentionId}
-                  className="absolute right-4 top-3 text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="absolute right-4 top-3 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   {attentionExpanded ? "Hide lists" : "Show lists"}
                 </button>
@@ -244,11 +232,12 @@ export function ProjectCard({
                             <li key={t.id} className={`flex items-center gap-2 ${pending ? "opacity-60" : ""}`}>
                               <span className="min-w-0 flex-1 truncate text-sm text-on-surface">{t.title}</span>
                               {t.dueDate && (
-                                <span className="shrink-0 font-mono text-[11px] text-chip-rose-text">
+                                <span className="shrink-0 text-meta text-chip-rose-text">
                                   due {dueDateLabel(t.dueDate)}
                                 </span>
                               )}
                               <Select
+                                items={taskStatusOptions}
                                 value={t.status}
                                 onValueChange={(v) => updateTask.mutate({ id: t.id, patch: { status: v as TaskStatus } })}
                                 disabled={pending}
@@ -261,7 +250,7 @@ export function ProjectCard({
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent align="end">
-                                  {TASK_STATUS_OPTIONS.map((o) => (
+                                  {taskStatusOptions.map((o) => (
                                     <SelectItem key={o.value} value={o.value}>
                                       {o.label}
                                     </SelectItem>
@@ -280,12 +269,13 @@ export function ProjectCard({
                             <li key={r.id} className={`flex items-center gap-2 ${pending ? "opacity-60" : ""}`}>
                               <span className="min-w-0 flex-1 truncate text-sm text-on-surface">{r.description}</span>
                               <span
-                                className={`shrink-0 rounded-sm border px-1.5 py-0.5 font-mono text-[10px] font-bold ${scoreClass(score)}`}
+                                className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-meta font-bold ${scoreClass(score)}`}
                                 title={`${r.probability} × ${r.impact} = ${score}`}
                               >
                                 {scoreLevel(score)}
                               </span>
                               <Select
+                                items={riskStatusOptions}
                                 value={r.status}
                                 onValueChange={(v) => updateRisk.mutate({ id: r.id, patch: { status: v as RiskStatus } })}
                                 disabled={pending}
@@ -298,7 +288,7 @@ export function ProjectCard({
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent align="end">
-                                  {RISK_STATUS_OPTIONS.map((o) => (
+                                  {riskStatusOptions.map((o) => (
                                     <SelectItem key={o.value} value={o.value}>
                                       {o.label}
                                     </SelectItem>
@@ -356,10 +346,10 @@ export function ProjectCard({
 function Metric({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
     <div className="min-w-0">
-      <div className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">{label}</div>
+      <div className="text-label-caps uppercase text-on-surface-variant">{label}</div>
       <div className="truncate text-sm font-semibold text-on-surface">
         {value}
-        {sub && <span className="ml-1 font-mono text-[11px] font-normal text-on-surface-variant">{sub}</span>}
+        {sub && <span className="ml-1 text-meta font-normal tabular-nums text-on-surface-variant">{sub}</span>}
       </div>
     </div>
   );
@@ -396,8 +386,8 @@ function AttentionColumn({
 function AttentionCount({ label, count, tone }: { label: string; count: number; tone: "bad" | "warn" }) {
   const toneClass = tone === "bad" ? "text-chip-rose-text" : "text-chip-amber-text";
   return (
-    <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
-      {label} <span className={`font-mono ${toneClass}`}>{count}</span>
+    <span className="flex items-center gap-1.5 text-label-caps uppercase text-on-surface-variant">
+      {label} <span className={`tabular-nums ${toneClass}`}>{count}</span>
     </span>
   );
 }

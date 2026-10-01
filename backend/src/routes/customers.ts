@@ -6,10 +6,17 @@ import { requireAuth, requirePermission, hasPermission, type JwtPayload } from "
 // services router lives in ./services.ts; this file owns the customer-side mapping.
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
-import { isValidDayString, utcMidnightOf, utcMidnightOfDayString } from "../lib/dateBoundary.js";
-import { isMonday } from "../lib/isoWeek.js";
+import {
+  isValidDayString,
+  overdueBoundary,
+  utcMidnightOf,
+  utcMidnightOfDayString,
+} from "../lib/dateBoundary.js";
+import { isMonday, parseWeekKey, weekKeyOf } from "../lib/isoWeek.js";
+import { computeProjectHealth } from "../lib/projectHealth.js";
 import {
   customerVisibilityFilter,
+  ensureCustomerOwnerAccess,
   ensureCustomerVisible,
   projectVisibilityFilter,
 } from "../lib/visibility.js";
@@ -169,8 +176,16 @@ export const customersRouter = Router();
 
 customersRouter.use(requireAuth);
 
-customersRouter.get("/", async (req, res) => {
+const customersListQuerySchema = z.object({
+  today: z
+    .string()
+    .refine(isValidDayString, { message: "today must be a valid yyyy-MM-dd date" })
+    .optional(),
+});
+
+customersRouter.get("/", validate("query", customersListQuerySchema), async (req, res) => {
   const user = req.user!;
+  const { today } = req.query as unknown as z.infer<typeof customersListQuerySchema>;
   const customers = await prisma.customer.findMany({
     where: customerVisibilityFilter(user),
     orderBy: { name: "asc" },
@@ -183,7 +198,83 @@ customersRouter.get("/", async (req, res) => {
       _count: { select: { projects: { where: projectVisibilityFilter(user) } } },
     },
   });
-  res.json(customers);
+  if (customers.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  // Health roll-up: a fixed five queries however many customers there are.
+  // Prisma cannot group across a relation, so resolve the caller's visible
+  // projects of these customers first, group tasks/risks by projectId, then
+  // fold project rows into their customer. Hidden projects never contribute.
+  const customerIds = customers.map((c) => c.id);
+  const boundary = overdueBoundary(today);
+  const weekStartDay =
+    parseWeekKey(weekKeyOf(today ?? boundary.toISOString().slice(0, 10)))!.start;
+  const visibleProjects = await prisma.project.findMany({
+    where: { AND: [projectVisibilityFilter(user), { customerId: { in: customerIds } }] },
+    select: { id: true, customerId: true },
+  });
+  const projectIds = visibleProjects.map((p) => p.id);
+  const [overdueRows, riskRows, weeklyRows] = await Promise.all([
+    projectIds.length === 0
+      ? []
+      : prisma.task.groupBy({
+          by: ["projectId"],
+          where: {
+            projectId: { in: projectIds },
+            status: { not: "DONE" },
+            dueDate: { lt: boundary },
+          },
+          _count: { _all: true },
+        }),
+    projectIds.length === 0
+      ? []
+      : prisma.risk.groupBy({
+          by: ["projectId"],
+          where: { projectId: { in: projectIds }, status: "OPEN" },
+          _count: { _all: true },
+        }),
+    prisma.weeklyUpdate.findMany({
+      where: {
+        customerId: { in: customerIds },
+        weekStart: utcMidnightOfDayString(weekStartDay),
+      },
+      select: { customerId: true, status: true, health: true },
+    }),
+  ]);
+
+  const customerOfProject = new Map<number, number>();
+  for (const p of visibleProjects) {
+    if (p.customerId != null) customerOfProject.set(p.id, p.customerId);
+  }
+  const overdueByCustomer = new Map<number, number>();
+  for (const row of overdueRows) {
+    const cid = customerOfProject.get(row.projectId);
+    if (cid != null) overdueByCustomer.set(cid, (overdueByCustomer.get(cid) ?? 0) + row._count._all);
+  }
+  const risksByCustomer = new Map<number, number>();
+  for (const row of riskRows) {
+    const cid = customerOfProject.get(row.projectId);
+    if (cid != null) risksByCustomer.set(cid, (risksByCustomer.get(cid) ?? 0) + row._count._all);
+  }
+  const weeklyByCustomer = new Map(weeklyRows.map((w) => [w.customerId, w]));
+
+  res.json(
+    customers.map((c) => {
+      const weekly = weeklyByCustomer.get(c.id);
+      return {
+        ...c,
+        health: {
+          overdueCount: overdueByCustomer.get(c.id) ?? 0,
+          openRiskCount: risksByCustomer.get(c.id) ?? 0,
+          weeklyUpdate: weekly
+            ? { weekStart: weekStartDay, status: weekly.status, health: weekly.health }
+            : null,
+        },
+      };
+    }),
+  );
 });
 
 // A function of the caller, not a module-level const: the nested `projects`
@@ -197,7 +288,6 @@ function customerInclude(user: JwtPayload) {
       orderBy: { updatedAt: "desc" } as const,
       include: {
         tam: { select: { id: true, username: true } },
-        sa: { select: { id: true, username: true } },
         _count: { select: { tasks: true } },
       },
     },
@@ -210,8 +300,16 @@ function customerInclude(user: JwtPayload) {
   } as const;
 }
 
-customersRouter.get("/:id", validate("params", idParamSchema), async (req, res) => {
+const customerDetailQuerySchema = z.object({
+  today: z
+    .string()
+    .refine(isValidDayString, { message: "today must be a valid yyyy-MM-dd date" })
+    .optional(),
+});
+
+customersRouter.get("/:id", validate("params", idParamSchema), validate("query", customerDetailQuerySchema), async (req, res) => {
   const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
+  const { today } = req.query as unknown as z.infer<typeof customerDetailQuerySchema>;
   const customer = await prisma.customer.findFirst({
     where: { id, ...customerVisibilityFilter(req.user!) },
     include: customerInclude(req.user!),
@@ -219,7 +317,16 @@ customersRouter.get("/:id", validate("params", idParamSchema), async (req, res) 
   if (!customer) {
     throw new HttpError(404, "customer_not_found", "Customer not found");
   }
-  res.json(customer);
+  // The nested projects are already visibility-scoped by customerInclude, so
+  // their ids are safe to hand to the (scope-free) health helper.
+  const health = await computeProjectHealth(
+    customer.projects.map((p) => p.id),
+    today,
+  );
+  res.json({
+    ...customer,
+    projects: customer.projects.map((p) => ({ ...p, health: health.get(p.id) })),
+  });
 });
 
 const assignServicesSchema = z.object({
@@ -345,6 +452,13 @@ customersRouter.patch(
       throw new HttpError(404, "customer_not_found", "Customer not found");
     }
 
+    // Changing the owner is owner-only (a project member sees the customer
+    // through the project, but must not be able to take it over). Re-saving
+    // the current owner — the edit form's steady state — is not a change.
+    if (body.tamId !== undefined && body.tamId !== existing.tamId) {
+      await ensureCustomerOwnerAccess(user, id);
+    }
+
     const data: Prisma.CustomerUpdateInput = {};
     if (body.name !== undefined) data.name = body.name;
     if (body.accountManager !== undefined)
@@ -387,7 +501,7 @@ customersRouter.delete(
   validate("params", idParamSchema),
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
-    await ensureCustomerVisible(req.user!, id);
+    await ensureCustomerOwnerAccess(req.user!, id);
     // onDelete: SetNull on Project.customerId — projects survive, customer link clears.
     await prisma.customer.delete({ where: { id } });
     res.status(204).end();

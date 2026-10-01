@@ -1,35 +1,31 @@
 import { Link } from "react-router-dom";
-import { PipelineOverviewPanel } from "@/components/pipeline/PipelineOverviewPanel";
 import {
   PortfolioCalendar,
   sortPortfolioRows,
 } from "@/components/portfolio/PortfolioCalendar";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { ProjectStatusChip } from "@/components/StatusChip";
-import { hasPermission, useAuth } from "@/lib/auth";
 import { dayLabel } from "@/lib/dailyReviewStats";
-import { dayFromIso } from "@/lib/dateField";
+import { dateToDay, dayFromIso } from "@/lib/dateField";
+import { fmtDayLong } from "@/lib/formatDate";
 import {
   type OverviewResponse,
+  type ProjectHealth,
   type ProjectStatus,
   type RecentNote,
   useOverview,
+  useProjects,
   useRecentNotes,
 } from "@/lib/queries";
 
 export function Overview() {
-  const { user } = useAuth();
   const { data, isLoading, isError, error } = useOverview();
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-on-surface">
-          Welcome back, {firstNameOf(user)}.
-        </h1>
-        <p className="text-sm text-on-surface-variant">
-          A high-density snapshot of your active workload.
-        </p>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h1 className="font-display text-2xl font-bold text-on-surface">Overview</h1>
+        <p className="text-sm text-on-surface-variant">{fmtDayLong(dateToDay(new Date()))}</p>
       </div>
 
       {isLoading && <SkeletonGrid />}
@@ -41,62 +37,122 @@ export function Overview() {
       )}
 
       {data && <OverviewBody data={data} />}
-
-      {/* Pipeline fold-in (PRD §2.7) — gated on pipeline:view so a TAM
-          without Pipeline access sees no panel at all, not an empty shell,
-          and never triggers the underlying opportunities fetch. Renders
-          independently of useOverview()'s own loading/error state, since
-          it owns its own data (useOpportunities()). */}
-      {hasPermission(user, "pipeline:view") && <PipelineOverviewPanel />}
     </div>
   );
 }
 
 function OverviewBody({ data }: { data: OverviewResponse }) {
-  const activeProjects = data.projectStatusCounts.ACTIVE ?? 0;
-  const totalTasks = data.taskCounts.TODO + data.taskCounts.IN_PROGRESS + data.taskCounts.DONE;
-  const openTasks = data.taskCounts.TODO + data.taskCounts.IN_PROGRESS;
-  const completionRate = totalTasks === 0 ? 0 : Math.round((data.taskCounts.DONE / totalTasks) * 100);
+  const { overdue, dueThisWeek, openRisks } = data.workCounts;
+  // Per-project task-overdue and open-risk counts come from GET /projects
+  // (server-computed `health`); the overview portfolio rows don't carry them.
+  const { data: projects } = useProjects();
+  const healthById = new Map<number, ProjectHealth>();
+  for (const p of projects ?? []) {
+    if (p.health) healthById.set(p.id, p.health);
+  }
 
   return (
     <>
-      {/* KPI strip */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Work tiles — each is a link to the list it counts */}
+      <div className="grid gap-4 sm:grid-cols-3">
         <Kpi
-          label="Active Projects"
-          value={activeProjects}
-          hint={`${data.projectCount} total`}
-          icon="folder_open"
+          label="Overdue"
+          value={overdue}
+          hint={overdue === 1 ? "open task past due" : "open tasks past due"}
+          icon="event_busy"
+          tone={overdue > 0 ? "error" : "neutral"}
+          to="/tasks?view=overdue"
+          ariaLabel={`Overdue: ${overdue} ${overdue === 1 ? "task" : "tasks"}`}
+        />
+        <Kpi
+          label="Due this week"
+          value={dueThisWeek}
+          hint="open, due by Sunday"
+          icon="date_range"
           tone="primary"
+          to="/tasks?view=week"
+          ariaLabel={`Due this week: ${dueThisWeek} ${dueThisWeek === 1 ? "task" : "tasks"}`}
         />
         <Kpi
-          label="Open Tasks"
-          value={openTasks}
-          hint={`${data.taskCounts.IN_PROGRESS} in progress`}
-          icon="task_alt"
-          tone="primary"
-        />
-        <Kpi
-          label="Completed"
-          value={data.taskCounts.DONE}
-          hint={totalTasks > 0 ? `${completionRate}% of all tasks` : "—"}
-          icon="trending_up"
-          tone="emerald"
-        />
-        <Kpi
-          label="Total tasks"
-          value={totalTasks}
-          hint={`${data.taskCounts.TODO} to do`}
-          icon="checklist"
+          label="Open risks"
+          value={openRisks}
+          hint="across your projects"
+          icon="warning"
           tone="neutral"
+          to="/daily-review"
+          ariaLabel={`Open risks: ${openRisks}`}
         />
+      </div>
+
+      {/* Projects needing attention */}
+      <div className="min-w-0 rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
+        <header className="mb-3 flex items-center justify-between">
+          <h3 className="font-display text-sm font-bold text-on-surface">Projects needing attention</h3>
+          <Link to="/projects" className="text-meta font-semibold text-primary hover:underline">
+            View all →
+          </Link>
+        </header>
+        {data.portfolio.length === 0 ? (
+          <EmptyHint label="No projects yet." />
+        ) : (
+          <ul className="grid gap-2 md:grid-cols-2">
+            {[...data.portfolio]
+              .sort((a, b) => {
+                const ra = healthRank(a);
+                const rb = healthRank(b);
+                if (ra !== rb) return ra - rb;
+                if (ra === 0) return b.daysOverdue - a.daysOverdue;
+                return (
+                  new Date(b.updatedAt).getTime() -
+                  new Date(a.updatedAt).getTime()
+                );
+              })
+              .slice(0, 6)
+              .map((p) => {
+                const health = healthById.get(p.id);
+                const overdueTasks = health?.overdueCount ?? 0;
+                const risks = health?.openRiskCount ?? 0;
+                return (
+                  // min-w-0: a grid item's automatic minimum is its
+                  // min-content width — lets the row's `truncate` name
+                  // actually shrink on a phone.
+                  <li key={p.id} className="min-w-0">
+                    <Link
+                      to={`/projects/${p.id}`}
+                      className={`flex items-center gap-3 rounded-sm border border-l-3 border-outline-variant bg-surface-container-lowest px-3 py-2 transition-colors hover:border-y-primary hover:border-r-primary ${healthBorder(p)}`}
+                    >
+                      <span className="font-mono text-meta text-on-surface-variant">P-{String(p.id).padStart(3, "0")}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-on-surface">{p.name}</span>
+                      {overdueTasks > 0 && (
+                        <span
+                          title="Open tasks past their due date"
+                          className="shrink-0 whitespace-nowrap rounded-sm bg-chip-rose-bg px-1.5 py-0.5 text-meta font-semibold text-chip-rose-text"
+                        >
+                          {overdueTasks} overdue
+                        </span>
+                      )}
+                      {risks > 0 && (
+                        <span
+                          title="Open risks"
+                          className="shrink-0 whitespace-nowrap rounded-sm bg-chip-amber-bg px-1.5 py-0.5 text-meta font-semibold text-chip-amber-text"
+                        >
+                          {risks} {risks === 1 ? "risk" : "risks"}
+                        </span>
+                      )}
+                      <ProjectStatusChip status={p.status} />
+                    </Link>
+                  </li>
+                );
+              })}
+          </ul>
+        )}
       </div>
 
       {/* Full-width portfolio timeline */}
       <section className="space-y-3">
         <header>
           <h3 className="font-display text-sm font-bold text-on-surface">Portfolio timeline</h3>
-          <p className="text-[11px] text-on-surface-variant">
+          <p className="text-xs text-on-surface-variant">
             Where each of your projects sits across the year
           </p>
         </header>
@@ -112,73 +168,16 @@ function OverviewBody({ data }: { data: OverviewResponse }) {
         )}
       </section>
 
-      {/* Two-up: attention + recent notes */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        {/* min-w-0 on both grid items: a grid item's automatic minimum is
-            its min-content width, so a nowrap row inside either panel would
-            otherwise size the single mobile column wider than the viewport
-            and clip both panels. */}
-        <div className="min-w-0 rounded-sm border border-outline-variant bg-surface-container-lowest p-5 lg:col-span-2">
-          <header className="mb-3 flex items-center justify-between">
-            <h3 className="font-display text-sm font-bold text-on-surface">Projects needing attention</h3>
-            <Link to="/projects" className="text-[11px] font-semibold text-primary hover:underline">
-              View all →
-            </Link>
-          </header>
-          {data.portfolio.length === 0 ? (
-            <EmptyHint label="No projects yet." />
-          ) : (
-            <ul className="grid gap-2 md:grid-cols-2">
-              {[...data.portfolio]
-                .sort((a, b) => {
-                  const ra = healthRank(a);
-                  const rb = healthRank(b);
-                  if (ra !== rb) return ra - rb;
-                  if (ra === 0) return b.daysOverdue - a.daysOverdue;
-                  return (
-                    new Date(b.updatedAt).getTime() -
-                    new Date(a.updatedAt).getTime()
-                  );
-                })
-                .slice(0, 6)
-                .map((p) => (
-                  // min-w-0: same grid-item rule as the panels above — lets
-                  // the row's `truncate` name actually shrink on a phone.
-                  <li key={p.id} className="min-w-0">
-                    <Link
-                      to={`/projects/${p.id}`}
-                      style={{
-                        borderLeftWidth: 3,
-                        borderLeftStyle: "solid",
-                        borderLeftColor: healthColor(p),
-                      }}
-                      className="flex items-center gap-3 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 transition-colors hover:border-primary"
-                    >
-                      <span className="font-mono text-[11px] text-on-surface-variant">P-{String(p.id).padStart(3, "0")}</span>
-                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-on-surface">{p.name}</span>
-                      {p.isOverdue && (
-                        <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold text-chip-amber-text">
-                          {p.daysOverdue}d overdue
-                        </span>
-                      )}
-                      <span className="text-[11px] text-on-surface-variant">{p.totalTasks} tasks</span>
-                      <ProjectStatusChip status={p.status} />
-                    </Link>
-                  </li>
-                ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="min-w-0 rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
-          <header className="mb-3 flex items-center justify-between">
-            <h3 className="font-display text-sm font-bold text-on-surface">Recent notes</h3>
-            <Link to="/daily-review" className="text-[11px] font-semibold text-primary hover:underline">
-              Daily Review →
-            </Link>
-          </header>
-          <RecentNotesFeed />
-        </div>
+      {/* Recent notes — the heading stays a direct child of this panel
+          (daily-review.spec.ts walks ancestor::div[1] from it). */}
+      <div className="min-w-0 rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
+        <header className="mb-3 flex items-center justify-between">
+          <h3 className="font-display text-sm font-bold text-on-surface">Recent notes</h3>
+          <Link to="/daily-review" className="text-meta font-semibold text-primary hover:underline">
+            Daily Review →
+          </Link>
+        </header>
+        <RecentNotesFeed />
       </div>
     </>
   );
@@ -189,29 +188,33 @@ interface KpiProps {
   value: number;
   hint?: string;
   icon: string;
-  tone: "primary" | "emerald" | "amber" | "neutral";
+  tone: "primary" | "error" | "neutral";
+  to: string;
+  ariaLabel: string;
 }
 
-function Kpi({ label, value, hint, icon, tone }: KpiProps) {
+function Kpi({ label, value, hint, icon, tone, to, ariaLabel }: KpiProps) {
   const iconColor =
-    tone === "primary"
-      ? "text-primary"
-      : tone === "emerald"
-        ? "text-emerald-600"
-        : tone === "amber"
-          ? "text-amber-600"
-          : "text-on-surface-variant";
+    tone === "primary" ? "text-primary" : tone === "error" ? "text-error" : "text-on-surface-variant";
   return (
-    <div className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
+    <Link
+      to={to}
+      aria-label={ariaLabel}
+      className="block rounded-sm border border-outline-variant bg-surface-container-lowest p-4 transition-colors hover:border-primary"
+    >
       <div className="flex items-center justify-between">
-        <span className="text-label-caps uppercase tracking-wider text-on-surface-variant">{label}</span>
-        <span className={`material-symbols-outlined text-base ${iconColor}`}>{icon}</span>
+        <span className="text-label-caps uppercase text-on-surface-variant">{label}</span>
+        <span aria-hidden="true" className={`material-symbols-outlined text-base ${iconColor}`}>{icon}</span>
       </div>
       <div className="mt-2 flex items-baseline gap-2">
-        <span className="font-mono text-3xl font-bold tabular-nums text-on-surface">{value}</span>
-        {hint && <span className="text-[11px] text-on-surface-variant">{hint}</span>}
+        <span
+          className={`text-3xl font-bold tabular-nums ${tone === "error" ? "text-error" : "text-on-surface"}`}
+        >
+          {value}
+        </span>
+        {hint && <span className="text-meta text-on-surface-variant">{hint}</span>}
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -262,7 +265,7 @@ function RecentNoteRow({ note }: { note: RecentNote }) {
   const day = dayFromIso(note.noteDate);
   return (
     <li className="py-2 first:pt-0 last:pb-0">
-      <div className="flex items-baseline gap-2 text-[11px] text-on-surface-variant">
+      <div className="flex items-baseline gap-2 text-meta text-on-surface-variant">
         <span className="shrink-0 font-mono tabular-nums">{day ? dayLabel(day) : "—"}</span>
         <span className="min-w-0 truncate">
           {note.customer ? (
@@ -300,41 +303,28 @@ function EmptyHint({ label }: { label: string }) {
 function SkeletonGrid() {
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
+      <div className="grid gap-4 sm:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
           <div key={i} className="h-24 animate-pulse rounded-sm bg-surface-container-low" />
         ))}
       </div>
+      <div className="h-40 animate-pulse rounded-sm bg-surface-container-low" />
       <div className="h-64 animate-pulse rounded-sm bg-surface-container-low" />
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="h-64 animate-pulse rounded-sm bg-surface-container-low lg:col-span-2" />
-        <div className="h-64 animate-pulse rounded-sm bg-surface-container-low" />
-      </div>
+      <div className="h-64 animate-pulse rounded-sm bg-surface-container-low" />
     </>
   );
 }
 
-// First name for the welcome heading. AuthUser carries no name field, so
-// derive it from the username (or email): take the segment before the
-// first "." or "@" and capitalize it. "alfi.rajasyah" → "Alfi",
-// "tam@elitery.com" → "Tam", "admin" → "Admin".
-function firstNameOf(
-  user: { username?: string; email?: string } | null | undefined,
-): string {
-  const source = user?.username || user?.email || "operator";
-  const head = source.split(/[.@]/)[0] || "operator";
-  return head.charAt(0).toUpperCase() + head.slice(1);
-}
-
 // Health signal comes from portfolio[].isOverdue (real schedule data):
-// overdue (amber) → active on-track (green) → everything else (gray).
+// overdue (error) → active on-track (primary) → everything else (muted).
 function healthRank(p: { status: ProjectStatus; isOverdue: boolean }): number {
   if (p.isOverdue) return 0;
   if (p.status === "ACTIVE") return 1;
   return 2;
 }
-function healthColor(p: { status: ProjectStatus; isOverdue: boolean }): string {
-  if (p.isOverdue) return "#F59E0B";
-  if (p.status === "ACTIVE") return "#8DC63F";
-  return "#6B7280";
+// Left-edge accent of an attention row, as token classes.
+function healthBorder(p: { status: ProjectStatus; isOverdue: boolean }): string {
+  if (p.isOverdue) return "border-l-error";
+  if (p.status === "ACTIVE") return "border-l-primary";
+  return "border-l-on-surface-variant/40";
 }

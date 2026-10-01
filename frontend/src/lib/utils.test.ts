@@ -3,9 +3,9 @@ import { cn } from "./utils";
 
 /**
  * Regression coverage for the `extendTailwindMerge` fix (reui-data-grid.md
- * pilot fix round). Plain `twMerge` doesn't know this project's six named
- * `@theme` typography roles (index.css:94-113: h1, h2, body-lg, body-sm,
- * data-mono, label-caps) — before the fix, an unmatched `text-{name}` fell
+ * pilot fix round). Plain `twMerge` doesn't know this project's seven named
+ * `@theme` typography roles (index.css: h1, h2, body-lg, body-sm,
+ * data-mono, label-caps, meta) — before the fix, an unmatched `text-{name}` fell
  * through `font-size`'s validator to `text-color`'s default `isAny`
  * validator and got filed as a color utility instead. Two bugs followed:
  * no dedupe against a conflicting `text-{size}`, and — worse — silent
@@ -35,6 +35,16 @@ describe("cn() — named @theme text roles vs. tailwind-merge's default config",
     expect(result).toContain("text-label-caps");
   });
 
+  it("text-meta keeps a sibling text-color class and evicts a stock font-size class", () => {
+    const kept = cn("text-meta", "text-primary");
+    expect(kept).toContain("text-meta");
+    expect(kept).toContain("text-primary");
+    const swapped = cn("text-xs text-primary", "text-meta");
+    expect(swapped).toContain("text-meta");
+    expect(swapped).toContain("text-primary");
+    expect(swapped).not.toMatch(/text-xs(?!\w)/);
+  });
+
   it("font-bold still evicts font-medium (independent of the theme.text fix — a stock class-group pairing)", () => {
     const result = cn("font-medium", "font-bold");
     expect(result).toContain("font-bold");
@@ -42,7 +52,7 @@ describe("cn() — named @theme text roles vs. tailwind-merge's default config",
   });
 
   it("every named role dedupes against its stock font-size sibling without touching an adjacent text-color class", () => {
-    const roles = ["h1", "h2", "body-lg", "body-sm", "data-mono", "label-caps"];
+    const roles = ["h1", "h2", "body-lg", "body-sm", "data-mono", "label-caps", "meta"];
     for (const role of roles) {
       const result = cn("text-red-500 text-sm", `text-${role}`);
       expect(result, `text-${role} should win over text-sm`).toContain(`text-${role}`);

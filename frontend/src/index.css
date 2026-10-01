@@ -111,6 +111,9 @@
   --text-label-caps--line-height: 1;
   --text-label-caps--letter-spacing: 0.05em;
   --text-label-caps--font-weight: 700;
+  --text-meta: 12px;
+  --text-meta--line-height: 1.35;
+  --text-meta--font-weight: 500;
 
   /* — Elevation: outlines only; the single sanctioned shadow — */
   --shadow-overlay: 0 4px 24px rgba(0, 0, 0, 0.18);

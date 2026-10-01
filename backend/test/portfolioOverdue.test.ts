@@ -34,7 +34,6 @@ async function createProjectWithDueTask(
   const project = await prisma.project.create({
     data: {
       name: `Portfolio ${Date.now()}-${Math.random()}`,
-      saId: ownerId,
       tamId: ownerId,
       status: projectStatus,
     },
@@ -55,7 +54,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  // Only the userId is used (to satisfy Project.tamId/saId) — this suite
+  // Only the userId is used (to satisfy Project.tamId) — this suite
   // never makes an HTTP request, so the token itself (and its expiry) is
   // irrelevant here, unlike tasksOverdue.test.ts.
   const { userId } = await createAdminAndToken();

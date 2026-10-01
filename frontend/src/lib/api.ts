@@ -28,10 +28,18 @@ interface RequestOptions {
   auth?: boolean;
 }
 
-export async function apiRequest<T>(
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  return (await apiRequestWithHeaders<T>(path, options)).data;
+}
+
+/**
+ * Same as `apiRequest`, but also returns the response headers, for the few
+ * endpoints that carry data in one (e.g. `X-Total-Count` on `GET /tasks`).
+ */
+export async function apiRequestWithHeaders<T>(
   path: string,
   { method = "GET", body, signal, auth = true }: RequestOptions = {},
-): Promise<T> {
+): Promise<{ data: T; headers: Headers }> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
 
@@ -58,7 +66,7 @@ export async function apiRequest<T>(
     throw new ApiError(res.status, message, parsed);
   }
 
-  return parsed as T;
+  return { data: parsed as T, headers: res.headers };
 }
 
 function safeJsonParse(text: string): unknown {

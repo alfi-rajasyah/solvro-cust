@@ -1,3 +1,4 @@
+import { PRIORITY_LABEL } from "@/lib/labels";
 import type { Priority } from "@/lib/queries";
 
 type Tone = "gray" | "amber" | "rose";
@@ -15,13 +16,6 @@ const TONE: Record<Priority, Tone> = {
   URGENT: "rose",
 };
 
-const LABEL: Record<Priority, string> = {
-  LOW: "Low",
-  MEDIUM: "Med",
-  HIGH: "High",
-  URGENT: "Urgent",
-};
-
 export function PriorityBadge({
   priority,
   compact = false,
@@ -31,10 +25,10 @@ export function PriorityBadge({
 }) {
   return (
     <span
-      title={`Priority: ${LABEL[priority]}`}
-      className={`inline-flex items-center rounded-full font-display text-[11px] font-semibold leading-[18px] ${TONE_CLASS[TONE[priority]]} ${compact ? "px-1.5 py-0.5" : "px-2 py-0.5"}`}
+      title={`Priority: ${PRIORITY_LABEL[priority]}`}
+      className={`inline-flex items-center rounded-full font-display text-meta font-semibold leading-[18px] ${TONE_CLASS[TONE[priority]]} ${compact ? "px-1.5 py-0.5" : "px-2 py-0.5"}`}
     >
-      {LABEL[priority]}
+      {PRIORITY_LABEL[priority]}
     </span>
   );
 }

@@ -193,7 +193,7 @@ cited files; entries marked *code check* below carry the result).
   `solvro_test` starts empty every invocation; no more manual schema
   drop/recreate. See CHANGELOG's "Backend tests start from a clean database"
   entry.
-- **`backend/test/opportunities.test.ts` flakes under a full gates run, order-dependent on other test files sharing `solvro_test`** (discovered 2026-09-09, weekly-sync-highlight-rows phase close; pre-existing, unrelated to that phase's changes): `"repacks the SOURCE stage densely (0..n-1) after a cross-stage move"` (`opportunities.test.ts:439`) failed once in a full `gates.sh` run — expected `stageOrder` 0, got 1 for the first `DELIVER_PROPOSAL` opportunity — then passed on an immediate single-file re-run (44/44) and in every other full run that same day. The test's own comment assumes `DELIVER_PROPOSAL` is untouched by any earlier test *in that file*, but a full run shares one `solvro_test` database across all 30 test files, so an opportunity another file leaves in that stage (order/timing dependent) shifts the positions this test appends onto. Fix direction: assert relative order among this test's own three rows instead of absolute `stageOrder`, or seed into a stage no other file touches.
+- ~~**`backend/test/opportunities.test.ts` flakes under a full gates run, order-dependent on other test files sharing `solvro_test`** (discovered 2026-09-09, weekly-sync-highlight-rows phase close; pre-existing, unrelated to that phase's changes): `"repacks the SOURCE stage densely (0..n-1) after a cross-stage move"` (`opportunities.test.ts:439`) failed once in a full `gates.sh` run — expected `stageOrder` 0, got 1 for the first `DELIVER_PROPOSAL` opportunity — then passed on an immediate single-file re-run (44/44) and in every other full run that same day. The test's own comment assumes `DELIVER_PROPOSAL` is untouched by any earlier test *in that file*, but a full run shares one `solvro_test` database across all 30 test files, so an opportunity another file leaves in that stage (order/timing dependent) shifts the positions this test appends onto. Fix direction: assert relative order among this test's own three rows instead of absolute `stageOrder`, or seed into a stage no other file touches.~~ **Moot 2026-09-22**: `backend/test/opportunities.test.ts` was deleted with the Pipeline module removal.
 
 ---
 
@@ -209,16 +209,22 @@ cited files; entries marked *code check* below carry the result).
   removed (migration `20260803000000_remove_blueprints`); the spec moved to
   `docs/archive/plans/secure-ingestion-port-spec.md`. The SA user role,
   `Project.saId`, and SA visibility matching are unrelated to the webhook and
-  stay.
+  stay. **Update 2026-09-22**: the SA user role and `Project.saId` were
+  subsequently removed in their own right, as part of the Pipeline-module
+  removal — see the dated line below.
 - ~~**Reports screen revamp**~~ — **Resolved (noted stale 2026-07-25)**:
   shipped. CLAUDE.md's Facts block ("Reports & export (shipped)") documents
   `Reports.tsx` producing the full export packet (identity / health / phase
   breakdown / task signals / open risks / `CUSTOMER_FACING` notes, last 14
   days) via dynamically-imported `frontend/src/lib/export/projectExport.ts`,
   with both copy-to-clipboard and `.md` download.
-- **Work Logs / Utilization** (`WorkLogs.tsx`) — placeholder only, now hidden
+- ~~**Work Logs / Utilization** (`WorkLogs.tsx`) — placeholder only, now hidden
   from the sidebar; awaits the iTop API spec. Rename to "Utilization" when
-  implemented.
+  implemented.~~ **Resolved 2026-09-22**: shipped as the Utilization page
+  (iTop integration Phase 3) — `frontend/src/pages/Utilization.tsx` at
+  `/utilization`, with `/work-logs` redirecting to it and the sidebar entry
+  restored after Weekly Sync. See `CHANGELOG.md`'s "Utilization from iTop
+  time tracking" entry.
 - **Task attachments** — not built. The "Attachments placeholder" block this
   entry used to cite in `TaskFormModal.tsx` was removed (verified absent
   2026-09-02); the only related trace is `frontend/src/pages/CustomerDetail.tsx:248`'s
@@ -448,6 +454,7 @@ cited files; entries marked *code check* below carry the result).
 - **Reorder repack is N sequential UPDATEs — batch if perf ever bites** (2026-07-22, plan Task 6 close-out, orchestrator-filed): `insertAt`/`closeGap` in `backend/src/lib/taskOrdering.ts` issue one `UPDATE` per displaced sibling inside the transaction (~200 round-trips on a 200-task project). Calm-host worst case measured 0.196s (inside the 200ms NFR); under host load 6-15 the same call measured 0.20-0.47s with containers idle — host contention, not endpoint cost. If real-world use ever feels slow, batch the repack into a single SQL statement (`UPDATE ... FROM (VALUES ...)`) — one round-trip, no model change. Re-time on a quiet host: seed ~200 tasks, `curl -w "%{time_total}" -X PATCH .../tasks/<id> -d '{"position":0}'`.
 - ~~**Unswept prose-overflow surfaces remain candidates for overflow hardening** (2026-07-23, plan Task 2 review, deferred): The comment-text wrap fix (GH #57, `whitespace-pre-wrap break-words` convention) was applied to three surfaces in TaskPanel, CustomerDetail, and ProjectDetail. Three other surfaces remain unswept: (a) `frontend/src/pages/views/ProjectRisks.tsx:299` and `:446` — risk.description in a `max-w-[28rem]` cell, contained by table's `overflow-x-auto` but stretches it; (b) `frontend/src/pages/views/ProjectTimeline.tsx:157` — task.description with neither wrap-hardening nor clamp. Follow-up: apply the prose standard across all surfaces.~~ **Resolved 2026-08-02** (Issues Sweep #1): both surfaces now use `whitespace-pre-wrap wrap-break-word` (Tailwind v4's renamed `break-words`) — `ProjectRisks.tsx`'s desktop grid cell and mobile card description, and `ProjectTimeline.tsx`'s task description. Verified in the current tree. See CHANGELOG's "Service Catalogue and project Risks tables on the data grid; long text wraps" entry.
 - **E2E fixture pollution pattern: shared seeded state across suite** (2026-07-23, plan Task 2 review, deferred): `e2e/fixtures/test.ts` doc-comment incorrectly claims `seededProject` is "effectively per test file," but it is WORKER-scoped with `workers: 1`, meaning ONE seeded project is shared by the entire suite run (all specs sequentially). `e2e/tests/comments.spec.ts` (new) leaves a 300-char comment on task Alpha, inherited by `kanban-dnd.spec.ts` and `list-dnd.spec.ts`. Benign today (drag specs don't depend on Alpha being comment-free), but a known suspect for CI fragility if comment mutations cause later specs to flake. Future fix: clean comment state in specs that don't exercise comment persistence, or truncate seeded comment history between specs.
+  *Updated 2026-09-24 (Epics phase, docs-reconciliation)*: `e2e/fixtures/test.ts`'s comment (lines 4-7) still says "effectively per test file"; still inaccurate for the same reason — `playwright.config.ts` also sets `fullyParallel: false`, so the whole run is genuinely ONE seeded project shared by every spec file in sequence, not an approximation of per-file isolation. Two new specs add to the same pattern: `e2e/tests/epics.spec.ts` creates and deletes an epic on the shared `seededProject`, leaving behind a top-level "story" task (via the epic's "Add story…", later DONE-marked and orphaned by the epic delete) that persists into every later spec in the run; `e2e/tests/task-epic-select.spec.ts` seeds its own tasks/epics via the API rather than mutating the shared project directly, but its own file header notes that page-scoped `getByTestId("epic-chip")` locators must stay drawer/panel-scoped because the shared project can already carry epic-tagged tasks from earlier tests in the same worker. Still not fixed — same future-fix direction applies (truncate or scope seeded mutations per spec).
 
 ---
 
@@ -1461,57 +1468,96 @@ are accepted-as-deferred, not outstanding review items.
   re-runs two slow specs, so it was left out of the 2026-08-07 subtask-edit
   phase rather than widening that diff.
 
+## Pipeline module and SA project owner removed (2026-09-22)
+
+The Pipeline module (opportunity tracking, native-ported from Velora) and the
+SA project-owner concept (`Project.saId`, the SA role) were removed from
+backend, frontend, e2e, and docs (user decision 2026-09-22). Every entry below
+this line that concerned the Pipeline module, opportunities, or the SA role
+is now moot — its subject no longer exists in the code — and is struck with a
+`**Moot 2026-09-22**` note rather than deleted, per this file's append-only
+convention.
+
+### Deferred — the Daily Review empty-group prune may now be dead code
+
+`backend/src/routes/dailyReview.ts`'s prune branch (the `projectCustomerIds.has(c.id)`
+removal for a non-owned candidate) existed to drop a customer that passed
+`customerVisibilityFilter` but contributed no project to the page. With the `saId`
+arm gone from `projectVisibilityFilter`, the `candidateCustomers` SQL query appears
+to exclude those customers one step earlier: its second clause requires either
+`tamId: user.sub` or an ACTIVE project matching the project filter, which for an
+attached (non-owned) customer reduces to exactly the condition the later
+`projectWhere` attached-tier bucket uses. No scenario was found in which a customer
+is admitted as a candidate and then pruned. **Not acted on** — removing the branch is
+a route-logic simplification, not part of the removal phase. A regression test for the
+observable behaviour (an unowned customer whose only ACTIVE project belongs to another
+TAM is absent, and does not inflate `coverage[TODAY].total`) was added to
+`backend/test/dailyReview.test.ts`, so the behaviour is pinned either way.
+
 ## Pipeline native port — accepted risks & deferred items (2026-08-15)
 
 Collected across the six-milestone native port (branch `velora-integration`); every
 blocking finding was fixed pre-PR — these are the consciously accepted leftovers.
 
-- **`xlsx@0.18.5` ships known npm-audit advisories (prototype pollution, ReDoS) —
+- ~~**`xlsx@0.18.5` ships known npm-audit advisories (prototype pollution, ReDoS) —
   accepted for v1.** The parse is 100% client-side, in the authenticated user's own
   tab, on a file that user personally chose; the server never parses a workbook, so
   there is no remote-attacker path. Upgrade path if a dependency-audit policy ever
   lands: SheetJS's own 0.20.x registry (not npm). No `npm audit` gate exists in CI
-  today, so this cannot break the merge gate.
-- **PRD §2.7's per-PIC Overview summary cards are deliberately omitted** — the
+  today, so this cannot break the merge gate.~~ **Moot 2026-09-22**: `xlsx` and the
+  Excel/CSV import dialog were removed with the Pipeline module.
+- ~~**PRD §2.7's per-PIC Overview summary cards are deliberately omitted** — the
   Overview panel ships KPI tiles + a stage distribution; the per-PIC drill-down is
   fully realized on the Executive dashboard instead. Spec deviation on record, not
-  an unimplemented gap.
+  an unimplemented gap.~~ **Moot 2026-09-22**: the Pipeline Overview panel is gone.
 - **App-wide light-theme hover contrast (pre-existing, NOT pipeline)**:
   `hover:bg-primary-container` paired with `text-on-primary` renders ≈1.3:1 in
   light theme (white label on pale green) across 15+ sites (Admin, Settings,
-  Pipeline, gantt, DateRangeField…). The pipeline buttons just follow the house
-  pattern; fixing it is one global ticket, not per-feature.
-- **DealCard on a project's Overview tab reads the full deal list client-side**
+  gantt, DateRangeField…). This is a general cross-cutting issue, not specific to
+  the removed Pipeline pages; fixing it is still one global ticket.
+- ~~**DealCard on a project's Overview tab reads the full deal list client-side**
   (`useOpportunities().find(projectId)`) — fine at the PRD's "hundreds of deals"
   scale and cache-shared, but PRD §3.3's ~2k-deal revisit trigger applies to this
-  call site too.
+  call site too.~~ **Moot 2026-09-22**: `DealCard.tsx` was deleted with the
+  Pipeline module.
 - **Backend `tsx watch` inotify staleness** observed once on the dev stack (file
   edits silently not picked up until `docker compose restart backend`). If the API
-  ignores fresh code, restart the container before debugging deeper.
-- **`backend/tsconfig.json` excludes `scripts/` from the typecheck gate**
+  ignores fresh code, restart the container before debugging deeper. (General
+  backend dev-loop issue, not Pipeline-specific — unaffected by the removal.)
+- ~~**`backend/tsconfig.json` excludes `scripts/` from the typecheck gate**
   (pre-existing — `create-admin.ts` too). `import-velora.ts` was hand-typechecked
-  clean with the same compiler options; a follow-up could add a scripts tsconfig.
-- **Import parse polish candidate**: an unparseable Win Probability cell silently
+  clean with the same compiler options; a follow-up could add a scripts tsconfig.~~
+  **Moot 2026-09-22**: `import-velora.ts` no longer exists; `create-admin.ts` is
+  the only script left excluded from the typecheck gate, tracked as its own
+  pre-existing nit, not a Pipeline one.
+- ~~**Import parse polish candidate**: an unparseable Win Probability cell silently
   defaults to 50 (`importParse.ts` `winProbRaw`) — same shape as the fixed
-  deal-value bug, much lower stakes.
-- **Cutover checklist — SIMPLIFIED (user decision 2026-08-15: START FRESH, NO
+  deal-value bug, much lower stakes.~~ **Moot 2026-09-22**: `importParse.ts` was
+  deleted with the Pipeline module.
+- ~~**Cutover checklist — SIMPLIFIED (user decision 2026-08-15: START FRESH, NO
   DATA MIGRATION).** The Pipeline begins empty in production; the SA team enters
   or Excel-imports deals fresh. `backend/scripts/import-velora.ts` ships unused —
   it remains available if historical data is ever wanted BEFORE users start
   editing (it is a full-overwrite sync; never run it after go-live). Remaining
   cutover acts, at the user's own pace: retire the standalone `/opt/velora` stack
   and its GitLab CI deploy; after a soak period, drop the dev `velora-*` compose
-  services and the `../VeloraApp` clone. Dev-DB fixtures:
+  services and the `../VeloraApp` clone. **Partly resolved 2026-09-21**: the dev
+  `velora-app`/`velora-cron` services, the `velora` logical database and the
+  `../VeloraApp` clone are gone from the dev stack and its documentation (user
+  confirmed nothing remains to use from Velora). Retiring the standalone
+  `/opt/velora` stack and its GitLab CI deploy is infrastructure outside this
+  repository and is not tracked here. Dev-DB fixtures:
   `qa@solvro.test` (id 707) is ALSO the e2e fixture admin — keep it, password
   `QaTest1234!` (gates.sh asserts it pre-smoke); the QA project 1408 ("Delta
-  Migration Delivery") + its linked deal are throwaway.
+  Migration Delivery") + its linked deal are throwaway.~~ **Moot 2026-09-22**: the
+  Pipeline module (and with it, the cutover/import concern) no longer exists.
 
 ## Velora integration, Phase 1 ("One address") — deferred findings (2026-08-14)
 
 > **PIVOT 2026-08-14 (same day, later): the native-port decision supersedes most of this section** (see CLAUDE.md standing decisions; PR #146 reverted by #148). Item statuses: the `iss`/`aud` shared-verifier requirement is **moot** (no shared verifier exists in the native port); the cron-timezone decision (keep 23:00 UTC = 06:00 WIB) **carries over** into the native re-implementation of the auto-hold job; the GitLab-CI item **reframes** as: retire the standalone `/opt/velora` deploy once the native port ships and its data is migrated; the compose-profile note still describes the dev stack accurately (the Velora services remain as reference/data source).
 
 User-deferred findings from Phase 1 of the Velora (Pipeline) integration
-(`docs/plans/velora-integration-plan.md`, `docs/plans/velora-integration-prd.md`,
+(`docs/archive/plans/velora-integration-plan.md`, `docs/archive/plans/velora-integration-prd.md`,
 branch `velora-integration-phase-1`): `docker-compose.yml` gained `velora-app`
 + `velora-cron` services and a second logical Postgres database (`velora`);
 `frontend/nginx.conf` + `frontend/vite.config.ts` gained the same-origin
@@ -1528,7 +1574,7 @@ routed to a later phase, not outstanding review items.
   live gap yet (nothing but Solvro's backend holds the secret, and Phase 1
   ships no route that issues Velora-shaped tokens), but it becomes load-
   bearing the moment Phase 2's shared sign-in lands. Per
-  `docs/plans/velora-integration-plan.md`'s Phase 2 (`lib/solvro-token.ts`,
+  `docs/archive/plans/velora-integration-plan.md`'s Phase 2 (`lib/solvro-token.ts`,
   Velora repo), that verification step must add and check an `iss`/`aud`
   claim (or equivalent) so a Velora-internal token (if any ever exists) can't
   be replayed against Solvro, and vice versa. File as a Phase 2 acceptance
@@ -1553,14 +1599,14 @@ routed to a later phase, not outstanding review items.
   3001) while the standalone stack presumably uses its own ports. That
   GitLab CI pipeline must be stopped or repointed at cutover, or the two
   stacks will drift and confuse which one is authoritative. User decision
-  due by Phase 2 (tracked in `docs/plans/velora-integration-plan.md`).
+  due by Phase 2 (tracked in `docs/archive/plans/velora-integration-plan.md`).
   Related decision already made (2026-08-14): Velora-side *source* work
   happens on the GitHub repo (`FS3P/VeloraApp`, cloned at `../VeloraApp`),
   not GitLab. Open consequence: `setup.sh`'s `VELORA_IMAGE` default still
   points at the GitLab registry image that GitLab CI builds — where prod
   images build from once development moves to GitHub is part of the same
   cutover decision.~~ **Obsolete 2026-09-02**: code check — `setup.sh` has zero `velora` references; the separate-service prod provisioning this entry was keyed on was removed with the native-port pivot. The external GitLab pipeline is outside this repo.
-- **Declined reviewer nit, recorded for context: no compose profile gates
+- ~~**Declined reviewer nit, recorded for context: no compose profile gates
   the Velora services in the dev stack.** The phase reviewer suggested
   gating `velora-app`/`velora-cron` behind a Docker Compose profile so
   `docker compose up -d` could still start a Velora-less Solvro without an
@@ -1569,7 +1615,9 @@ routed to a later phase, not outstanding review items.
   `velora-app` service's build context) — integration is default-on, not
   opt-in, matching production's default-on `setup.sh` behavior (`SKIP_VELORA=1`
   is the opt-out there). Documented in `docker-compose.yml`'s header comment
-  rather than implemented as a profile.
+  rather than implemented as a profile.~~ **Moot 2026-09-22**: the `velora-app`/
+  `velora-cron` services were already retired 2026-09-21, and the Pipeline
+  module they backed is now removed entirely.
 
 ## Daily Review v2 — deferred findings (2026-08-29)
 
@@ -1798,9 +1846,7 @@ blockers; this is its one deferred finding, not an outstanding review item.
   rendered as `<span className="material-symbols-outlined">person_add</span>`
   inside a labelled `<button>`/`<Link>` contributes its ligature text to the
   computed accessible name (e.g. `person_add Assign PIC`, `edit Edit`,
-  `delete Delete`). Seen on the opportunity detail header row
-  (`frontend/src/pages/OpportunityDetail.tsx` — View project, Create project,
-  Assign PIC, Edit, Delete) and elsewhere: grep-verified rough size is 188
+  `delete Delete`). Grep-verified rough size is 188
   `material-symbols-outlined` spans across 47 files under `frontend/src`,
   with roughly 136 of them sitting inside a `<button>` or `<Link>` element.
   Screen readers announce the glyph name; Playwright locators in `e2e/`
@@ -1808,7 +1854,11 @@ blockers; this is its one deferred finding, not an outstanding review item.
   on every icon span inside a labelled control (or a shared icon component),
   then one e2e pass to restore `exact` matching where wanted. Deferred
   2026-09-08 (phase review, Claim Unassigned Deals) — not fixed piecemeal to
-  avoid one header row with two conventions.
+  avoid one header row with two conventions. **Update 2026-09-22**: the
+  opportunity detail header row cited as the original example
+  (`frontend/src/pages/OpportunityDetail.tsx`) was deleted with the Pipeline
+  module; the general app-wide finding still stands elsewhere and remains
+  open.
 
 ## Weekly Sync achievement rows — deferred findings (2026-09-10)
 
@@ -1830,3 +1880,405 @@ item.
   existing pattern (`MidweekSyncModal.tsx`); not blocking either form. Fix
   direction: mark the offending card itself (e.g. a border in the error
   tone) or scroll/focus it when the save is blocked.
+
+## iTop integration Phase 1 — deferred findings (2026-09-22)
+
+User-deferred findings from the wave-1 review of the iTop integration's first
+phase (branch `feat/itop-p1-tickets` — see `CHANGELOG.md`'s "iTop
+integration: encrypted secrets at rest, ticket snapshot schema, REST client"
+entry). No fix now; each is a Phase 2/3 follow-up per
+`docs/archive/plans/itop-integration.md`.
+
+- ~~**`itop_tickets` has a low-cardinality `@@index([status])`.**
+  `backend/prisma/schema.prisma:559` (`ItopTicket` model, lines 533-563)
+  indexes `status` alone; `status` has only a handful of distinct values
+  (`new`, `assigned`, `resolved`, `closed`, …), so the index does little to
+  narrow a scan once the table has real volume, while every read in
+  `backend/src/routes/itop.ts` (ongoing/resolved/mine scopes) always filters
+  by `customerId` first. Fix direction: replace it with
+  `@@index([customerId, status])` in the next iTop migration.~~ **Resolved
+  2026-09-22**: done exactly as suggested — migration
+  `20260922182346_itop_time_entries` drops `itop_tickets_status_idx` and adds
+  `@@index([customerId, status])` (`itop_tickets_customer_id_status_idx`).
+- ~~**iTop datetimes are parsed as UTC.** `parseItopDate` in
+  `backend/src/lib/itop/sync.ts:61` treats every date/time string iTop
+  returns (`start_date`, `last_update`, `tto`, `ttr`, `resolution_date`) as
+  UTC with no timezone conversion. If the iTop server itself runs in local
+  (non-UTC) time, every stamp — and the SLA/age math derived from it — is
+  off by the server's UTC offset. Fix direction: a per-install timezone
+  setting (likely on `ItopConfig`) once an iTop admin confirms the source
+  server's zone; no such setting exists yet.~~ **Resolved 2026-09-24**
+  (branch `fix/itop-timezone`): confirmed on the real iTop 3.2.2 (Europe/Paris,
+  2 h skew). `ItopConfig.timezone` (IANA, default `UTC`, Admin › iTop) feeds
+  `lib/itop/timezone.ts`; all reads, OQL cutoffs and writes convert through
+  it, and a zone change forces a full re-sync. Verified live: 8 tickets and
+  their case logs match iTop after the re-sync.
+- **`GET /customers/:id` doesn't type or use `itopOrgId`/`itopOrgName` on
+  the frontend, though the backend response already carries both fields.**
+  `backend/src/routes/customers.ts`'s `GET /:id` calls
+  `prisma.customer.findFirst({ where, include: customerInclude(user) })`
+  with no top-level `select` — Prisma's default behavior for `include`
+  without `select` returns every scalar column of `Customer` (so
+  `itopOrgId`/`itopOrgName` are already on the wire) alongside the included
+  relations. The frontend's `CustomerDetail` type
+  (`frontend/src/lib/queries.ts:83`) doesn't declare either field, and
+  `frontend/src/pages/CustomerDetail.tsx:59-62` instead derives whether a
+  customer is iTop-mapped from the tickets endpoint's own `mapped` flag —
+  its inline comment attributes the omission to a `customers.ts` "select",
+  but the route uses `include`, not `select`, so the fields are just
+  untyped and unread on the frontend, not actually withheld by the backend.
+  Consider typing and using them directly in Phase 2, or explicitly
+  trimming the route's response with a real `select` if withholding them
+  was the intent.
+- **No pino `redact` configuration — defence in depth for the iTop token.**
+  `backend/src/logger.ts` creates the shared pino logger with no `redact`
+  option, though `docs/archive/plans/itop-integration.md` §5 ("Risks") calls for
+  redacting `token` / `Auth-Token` paths. No current code path actually logs
+  the iTop application token — it travels to iTop in a request body that the
+  HTTP request logger (see the next entry) doesn't log — so this is a
+  hardening gap, not a live leak. Fix direction: add a `redact` array
+  (`token`, `Auth-Token`, and the equivalent per-TAM token fields Phase 5
+  introduces) to the `pino()` call in `backend/src/logger.ts`.
+- **Pre-existing: the request logger logs the `Authorization` header
+  (found during this phase's review, unrelated to the iTop diff).**
+  `backend/src/app.ts`'s `app.use(pinoHttp({ logger }))` uses `pino-http`'s
+  default `req` serializer, which logs request headers — including
+  `Authorization` (the caller's bearer JWT) and `Cookie` — at the configured
+  `LOG_LEVEL`. Recommended fix, standalone from the iTop work: add
+  `redact: ["req.headers.authorization", "req.headers.cookie"]` to the pino
+  logger (`backend/src/logger.ts`) so `pino-http` redacts those paths before
+  they're written.
+
+Integration complete as of 2026-09-23; the plan is archived at
+`docs/archive/plans/itop-integration.md`.
+
+---
+
+## iTop integration Phase 3 — deferred findings (2026-09-22)
+
+- **`TimeSpent` duration unit assumed to be seconds.**
+  `backend/src/lib/itop/types.ts`'s `ITOP_TIME_SPENT_DURATION_IN_SECONDS`
+  (currently `true`) drives `lib/itop/sync.ts`'s `syncTimeEntries`, which
+  divides `TimeSpent.duration` by 60 to get `ItopTimeEntry.durationMinutes`.
+  This is iTop core's own default unit for a duration attribute, but the
+  real install's Time Tracking extension has not been probed yet. Verify
+  with the probe's `TimeSpent` field dump (`output_fields: "*"`, see
+  `client.ts`'s `probe()`) against the real install before go-live — if it
+  reports minutes instead, flip the one constant.
+- **Full-sync removal passes bind one parameter per in-window row —
+  approaches Postgres's bind-parameter ceiling at scale.** In
+  `backend/src/lib/itop/sync.ts`, both full-sync removal passes build an
+  `id: { notIn: [...seenIds] }` clause (ticket removal, line 519; time-entry
+  removal, line 373), which Prisma compiles to one bind parameter per id in
+  `seenIds`. With many mapped users and a wide time-entry window (or many
+  tickets), that set can grow large enough to exceed Postgres's
+  bind-parameter limit; the failure is caught by the surrounding `catch`
+  (lines 381, 551) and logged, so the removal pass is silently skipped
+  rather than surfaced as a sync failure — stale rows accumulate instead of
+  being dropped. Fix direction: stamp rows with a `syncRunId`/`seenAt` during
+  the upsert and delete with `WHERE seenAt < runStart` instead of `notIn`,
+  which needs no per-row parameter regardless of row count.
+
+Integration complete as of 2026-09-23; the plan is archived at
+`docs/archive/plans/itop-integration.md`.
+
+---
+
+## iTop integration Phase 4 — deferred findings (2026-09-23)
+
+User-deferred findings from Phase 4 (branch `feat/itop-p4-webhook-taskref` —
+see `CHANGELOG.md`'s "iTop webhook and task ticket links" entry). No fix now;
+each is a follow-up decision.
+
+- **Duplicating a task or section drops its pinned iTop ticket ref.**
+  `backend/src/lib/duplicate.ts`'s `TASK_SELECT` (lines 17-31) does not
+  select `itopTicketRef`, and `copyOne`'s `data` object (lines 42-63) never
+  sets it, so every copy made by `POST /tasks/:id/duplicate` or
+  `POST /sections/:id/duplicate` gets no ref, even when its source task had
+  one pinned. This matches the module's existing "carry verbatim, but reset
+  anything that shouldn't point at the same external state twice" pattern
+  (status resets to `TODO`, baseline dates clear, dependencies and comments
+  never copy) but was never an explicit decision for this field. Decide:
+  should a duplicated task keep pointing at the same ticket, or is dropping
+  the ref (current behaviour) correct — two Solvro tasks pointing at one
+  iTop ticket may itself be undesirable.
+- **A task cannot be created with an iTop ticket ref pre-set.**
+  `createTaskSchema` in `backend/src/routes/projects.ts`
+  (`POST /projects/:id/tasks`, lines 85-103) was not extended with
+  `itopTicketRef` — only the PATCH schema in `backend/src/routes/tasks.ts`
+  (line 48) accepts it. A ref can only be attached after the task exists,
+  via a follow-up `PATCH /tasks/:id`. Decide whether create-time pinning
+  (e.g. from a "Create iTop ticket" flow in a later phase) is worth adding,
+  or whether PATCH-only is fine indefinitely.
+- **Focus treatment sweep needed (codebase-wide, not a Phase 4 regression).**
+  `docs/DESIGN.md` §4 names the one app-wide focus treatment as
+  `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30`
+  and explicitly excludes `focus-visible:border-primary`, yet the older,
+  fuller `focus:border-primary focus:outline-hidden` pattern still appears
+  at roughly 55-58 sites across the frontend — including two new ones this
+  phase added: `frontend/src/components/admin/ItopTab.tsx` (5 sites) and
+  `frontend/src/components/itop/TaskTicketField.tsx:14`, alongside
+  pre-existing ones such as `frontend/src/components/TaskPanel.tsx:466,586`.
+  This is a pre-existing, spreading inconsistency, not something to fix
+  per-PR — file as a one-shot design-system sweep task to align every site
+  to the DESIGN.md-documented form in one pass, rather than drifting further
+  one component at a time.
+- **Export: the Gantt Excel export has no "iTop ticket" column.**
+  `frontend/src/lib/gantt/exportExcel.ts`'s `buildTasksSheet` (columns at
+  lines 72-82) builds Section/Title/Status/Priority/(Critical
+  Path)/Start/Due — no column carries a task's pinned `itopTicketRef`, even
+  though it would be a customer-facing-safe field (the ref is the
+  customer's own iTop reference, not internal Solvro data) and could be
+  useful on a customer-facing export. Adding it needs the field threaded
+  through the Gantt row adapter that produces `Row` (`t.itopTicketRef` isn't
+  currently carried onto the row alongside `t.status`/`t.priority`). Decision
+  item — whether this export should show it — not a bug.
+
+Integration complete as of 2026-09-23; the plan is archived at
+`docs/archive/plans/itop-integration.md`.
+
+---
+
+## iTop integration Phase 5 — deferred findings (2026-09-23)
+
+- **Personal-token expiry is best-effort, not guaranteed.** `PUT /itop/me/token`
+  (`backend/src/routes/itopUser.ts`) tries to read the token's expiry via
+  `core/get PersonalToken WHERE user_id = <resolved itopUserId>` using the
+  user's own freshly-saved token, and stores whatever comes back (`expiresAt`
+  left `null` on any failure — unresolved `itopUserId`, the class being
+  unreadable to that profile, or any other iTop error; see the `try/catch`
+  around the `PersonalToken` lookup). Whether an install exposes `PersonalToken`
+  to a plain personal-token holder varies with the profile granted. On an
+  install where it doesn't, `GET /itop/me/token` always reports `expiresAt:
+  null`, so the Settings page has no way to warn a TAM before their token
+  expires — the first sign of expiry is a saved token starting to fail on its
+  next use. No code change proposed; this is a documented limitation of the
+  "read it if iTop allows it" approach chosen for Task 5.1, not a bug to fix.
+- **A token's write capability can't be verified up front.** The same route's
+  write-capability probe calls `client.listOperations()` and checks whether
+  `core/apply_stimulus`/`core/update` appear — but `list_operations` reports
+  what the iTop *server* supports, not what the calling token's *profile* is
+  actually allowed to do, so the probe is logged only (`logger.debug`) and
+  never rejects the token. A TAM who saves a personal token without the
+  `Support Agent` / `Service Desk Agent` write profile therefore passes
+  token-save validation cleanly, and only discovers the gap when their first
+  real action (`POST /itop/tickets/:id/actions` or `/log`) comes back `403
+  itop_token_invalid` or `409 itop_refused` with iTop's own refusal text.
+  Working as designed per Task 5.1's "if you cannot detect rights, skip and
+  say so" rule — noted here so a future UX pass (e.g. a one-time trial
+  `apply_stimulus` dry run, if iTop ever supports one) has the context.
+- **Token-ownership check: residual risk on some iTop installs.** `PUT /itop/me/token`
+  (`backend/src/routes/itopUser.ts`) accepts a pasted personal token only when, used
+  with that token, `SELECT Person WHERE email = <user email>` returns exactly one person
+  AND — when the `PersonalToken` class is readable — `SELECT PersonalToken WHERE
+  user_id = <that person's iTop user>` returns at least one row (iTop scopes that class
+  to the token's own user, so a foreign token sees zero rows and is refused; proven by
+  the imposter test in `backend/test/itop/itopToken.test.ts`). iTop REST 1.3 has no
+  "whoami", so two gaps remain: (a) installs where `PersonalToken` is not readable by
+  the token's profile fall back to the email check alone, and a foreign token that can
+  read Persons would pass; (b) installs where the class is readable beyond the token's
+  own user (e.g. an admin-profile token) also pass. Some iTop versions answer a no-match
+  `core/get` with `code: 100` instead of an empty result; that path is treated as
+  "unreadable" (fail-open) — verify against the real install and record the answer
+  here. Mitigations: grant `PersonalToken` read to the TAM profile, or an iTop-side
+  whoami extension. This is impersonation with a stolen/foreign credential, not
+  privilege escalation: `itopPersonId` is always derived from the caller's own email.
+- **`rounded-full` on filter/tab pills vs DESIGN.md §"Radius".** `docs/DESIGN.md`
+  reserves `full` for status chips and avatars, yet `frontend/src/components/itop/
+  TicketFilters.tsx` and `TicketLog.tsx` use it on toggle buttons (count chips, log tabs).
+  Decide once: sanction the pill-toggle pattern in DESIGN.md, or retire it in both files.
+
+Integration complete as of 2026-09-23; the plan is archived at
+`docs/archive/plans/itop-integration.md`.
+
+---
+
+## iTop integration Phase 6 — deferred findings (2026-09-23)
+
+User-deferred findings from Phase 6 (branch `feat/itop-p6-board` — see
+`CHANGELOG.md`'s "iTop board view and new tickets from Solvro" entry). No fix
+now; each is a follow-up decision.
+
+- ~~**Scope chips stay visible but inert in Board view.**
+    `frontend/src/components/itop/TicketsTab.tsx` renders `TicketFilters`
+    (Ongoing / Resolved this week / Mine) above both the Table and the Board,
+    but only the Table's `useCustomerTickets(scope, cls, ...)` call reads
+    `scope` — `TicketBoard.tsx` always fetches its own fixed `ongoing` +
+    `resolved_week` scopes directly and ignores the `scope` state entirely (it
+    does still respect `cls`). Clicking a scope chip while the Board is active
+    changes nothing on screen, with no indication that the click was a no-op.
+    Fix direction: hide the scope chips (keep the class filter) when
+    `view === "board"` in `TicketFilters.tsx`/`TicketsTab.tsx`.~~ **Resolved 2026-09-23**: `TicketFilters.tsx` gained `showScope`; the Tickets tab hides the scope chips in Board view (class chips stay).
+
+- **The drop lifecycle graph assumes iTop's default stimuli.**
+  `frontend/src/components/itop/board/dropMapper.ts`'s `TRANSITIONS` table
+  hard-codes iTop's default UserRequest/Incident lifecycle (`ev_assign`,
+  `ev_pending`, `ev_resolve`, `ev_close`, `ev_reopen` — decision 10 in
+  `docs/archive/plans/itop-integration.md`). An install with custom states,
+  a narrower state machine, or `ev_reassign`-style semantics instead of plain
+  reassignment will either reject drags the admin actually wants to allow, or
+  let a drag through that `apply_stimulus` then refuses — surfaced only as
+  iTop's own refusal text (`409 itop_refused`), not a Solvro-authored
+  message. No per-install configuration exists for this graph; verify item
+  10 against the real install before relying on Board drag-and-drop there.
+- **Mobile board is a single stacked column with touch drag.**
+  `TicketBoard.tsx`'s `KanbanBoard` uses `grid gap-3 md:grid-cols-5` — below
+  the `md:` breakpoint the five columns stack vertically with drag-and-drop
+  still wired through the same dnd-kit-backed `reui/kanban` engine. This has
+  not been evaluated against real phone use (long stacked scroll to reach a
+  distant column, touch-drag precision across a tall single-column stack);
+  evaluate before treating it as the phone-usable form of the Board, same
+  caution flagged for `kanban-v2`'s task board mobile fallback.
+- **The services pick-list caches for 5 minutes in-process; the cache is now busted on every admin settings change.**
+  `backend/src/routes/itop.ts`'s `GET /services` handler caches
+  `servicesCache` in a module-level variable for `SERVICES_CACHE_TTL_MS` (5
+  minutes). Fixed this round: `bustItopServicesCache()` is called from
+  `routes/itopAdmin.ts` alongside every `bustItopConfigCache()` (settings
+  PATCH, webhook-secret generate/remove, manual sync), so a base-URL/token
+  change no longer leaves a stale or previous-instance service list cached
+  for up to 5 minutes — it re-fetches on the next `GET /services` call.
+- **`GET /itop/services` returns every organisation's services to any authenticated user, with no customer scoping.**
+  `backend/src/routes/itop.ts`'s `GET /services` handler runs `SELECT
+  Service` (no `WHERE`) with the read-only application token and returns
+  every service's `name` and `providerName` (the owning organisation's
+  friendly name) to any signed-in Solvro user, regardless of which
+  customers they can see — `ensureCustomerVisible`/`customerVisibilityFilter`
+  are not applied here, unlike every other `/itop` read. Two consequences:
+  (a) `NewTicketSheet.tsx`'s service picker offers services that don't
+  belong to the customer being ticketed — iTop's own `create` call refuses
+  an entitlement mismatch at submit time, so this is friction, not a write
+  bypass; (b) every iTop organisation name in the install becomes readable
+  through this endpoint by any Solvro user, independent of customer
+  visibility — a narrower information leak than a ticket/customer read, but
+  still not gated the way the rest of `/itop` is. Decision item before this
+  endpoint (or its picker) is reused elsewhere: filter services by the
+  target customer's organisation via iTop's service-entitlement link
+  (`lnkCustomerContractToService` or equivalent) once a `customerId` is
+  known, or accept and document the current organisation-wide visibility.
+
+Integration complete as of 2026-09-23; the plan is archived at
+`docs/archive/plans/itop-integration.md`.
+
+---
+
+## iTop integration Phase 7 — deferred findings (2026-09-23)
+
+User-deferred findings from Phase 7, the last phase (branch
+`feat/itop-p7-timer` — see `CHANGELOG.md`'s "Time tracking and task-to-ticket
+from Solvro" entry). No fix now; each is a follow-up decision.
+
+- **The running timer is shared across every user on one browser profile.**
+  `frontend/src/components/itop/useTicketTimer.ts` persists the single
+  running timer in `localStorage["solvro.itopTimer"]` with no user id in the
+  key or the stored shape. Two Solvro accounts signed in from the same
+  browser profile (e.g. a shared kiosk machine, or one TAM covering for
+  another) see and can stop/discard each other's timer, and a Stop always
+  logs the entry under whichever user's session is currently active, not
+  necessarily the one who started it. Fix direction: key the storage entry
+  (or at least gate reads/writes) by the signed-in user's id.
+- ~~**The Stop-timer response's `myMinutesThisWeek` is UTC-week bucketed; the
+  panel always displays the local-week figure from a separate read.**
+  `POST /itop/tickets/:id/time` (`backend/src/routes/itop.ts`) computes its
+  returned `myMinutesThisWeek` via `currentIsoWeekStart()` (plain UTC
+  Monday), while `TicketTimer.tsx`'s displayed weekly figure comes from
+  `GET /tickets/:id`'s `myMinutesThisWeek`, bucketed by the viewer's local
+  week (`useItopTicket`'s `utcOffsetMinutes`). The two numbers can disagree
+  near a week boundary in a non-UTC timezone. This is already documented in
+  a code comment at the POST handler and in `useLogTicketTimeFor` — the
+  client deliberately never `setQueryData`s the POST response's figure onto
+  the ticket cache, invalidating instead so the next `GET` supplies the
+  correctly-bucketed number. No behavioural bug today, but the mismatched
+  units between the two responses are worth resolving (e.g. have the POST
+  route accept and honor the same `utcOffsetMinutes` the GET route does) so
+  the two payload shapes stop disagreeing on what "this week" means.~~
+  **Resolved 2026-09-23**: `POST /itop/tickets/:id/time` no longer computes
+  or returns `myMinutesThisWeek` at all (`backend/src/routes/itop.ts`'s 201
+  response is now just `{ entry }`) — the route has no `utcOffsetMinutes`
+  input to bucket it correctly by, so the ambiguous figure was dropped
+  rather than fixed to agree. The panel's "this week" figure comes only from
+  `GET /tickets/:id`'s local-week-bucketed value, refetched via
+  `useLogTicketTimeFor`'s invalidation on success — there is no longer a
+  second, differently-bucketed number in play. (Note for a follow-up docs
+  pass: `frontend/src/lib/queries.ts`'s `ItopTimeLogResult` type and its
+  surrounding comments still describe the old `myMinutesThisWeek`-bearing
+  shape as of this writing — worth updating alongside this fix.)
+- **`useItopTicket`'s `utcOffsetMinutes` isn't part of its query key.**
+  `frontend/src/lib/queries.ts`'s `useItopTicket(id)` computes
+  `utcOffsetMinutes` fresh on every render and sends it on the request, but
+  the query key is just `queryKeys.itopTicket(id)` — unlike `useItopDaily`
+  and `useUtilization`, which both fold `utcOffsetMinutes` into their keys.
+  A DST transition (or a laptop's timezone changing mid-session) changes
+  what "this week" means without invalidating the cached response, so the
+  ticket panel's "x h this week" figure can read stale-by-timezone until the
+  query's `staleTime` next elapses on its own. Fix direction: fold
+  `utcOffsetMinutes` into `queryKeys.itopTicket` the same way the other two
+  hooks do.
+- **The `TimeSpent.ticket_ref` attribute name is unverified against the real install.**
+  `POST /itop/tickets/:id/time`'s `core/create TimeSpent` call
+  (`backend/src/routes/itop.ts`) sends `ITOP_TIME_SPENT_TICKET_REF_FIELD`
+  (`backend/src/lib/itop/types.ts`, currently `"ticket_ref"`) to link the new
+  entry back to its ticket. Whether that attribute exists, is spelled that
+  way, and is writable via REST on the real install's Time Tracking
+  extension has not been confirmed — only the fake iTop (`backend/test/itop/
+  fakeItop.ts`) enforces it, by refusing an unknown ref, which is a
+  Solvro-side test stand-in, not evidence about the real server. If the real
+  install accepts the create but silently ignores an unrecognised
+  `ticket_ref` field, the entry still lands in Utilization (time is real and
+  attributed to the right user/customer) but with no ticket link, and the
+  ticket panel's "x h this week on this ticket" figure stays at 0 for every
+  entry logged from Solvro, even though the hours are being counted
+  elsewhere. Action for the iTop admin before go-live: confirm the
+  attribute's name and that it is writable via REST (the same probe
+  discipline already used for `TimeSpent.duration`'s unit, see the Phase 3
+  finding above and `docs/CONFIGURATION.md` §2.16).
+
+Integration complete as of 2026-09-23; the plan is archived at
+`docs/archive/plans/itop-integration.md`.
+
+## iTop integration — real-install findings (2026-09-24)
+
+Tested against a real iTop 3.2.2 (ITIL, default lifecycle). Fixed in code the same day: mandatory `comment` on writes, `pending_reason`, assign from Pending, SLA deadline fields, per-row sync skipping, priority codes. Still open:
+
+- **The application token cannot read iTop's `User` class** (Support Agent profile), and neither can a TAM's personal token. So user matching sets the person link but never `User.itopUserId`, and time logging answers "Your iTop user account is not linked yet". Options once the Time Tracking extension is installed: check whether `TimeSpent.user_id` can be omitted (iTop may default it to the caller), or grant the application token a profile that can read `User`.
+- **`PersonalToken` is not readable by a Support Agent token either.** The token-ownership check therefore falls back to the email match, and token expiry shows as unknown. See the Phase 5 entry above.
+- **Go-live iTop setting:** personal tokens work only for profiles listed in the `authent-token` module setting `personal_tokens_allowed_profiles` (e.g. `array('Support Agent')`); by default only administrators can use them.
+- **Time Tracking extension not bundled** with iTop Community; download it from iTop Hub before the `TimeSpent` checks (duration unit, `ticket_ref` writability) can run.
+- **`pending_reason` is assumed to be free text.** True on the default install; an install that turns it into a list of values will refuse free text, and the user sees iTop's message.
+
+## Professional UI pass — deferred findings (2026-09-29)
+
+- **e2e flakes that pass on retry** (2026-09-29): `e2e/tests/list-dnd.spec.ts:89` (cross-status reorder, Gamma onto Alpha), `e2e/tests/kanban-dnd.spec.ts:1114` (mobile touch append), `e2e/tests/kanban-dnd.spec.ts:1071` (R3 cross-view parity), `e2e/tests/gantt-parity.spec.ts:246` (drag-move). The sidebar now starts expanded at 1440px, which makes the main area 196px narrower; suspect for the desktop drag flakes, not confirmed. Same flake class as the earlier drag/reorder-timing entries above.
+- **`frontend/src/components/Drawer.tsx` has no focus management** (2026-09-29): `Modal` gained focus trap/restore via `frontend/src/hooks/useDialogFocus.ts`; `Drawer` is intentionally non-modal, so whether it should trap, restore, or stay as is needs a decision.
+- **`frontend/src/lib/contrast.ts` `pickContrast` has no callers left** (2026-09-29): label/epic chips now use `on-surface` text over a tint, so nothing needs it. Kept on purpose pending a decision to delete it.
+- **CORS config has no `exposedHeaders`** (2026-09-29): `backend/src/app.ts` (`cors({...})`) does not expose `X-Total-Count` (set in `backend/src/routes/tasks.ts:203`), so cross-origin callers cannot read it. Fine through the same-origin `/api` proxy the app uses; matters only if the API is ever called cross-origin.
+- **`GET /tasks` still caps at 200 rows** (2026-09-29): the `/tasks` page now shows "Showing N of total" (`frontend/src/pages/Tasks.tsx:424`), so truncation is visible, but pagination remains deferred (see the earlier `GET /tasks` window entry).
+
+## Collaboration & sharing, Phase 1 ("Quick wins") — deferred findings (2026-09-29)
+
+- **Flaky e2e: `auth.spec.ts` "an admin page opened right after sign-in stays on the admin page" fails on the `mobile` project** (2026-09-29): `e2e/tests/auth.spec.ts:70`. Fails about 1 run in 2 against the dev server at `:5173` with `--retries=0`. After sign-in and a check that `solvro.token` and `solvro.user` are in localStorage, `page.goto("/admin")` ends on the sign-in page and the H1 "Admin" never appears within 10 s. Reproduced on untouched `origin/develop` (`3749e7c`) on 2026-09-29, so it predates Phase 1. Cause unknown, not investigated; the `desktop` project passes.
+- **`TaskPanel` shows "Loading task…" forever when the project-tasks fetch fails** (2026-09-29): `frontend/src/components/TaskPanel.tsx:182`. When the fetch errors, `tasks` stays undefined and the panel keeps showing the loading text instead of an error state. Predates Phase 1, which only added "Task not found" for the loaded-but-missing case. Minor.
+- **The `eslint-disable-next-line react-hooks/exhaustive-deps` comments have no effect: `frontend/` has no ESLint config** (2026-09-29): 21 occurrences of `react-hooks/exhaustive-deps` under `frontend/src` (verified by grep), including the new ones in `ProjectFormModal.tsx` and `CustomerFormModal.tsx`. The exhaustive-deps discipline they document is not enforced by anything. Same root cause as the earlier "ESLint `exhaustive-deps` disable comment is inert; repo has no lint config" entry under Tech debt; fixing that one (an ESLint config with `react-hooks/exhaustive-deps` plus a lint gate) resolves this too. Minor.
+
+## Collaboration & sharing, Phase 3 ("Conflict warning") — deferred findings (2026-09-30)
+
+- **A hung `PATCH /tasks/:id` blocks every later save of the same task** (2026-09-30): task saves are now applied in order per task (a promise chain in `useUpdateTask`, `frontend/src/lib/queries.ts`), and `apiRequest` (`frontend/src/lib/api.ts`) has no timeout. While one request hangs, optimistic edits keep showing but nothing further is sent. Rare (e.g. a dead tunnel); the fetch eventually errors and the chain resumes. Possible fix: a request timeout in `apiRequest`.
+- **Panel date edits can leave a task with its due date before its start date** (2026-09-30): the task panel now sends only the date that changed (per-field conflict design), so a due-date edit can merge with someone else's later start date. `PATCH /tasks/:id` (`backend/src/routes/tasks.ts`) has no start <= due check; only the edit form validates on the client. Gantt edits could already produce this. Possible fix: a server-side check or clamp.
+- **Flaky backend test: `backend/test/taskOrdering.test.ts` "orders GET /tasks (cross-project)…"** (2026-09-30): fails occasionally in the full parallel run and passes alone. Its assertion reads the `take: 200` window of `GET /tasks`, which other test files fill when running in parallel. Predates Phase 3.
+- **Dev backend container can keep serving stale `backend/src/routes/tasks.ts`** (2026-09-30): observed during Phase 3: after an edit the `tsx watch` process had not reloaded the file, and the container served the previous version until `docker compose restart backend`. Cause not investigated; restart the backend before trusting a backend change on the dev stack.
+- **Per-call `mutate` error callbacks can be lost in `SolvroGantt.tsx`** (2026-09-30): `frontend/src/components/gantt-v2/SolvroGantt.tsx` (~`:561`, `:644`, `:701`, `:746`) passes `onError` to `updateTask.mutate(vars, { onError })`. TanStack Query v5 fires per-call callbacks only for the latest `mutate` on a hook, so a failure is silently swallowed if another update on the same hook follows before it settles; the per-task save queue added in Phase 3 widens that window. The task panel moved to `mutateAsync(...).catch(...)` for this reason. Possible fix: the same change in the Gantt.
+- **Filters popover keeps stealing focus after a filter is chosen** (2026-09-30): on `/tasks`, after picking a filter value and pressing Escape, the Filters popover's focus manager keeps pulling focus back into its "Filter..." search input for a short time. A user who opens a task row right away can type into the popover's search box instead of the task edit form. Seen as CI-only failures in `e2e/tests/task-conflict.spec.ts` on the production build (fast enough to hit the window); the tests now wait for the popover to close. Predates Phase 3; not investigated in the vendored filters component.
+
+## Collaboration & sharing, Phase 4 ("Activity and notifications") — deferred findings (2026-09-30)
+
+- **Mention chips only resolve against the project's TAM and current members** (2026-09-30): `frontend/src/components/CommentMentions.tsx`. Comments store user ids only, so a mentioned person later removed from the project, or a view-all user the server accepted as a mention, renders as plain `@name` text instead of a chip. Known limitation; do not "fix" it by trusting local picker state.
+- **The recipient concurrency tests were never shown to fail without the row lock** (2026-09-30): `backend/test/activity.test.ts` and the "simultaneous identical assign" case in `backend/test/notifications.test.ts`. They cannot fail spuriously, but nobody has confirmed they fail when the row lock is removed, so they may not actually guard it.
+- **Activity feed ordering is by id, while the index is `(project_id, created_at desc)`** (2026-09-30): measured under 1 ms at 200k rows, so no action now. A `(project_id, id desc)` index would match the ordering exactly if it ever matters.
+- **Project TAM changes are not in the activity log** (2026-09-30): admin TAM reassignment (`PATCH /admin/projects/reassign`) and a project's TAM change through the normal project update produce no activity event. Out of scope for the activity-log work; file a follow-up if the feed should show ownership changes.
+
+## Collaboration & sharing, Phase 6 ("Guest links") — deferred findings (2026-09-30)
+
+- **The guest page still loads Google Fonts from Google** (2026-09-30): the SPA shell served at `/share/<token>` (`frontend/nginx.conf`) pulls its fonts from Google, so a visitor's browser contacts Google when opening a guest link. The `Referrer-Policy: no-referrer` header on the document keeps the token out of those requests. Self-hosting the fonts would remove the third-party request but changes the whole app shell, so it was deferred.
+- **The global `errorHandler` ignores `err.status`, so malformed JSON request bodies return 500 app-wide** (2026-09-30): `backend/src/http/errors.ts` renders a `body-parser` syntax error as an internal error rather than a 400. Pre-existing, not introduced by guest links; the public share router maps its own 400s to the uniform 404, so the guest surface is unaffected.
+- **The rate limiter is in-process only** (2026-09-30): `backend/src/http/rateLimit.ts` keeps its counters in memory per backend instance, with no shared store. With more than one backend instance the effective limit is per instance, and counters reset on restart. Fine for the current single-instance deployment; needs a shared store if the backend is ever scaled out.
+- **Guest links use the address the owner is browsing from** (2026-09-30): `frontend/src/components/ProjectShare.tsx` builds the copied link from `window.location.origin`, because the backend has no public base URL setting. An owner signed in through an SSH tunnel or `localhost` gets a link a guest cannot open. Possible fix: a `PUBLIC_BASE_URL` setting used to build the link.
+- **The shared dialog focus trap only wraps from the last focusable element** (2026-09-30): `useDialogFocus` (used by `Modal`) wraps Tab only when focus is on the last tabbable element, so focus that sits on a non-tabbable element with `tabIndex={-1}` (e.g. a heading focused programmatically) can Tab out of the dialog when nothing tabbable follows it. `ProjectShare.tsx` works around it locally on its "Guest links" heading. Pre-existing; the fix belongs in the shared hook.

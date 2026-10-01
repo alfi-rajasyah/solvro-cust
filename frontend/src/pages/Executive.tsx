@@ -2,14 +2,12 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
 import {
-  fmtDate,
   PortfolioCalendar,
   sortPortfolioRows,
 } from "@/components/portfolio/PortfolioCalendar";
-import { PipelineAnalyticsSection } from "@/components/pipeline/PipelineAnalyticsSection";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { ProjectStatusChip } from "@/components/StatusChip";
-import { hasPermission, useAuth } from "@/lib/auth";
+import { fmtDateTime, fmtDay, fmtRange } from "@/lib/formatDate";
 import { type PortfolioProjectRow, useExecutiveReport } from "@/lib/queries";
 
 // Executive dashboard — org-wide portfolio roll-up. Two blocks: an
@@ -51,15 +49,8 @@ function ExecutiveBody({
 }: {
   data: { projects: PortfolioProjectRow[]; generatedAt: string };
 }) {
-  const { user } = useAuth();
   const { projects, generatedAt } = data;
   const overdue = projects.filter((p) => p.isOverdue);
-  // PRD §2.7: "Both fold-ins render only for users holding pipeline:view —
-  // a TAM without it sees today's pages unchanged and their browser never
-  // calls [the pipeline API]." Gated here (mount boundary), not inside
-  // PipelineAnalyticsSection, so a user lacking the permission never mounts
-  // the component that calls useOpportunities() in the first place.
-  const canViewPipeline = hasPermission(user, "pipeline:view");
 
   if (projects.length === 0) {
     return (
@@ -69,7 +60,6 @@ function ExecutiveBody({
           title="No projects yet"
           message="Once projects exist across the org, they'll show up here as a portfolio roll-up."
         />
-        {canViewPipeline && <PipelineAnalyticsSection />}
       </div>
     );
   }
@@ -86,7 +76,6 @@ function ExecutiveBody({
 
       <OverdueProjectsSection projects={overdue} />
       <PortfolioTimelinesSection projects={projects} />
-      {canViewPipeline && <PipelineAnalyticsSection />}
     </div>
   );
 }
@@ -108,7 +97,7 @@ function OverdueProjectsSection({
         <h2 className="font-display text-base font-bold text-on-surface">
           Overdue Projects
         </h2>
-        <span className="inline-flex items-center rounded-full bg-error-container px-2 py-0.5 font-mono text-[11px] font-semibold text-on-error-container">
+        <span className="inline-flex items-center rounded-full bg-error-container px-2 py-0.5 font-mono text-meta font-semibold text-on-error-container">
           {sorted.length}
         </span>
       </header>
@@ -156,8 +145,8 @@ function OverdueRow({ project: p }: { project: PortfolioProjectRow }) {
         <span className="truncate text-on-surface-variant">
           {p.customerName ?? "—"}
         </span>
-        <span className="font-mono text-[12px] text-on-surface-variant">
-          {fmtDate(p.end)}
+        <span className="text-[12px] text-on-surface-variant">
+          {fmtDay(p.end) || "—"}
         </span>
         <span className="text-right font-semibold text-error">
           {fmtOverdueBy(p.daysOverdue)}
@@ -179,7 +168,7 @@ function OverdueRow({ project: p }: { project: PortfolioProjectRow }) {
           <span className="truncate">
             {p.tamName} · {p.customerName ?? "—"}
           </span>
-          <span className="font-mono text-[12px]">{fmtDate(p.end)}</span>
+          <span className="text-[12px]">{fmtDay(p.end) || "—"}</span>
         </div>
         <div className="text-right text-[13px] font-semibold text-error">
           {fmtOverdueBy(p.daysOverdue)} overdue
@@ -228,7 +217,7 @@ function PortfolioTimelinesSection({
               type="button"
               onClick={() => setView(v.view)}
               className={[
-                "px-2.5 py-1 font-display text-label-caps uppercase tracking-wider",
+                "px-2.5 py-1 font-display text-sm font-semibold",
                 i > 0 ? "border-l border-outline-variant" : "",
                 v.view === view
                   ? "bg-primary text-on-primary"
@@ -257,7 +246,7 @@ function PortfolioTimelinesSection({
 function PortfolioList({ projects }: { projects: PortfolioProjectRow[] }) {
   return (
     <div className="space-y-3">
-      <p className="text-[11px] text-on-surface-variant">
+      <p className="text-xs text-on-surface-variant">
         High-level progress overview — a first pass. Phase dots below are a
         legend, not date-positioned segments.
       </p>
@@ -306,12 +295,12 @@ function TimelineRow({ project: p }: { project: PortfolioProjectRow }) {
               {p.progressPct}%
             </span>
           </div>
-          <div className="font-mono text-[11px] text-on-surface-variant">
-            {fmtDate(p.start)} → {fmtDate(p.end)}
+          <div className="text-xs text-on-surface-variant">
+            {fmtRange(p.start, p.end)}
           </div>
         </>
       ) : (
-        <p className="text-[11px] italic text-on-surface-variant">
+        <p className="text-xs italic text-on-surface-variant">
           No scheduled tasks
         </p>
       )}
@@ -321,7 +310,7 @@ function TimelineRow({ project: p }: { project: PortfolioProjectRow }) {
           {p.sections.map((s) => (
             <span
               key={s.id}
-              className="inline-flex items-center gap-1 text-[11px] text-on-surface-variant"
+              className="inline-flex items-center gap-1 text-meta text-on-surface-variant"
             >
               <span
                 className="h-1.5 w-1.5 rounded-full"
@@ -339,16 +328,6 @@ function TimelineRow({ project: p }: { project: PortfolioProjectRow }) {
 // ─────────────────────────────────────────────────────────────────────────
 // Formatting helpers
 // ─────────────────────────────────────────────────────────────────────────
-
-function fmtDateTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 function fmtOverdueBy(days: number): string {
   return `${days} day${days === 1 ? "" : "s"}`;

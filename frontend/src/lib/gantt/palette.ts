@@ -1,3 +1,4 @@
+import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
 import type { Priority, Section, TaskStatus } from "@/lib/queries";
 
 // Single source of truth for Gantt bar colors. The UI applies these via
@@ -235,17 +236,17 @@ export function legendEntries(
 ): Array<[string, string]> {
   if (mode === "status") {
     return [
-      ["To Do", STATUS_FILL_HEX.TODO],
-      ["In Progress", STATUS_FILL_HEX.IN_PROGRESS],
-      ["Done", STATUS_FILL_HEX.DONE],
+      [TASK_STATUS_LABEL.TODO, STATUS_FILL_HEX.TODO],
+      [TASK_STATUS_LABEL.IN_PROGRESS, STATUS_FILL_HEX.IN_PROGRESS],
+      [TASK_STATUS_LABEL.DONE, STATUS_FILL_HEX.DONE],
     ];
   }
   if (mode === "priority") {
     return [
-      ["Low", PRIORITY_BORDER_HEX.LOW],
-      ["Medium", PRIORITY_BORDER_HEX.MEDIUM],
-      ["High", PRIORITY_BORDER_HEX.HIGH],
-      ["Urgent", PRIORITY_BORDER_HEX.URGENT],
+      [PRIORITY_LABEL.LOW, PRIORITY_BORDER_HEX.LOW],
+      [PRIORITY_LABEL.MEDIUM, PRIORITY_BORDER_HEX.MEDIUM],
+      [PRIORITY_LABEL.HIGH, PRIORITY_BORDER_HEX.HIGH],
+      [PRIORITY_LABEL.URGENT, PRIORITY_BORDER_HEX.URGENT],
     ];
   }
   // Section mode: one entry per section in board order, resolved through the

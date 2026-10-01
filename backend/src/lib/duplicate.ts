@@ -13,7 +13,15 @@ export interface DuplicateOverrides {
 // to null (decision 4) on every copy, top-level or subtask — never selected
 // here since the copy never reads them. No TaskDependency row is ever
 // created for a copy (decision 8); comments are never copied (decision 9) —
-// this helper never touches the Comment or TaskDependency tables.
+// this helper never touches the Comment or TaskDependency tables. itopTicketRef
+// (docs/archive/plans/itop-integration.md Task 4.2) is likewise never
+// selected/copied — a copy must not pin the same iTop ticket as its source.
+// Duplication deliberately never adds ProjectMember rows (unlike assigning via
+// the task routes): a copy must not re-grant a member who was removed.
+// epicId IS carried verbatim (docs/archive/plans/epics-spec.md §4: "lib/duplicate.ts
+// copies keep epicId") — same project, so no cross-project validation is
+// needed here the way routes/tasks.ts and routes/projects.ts need it on a
+// client-supplied epicId.
 const TASK_SELECT = {
   id: true,
   projectId: true,
@@ -27,6 +35,7 @@ const TASK_SELECT = {
   assignedToId: true,
   sectionId: true,
   parentTaskId: true,
+  epicId: true,
   labels: { select: { id: true } },
 } satisfies Prisma.TaskSelect;
 
@@ -55,6 +64,7 @@ async function copyOne(
       assignedToId: source.assignedToId,
       parentTaskId: newParentTaskId,
       sectionId: newSectionId,
+      epicId: source.epicId,
       position,
       labels:
         source.labels.length > 0

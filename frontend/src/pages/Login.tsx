@@ -8,6 +8,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useGoogleAuthConfig } from "@/lib/queries";
+import { safeRedirectPath } from "@/lib/safeRedirect";
 import { BrandMark } from "@/components/BrandMark";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 
@@ -40,7 +41,9 @@ export function Login() {
   const { status, login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from ?? "/overview";
+  // Shared by the password path, the Google path and the already-signed-in
+  // redirect below; only an in-app path is accepted.
+  const from = safeRedirectPath((location.state as { from?: unknown } | null)?.from);
 
   // Runtime-fetched OAuth config — clientId comes from the DB (Admin > Sign-in),
   // not the build. `enabled` is true only when both clientId and at least one
@@ -248,7 +251,7 @@ export function Login() {
           {googleAvailable && (
             <>
               {/* Divider */}
-              <div className="my-6 flex items-center gap-3 text-[11px] uppercase tracking-wider text-on-surface-variant">
+              <div className="my-6 flex items-center gap-3 text-label-caps uppercase text-on-surface-variant">
                 <div
                   className="flex-1 bg-outline-variant"
                   style={{ height: "0.5px" }}
@@ -343,7 +346,7 @@ function PasswordForm({
   return (
     <form onSubmit={onSubmit} className="space-y-3" noValidate>
       <label className="block">
-        <span className="text-label-caps uppercase tracking-wider text-on-surface-variant">
+        <span className="text-label-caps uppercase text-on-surface-variant">
           Email
         </span>
         <div className="mt-1 flex items-center gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgba(58,174,81,0.15)]">
@@ -363,7 +366,7 @@ function PasswordForm({
       </label>
 
       <label className="block">
-        <span className="text-label-caps uppercase tracking-wider text-on-surface-variant">
+        <span className="text-label-caps uppercase text-on-surface-variant">
           Password
         </span>
         <div className="mt-1 flex items-center gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgba(58,174,81,0.15)]">
@@ -395,7 +398,7 @@ function PasswordForm({
       <button
         type="submit"
         disabled={submitting}
-        className="mt-1 w-full rounded-sm bg-ink py-2 font-display text-sm font-bold uppercase tracking-wider text-white transition-colors hover:bg-ink-hover disabled:opacity-60"
+        className="mt-1 w-full rounded-sm bg-ink py-2 font-display text-sm font-semibold text-white transition-colors hover:bg-ink-hover disabled:opacity-60"
       >
         {submitting ? "Signing in…" : "Sign in"}
       </button>

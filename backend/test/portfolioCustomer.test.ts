@@ -32,7 +32,6 @@ async function createProject(customerId: number | null): Promise<number> {
   const project = await prisma.project.create({
     data: {
       name: `Portfolio customer ${Date.now()}-${Math.random()}`,
-      saId: ownerId,
       tamId: ownerId,
       status: "ACTIVE",
       customerId,

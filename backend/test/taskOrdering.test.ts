@@ -16,7 +16,6 @@ async function createProject(): Promise<number> {
   const project = await prisma.project.create({
     data: {
       name: `Project ${Date.now()}-${Math.random()}`,
-      saId: userId,
       tamId: userId,
       status: "ACTIVE",
     },

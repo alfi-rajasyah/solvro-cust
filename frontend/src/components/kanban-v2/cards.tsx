@@ -1,5 +1,5 @@
 // Copied from the legacy frontend/src/pages/views/ProjectKanban.tsx (TaskCard
-// lines 874-1021, SubtaskRow lines 1057-1121, getDuration lines 1175-1182,
+// lines 874-1021, SubtaskRow lines 1057-1121, the old "N Days" duration,
 // pre-T11 cutover) per Architecture Decision 2 (docs/plans/kanban-reui-swap/
 // plan.md): copy, don't extract. The legacy file is gone as of T11 cutover
 // (git history preserves it) — this duplication is now permanent, not
@@ -17,16 +17,19 @@
 // toggle (`onToggleSubtask`) and TaskCard's mobile-only "more_horiz" menu
 // button (opens MobileMoveSheet, wired in SolvroKanban.tsx).
 import { AssigneeAvatar } from "@/components/AssigneeAvatar";
-import { CriticalPathMark } from "@/components/CriticalPathMark";
+import { CRITICAL_PATH_LABEL, CriticalPathMark } from "@/components/CriticalPathMark";
+import { EpicChip } from "@/components/EpicChip";
 import { LabelChip } from "@/components/LabelChip";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { KanbanItemHandle } from "@/components/reui/kanban";
-import { dayFromIso, dayToDate } from "@/lib/dateField";
-import { type Task } from "@/lib/queries";
+import { dateToDay } from "@/lib/dateField";
+import { fmtDay, fmtDue, isTaskOverdue } from "@/lib/formatDate";
+import { type Epic, type Task } from "@/lib/queries";
 
 export function TaskCard({
   task,
   subtaskMap,
+  epicMap,
   canDrag,
   canToggleSubtasks = false,
   dragging = false,
@@ -36,6 +39,11 @@ export function TaskCard({
 }: {
   task: Task;
   subtaskMap: Map<number, Task[]>;
+  // Epics (docs/archive/plans/epics-spec.md §6/§7 T5): keyed by Epic.id, built once
+  // in SolvroKanban.tsx from useProjectEpics — no per-card hook calls.
+  // Optional so the drag-overlay ghost (which only needs `canDrag`/`dragging`
+  // today) doesn't have to thread it through if a future caller omits it.
+  epicMap?: Map<number, Epic>;
   canDrag: boolean;
   canToggleSubtasks?: boolean;
   // M4 (Phase 2 review): restores the drag-overlay treatment
@@ -49,7 +57,13 @@ export function TaskCard({
 }) {
   const subtasks = subtaskMap.get(task.id) ?? [];
   const subtasksDone = subtasks.filter((s) => s.status === "DONE").length;
-  const duration = getDuration(task.startDate, task.dueDate);
+  // Due date replaces the old "N Days" duration. Open tasks read relative
+  // (`fmtDue`: Today / Tomorrow / "6d late"); done tasks read the plain day
+  // and never late. Overdue is the same predicate the Gantt tree uses.
+  const done = task.status === "DONE";
+  const overdue = isTaskOverdue(task.status, task.dueDate, dateToDay(new Date()));
+  const dueLabel = task.dueDate ? (done ? fmtDay(task.dueDate) : fmtDue(task.dueDate)) : "";
+  const epic = task.epicId !== null ? epicMap?.get(task.epicId) : undefined;
 
   function handleClick(e: React.MouseEvent) {
     e.stopPropagation();
@@ -60,13 +74,15 @@ export function TaskCard({
     <div
       onClick={handleClick}
       className={[
-        "touch-manipulation rounded-sm border bg-surface-container-lowest p-3 transition-colors",
+        "group/card touch-manipulation rounded-sm border bg-surface-container-lowest p-3 transition-colors",
         dragging
           ? "rotate-[-1.2deg] border-[1.5px] border-primary shadow-overlay ring-2 ring-primary"
           : "border-outline-variant hover:border-primary",
       ].join(" ")}
     >
-      {/* Title + duration + drag handle */}
+      {/* Title + drag handle. The grip appears on hover / keyboard focus from
+          `md:` up (it stays in the layout and in the tab order, so it is
+          reachable by keyboard); below `md` it is always visible. */}
       <div className="mb-1.5 flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-start gap-1.5">
           {/* Real drag activator (T7): KanbanItemHandle attaches dnd-kit's
@@ -77,7 +93,7 @@ export function TaskCard({
           {canDrag && (
             <KanbanItemHandle
               aria-label="Drag to reorder"
-              className="mt-0.5 inline-flex shrink-0 touch-none items-center text-on-surface-variant/60"
+              className="mt-0.5 inline-flex shrink-0 touch-none items-center text-on-surface-variant/60 transition-opacity md:pointer-fine:opacity-0 md:pointer-fine:group-focus-within/card:opacity-100 md:pointer-fine:group-hover/card:opacity-100 md:pointer-fine:[[data-slot=kanban-item]:focus-visible_&]:opacity-100"
             >
               <span className="material-symbols-outlined text-[16px]">drag_indicator</span>
             </KanbanItemHandle>
@@ -91,36 +107,35 @@ export function TaskCard({
             {task.title}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <div className="flex items-center gap-1 text-[13px] text-on-surface-variant">
-            <span className="material-symbols-outlined text-[15px]">schedule</span>
-            <span className="whitespace-nowrap">{duration}</span>
-          </div>
-          {onMenuClick && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMenuClick();
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="material-symbols-outlined text-[17px] text-on-surface-variant hover:text-on-surface md:hidden"
-              aria-label="Card options"
-            >
-              more_horiz
-            </button>
-          )}
-        </div>
+        {/* Card options (opens MobileMoveSheet): touch-only, so it is always
+            visible below `md` and absent from `md:` up, where the grip and the
+            card click cover the same jobs. */}
+        {onMenuClick && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onMenuClick();
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="material-symbols-outlined shrink-0 text-[17px] text-on-surface-variant hover:text-on-surface md:hidden"
+            aria-label="Card options"
+          >
+            more_horiz
+          </button>
+        )}
       </div>
 
-      {/* Labels */}
-      {task.labels.length > 0 && (
-        <div className="mb-1.5 flex flex-wrap gap-1">
+      {/* Labels + epic chip (docs/archive/plans/epics-spec.md §6): same row, epic
+          first — renders on its own even when the task has no labels. */}
+      {(epic || task.labels.length > 0) && (
+        <div className="mb-1.5 flex flex-wrap items-center gap-1">
+          {epic && <EpicChip epic={epic} compact />}
           {task.labels.slice(0, 2).map((l) => (
             <LabelChip key={l.id} label={l} compact />
           ))}
           {task.labels.length > 2 && (
-            <span className="text-[11px] text-on-surface-variant">+{task.labels.length - 2}</span>
+            <span className="text-meta text-on-surface-variant">+{task.labels.length - 2}</span>
           )}
         </div>
       )}
@@ -136,7 +151,7 @@ export function TaskCard({
           toggle only, DONE<->TODO (ProjectKanban.tsx:451-454). */}
       {subtasks.length > 0 && (
         <div className="mb-2">
-          <div className="mb-1 flex items-center gap-1 font-display text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+          <div className="mb-1 flex items-center gap-1 font-display text-label-caps uppercase text-on-surface-variant">
             <span className="material-symbols-outlined text-[12px]">check_circle</span>
             Subtasks {subtasksDone}/{subtasks.length}
           </div>
@@ -154,19 +169,40 @@ export function TaskCard({
         </div>
       )}
 
-      {/* Bottom row: comments + priority + assignee */}
+      {/* Bottom row: due date + comments (only when > 0) on the left; critical
+          path, priority (hidden when MEDIUM) and assignee on the right. */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-3 text-[13px] text-on-surface-variant">
-          <span className="flex items-center gap-0.5">
-            <span className="material-symbols-outlined text-[14px]">chat_bubble</span>
-            {task._count.comments}
-          </span>
+        <div className="flex items-center gap-3 text-meta text-on-surface-variant">
+          {dueLabel && (
+            <span
+              className={[
+                "whitespace-nowrap",
+                overdue ? "font-semibold text-error" : "",
+              ].join(" ")}
+            >
+              {dueLabel}
+            </span>
+          )}
+          {task._count.comments > 0 && (
+            <span className="flex items-center gap-0.5">
+              <span className="material-symbols-outlined text-[14px]">chat_bubble</span>
+              {task._count.comments}
+            </span>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-1">
           {task.isCriticalPath && (
-            <CriticalPathMark variant="chip" className="shrink-0 whitespace-nowrap" />
+            // Icon variant (its `title` is the tooltip). The sr-only text keeps
+            // "Critical Path" findable inside the card; the icon is hidden from
+            // assistive tech so the name is announced once.
+            <>
+              <span aria-hidden="true" className="inline-flex shrink-0">
+                <CriticalPathMark variant="glyph" />
+              </span>
+              <span className="sr-only">{CRITICAL_PATH_LABEL}</span>
+            </>
           )}
-          <PriorityBadge priority={task.priority} compact />
+          {task.priority !== "MEDIUM" && <PriorityBadge priority={task.priority} compact />}
           {task.assignedTo && <AssigneeAvatar user={task.assignedTo} size="sm" />}
         </div>
       </div>
@@ -206,7 +242,7 @@ export function SubtaskRow({
           canToggle ? "cursor-pointer" : "cursor-default",
         ].join(" ")}
       >
-        {done && <span className="material-symbols-outlined text-[11px] leading-none">check</span>}
+        {done && <span className="material-symbols-outlined text-meta leading-none">check</span>}
       </button>
       <span
         onPointerDown={(e) => e.stopPropagation()}
@@ -221,21 +257,4 @@ export function SubtaskRow({
       )}
     </div>
   );
-}
-
-export function getDuration(start: string | null, end: string | null): string {
-  if (!end) return "—";
-  if (!start) {
-    // Derive the day via the UTC
-    // date-part, not a local-time parse of the ISO instant.
-    const d = dayToDate(dayFromIso(end));
-    return d ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
-  }
-  // Duration is an absolute-instant delta (both sides are full ISO
-  // instants), not a local-time day read — TZ-independent as-is;
-  // deliberately left on direct Date parses.
-  const diff = Math.ceil(
-    (new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60 * 60 * 24),
-  );
-  return diff > 0 ? `${diff} Days` : "1 Day";
 }

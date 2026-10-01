@@ -1,9 +1,7 @@
+import { PROJECT_STATUS_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
 import type { ProjectStatus, TaskStatus } from "@/lib/queries";
 
-// Exported (M2 review finding S5) so StageChip.tsx can type its per-stage
-// tone map against this module's own `Tone` union instead of keeping a
-// second, identical copy.
-export type Tone = "emerald" | "amber" | "rose" | "violet" | "blue" | "gray";
+type Tone = "emerald" | "amber" | "rose" | "violet" | "blue" | "gray";
 
 const TONE_CLASS: Record<Tone, string> = {
   emerald: "bg-chip-emerald-bg text-chip-emerald-text",
@@ -22,18 +20,10 @@ const PROJECT_TONE: Record<ProjectStatus, Tone> = {
   CANCELLED: "rose",
 };
 
-const PROJECT_LABEL: Record<ProjectStatus, string> = {
-  PLANNING: "Planning",
-  ACTIVE: "Active",
-  ON_HOLD: "On hold",
-  COMPLETED: "Completed",
-  CANCELLED: "Cancelled",
-};
-
 // Humanized status text for non-chip surfaces (e.g. CommandPalette's hint
 // slot) that want the same mapping without rendering a full colored chip.
 export function projectStatusLabel(status: ProjectStatus): string {
-  return PROJECT_LABEL[status];
+  return PROJECT_STATUS_LABEL[status];
 }
 
 const TASK_TONE: Record<TaskStatus, Tone> = {
@@ -42,19 +32,21 @@ const TASK_TONE: Record<TaskStatus, Tone> = {
   DONE: "emerald",
 };
 
-const TASK_LABEL: Record<TaskStatus, string> = {
-  TODO: "To do",
-  IN_PROGRESS: "In progress",
-  DONE: "Done",
+// Tone classes for hand-rolled status controls (button-wrapped chips) that
+// need the same colours as TaskStatusChip without rendering it.
+export const TASK_STATUS_TONE_CLASS: Record<TaskStatus, string> = {
+  TODO: TONE_CLASS[TASK_TONE.TODO],
+  IN_PROGRESS: TONE_CLASS[TASK_TONE.IN_PROGRESS],
+  DONE: TONE_CLASS[TASK_TONE.DONE],
 };
 
 const CHIP_BASE =
-  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-display text-[11px] font-semibold leading-[18px]";
+  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-display text-meta font-semibold leading-[18px]";
 
 export function ProjectStatusChip({ status }: { status: ProjectStatus }) {
   return (
     <span className={`${CHIP_BASE} ${TONE_CLASS[PROJECT_TONE[status]]}`}>
-      {PROJECT_LABEL[status]}
+      {PROJECT_STATUS_LABEL[status]}
     </span>
   );
 }
@@ -62,7 +54,7 @@ export function ProjectStatusChip({ status }: { status: ProjectStatus }) {
 export function TaskStatusChip({ status }: { status: TaskStatus }) {
   return (
     <span className={`${CHIP_BASE} ${TONE_CLASS[TASK_TONE[status]]}`}>
-      {TASK_LABEL[status]}
+      {TASK_STATUS_LABEL[status]}
     </span>
   );
 }

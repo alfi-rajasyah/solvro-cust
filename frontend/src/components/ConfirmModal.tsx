@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Modal } from "./Modal";
 
-type Tone = "primary" | "warning";
+type Tone = "primary" | "warning" | "danger";
 
 interface ConfirmModalProps {
   open: boolean;
@@ -27,7 +27,9 @@ export function ConfirmModal({
   const confirmClass =
     confirmTone === "warning"
       ? "rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-bold text-white hover:bg-amber-600 disabled:opacity-60"
-      : "rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60";
+      : confirmTone === "danger"
+        ? "rounded-lg bg-error px-4 py-1.5 text-xs font-bold text-on-error hover:bg-error/90 disabled:opacity-60"
+        : "rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60";
   return (
     <Modal
       open={open}
@@ -37,6 +39,7 @@ export function ConfirmModal({
         <>
           <button
             type="button"
+            data-autofocus
             onClick={onClose}
             disabled={busy}
             className="rounded-lg border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"

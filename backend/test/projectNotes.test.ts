@@ -255,8 +255,8 @@ describe("hidden project → 404 for every notes route", () => {
   it("returns 404 for GET/POST/PATCH/DELETE when the caller has no visibility", async () => {
     const customerId = await createCustomer(adminToken);
     // Project stays owned by the admin (tamId defaults to the creator); a
-    // plain TAM with neither tamId nor saId on this project has no
-    // project:view-all, so ensureProjectVisible must 404 every route below.
+    // plain TAM with no tamId on this project has no project:view-all, so
+    // ensureProjectVisible must 404 every route below.
     const projectId = await createProject(adminToken, customerId);
     const outsider = await createUserWithRole("TAM");
 

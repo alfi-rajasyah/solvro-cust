@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
 import { ProjectStatusChip } from "@/components/StatusChip";
-import { dayFromIso, dayToDate } from "@/lib/dateField";
+import { fmtRange, MONTH_ABBR } from "@/lib/formatDate";
 import { parseISODate } from "@/lib/gantt/geometry";
 import type { PortfolioProjectRow } from "@/lib/queries";
 
@@ -26,11 +26,6 @@ export function sortPortfolioRows(
 // ─────────────────────────────────────────────────────────────────────────
 // Portfolio Timelines — Calendar view (horizontal year-roadmap)
 // ─────────────────────────────────────────────────────────────────────────
-
-const MONTH_LABELS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
 
 const MIN_BAR_WIDTH_PCT = 1;
 
@@ -139,7 +134,7 @@ export function PortfolioCalendar({
           {CALENDAR_LEGEND.map((item) => (
             <span
               key={item.label}
-              className="inline-flex items-center gap-1.5 text-[11px] text-on-surface-variant"
+              className="inline-flex items-center gap-1.5 text-meta text-on-surface-variant"
             >
               <span className={`h-2 w-2 rounded-full ${item.tone}`} />
               {item.label}
@@ -153,7 +148,7 @@ export function PortfolioCalendar({
           <div className="flex items-center gap-3 border-b border-outline-variant bg-surface-container-low px-3">
             <div className={`${LABEL_COL_CLASS} shrink-0`} />
             <div className="grid flex-1 grid-cols-12">
-              {MONTH_LABELS.map((label, i) => (
+              {MONTH_ABBR.map((label, i) => (
                 <div
                   key={label}
                   className={`px-1.5 py-1.5 text-center font-display text-label-caps uppercase tracking-widest text-on-surface-variant ${
@@ -180,7 +175,7 @@ export function PortfolioCalendar({
                       className="absolute top-0 h-full border-l border-dashed border-primary"
                       style={{ left: `${todayFrac * 100}%` }}
                     >
-                      <span className="absolute -top-0.5 left-1 whitespace-nowrap rounded-sm bg-primary px-1 py-0.5 font-display text-[9px] font-bold uppercase leading-none text-on-primary">
+                      <span className="absolute -top-0.5 left-1 whitespace-nowrap rounded-sm bg-primary px-1 py-0.5 font-display text-label-caps uppercase leading-none text-on-primary">
                         Today
                       </span>
                     </div>
@@ -212,12 +207,12 @@ export function PortfolioCalendar({
                 return (
                   <div
                     key={p.id}
-                    className="flex items-center gap-3 border-t border-outline-variant px-3 py-2 first:border-t-0"
+                    className="flex h-8 items-center gap-3 border-t border-outline-variant px-3 first:border-t-0"
                   >
                     <div
-                      className={`flex ${LABEL_COL_CLASS} shrink-0 flex-col items-start gap-0.5`}
+                      className={`flex ${LABEL_COL_CLASS} shrink-0 items-center gap-2`}
                     >
-                      {/* One truncating line: the project name, then the
+                      {/* One truncating line (32px row): the project name, then the
                           customer. The customer is what gets cut on a long
                           pair, and `title` carries the full text. The
                           project name stays the only primary-coloured
@@ -225,7 +220,7 @@ export function PortfolioCalendar({
                           takes the same hover treatment the Overview page
                           gives its customer links. */}
                       <div
-                        className="w-full min-w-0 truncate"
+                        className="min-w-0 flex-1 truncate"
                         title={
                           customer ? `${p.name} · ${customer.name}` : p.name
                         }
@@ -248,11 +243,13 @@ export function PortfolioCalendar({
                           </span>
                         )}
                       </div>
-                      <ProjectStatusChip status={p.status} />
+                      <span className="shrink-0">
+                        <ProjectStatusChip status={p.status} />
+                      </span>
                     </div>
                     <div className="relative h-5 flex-1">
                       <div className="pointer-events-none absolute inset-0 grid grid-cols-12">
-                        {MONTH_LABELS.map((label, i) => (
+                        {MONTH_ABBR.map((label, i) => (
                           <div
                             key={label}
                             className={
@@ -262,7 +259,7 @@ export function PortfolioCalendar({
                         ))}
                       </div>
                       <div
-                        title={`${fmtDate(p.start)} → ${fmtDate(p.end)} · ${p.progressPct}%`}
+                        title={`${fmtRange(p.start, p.end)} · ${p.progressPct}%`}
                         className={`absolute top-1/2 flex h-2.5 -translate-y-1/2 items-center rounded-full ${barTone(p)}`}
                         style={{
                           left: `${leftFrac * 100}%`,
@@ -270,12 +267,12 @@ export function PortfolioCalendar({
                         }}
                       >
                         {clippedStart && (
-                          <span className="absolute -left-3 text-[10px] leading-none text-on-surface-variant">
+                          <span className="absolute -left-3 text-meta leading-none text-on-surface-variant">
                             ‹
                           </span>
                         )}
                         {clippedEnd && (
-                          <span className="absolute -right-3 text-[10px] leading-none text-on-surface-variant">
+                          <span className="absolute -right-3 text-meta leading-none text-on-surface-variant">
                             ›
                           </span>
                         )}
@@ -290,30 +287,10 @@ export function PortfolioCalendar({
       </div>
 
       {unscheduledCount > 0 && (
-        <p className="text-[11px] text-on-surface-variant">
+        <p className="text-xs text-on-surface-variant">
           {unscheduledNote(unscheduledCount)}
         </p>
       )}
     </div>
   );
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Formatting helpers
-// ─────────────────────────────────────────────────────────────────────────
-
-export function fmtDate(iso: string | null): string {
-  // `iso` is a rollup instant
-  // (`PortfolioProjectRow.start`/`.end`, min/max of `Task.startDate`/
-  // `dueDate` — see backend/src/lib/portfolio.ts) and therefore day-semantic;
-  // derive the day via the UTC date-part, not a local-time parse, so the
-  // tooltip agrees with the bar (which already reads via `parseISODate`,
-  // the same UTC-slice pattern).
-  const d = dayToDate(dayFromIso(iso));
-  if (!d) return "—";
-  return d.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
 }

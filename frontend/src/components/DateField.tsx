@@ -150,7 +150,7 @@ export function DateField({
             <button
               type="button"
               onClick={handleClear}
-              className="rounded-sm px-1.5 py-0.5 font-display text-label-caps uppercase tracking-wider text-on-surface-variant hover:bg-surface-container"
+              className="rounded-sm px-1.5 py-0.5 font-display text-sm text-on-surface-variant hover:bg-surface-container font-semibold"
             >
               Clear
             </button>

@@ -23,7 +23,6 @@ async function createProjectWithDueTask(dueDate: Date): Promise<number> {
   const project = await prisma.project.create({
     data: {
       name: `Portfolio route ${Date.now()}-${Math.random()}`,
-      saId: ownerId,
       tamId: ownerId,
       status: "ACTIVE",
     },

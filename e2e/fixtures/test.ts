@@ -43,6 +43,22 @@ export async function loginViaUi(
   password = ADMIN_PASSWORD,
 ): Promise<void> {
   await page.goto("/", { waitUntil: "networkidle" });
+  await submitLoginForm(page, email, password);
+  await page.waitForURL(/overview|projects|\/$/i, { timeout: 10_000 }).catch(() => {});
+  await page.waitForTimeout(1000);
+}
+
+/**
+ * Fills and submits the login form on the page that is already showing it
+ * (expanding the "Admin sign-in" accordion first when Google sign-in is
+ * configured). Use when the test itself navigated to /login — e.g. via the
+ * auth guard's redirect — and needs to assert where sign-in lands.
+ */
+export async function submitLoginForm(
+  page: Page,
+  email = ADMIN_EMAIL,
+  password = ADMIN_PASSWORD,
+): Promise<void> {
   const accordion = page.getByText(/Admin sign-in/i).first();
   if (await accordion.isVisible().catch(() => false)) {
     await accordion.click();
@@ -52,8 +68,6 @@ export async function loginViaUi(
   await emailInput.fill(email);
   await page.fill('input[type="password"]', password);
   await page.click('button[type="submit"]');
-  await page.waitForURL(/overview|projects|\/$/i, { timeout: 10_000 }).catch(() => {});
-  await page.waitForTimeout(1000);
 }
 
 /**
