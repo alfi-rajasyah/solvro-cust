@@ -69,8 +69,12 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service.name }}
+          # On workflow_run events github.ref is the default branch (develop),
+          # so `type=ref,event=branch` would tag a main release as `develop`.
+          # Take the branch name from the CI run that triggered this instead.
           tags: |
-            type=ref,event=branch
+            type=ref,event=branch,enable=${{ github.event_name != 'workflow_run' }}
+            type=raw,value=${{ github.event.workflow_run.head_branch }},enable=${{ github.event_name == 'workflow_run' }}
             type=ref,event=tag
             type=raw,value=sha-${{ steps.sha.outputs.short }}
             type=raw,value=latest,enable=${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
