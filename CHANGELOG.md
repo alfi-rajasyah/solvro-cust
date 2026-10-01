@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-10-01 — Release image tags
+
+- Images published after CI passes on `main` no longer also get the `develop` tag (**`.github/workflows/docker-publish.yml`**). On these runs GitHub reports the default branch (`develop`) as the current branch, so the branch tag now comes from the CI run that triggered the publish: a `main` release gets `main`, `latest` and `sha-<commit>`.
+
 ### Changed — 2026-09-30 — Repository housekeeping
 
 - `.gitignore` keeps the UI-pass QA screenshots (`docs/archive/plans/ui-ux-qa-run/shots/`) out of the repository; the QA report and notes beside them are tracked.
