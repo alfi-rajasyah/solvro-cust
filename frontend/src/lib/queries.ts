@@ -94,6 +94,8 @@ export interface CustomerSummary {
   accountManager: string | null;
   solutionArchitect: string | null;
   description: string;
+  /** Optional http(s) link to the customer's Outline page or collection. */
+  outlineUrl: string | null;
   createdAt: string;
   // TAM ownership (Decision 8, daily-review-v2-spec.md §3) — gated by
   // `project:write`, the same permission the customer form already requires.
@@ -179,6 +181,8 @@ export interface ProjectSummary {
   id: number;
   name: string;
   description: string | null;
+  /** Optional http(s) link to the project's Outline page or collection. */
+  outlineUrl: string | null;
   status: ProjectStatus;
   tamId: number;
   customerId: number | null;
@@ -696,6 +700,9 @@ export interface ProjectNotesWindow {
 }
 
 export const queryKeys = {
+  // Outline base URL for every signed-in user (sidebar link); the admin
+  // settings live under adminQueryKeys.outlineSettings.
+  outlineConfig: ["outline", "config"] as const,
   overview: ["overview"] as const,
   users: ["users"] as const,
   projects: (filter?: ProjectsFilter) => ["projects", filter ?? {}] as const,
@@ -1415,6 +1422,8 @@ export function useTasksWithTotal(filter: TasksFilter = {}) {
 export interface CreateProjectInput {
   name: string;
   description?: string;
+  /** Optional http(s) link to the project's Outline page; null for none. Validated server-side. */
+  outlineUrl?: string | null;
   tamId?: number;
   customerId: number;
   status?: ProjectStatus;
@@ -1457,6 +1466,7 @@ export function useCreateProject() {
 export interface UpdateProjectInput {
   name?: string;
   description?: string | null;
+  outlineUrl?: string | null;
   status?: ProjectStatus;
   tamId?: number;
   customerId?: number;
@@ -1507,6 +1517,7 @@ export interface CustomerInput {
   accountManager?: string;
   solutionArchitect?: string;
   description: string;
+  outlineUrl?: string | null;
   // TAM ownership gate is `project:write` (Decision 8) — the same
   // permission this form already requires to submit; there's no
   // `customer:write`. Nullable to support unassigning.
@@ -3786,6 +3797,7 @@ export const adminQueryKeys = {
   itopOrganizations: ["admin", "itop", "organizations"] as const,
   itopCustomers: ["admin", "itop", "customers"] as const,
   itopPersons: ["admin", "itop", "persons"] as const,
+  outlineSettings: ["admin", "settings", "outline"] as const,
 };
 
 export interface AdminRole {
@@ -4126,6 +4138,52 @@ export interface ItopPersonRow {
 export interface ItopPersonsResponse {
   users: ItopPersonRow[];
   unmatched: number;
+}
+
+// ---- Outline links (docs/archive/plans/outline-integration.md, Phase A) -----
+// Solvro only links to Outline: a base URL for the sidebar item, and optional
+// per-project / per-customer links. No Outline API is called.
+
+export interface OutlineConfig {
+  baseUrl: string | null;
+}
+
+export function useOutlineConfig() {
+  return useQuery({
+    queryKey: queryKeys.outlineConfig,
+    queryFn: ({ signal }) => apiRequest<OutlineConfig>("/outline/config", { signal }),
+    staleTime: 10 * 60_000,
+  });
+}
+
+export interface OutlineAdminSettings {
+  baseUrl: string | null;
+  updatedAt: string;
+  updatedBy: { id: number; username: string } | null;
+}
+
+export function useOutlineAdminSettings() {
+  return useQuery({
+    queryKey: adminQueryKeys.outlineSettings,
+    queryFn: ({ signal }) =>
+      apiRequest<OutlineAdminSettings>("/admin/settings/outline", { signal }),
+  });
+}
+
+export function useUpdateOutlineAdminSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { baseUrl: string | null }) =>
+      apiRequest<OutlineAdminSettings>("/admin/settings/outline", {
+        method: "PATCH",
+        body: input,
+      }),
+    onSuccess: (fresh) => {
+      qc.setQueryData(adminQueryKeys.outlineSettings, fresh);
+      // The sidebar item reads the user-facing copy of the same value.
+      qc.invalidateQueries({ queryKey: queryKeys.outlineConfig });
+    },
+  });
 }
 
 export function useItopSettings() {

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
+import { OutlineLinkButton } from "@/components/OutlineLinkButton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -150,6 +151,7 @@ export function AccountHeader({
       </div>
 
       <div className="flex shrink-0 items-center gap-2 self-end md:self-auto">
+        <OutlineLinkButton url={customer.outlineUrl} />
         <CopyLinkButton
           label="Copy link"
           className="h-8 w-8 rounded-lg border border-outline-variant bg-surface-container-lowest hover:bg-surface-container"

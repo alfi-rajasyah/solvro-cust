@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { ConfirmModal } from "./ConfirmModal";
 import { Modal } from "./Modal";
+import { OutlineUrlField } from "./OutlineUrlField";
 import { Alert, AlertDescription } from "@/components/reui/alert";
+import { parseOutlineUrl } from "@/lib/outlineUrl";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { customerSaveErrorMessage } from "@/lib/ownerAccess";
 import {
@@ -44,6 +46,9 @@ export function CustomerFormModal({ open, onClose, customer, canChangeOwner = tr
   // non-view-all user reassigning the TAM away from themselves (Decision 5).
   const [initialTam, setInitialTam] = useState("");
   const [description, setDescription] = useState("");
+  const [outlineUrl, setOutlineUrl] = useState("");
+  const [outlineUrlError, setOutlineUrlError] = useState<string | null>(null);
+  const outlineUrlInput = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmReassignOpen, setConfirmReassignOpen] = useState(false);
   const [pendingPayload, setPendingPayload] = useState<CustomerInput | null>(null);
@@ -61,6 +66,7 @@ export function CustomerFormModal({ open, onClose, customer, canChangeOwner = tr
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setOutlineUrlError(null);
     setConfirmReassignOpen(false);
     setPendingPayload(null);
     if (customer) {
@@ -78,6 +84,7 @@ export function CustomerFormModal({ open, onClose, customer, canChangeOwner = tr
       setTam(initial);
       setInitialTam(initial);
       setDescription(customer.description ?? "");
+      setOutlineUrl(customer.outlineUrl ?? "");
     } else {
       setName("");
       setAccountManager("");
@@ -88,6 +95,7 @@ export function CustomerFormModal({ open, onClose, customer, canChangeOwner = tr
       setTam(initial);
       setInitialTam(initial);
       setDescription("");
+      setOutlineUrl("");
     }
     // Seed on open / customer switch only — `customer` gets a fresh identity on
     // every 30 s refetch, and re-running this reset wipes in-progress input
@@ -124,6 +132,13 @@ export function CustomerFormModal({ open, onClose, customer, canChangeOwner = tr
       setError("Description is required.");
       return;
     }
+    const parsedOutline = parseOutlineUrl(outlineUrl);
+    if (!parsedOutline.ok) {
+      setOutlineUrlError(parsedOutline.error);
+      outlineUrlInput.current?.focus();
+      return;
+    }
+    setOutlineUrlError(null);
     const payload: CustomerInput = {
       name: name.trim(),
       accountManager: accountManager.trim() || undefined,
@@ -132,6 +147,8 @@ export function CustomerFormModal({ open, onClose, customer, canChangeOwner = tr
       // "— none —" actually unassigns the TAM instead of being dropped.
       ...(isEdit && !canChangeOwner ? {} : { tamId: tam ? Number(tam) : null }),
       description: description.trim(),
+      // null clears the link on edit; on create null is simply "no link".
+      outlineUrl: parsedOutline.value,
     };
     // Decision 5: a non-view-all user handing the customer to someone else
     // (or off an unowned customer they were just editing) loses access to
@@ -258,6 +275,18 @@ export function CustomerFormModal({ open, onClose, customer, canChangeOwner = tr
             )}
           </Field>
         </div>
+
+        <OutlineUrlField
+          value={outlineUrl}
+          onChange={(v) => {
+            setOutlineUrl(v);
+            setOutlineUrlError(null);
+          }}
+          error={outlineUrlError}
+          noun="customer"
+          inputRef={outlineUrlInput}
+          inputClassName="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+        />
 
         <Field label="Description" required>
           <textarea

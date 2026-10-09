@@ -13,6 +13,7 @@ import { prisma } from "../prisma.js";
 import { hasPermission, requireAuth, requirePermission } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
+import { outlineUrlSchema } from "../lib/outlineUrl.js";
 import {
   ensureProjectOwnerAccess,
   ensureProjectVisible,
@@ -58,6 +59,7 @@ const wipLimitsSchema = z
 export const createProjectSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
+  outlineUrl: outlineUrlSchema.optional(),
   tamId: z.number().int().positive().optional(),
   customerId: z.number().int().positive(),
   status: z.nativeEnum(ProjectStatus).optional(),
@@ -68,6 +70,7 @@ export const createProjectSchema = z.object({
 const updateProjectSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
+  outlineUrl: outlineUrlSchema.optional(),
   status: z.nativeEnum(ProjectStatus).optional(),
   tamId: z.number().int().positive().optional(),
   customerId: z.number().int().positive().optional(),
@@ -195,6 +198,7 @@ projectsRouter.post(
         data: {
           name: body.name,
           description: body.description,
+          outlineUrl: body.outlineUrl ?? null,
           tamId,
           customerId: body.customerId,
           status: body.status ?? "PLANNING",
@@ -397,6 +401,7 @@ projectsRouter.patch(
     const data: Prisma.ProjectUpdateInput = {};
     if (body.name !== undefined) data.name = body.name;
     if (body.description !== undefined) data.description = body.description;
+    if (body.outlineUrl !== undefined) data.outlineUrl = body.outlineUrl;
     if (body.status !== undefined) data.status = body.status;
     if (body.tamId !== undefined) data.tam = { connect: { id: body.tamId } };
     if (body.customerId !== undefined) {

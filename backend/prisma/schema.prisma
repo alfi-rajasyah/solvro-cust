@@ -112,6 +112,7 @@ model User {
   weeklyUpdates          WeeklyUpdate[]
   projectReviews         ProjectReview[]
   itopConfigUpdates      ItopConfig[]          @relation("ItopConfigUpdatedBy")
+  outlineConfigUpdates   OutlineConfig[]       @relation("OutlineConfigUpdatedBy")
   // iTop Person/User object keys this account is matched to (by email).
   itopPersonId           Int?                  @unique @map("itop_person_id")
   itopUserId             Int?                  @unique @map("itop_user_id")
@@ -183,10 +184,28 @@ model ItopConfig {
   @@map("itop_config")
 }
 
+// Singleton row (id="default") holding the deployment's Outline address,
+// editable by an admin without a redeploy (docs/archive/plans/outline-integration.md).
+// Phase A stores only the base URL — Solvro holds no Outline API key or admin
+// token (Guardrails: Outline calls never use an application token).
+model OutlineConfig {
+  id          String   @id @default("default")
+  baseUrl     String?  @map("base_url")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  updatedById Int?     @map("updated_by_id")
+  updatedBy   User?    @relation("OutlineConfigUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("outline_config")
+}
+
 model Project {
   id                   Int              @id @default(autoincrement())
   name                 String
   description          String?
+  // Optional link to this project's Outline page or collection (http/https,
+  // validated by lib/outlineUrl.ts). Never inherited from the customer and
+  // never part of the guest payload or any export.
+  outlineUrl           String?          @map("outline_url")
   tamId                Int              @map("tam_id")
   customerId           Int?             @map("customer_id")
   tam                  User             @relation("ProjectTAM", fields: [tamId], references: [id])
@@ -297,6 +316,9 @@ model Customer {
   accountManager    String?           @map("account_manager")
   solutionArchitect String?           @map("solution_architect")
   description       String            @db.Text
+  // Optional link to this customer's Outline page or collection (http/https,
+  // validated by lib/outlineUrl.ts). Never part of the guest payload or any export.
+  outlineUrl        String?           @map("outline_url")
   createdAt         DateTime          @default(now()) @map("created_at")
   projects          Project[]
   services          CustomerService[]

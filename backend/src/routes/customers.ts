@@ -7,6 +7,7 @@ import { logger } from "../logger.js";
 // services router lives in ./services.ts; this file owns the customer-side mapping.
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
+import { outlineUrlSchema } from "../lib/outlineUrl.js";
 import {
   isValidDayString,
   overdueBoundary,
@@ -32,6 +33,7 @@ const createCustomerSchema = z.object({
   // TAM ownership gate is `project:write` (Decision 8) — the same permission
   // this router already requires for writes; there is no `customer:write`.
   tamId: z.number().int().positive().nullable().optional(),
+  outlineUrl: outlineUrlSchema.optional(),
 });
 
 const updateCustomerSchema = z.object({
@@ -40,6 +42,7 @@ const updateCustomerSchema = z.object({
   solutionArchitect: z.string().max(200).optional(),
   description: z.string().min(1).max(5000).optional(),
   tamId: z.number().int().positive().nullable().optional(),
+  outlineUrl: outlineUrlSchema.optional(),
 });
 
 /** 400 `tam_not_found` instead of a raw P2003 → 500 on a bogus tamId. */
@@ -460,6 +463,7 @@ customersRouter.post(
       accountManager: body.accountManager || null,
       solutionArchitect: body.solutionArchitect || null,
       description: body.description,
+      outlineUrl: body.outlineUrl ?? null,
     };
     if (tamId != null) {
       data.tam = { connect: { id: tamId } };
@@ -523,6 +527,7 @@ customersRouter.patch(
     if (body.solutionArchitect !== undefined)
       data.solutionArchitect = body.solutionArchitect || null;
     if (body.description !== undefined) data.description = body.description;
+    if (body.outlineUrl !== undefined) data.outlineUrl = body.outlineUrl;
     if (body.tamId !== undefined) {
       if (body.tamId === null) {
         // Un-owning must not be a side door around Decision 4's "a TAM can
