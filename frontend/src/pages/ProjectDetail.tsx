@@ -12,6 +12,7 @@ import {
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { RightSidebar } from "@/components/layout/RightSidebar";
+import { OutlineLinkButton } from "@/components/OutlineLinkButton";
 import { ProjectFormModal } from "@/components/ProjectFormModal";
 import { ProjectHeaderFacts } from "@/components/ProjectHeaderFacts";
 import { ProjectMembersButton } from "@/components/ProjectMembers";
@@ -31,6 +32,7 @@ import { useNewParam } from "@/hooks/useNewParam";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { GanttExportProvider } from "@/lib/gantt/exportContext";
 import { canOwnProject, saveErrorMessage } from "@/lib/ownerAccess";
+import { safeOutlineHref } from "@/lib/outlineUrl";
 import {
   type ProjectDetail as ProjectDetailType,
   useDeleteProject,
@@ -120,6 +122,7 @@ export function ProjectDetail() {
   const customerOwnerId = project?.customer?.tamId;
   const isOwner = project ? canOwnProject(user, project, customerOwnerId) : false;
   const canDelete = canEdit && isOwner;
+  const outlineHref = safeOutlineHref(project?.outlineUrl);
   // ⌘K palette "Add task": opens the create form on whichever tab is showing.
   useNewParam("task", hasPermission(user, "task:write"), () => setNewTaskOpen(true));
 
@@ -180,6 +183,8 @@ export function ProjectDetail() {
           {/* Guest links: owners only (TAM, customer owner, view-all) with
               project:write — the server answers 403 to anyone else. */}
           {canEdit && isOwner && <ProjectShareButton project={project} />}
+          {/* Outline link: a button from md up, an item in the ⋯ menu below. */}
+          <OutlineLinkButton url={project.outlineUrl} className="hidden md:inline-flex" />
           <CopyLinkButton
             label="Copy link"
             className="h-8 w-8 rounded-lg border border-outline-variant bg-surface-container-lowest hover:bg-surface-container"
@@ -222,6 +227,18 @@ export function ProjectDetail() {
               className="w-52 bg-surface-container-lowest shadow-overlay!"
               positionerClassName="z-50"
             >
+              {outlineHref && (
+                <DropdownMenuItem
+                  className="text-xs md:hidden"
+                  render={<a href={outlineHref} target="_blank" rel="noopener noreferrer" />}
+                >
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">
+                    menu_book
+                  </span>
+                  Open in Outline
+                  <span className="sr-only">(opens in a new tab)</span>
+                </DropdownMenuItem>
+              )}
               {canEdit && (
                 <DropdownMenuItem onClick={() => setEditOpen(true)} className="text-xs md:hidden">
                   <span className="material-symbols-outlined text-base" aria-hidden="true">

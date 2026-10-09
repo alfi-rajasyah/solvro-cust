@@ -15,6 +15,20 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-10-09 — Outline links
+
+- Admin › Outline sets the address of your self-hosted Outline wiki; every user then sees an "Outline" item at the end of the sidebar's Workspace group, opening in a new tab (**`frontend/src/components/admin/OutlineTab.tsx`**, **`frontend/src/components/layout/Sidebar.tsx`**). The address must be a plain `http://` or `https://` address without a login, query string or fragment; removing it asks for confirmation first, since it hides the sidebar link for everyone. Solvro only links to Outline: it reads and writes nothing there.
+- A customer and a project can each carry their own optional Outline link, set from a new "Outline URL" field in their forms and shown as an "Outline" button in the customer and project headers (on phones, the project's link moves to the ⋯ menu). A project does not inherit its customer's link. Links must be `http://` or `https://` (at most 2048 characters, no control characters) and are checked in the form and on the server; an empty field removes the link.
+- New `outline_config` table and `customers.outline_url` / `projects.outline_url` columns (migration **`backend/prisma/migrations/20261009150000_outline_links/`**); endpoints `GET`/`PATCH /admin/settings/outline` (admins only) and `GET /outline/config` (any signed-in user, returns only the address) (**`backend/src/routes/outlineAdmin.ts`**, **`backend/src/routes/outline.ts`**). Guest share links and exports never include these links.
+
+### Changed — 2026-10-09 — Review tooling
+
+- The quality-gate script treats the Gantt exports (**`frontend/src/lib/gantt/exportExcel.ts`**, **`exportPdf.ts`**) as review-required files, since they are the app's only exports today; it previously watched only a `frontend/src/lib/export/` folder that no longer exists (**`.claude/scripts/gates.sh`**).
+
+### Security — 2026-10-09 — Framing protection
+
+- The bundled web server now sends `Content-Security-Policy: frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN` on every page and static asset (including guest share links and error responses), so other sites can no longer embed Solvro in a frame (clickjacking). The two headers live in one shared **`frontend/nginx-frame-protection.conf`**, included by each location in **`frontend/nginx.conf`**; API responses keep the backend's own framing headers. A Playwright spec (**`e2e/tests/frame-headers.spec.ts`**) asserts both headers against the built image.
+
 ### Security — 2026-10-09 — Access gates, owner changes and usernames
 
 - Closed a role-permission gap and several data-exposure gaps found in an external penetration test:

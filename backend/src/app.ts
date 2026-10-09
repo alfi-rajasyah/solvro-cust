@@ -28,6 +28,8 @@ import { risksRouter } from "./routes/risks.js";
 import { dependenciesRouter } from "./routes/dependencies.js";
 import { adminRouter } from "./routes/admin.js";
 import { itopAdminRouter } from "./routes/itopAdmin.js";
+import { outlineAdminRouter } from "./routes/outlineAdmin.js";
+import { outlineRouter } from "./routes/outline.js";
 import { itopRouter } from "./routes/itop.js";
 import { itopUserRouter } from "./routes/itopUser.js";
 import { utilizationRouter } from "./routes/utilization.js";
@@ -93,6 +95,8 @@ export function createApp(opts: { logger?: Logger } = {}): Express {
   app.use("/dependencies", dependenciesRouter);
   app.use("/admin", adminRouter);
   app.use("/admin/itop", itopAdminRouter);
+  app.use("/admin/settings/outline", outlineAdminRouter);
+  app.use("/outline", outlineRouter);
   app.use("/itop/me", itopUserRouter);
   app.use("/itop", itopRouter);
   app.use("/utilization", utilizationRouter);
