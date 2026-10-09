@@ -21,8 +21,8 @@
 // exactly like `TicketPanel.tsx`'s own action/log mutations.
 import { useEffect, useState } from "react";
 import { ApiError } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
-import { isStaleTimeLog, useLogTicketTime, useLogTicketTimeFor } from "@/lib/queries";
+import { hasPermission, useAuth } from "@/lib/auth";
+import { isStaleTimeLog, useLogTicketTimeFor } from "@/lib/queries";
 
 const STORAGE_PREFIX = "solvro.itopTimer";
 
@@ -74,6 +74,54 @@ function safeWrite(key: string, timer: StoredTicketTimer | null): void {
     // Same rationale as safeReadRaw: the timer just won't persist across a
     // reload for this browser — nothing to surface mid-flow over it.
   }
+  notifyTimerChanged();
+}
+
+/** Same-tab change notification: `storage` only fires in OTHER tabs, so every
+ * write dispatches this too, and every reader listens to both. */
+const TIMER_CHANGED_EVENT = "solvro:itop-timer";
+
+function notifyTimerChanged(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(TIMER_CHANGED_EVENT));
+}
+
+/** The timer a Stop/Stop-other is closing — identified by ticket + start instant. */
+export interface ClosingTimer {
+  ticketId: number;
+  startedAt: string;
+}
+
+/**
+ * Compare-and-clear: a Stop (or Stop-other) request resolves arbitrarily
+ * later, possibly after the panel unmounted and a newer timer was started.
+ * Only when the stored timer is still the very one that was closed may the
+ * resolution clear/replace it — otherwise it would wipe a newer timer, or
+ * resurrect state a Discard/other tab already settled. Pure, so it is
+ * unit-testable without a DOM.
+ */
+export function shouldApplyAfterClose(current: StoredTicketTimer | null, closed: ClosingTimer): boolean {
+  return current !== null && current.ticketId === closed.ticketId && current.startedAt === closed.startedAt;
+}
+
+/** Module-level (survives a panel unmount and remount): `${userId}:${startedAt}` of every Stop whose request is still in flight. */
+const IN_FLIGHT_STOPS = new Set<string>();
+
+export function inFlightStopKey(userId: number, startedAt: string): string {
+  return `${userId}:${startedAt}`;
+}
+
+/** Marks `key` as in flight; false (a no-op for the caller) when it already is — a second Stop on the same timer must not log it twice. Takes the set so tests can use their own. */
+export function claimInFlightStop(key: string, inFlight: Set<string> = IN_FLIGHT_STOPS): boolean {
+  if (inFlight.has(key)) return false;
+  inFlight.add(key);
+  return true;
+}
+
+function releaseInFlightStop(key: string): void {
+  IN_FLIGHT_STOPS.delete(key);
+  // Mounted readers re-render off this (isStopping) — including after a failure, when no write happened.
+  notifyTimerChanged();
 }
 
 /**
@@ -146,7 +194,11 @@ function useStoredTimerPoll(userId: number | null): StoredTicketTimer | null {
     }
     refresh(); // pick up a userId/key change (e.g. a different login) right away
     window.addEventListener("storage", refresh);
-    return () => window.removeEventListener("storage", refresh);
+    window.addEventListener(TIMER_CHANGED_EVENT, refresh);
+    return () => {
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener(TIMER_CHANGED_EVENT, refresh);
+    };
   }, [key, userId]);
 
   const isRunning = stored !== null;
@@ -171,7 +223,9 @@ function useStoredTimerPoll(userId: number | null): StoredTicketTimer | null {
 export function useRunningItopTimer(): { timer: StoredTicketTimer; elapsedSeconds: number } | null {
   const { user } = useAuth();
   const stored = useStoredTimerPoll(user?.id ?? null);
-  if (!stored) return null;
+  // The timer logs time to iTop (POST /itop/tickets/:id/time), a task:write
+  // action — a user without it never sees the global pill.
+  if (!stored || !hasPermission(user, "task:write")) return null;
   const elapsedSeconds = Math.max(
     0,
     Math.floor((Date.now() - new Date(stored.startedAt).getTime()) / 1000),
@@ -227,12 +281,11 @@ export function useTicketTimer(ticket: TimerTicketRef): UseTicketTimerResult {
   const [stopError, setStopError] = useState<string | null>(null);
   const [staleNotice, setStaleNotice] = useState<string | null>(null);
 
-  // Fixed to THIS ticket — the Stop button's own mutation. `stopOtherAndStart`
-  // below needs a dynamic ticketId (whichever ticket is currently stored as
-  // "elsewhere"), so it goes through the unfixed `useLogTicketTimeFor`
-  // directly instead.
-  const logOwnTime = useLogTicketTime(ticket.id, ticket.customerId);
-  const logOtherTime = useLogTicketTimeFor();
+  // One mutation for both Stop (this ticket) and Stop-other-and-start (whichever
+  // ticket is currently stored as "elsewhere"): the ticket is a per-call
+  // argument, and `mutateAsync` is used below so the follow-up runs even if
+  // this component has unmounted by the time the request finishes.
+  const logTime = useLogTicketTimeFor();
 
   useEffect(() => {
     if (key === null || userId === null) {
@@ -243,11 +296,15 @@ export function useTicketTimer(ticket: TimerTicketRef): UseTicketTimerResult {
       setStored(readStoredTimer(safeReadRaw(key!), userId!));
     }
     refreshFromStorage();
-    // Cross-tab writes land via `storage`; same-tab, `persist()` below
-    // already updates this hook's own state synchronously, so this listener
-    // only matters for the multi-tab case.
+    // Cross-tab writes land via `storage`; same-tab writes (including a Stop
+    // that resolved after its panel unmounted) via the custom event, which
+    // every `safeWrite` dispatches.
     window.addEventListener("storage", refreshFromStorage);
-    return () => window.removeEventListener("storage", refreshFromStorage);
+    window.addEventListener(TIMER_CHANGED_EVENT, refreshFromStorage);
+    return () => {
+      window.removeEventListener("storage", refreshFromStorage);
+      window.removeEventListener(TIMER_CHANGED_EVENT, refreshFromStorage);
+    };
   }, [key, userId]);
 
   const isRunning = stored !== null;
@@ -304,40 +361,58 @@ export function useTicketTimer(ticket: TimerTicketRef): UseTicketTimerResult {
   }
 
   function stop() {
-    if (status !== "running-here" || !stored || expired) return;
+    if (status !== "running-here" || !stored || expired || userId === null || key === null) return;
+    const closing: ClosingTimer = { ticketId: stored.ticketId, startedAt: stored.startedAt };
+    const flightKey = inFlightStopKey(userId, stored.startedAt);
+    // A remounted panel (or a double click) must not log the same timer twice.
+    if (!claimInFlightStop(flightKey)) return;
     setStopError(null);
-    logOwnTime.mutate(
-      { startedAt: stored.startedAt, endedAt: new Date().toISOString() },
-      {
-        onSuccess: (result) => {
-          persist(null);
-          if (isStaleTimeLog(result)) {
-            setStaleNotice("Logged in iTop; it appears after the next sync.");
-          }
-        },
-        onError: (err) => {
-          // Left running deliberately — no queued/optimistic writes, so a
-          // refusal must leave the clock exactly where it was.
-          setStopError(err instanceof ApiError ? err.message : "Could not log time.");
-        },
-      },
-    );
+    // mutateAsync().then rather than a per-call onSuccess: React Query drops
+    // per-call callbacks once the component unmounts, and a Stop whose
+    // request finishes after the panel closed must still clear the stored
+    // timer — otherwise the next Stop would log an overlapping duplicate.
+    logTime
+      .mutateAsync({
+        ticketId: ticket.id,
+        customerId: ticket.customerId,
+        startedAt: stored.startedAt,
+        endedAt: new Date().toISOString(),
+      })
+      .then((result) => {
+        // Re-read: this can resolve long after the panel unmounted, with a
+        // newer timer stored since — only clear the one that was closed.
+        if (shouldApplyAfterClose(readStoredTimer(safeReadRaw(key), userId), closing)) persist(null);
+        if (isStaleTimeLog(result)) {
+          setStaleNotice("Logged in iTop; it appears after the next sync.");
+        }
+      })
+      .catch((err: unknown) => {
+        // Left running deliberately — no queued/optimistic writes, so a
+        // refusal must leave the clock exactly where it was.
+        setStopError(err instanceof ApiError ? err.message : "Could not log time.");
+      })
+      .finally(() => releaseInFlightStop(flightKey));
   }
 
   function stopOtherAndStart() {
-    if (status !== "running-elsewhere" || !stored || userId === null) return;
+    if (status !== "running-elsewhere" || !stored || userId === null || key === null) return;
     const closingOther = stored;
+    const flightKey = inFlightStopKey(userId, closingOther.startedAt);
+    if (!claimInFlightStop(flightKey)) return;
     setStopError(null);
     setStaleNotice(null);
-    logOtherTime.mutate(
-      {
+    // mutateAsync().then for the same reason as stop(): the stored timer
+    // must be replaced even if this component unmounts mid-request.
+    logTime
+      .mutateAsync({
         ticketId: closingOther.ticketId,
         customerId: closingOther.customerId,
         startedAt: closingOther.startedAt,
         endedAt: new Date().toISOString(),
-      },
-      {
-        onSuccess: () => {
+      })
+      .then(() => {
+        // Replace the closed timer only if it is still the stored one.
+        if (shouldApplyAfterClose(readStoredTimer(safeReadRaw(key), userId), closingOther)) {
           persist({
             userId,
             ticketId: ticket.id,
@@ -345,12 +420,12 @@ export function useTicketTimer(ticket: TimerTicketRef): UseTicketTimerResult {
             ref: ticket.ref,
             startedAt: new Date().toISOString(),
           });
-        },
-        onError: (err) => {
-          setStopError(err instanceof ApiError ? err.message : "Could not log time.");
-        },
-      },
-    );
+        }
+      })
+      .catch((err: unknown) => {
+        setStopError(err instanceof ApiError ? err.message : "Could not log time.");
+      })
+      .finally(() => releaseInFlightStop(flightKey));
   }
 
   function discardOtherAndStart() {
@@ -374,7 +449,9 @@ export function useTicketTimer(ticket: TimerTicketRef): UseTicketTimerResult {
     discard,
     stopOtherAndStart,
     discardOtherAndStart,
-    isStopping: logOwnTime.isPending || logOtherTime.isPending,
+    isStopping:
+      logTime.isPending ||
+      (stored !== null && userId !== null && IN_FLIGHT_STOPS.has(inFlightStopKey(userId, stored.startedAt))),
     stopError,
     staleNotice,
   };

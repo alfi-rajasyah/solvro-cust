@@ -6,10 +6,18 @@
 // "New ticket" sheet's picklists and creation route, and — Phase 7 — logging
 // time against a ticket, all under the ACTING USER'S OWN personal token,
 // never the application token and never another user's (docs/archive/plans/
-// itop-integration.md §1 decision 8). All routes are authed (no admin gate —
-// any authed user with visibility into the customer can read its tickets;
-// write routes additionally require their own token and
-// `ItopConfig.actionsEnabled`). Visibility reuses lib/visibility.ts's
+// itop-integration.md §1 decision 8; CLAUDE.md guardrail).
+//
+// Permission gating (docs/archive/plans/internal-sync.md): GET /status is open
+// to every authenticated user (it only feeds the "Open in iTop" links); every
+// other route requires `project:read` (customer-nested data, same as the rest
+// of the customer surface), so a PENDING user gets 403. Write routes (actions,
+// case-log entries, ticket creation, time logging) additionally require
+// `task:write`, the user's own token and `ItopConfig.actionsEnabled`. All of
+// this sits ON TOP of customer visibility, never instead of it. No admin gate —
+// any permitted user with visibility into the customer can read its tickets.
+// Private case-log entries are agent-internal and are withheld from callers
+// without `task:write`. Visibility reuses lib/visibility.ts's
 // ensureCustomerVisible/customerVisibilityFilter — never re-derived here —
 // so a customer hidden from the caller 404s (or is silently excluded from a
 // list) the same way every other customer-nested route does. Mounted at
@@ -20,7 +28,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { logger } from "../logger.js";
-import { requireAuth, type JwtPayload } from "../http/auth.js";
+import { hasPermission, requireAuth, requirePermission, type JwtPayload } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { ensureCustomerVisible, customerVisibilityFilter, isCustomerVisible } from "../lib/visibility.js";
@@ -144,8 +152,17 @@ type TicketRowSource = Pick<ItopTicket, keyof typeof TICKET_ROW_SELECT> & {
  * time (the single-ticket routes and the Phase 5 write routes, which all
  * pass `{ withLogs: true }` explicitly, and fetch the full row so the log
  * columns are actually there to read).
+ *
+ * `includePrivate` gates the PRIVATE log within `withLogs`: private notes are
+ * agent-internal, so only callers holding `task:write` (see `canSeePrivate`)
+ * get them; everyone else gets `privateLog: []` (same array shape, no
+ * content) so the response contract doesn't change.
  */
-function toTicketRow(ticket: TicketRowSource, myItopPersonId: number | null, options: { withLogs?: boolean } = {}) {
+function toTicketRow(
+  ticket: TicketRowSource,
+  myItopPersonId: number | null,
+  options: { withLogs?: boolean; includePrivate?: boolean } = {},
+) {
   return {
     id: ticket.id,
     class: ticket.class,
@@ -168,9 +185,17 @@ function toTicketRow(ticket: TicketRowSource, myItopPersonId: number | null, opt
     resolutionDate: ticket.resolutionDate,
     isMine: myItopPersonId !== null && ticket.agentPersonId === myItopPersonId,
     ...(options.withLogs
-      ? { publicLog: caseLogRows(ticket.publicLog), privateLog: caseLogRows(ticket.privateLog) }
+      ? {
+          publicLog: caseLogRows(ticket.publicLog),
+          privateLog: options.includePrivate ? caseLogRows(ticket.privateLog) : [],
+        }
       : {}),
   };
+}
+
+/** Private case-log entries are visible only to callers who can write tasks (the same permission that gates the write routes). */
+function canSeePrivate(user: JwtPayload): boolean {
+  return hasPermission(user, "task:write");
 }
 
 async function getMyItopPersonId(userId: number): Promise<number | null> {
@@ -196,6 +221,11 @@ itopRouter.get("/status", async (_req, res) => {
     actionsEnabled: config.actionsEnabled,
   });
 });
+
+// Everything below /status needs `project:read`. Router-level so a route
+// added later is gated by default; /status above is deliberately registered
+// first and stays open to every authenticated user.
+itopRouter.use(requirePermission("project:read"));
 
 // ---- GET /customers/:id/tickets ----------------------------------------------
 
@@ -323,7 +353,7 @@ itopRouter.get(
       ticket.id,
       localIsoWeekStart(utcOffsetMinutes),
     );
-    res.json({ ...toTicketRow(ticket, myItopPersonId, { withLogs: true }), myMinutesThisWeek });
+    res.json({ ...toTicketRow(ticket, myItopPersonId, { withLogs: true, includePrivate: canSeePrivate(req.user!) }), myMinutesThisWeek });
   },
 );
 
@@ -352,7 +382,7 @@ itopRouter.get(
     await ensureCustomerVisible(req.user!, ticket.customerId);
 
     const myItopPersonId = await getMyItopPersonId(req.user!.sub);
-    res.json(toTicketRow(ticket, myItopPersonId, { withLogs: true }));
+    res.json(toTicketRow(ticket, myItopPersonId, { withLogs: true, includePrivate: canSeePrivate(req.user!) }));
   },
 );
 
@@ -754,6 +784,7 @@ const actionBodySchema = z.discriminatedUnion("action", [
 
 itopRouter.post(
   "/tickets/:id/actions",
+  requirePermission("task:write"),
   validate("params", ticketIdParamSchema),
   validate("body", actionBodySchema),
   async (req, res) => {
@@ -846,7 +877,7 @@ itopRouter.post(
       { userId: req.user!.sub, ticketId: ticket.id, action: body.action, staleAfterWrite },
       "iTop ticket action applied",
     );
-    res.json({ ...toTicketRow(updated, myItopPersonId, { withLogs: true }), staleAfterWrite });
+    res.json({ ...toTicketRow(updated, myItopPersonId, { withLogs: true, includePrivate: canSeePrivate(req.user!) }), staleAfterWrite });
   },
 );
 
@@ -859,6 +890,7 @@ const logBodySchema = z.object({
 
 itopRouter.post(
   "/tickets/:id/log",
+  requirePermission("task:write"),
   validate("params", ticketIdParamSchema),
   validate("body", logBodySchema),
   async (req, res) => {
@@ -883,7 +915,7 @@ itopRouter.post(
       { userId: req.user!.sub, ticketId: ticket.id, action: "log", visibility, staleAfterWrite },
       "iTop ticket log entry added",
     );
-    res.json({ ...toTicketRow(updated, myItopPersonId, { withLogs: true }), staleAfterWrite });
+    res.json({ ...toTicketRow(updated, myItopPersonId, { withLogs: true, includePrivate: canSeePrivate(req.user!) }), staleAfterWrite });
   },
 );
 
@@ -1100,6 +1132,7 @@ const createTicketBodySchema = z.object({
 
 itopRouter.post(
   "/tickets",
+  requirePermission("task:write"),
   validate("body", createTicketBodySchema),
   async (req, res) => {
     const body = req.body as z.infer<typeof createTicketBodySchema>;
@@ -1163,7 +1196,7 @@ itopRouter.post(
       return;
     }
 
-    res.status(201).json(toTicketRow(newTicket, myItopPersonId, { withLogs: true }));
+    res.status(201).json(toTicketRow(newTicket, myItopPersonId, { withLogs: true, includePrivate: canSeePrivate(req.user!) }));
   },
 );
 
@@ -1228,6 +1261,7 @@ async function readAndUpsertNewTimeEntry(id: number): Promise<ItopTimeEntry | nu
 
 itopRouter.post(
   "/tickets/:id/time",
+  requirePermission("task:write"),
   validate("params", ticketIdParamSchema),
   validate("body", logTimeBodySchema),
   async (req, res) => {

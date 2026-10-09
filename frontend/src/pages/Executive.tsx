@@ -110,7 +110,7 @@ function OverdueProjectsSection({
       ) : (
         <div className="overflow-x-auto rounded-sm border border-outline-variant bg-surface-container-lowest">
           {/* Desktop grid */}
-          <div className="hidden grid-cols-[minmax(200px,1.6fr)_140px_160px_140px_120px] items-center border-b border-outline-variant bg-surface-container-low px-3 py-2 font-display text-label-caps uppercase tracking-widest text-on-surface-variant md:grid">
+          <div className="hidden grid-cols-[minmax(200px,1.6fr)_140px_160px_140px_120px] items-center border-b border-outline-variant bg-surface-container-low px-3 py-2 font-display text-label-caps uppercase text-on-surface-variant md:grid">
             <span>Project</span>
             <span>TAM</span>
             <span>Customer</span>

@@ -13,7 +13,12 @@ const prisma = new PrismaClient();
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   ADMIN: ["*"],
   TAM: ["project:read", "project:write", "task:read", "task:write"],
-  STAKEHOLDER: ["project:read", "project:view-all"],
+  // STAKEHOLDER reads only the projects it is attached to (TAM, member or
+  // customer owner). The read-everything grant (`project:view-all`) was
+  // removed in the 2026-10 security hardening (docs/archive/plans/internal-sync.md);
+  // an admin can grant it through a custom role in Admin > Roles (built-in
+  // roles are re-seeded on every start).
+  STAKEHOLDER: ["project:read"],
   PENDING: [],
 };
 

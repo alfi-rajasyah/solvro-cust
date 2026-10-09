@@ -517,7 +517,7 @@ export function ProjectList() {
 
       <div className="overflow-x-auto rounded-sm border border-outline-variant bg-surface-container-lowest md:min-h-0 md:flex-1 md:overflow-y-auto">
         {/* Column headers */}
-        <div className="hidden grid-cols-[28px_minmax(200px,1fr)_60px_70px_50px_100px] items-center gap-2 border-b border-outline-variant px-3 py-2 font-display text-label-caps uppercase tracking-widest text-on-surface-variant md:grid">
+        <div className="hidden grid-cols-[28px_minmax(200px,1fr)_60px_70px_50px_100px] items-center gap-2 border-b border-outline-variant px-3 py-2 font-display text-label-caps uppercase text-on-surface-variant md:grid">
           <span></span>
           <span>Name</span>
           <span>Owner</span>

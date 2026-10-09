@@ -25,6 +25,10 @@ export interface NotifyOptions {
   mentionedUserIds?: readonly number[];
 }
 
+type IdLike = { id?: unknown } | null | undefined;
+
+const idOf = (v: IdLike): number | null => (typeof v?.id === "number" ? v.id : null);
+
 /** The user `changes.assignee.to` names on a task event, if any. */
 function assigneeFromChanges(event: ActivityEvent): number | null {
   const changes = event.changes as { assignee?: { to?: { id?: unknown } | null } } | null;
@@ -79,8 +83,19 @@ export async function filterActiveUsersWhoCanSeeProject(
 }
 
 /**
+ * The TAM a project event hands the project to: `created` carries
+ * `changes.tam` (`{ id, username }`), `updated` carries `changes.tam` as
+ * `{ from, to }`.
+ */
+function tamFromChanges(event: ActivityEvent): number | null {
+  const tam = (event.changes as { tam?: { to?: IdLike; id?: unknown } | null } | null)?.tam;
+  return event.action === "created" ? idOf(tam) : idOf(tam?.to);
+}
+
+/**
  * Creates the notifications an event triggers:
- *  - `assigned`: a task created or updated with an assignee (`changes.assignee.to`);
+ *  - `assigned`: a task created or updated with an assignee (`changes.assignee.to`),
+ *    or a project created with / handed to a new TAM (`changes.tam`);
  *  - `commented`: a comment on a task that has an assignee (`opts.taskAssigneeId`);
  *  - `mentioned`: `opts.mentionedUserIds` (C5c).
  * One notification per user per event (mention > assigned > commented), never
@@ -103,6 +118,9 @@ export async function notifyForEvent(
   for (const userId of opts.mentionedUserIds ?? []) add(userId, "mentioned");
   if (event.entityType === "task" && (event.action === "created" || event.action === "updated")) {
     add(assigneeFromChanges(event), "assigned");
+  }
+  if (event.entityType === "project" && (event.action === "created" || event.action === "updated")) {
+    add(tamFromChanges(event), "assigned");
   }
   if (event.entityType === "comment" && event.action === "created") {
     add(opts.taskAssigneeId, "commented");

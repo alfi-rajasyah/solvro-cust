@@ -123,7 +123,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
         )}
 
         <div>
-          <label className="mb-1 block font-display text-label-caps uppercase tracking-widest text-on-surface-variant">
+          <label className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Risk description
           </label>
           <textarea
@@ -137,7 +137,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block font-display text-label-caps uppercase tracking-widest text-on-surface-variant">
+            <label className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
               Category
             </label>
             <select
@@ -153,7 +153,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
             </select>
           </div>
           <div>
-            <label className="mb-1 block font-display text-label-caps uppercase tracking-widest text-on-surface-variant">
+            <label className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
               Status
             </label>
             <select
@@ -172,7 +172,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
 
         <div className="grid gap-3 sm:grid-cols-3">
           <div>
-            <label className="mb-1 block font-display text-label-caps uppercase tracking-widest text-on-surface-variant">
+            <label className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
               Probability (1–5)
             </label>
             <select
@@ -188,7 +188,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
             </select>
           </div>
           <div>
-            <label className="mb-1 block font-display text-label-caps uppercase tracking-widest text-on-surface-variant">
+            <label className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
               Impact (1–5)
             </label>
             <select
@@ -204,7 +204,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
             </select>
           </div>
           <div>
-            <label className="mb-1 block font-display text-label-caps uppercase tracking-widest text-on-surface-variant">
+            <label className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
               Score
             </label>
             <div
@@ -222,7 +222,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
         </div>
 
         <div>
-          <label className="mb-1 block font-display text-label-caps uppercase tracking-widest text-on-surface-variant">
+          <label className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Mitigation plan
           </label>
           <textarea
@@ -235,7 +235,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
         </div>
 
         <div>
-          <label className="mb-1 block font-display text-label-caps uppercase tracking-widest text-on-surface-variant">
+          <label className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
             Contingency plan
           </label>
           <textarea

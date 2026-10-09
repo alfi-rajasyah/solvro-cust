@@ -80,7 +80,7 @@ export function SyncField({ id, label, action, helper, children }: SyncFieldProp
       <div className="mb-1 flex items-baseline justify-between gap-2">
         <label
           htmlFor={id}
-          className="block font-display text-label-caps uppercase tracking-widest text-on-surface-variant"
+          className="block font-display text-label-caps uppercase text-on-surface-variant"
         >
           {label}
         </label>

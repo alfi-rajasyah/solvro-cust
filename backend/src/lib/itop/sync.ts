@@ -69,8 +69,10 @@ export interface TimeEntrySyncResult {
 
 const FULL_SYNC_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const USER_SYNC_MIN_INTERVAL_MS = 60 * 60 * 1000;
-const ADVISORY_LOCK_KEY = "itop_sync";
-const TX_TIMEOUT_MS = 10 * 60_000;
+/** `hashtext` input of the Postgres advisory lock that serializes iTop sync runs — also taken by a customer remap (routes/itopAdmin.ts) so it never interleaves with a running sync. */
+export const ADVISORY_LOCK_KEY = "itop_sync";
+/** Interactive-transaction timeout of a sync run (the lock is held that long at most). */
+export const TX_TIMEOUT_MS = 10 * 60_000;
 const CHUNK_SIZE = 50;
 /**
  * How far back `syncTimeEntries` pulls `TimeSpent` rows — plan §3/Task 3.1.
@@ -487,8 +489,19 @@ async function upsertTimeEntry(
   orgIdToCustomerId: Map<number, number>,
   ticketIdByRef: Map<string, number>,
   timezone: string,
-): Promise<void> {
+): Promise<boolean> {
   const fields = row.fields;
+  // A time entry without a parseable start date can't be placed in a week;
+  // inventing one (e.g. "now") would put its hours in the wrong week, and
+  // we never store a time entry iTop has not confirmed. Skip and say so.
+  const startDate = parseItopDate(fields.start_date, timezone);
+  if (startDate === null) {
+    logger.warn(
+      { itopKey: row.key, startDate: fields.start_date ?? null },
+      "iTop syncTimeEntries: skipping a TimeSpent row without a parseable start_date",
+    );
+    return false;
+  }
   const itopUserId = parseItopInt(fields.user_id);
   if (itopUserId === null) {
     // itopUserId is a required (non-nullable) column — same reasoning as
@@ -514,7 +527,7 @@ async function upsertTimeEntry(
     customerId: orgId !== null ? (orgIdToCustomerId.get(orgId) ?? null) : null,
     ticketId,
     ticketRef,
-    startDate: parseItopDate(fields.start_date, timezone) ?? new Date(),
+    startDate,
     endDate: parseItopDate(fields.end_date, timezone),
     durationMinutes,
     title: fields.title || null,
@@ -526,6 +539,7 @@ async function upsertTimeEntry(
     create: { id: row.key, ...data },
     update: data,
   });
+  return true;
 }
 
 /**
@@ -644,8 +658,14 @@ export async function syncTimeEntries(opts: { full?: boolean } = {}): Promise<Ti
             if (ticketIdByRef.has(ref)) rowsWithResolvedRef += 1;
           }
           try {
-            await upsertTimeEntry(row, itopUserIdToUserId, orgIdToCustomerId, ticketIdByRef, timezone);
-            upserted += 1;
+            // A row skipped for a bad start_date stays in seenIds on purpose: a
+            // transient bad value must not make the full-sync prune delete hours
+            // already stored from an earlier, valid response.
+            if (await upsertTimeEntry(row, itopUserIdToUserId, orgIdToCustomerId, ticketIdByRef, timezone)) {
+              upserted += 1;
+            } else {
+              skipped += 1;
+            }
           } catch (err) {
             skipped += 1;
             logger.warn(

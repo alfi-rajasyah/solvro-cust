@@ -45,6 +45,17 @@ export function canOwnCustomer(
   return projectTamIds.includes(user.id);
 }
 
+/**
+ * Whether the caller may reassign a customer's owner. The server decides
+ * (`canChangeOwner` on GET /customers and /customers/:id, the same rule as
+ * PATCH): view-all, the owner, or — on an unowned customer — the TAM of every
+ * project under it, hidden ones included, which the client cannot see. Absent
+ * means unknown (a row from a stale cache), treated as not allowed.
+ */
+export function canChangeCustomerOwner(customer: { canChangeOwner?: boolean }): boolean {
+  return customer.canChangeOwner === true;
+}
+
 export const OWNER_ONLY_MESSAGE =
   "Only the project's TAM or the customer's owner can do this. Ask them, or an admin.";
 
@@ -59,4 +70,14 @@ export function isOwnerOnlyError(err: unknown): boolean {
 export function saveErrorMessage(err: unknown, fallback: string): string {
   if (isOwnerOnlyError(err)) return OWNER_ONLY_MESSAGE;
   return err instanceof ApiError ? err.message : fallback;
+}
+
+/**
+ * The message for a failed customer save. An `owner_only` refusal there is
+ * the owner-change rule, whose message is specific to the case (owned by
+ * someone else, or unowned with other TAMs' projects), so show the server's.
+ */
+export function customerSaveErrorMessage(err: unknown, fallback: string): string {
+  if (isOwnerOnlyError(err)) return (err as ApiError).message;
+  return saveErrorMessage(err, fallback);
 }

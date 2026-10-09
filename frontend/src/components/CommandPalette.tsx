@@ -50,7 +50,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const { pathname, search } = useLocation();
   const [query, setQuery] = useState("");
   const debounced = useDebounced(query, 200);
-  const { data, error, isFetching } = useSearch(debounced);
+  // GET /search needs project:read; an account without it just gets the pages.
+  const canSearch = hasPermission(user, "project:read");
+  const { data, error, isFetching } = useSearch(debounced, canSearch);
   // Same predicate that gates the request (queries.ts's `enabled`) must also
   // gate consumption of `data` — placeholderData resolves against React
   // Query's #lastQueryWithDefinedData, which never clears on its own, so
@@ -61,7 +63,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   // by up to the 200ms debounce window — without this, a reopen inside that
   // window could still read the prior session's now-stale `debounced` value
   // as a valid query and flash its rows before the debounce catches up.
-  const hasQuery = query.trim().length >= 2 && debounced.trim().length >= 2;
+  const hasQuery = canSearch && query.trim().length >= 2 && debounced.trim().length >= 2;
 
   // Fresh palette every open — stale queries are disorienting on reopen.
   useEffect(() => {

@@ -7,6 +7,8 @@ import { requireAuth, requirePermission, type JwtPayload } from "../http/auth.js
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { ensureProjectVisible } from "../lib/visibility.js";
+import { recordActivity, shortLabel } from "../lib/activity.js";
+import { diffEpicChanges, epicSnapshotSelect } from "../lib/epicActivity.js";
 
 // Resolve the epic's owning project and 404 if the caller can't see it.
 // Mirrors ensureSectionVisible (backend/src/routes/sections.ts) — 404, never
@@ -139,31 +141,40 @@ epicsRouter.patch(
       data.owner = body.ownerId === null ? { disconnect: true } : { connect: { id: body.ownerId } };
     }
 
-    if (body.position === undefined) {
-      // No ordering change: single update, same as before this task.
-      const updated = await prisma.epic.update({
-        where: { id },
-        data,
-        include: { owner: { select: { id: true, username: true, email: true } } },
-      });
-      const progress = await getEpicProgress(id);
-      res.json({ ...updated, progress });
-      return;
-    }
-
-    // Ordering patch: apply any non-position change first, then splice this
-    // epic into the clamped index and re-pack the whole list dense 0..n-1,
-    // all inside one transaction so the list is never observed half-moved —
-    // mirrors sections.ts's PATCH /:id.
+    // One transaction: the diff is taken against the row this write replaced
+    // and the activity event commits with it. With a `position`, any
+    // non-position change is applied first, then this epic is spliced into the
+    // clamped index and the whole list re-packed dense 0..n-1, so the list is
+    // never observed half-moved — mirrors sections.ts's PATCH /:id. A
+    // position-only write diffs to `{}` and records nothing
+    // (docs/archive/plans/internal-sync.md).
     const updated = await prisma.$transaction(async (tx) => {
+      // Lock first so overlapping identical saves serialise and record one event.
+      await tx.$queryRaw`SELECT id FROM epics WHERE id = ${id} FOR NO KEY UPDATE`;
+      const before = await tx.epic.findUniqueOrThrow({
+        where: { id },
+        select: epicSnapshotSelect,
+      });
       if (Object.keys(data).length > 0) {
         await tx.epic.update({ where: { id }, data });
       }
-      await insertEpicAt(tx, projectId, id, body.position!);
-      return tx.epic.findUniqueOrThrow({
+      if (body.position !== undefined) {
+        await insertEpicAt(tx, projectId, id, body.position);
+      }
+      const result = await tx.epic.findUniqueOrThrow({
         where: { id },
         include: { owner: { select: { id: true, username: true, email: true } } },
       });
+      await recordActivity(tx, {
+        projectId,
+        actorId: req.user!.sub,
+        entityType: "epic",
+        entityId: id,
+        action: "updated",
+        entityLabel: shortLabel(result.title),
+        changes: diffEpicChanges(before, result),
+      });
+      return result;
     });
     const progress = await getEpicProgress(id);
     res.json({ ...updated, progress });
@@ -176,10 +187,25 @@ epicsRouter.delete(
   validate("params", idParamSchema),
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
-    await ensureEpicVisible(req.user!, id);
+    const { projectId } = await ensureEpicVisible(req.user!, id);
     // Tasks linked to this epic have epicId set to NULL via onDelete: SetNull
-    // (docs/archive/plans/epics-spec.md §4) — they keep their data.
-    await prisma.epic.delete({ where: { id } });
+    // (docs/archive/plans/epics-spec.md §4) — they keep their data. The event
+    // snapshots the title and how many tasks lost the link.
+    await prisma.$transaction(async (tx) => {
+      const epic = await tx.epic.findUnique({ where: { id }, select: { title: true } });
+      if (!epic) throw new HttpError(404, "not_found", "Epic not found");
+      const taskCount = await tx.task.count({ where: { epicId: id } });
+      await tx.epic.delete({ where: { id } });
+      await recordActivity(tx, {
+        projectId,
+        actorId: req.user!.sub,
+        entityType: "epic",
+        entityId: id,
+        action: "deleted",
+        entityLabel: shortLabel(epic.title),
+        changes: { taskCount },
+      });
+    });
     res.status(204).end();
   },
 );

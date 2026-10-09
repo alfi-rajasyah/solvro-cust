@@ -29,6 +29,7 @@
 import { useState } from "react";
 import { Chip } from "@/components/StatusChip";
 import { ApiError } from "@/lib/api";
+import { hasPermission, useAuth } from "@/lib/auth";
 import { fmtTime } from "@/lib/formatDate";
 import type { DailyItopCustomer, ItopTicketActionName, ItopTicketRow, ItopTicketTeamOption } from "@/lib/queries";
 import { useItopStatus, useMyItopToken, useTicketAction } from "@/lib/queries";
@@ -64,7 +65,10 @@ export function DailyItopStrip({ itop, onAddToNote }: DailyItopStripProps) {
   const { data: status } = useItopStatus();
   const { data: myToken } = useMyItopToken();
   const baseUrl = status?.baseUrl ?? null;
-  const canAct = (status?.actionsEnabled ?? false) && (myToken?.set ?? false);
+  const { user } = useAuth();
+  // Quick actions are writes (POST /itop/tickets/:id/actions) — task:write only.
+  const canAct =
+    hasPermission(user, "task:write") && (status?.actionsEnabled ?? false) && (myToken?.set ?? false);
 
   const newChip = newTodayChip(itop.counts.newToday);
   const resolvedChip = resolvedTodayChip(itop.counts.resolvedToday);

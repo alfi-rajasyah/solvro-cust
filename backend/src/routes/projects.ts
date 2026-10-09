@@ -37,9 +37,11 @@ import { ensureAssigneeIsMember } from "../lib/projectMembers.js";
 import {
   diffProjectChanges,
   recordActivity,
+  type ActivityChanges,
   shortLabel,
   taskCreatedChanges,
 } from "../lib/activity.js";
+import { epicCreatedChanges } from "../lib/epicActivity.js";
 import { notifyForEvent } from "../lib/notifications.js";
 
 // Kanban WIP limits — one optional positive-int cap per top-level status
@@ -185,16 +187,39 @@ projectsRouter.post(
       throw new HttpError(400, "customer_not_found", "Customer not found");
     }
 
-    const project = await prisma.project.create({
-      data: {
-        name: body.name,
-        description: body.description,
-        tamId,
-        customerId: body.customerId,
-        status: body.status ?? "PLANNING",
-        wipLimits: body.wipLimits ?? undefined,
-        excludeFromPortfolio: body.excludeFromPortfolio ?? false,
-      },
+    // The project and its `created` event commit together. The event snapshots
+    // who holds the TAM seat and the customer — ids and display names only,
+    // never emails (docs/archive/plans/internal-sync.md).
+    const project = await prisma.$transaction(async (tx) => {
+      const created = await tx.project.create({
+        data: {
+          name: body.name,
+          description: body.description,
+          tamId,
+          customerId: body.customerId,
+          status: body.status ?? "PLANNING",
+          wipLimits: body.wipLimits ?? undefined,
+          excludeFromPortfolio: body.excludeFromPortfolio ?? false,
+        },
+      });
+      const [tam, customer] = await Promise.all([
+        tx.user.findUniqueOrThrow({ where: { id: created.tamId }, select: { id: true, username: true } }),
+        created.customerId === null
+          ? null
+          : tx.customer.findUnique({ where: { id: created.customerId }, select: { id: true, name: true } }),
+      ]);
+      const event = await recordActivity(tx, {
+        projectId: created.id,
+        actorId: req.user!.sub,
+        entityType: "project",
+        entityId: created.id,
+        action: "created",
+        entityLabel: shortLabel(created.name),
+        changes: { tam, customer } as Prisma.InputJsonObject as ActivityChanges,
+      });
+      // The named TAM gets an `assigned` notification (never the actor).
+      await notifyForEvent(tx, event);
+      return created;
     });
     res.status(201).json(project);
   },
@@ -393,19 +418,36 @@ projectsRouter.patch(
       await tx.$queryRaw`SELECT id FROM projects WHERE id = ${id} FOR NO KEY UPDATE`;
       const before = await tx.project.findUniqueOrThrow({
         where: { id },
-        select: { name: true, status: true, customerId: true },
+        select: {
+          name: true,
+          status: true,
+          customerId: true,
+          tam: { select: { id: true, username: true } },
+        },
       });
       const result = await tx.project.update({ where: { id }, data });
-      // Only name, status and customer are logged; a re-save records nothing.
-      await recordActivity(tx, {
+      // Name, status, customer and the TAM seat are logged (ids and usernames
+      // only); a re-save records nothing.
+      const changes: ActivityChanges = diffProjectChanges(
+        { name: before.name, status: before.status, customerId: before.customerId },
+        result,
+      );
+      if (before.tam.id !== result.tamId) {
+        const to = await tx.user.findUnique({ where: { id: result.tamId }, select: { id: true, username: true } });
+        changes.tam = { from: before.tam, to } as Prisma.InputJsonObject;
+      }
+      const event = await recordActivity(tx, {
         projectId: id,
         actorId: req.user!.sub,
         entityType: "project",
         entityId: id,
         action: "updated",
-        entityLabel: result.name,
-        changes: diffProjectChanges(before, result),
+        entityLabel: shortLabel(result.name),
+        changes,
       });
+      // The new TAM (changes.tam `to`) gets an `assigned` notification; the
+      // actor and inactive users are skipped inside.
+      await notifyForEvent(tx, event);
       return result;
     });
     res.json(updated);
@@ -659,18 +701,30 @@ projectsRouter.post(
       _max: { position: true },
     });
     const position = (max._max.position ?? -1) + 1;
-    const epic = await prisma.epic.create({
-      data: {
+    const epic = await prisma.$transaction(async (tx) => {
+      const created = await tx.epic.create({
+        data: {
+          projectId: id,
+          title: body.title,
+          description: body.description ?? null,
+          ownerId: body.ownerId ?? null,
+          startDate: body.startDate ?? null,
+          dueDate: body.dueDate ?? null,
+          position,
+          ...(body.color !== undefined && { color: body.color }),
+        },
+        include: { owner: { select: { id: true, username: true, email: true } } },
+      });
+      await recordActivity(tx, {
         projectId: id,
-        title: body.title,
-        description: body.description ?? null,
-        ownerId: body.ownerId ?? null,
-        startDate: body.startDate ?? null,
-        dueDate: body.dueDate ?? null,
-        position,
-        ...(body.color !== undefined && { color: body.color }),
-      },
-      include: { owner: { select: { id: true, username: true, email: true } } },
+        actorId: req.user!.sub,
+        entityType: "epic",
+        entityId: created.id,
+        action: "created",
+        entityLabel: shortLabel(created.title),
+        changes: epicCreatedChanges(created),
+      });
+      return created;
     });
     res.status(201).json({ ...epic, progress: { done: 0, total: 0 } });
   },

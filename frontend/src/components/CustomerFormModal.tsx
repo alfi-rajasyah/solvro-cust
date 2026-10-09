@@ -3,7 +3,7 @@ import { ConfirmModal } from "./ConfirmModal";
 import { Modal } from "./Modal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { hasPermission, useAuth } from "@/lib/auth";
-import { saveErrorMessage } from "@/lib/ownerAccess";
+import { customerSaveErrorMessage } from "@/lib/ownerAccess";
 import {
   type CustomerInput,
   type CustomerSummary,
@@ -109,7 +109,7 @@ export function CustomerFormModal({ open, onClose, customer, canChangeOwner = tr
       onClose();
     } catch (err) {
       setConfirmReassignOpen(false);
-      setError(saveErrorMessage(err, "Save failed."));
+      setError(customerSaveErrorMessage(err, "Save failed."));
     }
   }
 
@@ -251,7 +251,9 @@ export function CustomerFormModal({ open, onClose, customer, canChangeOwner = tr
             </select>
             {isEdit && !canChangeOwner && (
               <p className="mt-1 text-meta text-on-surface-variant">
-                Only the customer's owner can change this.
+                {customer?.tamId == null
+                  ? "Only an admin, or the TAM of every project under this customer, can claim it."
+                  : "Only the customer's owner can change this."}
               </p>
             )}
           </Field>

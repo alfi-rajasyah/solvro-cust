@@ -192,9 +192,9 @@ describe("owner API", () => {
     expect(res.status).toBe(201);
   });
 
-  it("a read-only view-all role (STAKEHOLDER) can list but not create or revoke", async () => {
+  it("a read-only view-all role (AUDITOR) can list but not create or revoke", async () => {
     const { tam, project } = await fixture();
-    const stakeholder = await createUserWithRole("STAKEHOLDER");
+    const stakeholder = await createUserWithRole("AUDITOR");
     const link = await createLink(project.id, tam.token);
 
     const get = await request(app)

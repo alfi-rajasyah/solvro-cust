@@ -75,7 +75,7 @@ async function createUserWithEmail(email: string): Promise<{ userId: number; tok
       active: true,
     },
   });
-  const token = signToken({ sub: user.id, role: role.roleName, permissions: role.permissions as string[] });
+  const token = signToken({ sub: user.id, ver: 0 });
   return { userId: user.id, token };
 }
 
@@ -225,6 +225,39 @@ describe("GET /itop/customers/:id/contacts", () => {
     const res = await call("get", `/itop/customers/${fixture.customer1Id}/contacts`, outsider.token);
     expect(res.status).toBe(404);
     expect(res.body.code).toBe("customer_not_found");
+  });
+});
+
+describe("permission gating", () => {
+  // The permission check runs before validation, visibility and the
+  // personal-token check, so a valid saved token doesn't help a caller whose
+  // role cannot write.
+  it("403s a STAKEHOLDER on POST /itop/tickets even with a valid personal token", async () => {
+    const user = await createUserWithRole("STAKEHOLDER");
+    await linkPersonalToken(user.userId, FAKE_ITOP_TOKENS.rina);
+
+    const res = await call("post", "/itop/tickets", user.token, {
+      customerId: fixture.customer1Id,
+      class: "UserRequest",
+      title: "Should not be created",
+      description: "Blocked by task:write.",
+      callerId: 1,
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("forbidden");
+    expect(fixture.state.writeLog.filter((w) => w.operation === "core/create")).toHaveLength(0);
+  });
+
+  it("403s a PENDING user on the picklists and on POST /itop/tickets", async () => {
+    const pending = await createUserWithRole("PENDING");
+    expect((await call("get", "/itop/services", pending.token)).status).toBe(403);
+    expect((await call("get", `/itop/customers/${fixture.customer1Id}/contacts`, pending.token)).status).toBe(403);
+    expect((await call("post", "/itop/tickets", pending.token, {})).status).toBe(403);
+  });
+
+  it("keeps the read-only picklists open to a project:read-only STAKEHOLDER", async () => {
+    const stakeholder = await createUserWithRole("STAKEHOLDER");
+    expect((await call("get", "/itop/services", stakeholder.token)).status).toBe(200);
   });
 });
 

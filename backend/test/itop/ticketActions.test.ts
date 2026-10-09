@@ -70,7 +70,7 @@ async function createUserWithEmail(email: string): Promise<{ userId: number; tok
       active: true,
     },
   });
-  const token = signToken({ sub: user.id, role: role.roleName, permissions: role.permissions as string[] });
+  const token = signToken({ sub: user.id, ver: 0 });
   return { userId: user.id, token };
 }
 
@@ -201,6 +201,67 @@ describe("preconditions", () => {
     const res = await call("post", `/itop/tickets/${id}/actions`, fixture.rina.token, pendingBody);
     expect(res.status).toBe(403);
     expect(res.body.code).toBe("itop_token_unreadable");
+  });
+});
+
+describe("task:write gating", () => {
+  // STAKEHOLDER holds project:read but not task:write — the permission check
+  // runs before validation, visibility and the personal-token check, so even
+  // a valid saved token and a visible customer end in 403 `forbidden`.
+  it("403s a STAKEHOLDER on actions and log even with a valid personal token", async () => {
+    const user = await createUserWithRole("STAKEHOLDER");
+    await linkPersonalToken(user.userId, FAKE_ITOP_TOKENS.rina);
+    const id = await ticketIdByRef("R-004535");
+    const before = await prisma.itopTicket.findUniqueOrThrow({ where: { id } });
+
+    const action = await call("post", `/itop/tickets/${id}/actions`, user.token, { action: "pending" });
+    expect(action.status).toBe(403);
+    expect(action.body.code).toBe("forbidden");
+
+    const log = await call("post", `/itop/tickets/${id}/log`, user.token, { visibility: "public", text: "hello" });
+    expect(log.status).toBe(403);
+    expect(log.body.code).toBe("forbidden");
+
+    // Nothing reached iTop or the snapshot.
+    const after = await prisma.itopTicket.findUniqueOrThrow({ where: { id } });
+    expect(after.publicLog).toEqual(before.publicLog);
+    expect(after.status).toBe(before.status);
+  });
+
+  it("403s a PENDING user on actions and log (no project:read either)", async () => {
+    const user = await createUserWithRole("PENDING");
+    const id = await ticketIdByRef("R-004535");
+    expect((await call("post", `/itop/tickets/${id}/actions`, user.token, { action: "pending" })).status).toBe(403);
+    expect((await call("post", `/itop/tickets/${id}/log`, user.token, { visibility: "public", text: "hello" })).status).toBe(403);
+  });
+
+  it("a TAM (task:write) still succeeds, and sees the private log entry it just wrote", async () => {
+    await linkPersonalToken(fixture.rina.userId, FAKE_ITOP_TOKENS.rina);
+    const id = await ticketIdByRef("R-004535");
+
+    const res = await call("post", `/itop/tickets/${id}/log`, fixture.rina.token, {
+      visibility: "private",
+      text: "Internal note for the agents.",
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.privateLog).toHaveLength(1);
+    expect(res.body.privateLog[0].message).toBe("Internal note for the agents.");
+  });
+
+  it("a read-only viewer never receives private log content from the single-ticket read after a TAM wrote it", async () => {
+    await linkPersonalToken(fixture.rina.userId, FAKE_ITOP_TOKENS.rina);
+    const id = await ticketIdByRef("R-004535");
+    const write = await call("post", `/itop/tickets/${id}/log`, fixture.rina.token, {
+      visibility: "private",
+      text: "Internal note for the agents.",
+    });
+    expect(write.status).toBe(200);
+
+    const auditor = await createUserWithRole("AUDITOR");
+    const read = await call("get", `/itop/tickets/${id}`, auditor.token);
+    expect(read.status).toBe(200);
+    expect(read.body.privateLog).toEqual([]);
+    expect(JSON.stringify(read.body)).not.toContain("Internal note for the agents.");
   });
 });
 

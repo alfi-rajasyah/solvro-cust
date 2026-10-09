@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth } from "../http/auth.js";
+import { requireAuth, requirePermission } from "../http/auth.js";
 import { validate } from "../http/validate.js";
 import { resolveDailyReviewScope } from "../lib/dailyReviewScope.js";
 import {
@@ -47,7 +47,10 @@ function dayOf(d: Date): string {
 
 export const dailyReviewRouter = Router();
 
-dailyReviewRouter.use(requireAuth);
+// `project:read` gate (2026-10 security hardening): the page aggregates
+// project and operations notes; a caller with no permissions must not read
+// them here when the direct routes refuse it.
+dailyReviewRouter.use(requireAuth, requirePermission("project:read"));
 
 dailyReviewRouter.get(
   "/",

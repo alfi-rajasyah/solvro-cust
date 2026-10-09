@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { copyText } from "@/lib/clipboard";
+import { cn } from "@/lib/utils";
 
 type Feedback = "copied" | "failed" | null;
 
@@ -55,10 +56,10 @@ export function CopyLinkButton({
         onClick={() => void handleClick()}
         aria-label={label}
         title={label}
-        className={[
+        className={cn(
           "inline-flex items-center justify-center text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30",
           className,
-        ].join(" ")}
+        )}
       >
         <span className="material-symbols-outlined text-base" aria-hidden="true">
           {feedback === "copied" ? "check" : "link"}

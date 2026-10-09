@@ -23,11 +23,17 @@ export interface NavCommand {
 export const NAV_COMMANDS: readonly NavCommand[] = [
   { to: "/overview", label: "Overview", icon: "dashboard", group: "Workspace" },
   { to: "/projects", label: "Projects", icon: "folder_managed", group: "Workspace" },
-  { to: "/customers", label: "Customers", icon: "groups", group: "Workspace" },
-  { to: "/daily-review", label: "Daily Review", icon: "edit_note", group: "Cadence" },
-  { to: "/weekly-sync", label: "Weekly Sync", icon: "table_chart", group: "Cadence" },
-  // Utilization (Utilization.tsx) replaced the old Work Logs placeholder (Task 3.3).
-  { to: "/utilization", label: "Utilization", icon: "schedule", group: "Insights" },
+  // Customers and Daily Review are gated on project:read like their API routes
+  // (GET /customers, /daily-review 403 without it) and carry the same rule
+  // through PermissionGuard in App.tsx (docs/archive/plans/internal-sync.md).
+  { to: "/customers", label: "Customers", icon: "groups", group: "Workspace", requires: "project:read" },
+  { to: "/daily-review", label: "Daily Review", icon: "edit_note", group: "Cadence", requires: "project:read" },
+  { to: "/weekly-sync", label: "Weekly Sync", icon: "table_chart", group: "Cadence", requires: "project:read" },
+  // Utilization (Utilization.tsx) replaced the old Work Logs placeholder. Gated on
+  // project:read — hours are meaningless without project access, and GET /utilization
+  // 403s without it (docs/archive/plans/internal-sync.md). The route carries the same
+  // rule through PermissionGuard in App.tsx.
+  { to: "/utilization", label: "Utilization", icon: "schedule", group: "Insights", requires: "project:read" },
   {
     to: "/executive",
     label: "Executive",

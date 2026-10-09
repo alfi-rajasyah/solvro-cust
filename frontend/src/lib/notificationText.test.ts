@@ -80,3 +80,32 @@ describe("notificationHref", () => {
     expect(notificationHref(notif({}, { entityType: "risk" }))).toBe("/projects/7");
   });
 });
+
+describe("project seat notifications", () => {
+  const seatNotif = (changes: Record<string, unknown>, action: "created" | "updated" = "created") =>
+    notif({}, { entityType: "project", entityId: 7, action, entityLabel: "Acme rollout", changes });
+
+  it("made you TAM of the project (created and changed)", () => {
+    expect(describeNotification(seatNotif({ tam: { id: 3, username: "ana" } })).text).toBe(
+      "rina.wijaya made you TAM of Acme rollout",
+    );
+    expect(
+      describeNotification(
+        seatNotif({ tam: { from: { id: 2, username: "budi" }, to: { id: 3, username: "ana" } } }, "updated"),
+      ).text,
+    ).toBe("rina.wijaya made you TAM of Acme rollout");
+  });
+
+  it("emphasises the project name and links to the project", () => {
+    const n = seatNotif({ tam: { id: 3, username: "ana" } });
+    const { parts } = describeNotification(n);
+    expect(parts[parts.length - 1]).toEqual({ kind: "entity", text: "Acme rollout" });
+    expect(notificationHref(n)).toBe("/projects/7");
+  });
+
+  it("uses the event label when the project name is missing", () => {
+    const n = seatNotif({ tam: { id: 3, username: "ana" } });
+    n.projectName = "";
+    expect(describeNotification(n).text).toBe("rina.wijaya made you TAM of Acme rollout");
+  });
+});

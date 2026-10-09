@@ -2,7 +2,7 @@
 // (Task 5.4, docs/archive/plans/itop-integration.md). Entries render in the
 // order the backend returns them ("newest last" per the API contract, same
 // reading order as a chat thread) — this component never reorders them.
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import { fmtDateTime } from "@/lib/formatDate";
 import type { ItopTicketLogEntry } from "@/lib/queries";
 
@@ -11,7 +11,7 @@ type LogVisibility = "public" | "private";
 const LOG_MAX_LENGTH = 4000;
 
 const PILL_BASE =
-  "rounded-full px-2.5 py-1 font-display text-meta font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "rounded-sm px-2.5 py-1 font-display text-meta font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
 function pillClass(active: boolean): string {
   return [
@@ -26,6 +26,7 @@ export function TicketLog({
   publicLog,
   privateLog,
   canAct,
+  showPrivate,
   onAdd,
   adding,
   error,
@@ -34,13 +35,23 @@ export function TicketLog({
   privateLog: ItopTicketLogEntry[];
   /** Whether the "Add a log entry" composer should render at all. */
   canAct: boolean;
-  onAdd: (visibility: LogVisibility, text: string) => void;
+  /** Whether the Private tab (and the private option in the composer) render — the backend withholds private entries from callers without task:write. */
+  showPrivate: boolean;
+  /** `onSuccess` fires only once iTop accepted the entry — the composer keeps the typed text until then, so a refusal doesn't lose it. */
+  onAdd: (visibility: LogVisibility, text: string, onSuccess: () => void) => void;
   adding: boolean;
   error: string | null;
 }) {
   const [tab, setTab] = useState<LogVisibility>("public");
   const [entryVisibility, setEntryVisibility] = useState<LogVisibility>("public");
   const [text, setText] = useState("");
+  // The composer is UNCONTROLLED on purpose: a controlled <textarea> mirrors its
+  // value into its DOM text content, so while the text is kept until iTop
+  // accepts the entry, the new log entry and the still-filled composer would
+  // both be on screen with the same text in the instant between the list
+  // updating and the composer clearing. `text` only tracks it for the counter
+  // and the disabled state.
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   // Complete tab semantics (fix round, phase review): each tab button owns
   // an id the shared panel points back to via `aria-labelledby`, and the
   // panel's own id is what `aria-controls` on the tabs points to.
@@ -49,7 +60,8 @@ export function TicketLog({
   const privateTabId = `${baseId}-tab-private`;
   const panelId = `${baseId}-panel`;
 
-  const entries = tab === "public" ? publicLog : privateLog;
+  const activeTab: LogVisibility = showPrivate ? tab : "public";
+  const entries = activeTab === "public" ? publicLog : privateLog;
   // Matches the backend's own limit (POST /itop/tickets/:id/log) — the
   // remaining-characters hint only shows up once it's actually relevant.
   const remaining = LOG_MAX_LENGTH - text.length;
@@ -58,8 +70,12 @@ export function TicketLog({
     e.preventDefault();
     const trimmed = text.trim();
     if (!trimmed || adding) return;
-    onAdd(entryVisibility, trimmed);
-    setText("");
+    // A composer that cannot offer Private never submits it, whatever the
+    // visibility state last held.
+    onAdd(showPrivate ? entryVisibility : "public", trimmed, () => {
+      if (composerRef.current) composerRef.current.value = "";
+      setText("");
+    });
   }
 
   return (
@@ -69,35 +85,37 @@ export function TicketLog({
           type="button"
           role="tab"
           id={publicTabId}
-          aria-selected={tab === "public"}
+          aria-selected={activeTab === "public"}
           aria-controls={panelId}
           onClick={() => setTab("public")}
-          className={pillClass(tab === "public")}
+          className={pillClass(activeTab === "public")}
         >
           Public
         </button>
-        <button
-          type="button"
-          role="tab"
-          id={privateTabId}
-          aria-selected={tab === "private"}
-          aria-controls={panelId}
-          onClick={() => setTab("private")}
-          className={pillClass(tab === "private")}
-        >
-          Private
-        </button>
+        {showPrivate && (
+          <button
+            type="button"
+            role="tab"
+            id={privateTabId}
+            aria-selected={tab === "private"}
+            aria-controls={panelId}
+            onClick={() => setTab("private")}
+            className={pillClass(tab === "private")}
+          >
+            Private
+          </button>
+        )}
       </div>
 
       <ul
         id={panelId}
         role="tabpanel"
-        aria-labelledby={tab === "public" ? publicTabId : privateTabId}
+        aria-labelledby={activeTab === "public" ? publicTabId : privateTabId}
         className="mt-3 space-y-2.5"
       >
         {entries.length === 0 && (
           <li className="text-[13px] text-on-surface-variant">
-            No {tab} log entries yet.
+            No {activeTab} log entries yet.
           </li>
         )}
         {entries.map((entry, i) => (
@@ -123,7 +141,8 @@ export function TicketLog({
       {canAct && (
         <form onSubmit={handleSubmit} className="mt-3 space-y-2">
           <textarea
-            value={text}
+            ref={composerRef}
+            defaultValue=""
             onChange={(e) => setText(e.target.value)}
             placeholder="Add a log entry…"
             rows={2}
@@ -146,14 +165,16 @@ export function TicketLog({
               >
                 Public
               </button>
-              <button
-                type="button"
-                aria-pressed={entryVisibility === "private"}
-                onClick={() => setEntryVisibility("private")}
-                className={pillClass(entryVisibility === "private")}
-              >
-                Private
-              </button>
+              {showPrivate && (
+                <button
+                  type="button"
+                  aria-pressed={entryVisibility === "private"}
+                  onClick={() => setEntryVisibility("private")}
+                  className={pillClass(entryVisibility === "private")}
+                >
+                  Private
+                </button>
+              )}
             </div>
             <button
               type="submit"

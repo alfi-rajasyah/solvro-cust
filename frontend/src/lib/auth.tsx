@@ -4,10 +4,19 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import { apiRequest, getToken, setToken } from "./api";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  apiRequest,
+  FORBIDDEN_EVENT,
+  getToken,
+  setToken,
+  TOKEN_STORAGE_KEY,
+  UNAUTHENTICATED_EVENT,
+} from "./api";
 
 // Built-in role names referenced structurally by backend (project visibility,
 // requireAdmin gate). Custom roles created via Admin > Roles tab use other
@@ -82,6 +91,8 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: (idToken: string) => Promise<void>;
   logout: () => void;
+  /** Swap in a token the server issued mid-session (after a password change). */
+  replaceToken: (token: string) => void;
 }
 
 const USER_STORAGE_KEY = "solvro.user";
@@ -94,9 +105,29 @@ function persistUser(user: AuthUser | null) {
   else localStorage.removeItem(USER_STORAGE_KEY);
 }
 
+// True while the document is being torn down (reload, or navigating to
+// another URL). The browser aborts the page's in-flight requests then, and
+// that rejection must not read as "the session is invalid": `logout()` clears
+// the shared localStorage token, which the page that is loading next reads.
+let pageUnloading = false;
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("pagehide", () => {
+    pageUnloading = true;
+  });
+  window.addEventListener("beforeunload", () => {
+    pageUnloading = true;
+  });
+  window.addEventListener("pageshow", () => {
+    pageUnloading = false;
+  });
+}
+
+const REFRESH_THROTTLE_MS = 30_000;
+
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [token, setTokenState] = useState<string | null>(() => getToken());
   const [user, setUser] = useState<AuthUser | null>(() => {
     const raw = localStorage.getItem(USER_STORAGE_KEY);
@@ -116,6 +147,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persistUser(user);
   }, [user]);
 
+  const logout = useCallback(() => {
+    setToken(null);
+    setTokenState(null);
+    setUser(null);
+    setUserVerified(false);
+    setStatus("unauthenticated");
+    // Drop every cached query so the next user in this tab never sees the
+    // previous user's data (forced and manual sign-out alike).
+    queryClient.clear();
+    // A running iTop timer is user-scoped (components/itop/useTicketTimer.ts) and must not leak into the next login on this browser.
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith("solvro.itopTimer."))
+      .forEach((k) => localStorage.removeItem(k));
+  }, [queryClient]);
+
   // Rehydrate from /auth/me on boot when we have a token. This refreshes the
   // cached user (notably the `permissions` array, which may be missing or
   // stale on bundles upgraded from before that field existed). If the token
@@ -134,17 +180,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus("authenticated");
       })
       .catch(() => {
-        if (cancelled) return;
-        setToken(null);
-        setTokenState(null);
-        setUser(null);
-        setUserVerified(false);
-        setStatus("unauthenticated");
+        if (cancelled || pageUnloading) return;
+        logout();
       });
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, logout]);
 
   const login = useCallback(async (email: string, password: string) => {
     setStatus("loading");
@@ -186,21 +228,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const logout = useCallback(() => {
-    setToken(null);
-    setTokenState(null);
-    setUser(null);
-    setUserVerified(false);
-    setStatus("unauthenticated");
-    // A running iTop timer is user-scoped (components/itop/useTicketTimer.ts) and must not leak into the next login on this browser.
-    Object.keys(localStorage)
-      .filter((k) => k.startsWith("solvro.itopTimer."))
-      .forEach((k) => localStorage.removeItem(k));
+  const replaceToken = useCallback((next: string) => {
+    setToken(next);
+    setTokenState(next);
   }, []);
 
+  // Any authenticated request answered with 401 (lib/api.ts) ends the
+  // session here too — the server revokes tokens (password change, admin
+  // reset, deactivation), and a revoked session must not keep showing cached
+  // pages behind failing requests.
+  useEffect(() => {
+    window.addEventListener(UNAUTHENTICATED_EVENT, logout);
+    return () => window.removeEventListener(UNAUTHENTICATED_EVENT, logout);
+  }, [logout]);
+
+  // Live permissions: an admin can change this account's role at any time and
+  // the server applies it on the next request, so the cached `permissions`
+  // (which drive nav, guards and buttons) are re-read when the tab regains
+  // focus and when a request is refused with 403 `forbidden`. Throttled, so a
+  // page that keeps hitting a forbidden route does not loop.
+  const lastRefresh = useRef(0);
+  useEffect(() => {
+    if (!token) return;
+    function refresh() {
+      const now = Date.now();
+      if (now - lastRefresh.current < REFRESH_THROTTLE_MS) return;
+      lastRefresh.current = now;
+      const requested = getToken();
+      apiRequest<AuthUser>("/auth/me")
+        .then((fresh) => {
+          if (getToken() === requested) setUser(fresh);
+        })
+        .catch(() => {
+          // A 401 already signs out through UNAUTHENTICATED_EVENT; a network
+          // blip keeps the cached user until the next trigger.
+        });
+    }
+    function onVisible() {
+      if (document.visibilityState === "visible") refresh();
+    }
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener(FORBIDDEN_EVENT, refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener(FORBIDDEN_EVENT, refresh);
+    };
+  }, [token]);
+
+  // Another tab signed out, signed in, or changed the password: follow it, so
+  // this tab is not left holding a revoked token.
+  useEffect(() => {
+    function onStorage(e: StorageEvent) {
+      if (e.key !== TOKEN_STORAGE_KEY) return;
+      if (e.newValue === null) logout();
+      else setTokenState(e.newValue);
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [logout]);
+
   const value = useMemo(
-    () => ({ user, token, status, userVerified, login, loginWithGoogle, logout }),
-    [user, token, status, userVerified, login, loginWithGoogle, logout],
+    () => ({ user, token, status, userVerified, login, loginWithGoogle, logout, replaceToken }),
+    [user, token, status, userVerified, login, loginWithGoogle, logout, replaceToken],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

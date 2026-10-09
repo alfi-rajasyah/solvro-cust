@@ -291,7 +291,7 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
           )}
 
           <div>
-            <p className="mb-1 block font-display text-label-caps uppercase tracking-widest text-on-surface-variant">
+            <p className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">
               Health
             </p>
             <HealthButtonGroup value={state.health} onChange={(health) => patch({ health })} />
@@ -310,7 +310,7 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
           <div className="space-y-2.5">
             <div>
               <div className="mb-1 flex items-baseline justify-between gap-2">
-                <p className="block font-display text-label-caps uppercase tracking-widest text-on-surface-variant">
+                <p className="block font-display text-label-caps uppercase text-on-surface-variant">
                   Highlights
                 </p>
                 <button type="button" onClick={requestDraft} className={linkClass}>

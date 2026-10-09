@@ -11,7 +11,7 @@ import { ServiceMappingList } from "@/components/services/ServiceMappingList";
 import { Tabs } from "@/components/Tabs";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
-import { canOwnCustomer, saveErrorMessage } from "@/lib/ownerAccess";
+import { canChangeCustomerOwner, canOwnCustomer, saveErrorMessage } from "@/lib/ownerAccess";
 import {
   type CustomerDetail as CustomerDetailType,
   useCustomer,
@@ -51,15 +51,18 @@ export function CustomerDetail() {
   // skips the fetch rather than skipping the hook call.
   const itopStatus = useItopStatus();
   const itopConfigured = itopStatus.data?.configured ?? false;
+  // The tickets endpoints require `project:read` (403 otherwise), so a user
+  // without it never fires the gate query and never sees the tab.
+  const canReadTickets = hasPermission(user, "project:read");
   const itopTicketsGate = useCustomerTickets(customerId ?? -1, {
     scope: "ongoing",
-    enabled: itopConfigured && customerId !== null,
+    enabled: itopConfigured && canReadTickets && customerId !== null,
     // This gate call runs on every customer page load (not just while the
     // Tickets tab is open) — no background polling here. TicketsTab.tsx's
     // own call opts into polling once the tab is actually visible.
     poll: false,
   });
-  const ticketsAvailable = itopConfigured && itopTicketsGate.data?.mapped === true;
+  const ticketsAvailable = itopConfigured && canReadTickets && itopTicketsGate.data?.mapped === true;
 
   // Latest weekly update for the header's health line; AccountOverview reads
   // the same key (limit 1) until the reader expands the history.
@@ -176,12 +179,14 @@ export function CustomerDetail() {
   }
 
   // Members reaching this customer through a project can edit its profile but
-  // not change its owner or delete it (server: 403 owner_only).
+  // not delete it (server: 403 owner_only); only the owner, view-all, or
+  // anyone on an unowned customer can change its owner.
   const canOwn = canOwnCustomer(
     user,
     customer,
     customer.projects.map((p) => p.tamId),
   );
+  const canChangeOwner = canChangeCustomerOwner(customer);
 
   async function handleDelete() {
     if (!customer) return;
@@ -245,7 +250,7 @@ export function CustomerDetail() {
         open={editOpen}
         onClose={() => setEditOpen(false)}
         customer={customer}
-        canChangeOwner={canOwn}
+        canChangeOwner={canChangeOwner}
       />
 
       <ConfirmModal

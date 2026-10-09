@@ -3,6 +3,8 @@ import { ApiError } from "@/lib/api";
 import type { AuthUser } from "@/lib/auth";
 import {
   OWNER_ONLY_MESSAGE,
+  canChangeCustomerOwner,
+  customerSaveErrorMessage,
   canOwnCustomer,
   canOwnProject,
   isOwnerOnlyError,
@@ -58,6 +60,16 @@ describe("canOwnCustomer", () => {
   });
 });
 
+describe("canChangeCustomerOwner", () => {
+  it("follows the server's flag", () => {
+    expect(canChangeCustomerOwner({ canChangeOwner: true })).toBe(true);
+    expect(canChangeCustomerOwner({ canChangeOwner: false })).toBe(false);
+  });
+  it("is false when the flag is absent (unknown)", () => {
+    expect(canChangeCustomerOwner({})).toBe(false);
+  });
+});
+
 describe("owner_only errors", () => {
   const ownerOnly = new ApiError(403, "Forbidden", { code: "owner_only" });
   it("recognises the 403 owner_only refusal", () => {
@@ -70,5 +82,20 @@ describe("owner_only errors", () => {
     expect(saveErrorMessage(ownerOnly, "Save failed.")).toBe(OWNER_ONLY_MESSAGE);
     expect(saveErrorMessage(new ApiError(500, "Boom", null), "Save failed.")).toBe("Boom");
     expect(saveErrorMessage(new Error("net"), "Save failed.")).toBe("Save failed.");
+  });
+});
+
+describe("customerSaveErrorMessage", () => {
+  it("shows the server's message for an owner_only refusal", () => {
+    const err = new ApiError(403, "An unowned customer can be claimed only by the TAM of all its projects", {
+      code: "owner_only",
+    });
+    expect(customerSaveErrorMessage(err, "Save failed.")).toBe(
+      "An unowned customer can be claimed only by the TAM of all its projects",
+    );
+  });
+  it("otherwise behaves like saveErrorMessage", () => {
+    expect(customerSaveErrorMessage(new ApiError(500, "Boom", null), "Save failed.")).toBe("Boom");
+    expect(customerSaveErrorMessage(new Error("net"), "Save failed.")).toBe("Save failed.");
   });
 });

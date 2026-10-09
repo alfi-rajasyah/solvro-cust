@@ -107,7 +107,8 @@ function NavItem({
 export function Sidebar() {
   const { expanded, toggle, close } = useSidebar();
   const { user } = useAuth();
-  const { data: badges } = useNavBadges();
+  // The counts are Daily Review scope (project data) — nothing to count, so no request, without project:read.
+  const { data: badges } = useNavBadges(hasPermission(user, "project:read"));
   const visible = NAV_COMMANDS.filter((i) => !i.requires || hasPermission(user, i.requires));
   const groups = NAV_GROUPS.map((group) => ({
     group,

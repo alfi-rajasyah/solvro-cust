@@ -163,7 +163,7 @@ test.describe("Project activity", () => {
     expect(await events.count()).toBeGreaterThan(1);
   });
 
-  test("a project without changes shows the designed empty state", async ({ page }, testInfo) => {
+  test("a new project opens with its creation event; a person with no changes shows the designed empty state", async ({ page }, testInfo) => {
     const base = apiBase(testInfo);
     const admin = await login(base);
     const s = stamp();
@@ -196,6 +196,15 @@ test.describe("Project activity", () => {
     await loginViaUi(page, `e2e-act-empty-${s}@solvro.test`, PASSWORD);
     await page.goto(`/projects/${project.id}/overview`, { waitUntil: "networkidle" });
     const section = page.getByRole("region", { name: "Recent activity" });
+
+    // Creating a project logs its own `created` event (by the admin who made it).
+    await expect(section.getByTestId("activity-event")).toHaveCount(1);
+    await expect(section.getByTestId("activity-event")).toContainText(`created the project Activity Empty ${s}`);
+
+    // The TAM has changed nothing: filtering to them shows the designed empty state.
+    await section.getByRole("combobox", { name: "Filter activity by person" }).click();
+    await page.getByRole("option", { name: `e2e-act-empty-${s}` }).click();
     await expect(section.getByText("No activity yet")).toBeVisible();
+    await expect(section.getByText("This person has not changed anything in this project yet.")).toBeVisible();
   });
 });

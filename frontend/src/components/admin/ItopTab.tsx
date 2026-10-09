@@ -285,18 +285,7 @@ function ConnectionCard() {
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span
-          className={[
-            "rounded-full px-2 py-0.5 font-display text-meta font-semibold",
-            connectionStatus.tone === "emerald"
-              ? "bg-chip-emerald-bg text-chip-emerald-text"
-              : connectionStatus.tone === "amber"
-                ? "bg-chip-amber-bg text-chip-amber-text"
-                : "bg-surface-container-high text-on-surface-variant",
-          ].join(" ")}
-        >
-          {connectionStatus.label}
-        </span>
+        <Chip tone={connectionStatus.tone}>{connectionStatus.label}</Chip>
         <button
           type="button"
           onClick={() => void handleTest()}
