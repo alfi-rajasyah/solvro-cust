@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AssigneeAvatar } from "@/components/AssigneeAvatar";
+import { SkeletonRegion } from "@/components/skeletons/SkeletonRegion";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { describeActivity } from "@/lib/activityText";
 import { fmtAgo, fmtDateTime } from "@/lib/formatDate";
@@ -75,12 +77,11 @@ export function ProjectActivity({
       </header>
 
       {isLoading ? (
-        <div className="space-y-2">
-          <span className="sr-only">Loading activity</span>
+        <SkeletonRegion className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} aria-hidden="true" className="h-8 animate-pulse rounded-sm bg-surface-container-low" />
+            <Skeleton key={i} className="h-8" />
           ))}
-        </div>
+        </SkeletonRegion>
       ) : isError ? (
         <div className="flex items-center gap-3 rounded-sm border border-dashed border-outline-variant px-3 py-4 text-xs text-on-surface-variant">
           <span className="material-symbols-outlined text-base" aria-hidden="true">

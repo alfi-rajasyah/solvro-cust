@@ -20,6 +20,7 @@ export type ActivityEntityType =
   | "risk"
   | "note"
   | "member"
+  | "epic"
   | "share_link";
 export type ActivityAction = "created" | "updated" | "deleted" | "added" | "removed";
 

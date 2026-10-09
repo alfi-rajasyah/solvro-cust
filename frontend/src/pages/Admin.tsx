@@ -325,7 +325,9 @@ function UsersTab() {
             <button
               type="button"
               onClick={() => setResettingUser(u)}
-              className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-semibold"
+              disabled={isSelf}
+              className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 font-semibold"
+              title={isSelf ? "Use Settings › Change password for your own account" : undefined}
             >
               Reset password
             </button>

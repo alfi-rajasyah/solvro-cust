@@ -354,3 +354,47 @@ describe("describeActivity - guest links", () => {
     expect(s.taskId).toBeNull();
   });
 });
+
+describe("describeActivity - project TAM", () => {
+  it("a TAM change reads as from/to usernames", () => {
+    const project = (changes: Record<string, unknown>) =>
+      ev({ entityType: "project", entityLabel: "Acme rollout", action: "updated", changes });
+    expect(text(project({ tam: { from: { id: 1, username: "ana" }, to: { id: 2, username: "budi" } } }))).toBe(
+      "maya.putri changed the project TAM from ana to budi",
+    );
+  });
+
+  it("project created with its TAM and customer still reads as a plain creation", () => {
+    const created = ev({
+      entityType: "project",
+      entityLabel: "Acme rollout",
+      changes: { tam: { id: 1, username: "ana" }, customer: { id: 4, name: "Acme" } },
+    });
+    expect(text(created)).toBe("maya.putri created the project Acme rollout");
+  });
+});
+
+describe("describeActivity - epics", () => {
+  it("created, updated, deleted", () => {
+    const epic = (over: Partial<ActivityEvent>) =>
+      ev({ entityType: "epic", entityLabel: "Billing", ...over });
+    expect(text(epic({}))).toBe("maya.putri created the epic Billing");
+    expect(text(epic({ action: "deleted" }))).toBe("maya.putri deleted the epic Billing");
+    expect(text(epic({ action: "updated", changes: { status: { from: "TODO", to: "DONE" } } }))).toBe(
+      "maya.putri changed the status of Billing from To do to Done",
+    );
+    expect(describeActivity(epic({})).taskId).toBeNull();
+    expect(text(epic({ action: "deleted", changes: { taskCount: 3 } }))).toBe(
+      "maya.putri deleted the epic Billing (3 tasks)",
+    );
+    expect(text(epic({ action: "updated", changes: { owner: { from: null, to: { id: 2, username: "budi" } } } }))).toBe(
+      "maya.putri changed the owner of Billing from none to budi",
+    );
+    expect(text(epic({ action: "updated", changes: { color: { from: "#111111", to: "#222222" } } }))).toBe(
+      "maya.putri changed the color of Billing from #111111 to #222222",
+    );
+    expect(text(epic({ action: "updated", changes: { description: { changed: true } } }))).toBe(
+      "maya.putri updated the description of Billing",
+    );
+  });
+});

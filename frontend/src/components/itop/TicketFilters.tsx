@@ -4,7 +4,8 @@
 // already-active class chip clears it, per
 // docs/archive/plans/itop-integration-spec.md's mockup ("Filters are counts,
 // so the tab answers 'how many?' before you read a row"). Toggle-pill visual
-// borrowed from SolvroGantt.tsx's Baseline toggle (bg-primary/text-on-primary
+// borrowed from SolvroGantt.tsx's Baseline toggle (rounded-sm, since
+// docs/DESIGN.md reserves `full` for chips/avatars; bg-primary/text-on-primary
 // active state, aria-pressed carrying the state semantically).
 import { cn } from "@/lib/utils";
 import type { ItopTicketClass, ItopTicketCounts, ItopTicketScope } from "@/lib/queries";
@@ -16,7 +17,7 @@ const SCOPE_LABEL: Record<ItopTicketScope, string> = {
 };
 
 const PILL_BASE =
-  "rounded-full px-3 py-1 font-display text-[12px] font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "rounded-sm px-3 py-1 font-display text-meta font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
 /** Exported (fix round, phase review) so other Tickets-tab toggle controls
  * (e.g. `TicketsTab.tsx`'s Table|Board `ViewSwitch`) share the exact same

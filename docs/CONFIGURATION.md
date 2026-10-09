@@ -208,7 +208,7 @@ Guest-page navigations (`/share/<token>`) bypass the PWA service-worker cache: [
 
 [backend/prisma/seed.ts](backend/prisma/seed.ts) seeds **no users**. It only upserts:
 
-- **Four built-in roles**: `ADMIN` (`*` wildcard), `TAM` (`project:read`, `project:write`, `task:read`, `task:write`), `STAKEHOLDER` (`project:read`, `project:view-all`), `PENDING` (empty permissions — the auto-provisioning role for first-time Google sign-ins, see [2.9](#29--auth--rbac-configuration)).
+- **Four built-in roles**: `ADMIN` (`*` wildcard), `TAM` (`project:read`, `project:write`, `task:read`, `task:write`), `STAKEHOLDER` (`project:read` only — read-only on the projects it is attached to as TAM, member or customer owner; for a read-everything role, create a custom role with `project:view-all` in Admin > Roles — the built-in roles are re-seeded to these permissions on every backend start, so editing them does not stick), `PENDING` (empty permissions — the auto-provisioning role for first-time Google sign-ins, see [2.9](#29--auth--rbac-configuration)).
 - The `AuthConfig` singleton (`id: "default"`), bootstrapped with an empty `googleAllowedDomains` array so Google sign-in starts disabled until an admin configures it.
 
 The seed is idempotent (`upsert`) and re-running it never overwrites an admin-edited `AuthConfig` row.
@@ -227,7 +227,9 @@ docker compose exec -e ADMIN_EMAIL=you@example.com -e ADMIN_PASSWORD=your-passwo
 
 - **Built-in roles** (hard-coded): `TAM`, `ADMIN`, `STAKEHOLDER`, `PENDING`. `PENDING` is the auto-provisioning role for first-time Google sign-ins — empty permissions, so every screen renders a permission-denied empty state until an admin promotes the user from Admin > Users.
 - **Custom roles**: created by admins via `POST /admin/roles` with an arbitrary `permissions: string[]`. The wildcard `"*"` short-circuits all permission checks.
-- **JWT payload**: `{ sub: <userId>, role: <RoleName>, permissions: string[] }`. The `permissions` array is materialised at login from the user's role record.
+- **JWT payload**: `{ sub: <userId>, ver: <tokenVersion> }`. Role and permissions are read from the database on every request, so a role change applies to live sessions on the next request; `ver` must equal `User.tokenVersion`, which a password change, an admin password reset and a deactivation increment — every older token is then refused with 401 `token_revoked`. A deactivated account's token is refused with 401 `account_disabled`; a deleted account's with 401 `unauthenticated`. `POST /auth/change-password` returns 200 `{ token }` (a replacement token, so the current session continues).
+- **Upgrade note**: tokens issued before this version carry no `ver` claim and are refused with 401 `token_revoked`, so after deploying this release every user signs in once again.
+- **Utilization needs `project:read`** (all scopes, plus the iTop read routes): a custom role granted `report:executive` for the team/customer views also needs `project:read`.
 - **Authorization gate to use** (in priority order):
   1. `requirePermission("project:write")` — the canonical pattern; works for both built-in and custom roles.
   2. `requireRole("ADMIN", ...)` — narrow legacy use only (e.g. `services.ts` writes).
@@ -235,7 +237,7 @@ docker compose exec -e ADMIN_EMAIL=you@example.com -e ADMIN_PASSWORD=your-passwo
 
 #### Google OAuth (config lives in the database, not env vars)
 
-Login supports two paths, both minting the same `{sub, role, permissions}` JWT: password (`POST /auth/login`) and Google (`POST /auth/google`, verified server-side via `google-auth-library`). Full routes live in [backend/src/routes/auth.ts](backend/src/routes/auth.ts).
+Login supports two paths, both minting the same `{sub, ver}` JWT: password (`POST /auth/login`) and Google (`POST /auth/google`, verified server-side via `google-auth-library`). Full routes live in [backend/src/routes/auth.ts](backend/src/routes/auth.ts).
 
 **Unlike every other setting in this document, Google OAuth config is not an env var.** It lives in the `AuthConfig` DB singleton (`id: "default"`), managed by admins in-app at **Admin > Sign-in** (`GET`/`PATCH /admin/settings/auth` in [backend/src/routes/admin.ts](backend/src/routes/admin.ts)) — not in `backend/.env`, not in docker-compose. This is a deliberate surprise worth flagging to an operator: setting a `GOOGLE_CLIENT_ID` env var does nothing.
 
@@ -252,7 +254,7 @@ Login supports two paths, both minting the same `{sub, role, permissions}` JWT: 
 - **Shared logger**: imported from [backend/src/logger.ts](backend/src/logger.ts) — never `new Logger()` ad hoc.
 - **Level**: controlled by `LOG_LEVEL` env (default `info`; the dev compose stack sets `debug`).
 - **Format**: JSON in prod (default pino), pretty in dev if pino-pretty is wired.
-- **Redaction**: request logging goes through [backend/src/http/requestLogger.ts](backend/src/http/requestLogger.ts), which replaces a guest-link token (`/share/<token>` in the request URL or a `Referer`) with `[redacted]` and masks the `Authorization` header, so neither a token nor a bearer JWT reaches the logs. Each request log line carries `clientIp` (the address `req.ip` resolves to under `TRUST_PROXY`, i.e. what the guest-link rate limit keys on) alongside `remoteAddress` / `remotePort` (the direct socket peer — the proxy, when behind nginx). (nginx separately skips access logging for the guest-link paths — see [2.6](#26--the-api-reverse-proxy-pattern-critical-detail).)
+- **Redaction**: request logging goes through [backend/src/http/requestLogger.ts](backend/src/http/requestLogger.ts), which masks the `Authorization`, `X-Solvro-Webhook-Secret`, `Cookie` and `Set-Cookie` headers (request and response) and replaces the `/share/<token>` segment of any URL or `Referer` with `[redacted]`, so no bearer JWT, webhook secret, session cookie or guest-link token reaches the logs. Each request log line carries `clientIp` (the address `req.ip` resolves to under `TRUST_PROXY`, i.e. what the guest-link rate limit keys on) alongside `remoteAddress` / `remotePort` (the direct socket peer — the proxy, when behind nginx). (nginx separately skips access logging for the guest-link paths — see [2.6](#26--the-api-reverse-proxy-pattern-critical-detail).)
 
 ### 2.11 — Frontend storage & client-side state
 

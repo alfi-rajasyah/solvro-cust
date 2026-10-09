@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { BrandMark } from "@/components/BrandMark";
+import { SkeletonRegion } from "@/components/skeletons/SkeletonRegion";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Chip, ProjectStatusChip } from "@/components/StatusChip";
 import { ApiError } from "@/lib/api";
 import { dateToDay } from "@/lib/dateField";
@@ -91,29 +93,22 @@ export function PublicShare() {
 
 function GuestSkeleton() {
   return (
-    <div role="status" aria-busy="true" data-testid="guest-loading" className="space-y-6">
-      <span className="sr-only">Loading project</span>
-      <div aria-hidden="true" className="space-y-3">
-        <div className="h-8 w-2/3 animate-pulse rounded-sm bg-surface-container" />
-        <div className="h-4 w-1/3 animate-pulse rounded-sm bg-surface-container" />
+    <SkeletonRegion className="space-y-6" data-testid="guest-loading">
+      <div className="space-y-3">
+        <Skeleton className="h-8 w-2/3" />
+        <Skeleton className="h-4 w-1/3" />
       </div>
-      <div
-        aria-hidden="true"
-        className="space-y-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-4"
-      >
+      <div className="space-y-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-10 animate-pulse rounded-sm bg-surface-container-low" />
+          <Skeleton key={i} className="h-10" />
         ))}
       </div>
-      <div
-        aria-hidden="true"
-        className="space-y-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-4"
-      >
+      <div className="space-y-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
         {[0, 1].map((i) => (
-          <div key={i} className="h-8 animate-pulse rounded-sm bg-surface-container-low" />
+          <Skeleton key={i} className="h-8" />
         ))}
       </div>
-    </div>
+    </SkeletonRegion>
   );
 }
 

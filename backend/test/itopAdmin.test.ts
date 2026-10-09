@@ -11,7 +11,8 @@ import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { open, seal } from "../src/lib/secretBox.js";
 import { bustItopConfigCache } from "../src/lib/itop/config.js";
-import { waitForItopSyncIdle } from "../src/routes/itopAdmin.js";
+import { setMappingLockTimeoutMs, waitForItopSyncIdle } from "../src/routes/itopAdmin.js";
+import { ADVISORY_LOCK_KEY } from "../src/lib/itop/sync.js";
 import { createAdminAndToken, createUserWithRole, seedRoles } from "./testAuth.js";
 import { createFakeItop, seedFakeItop, type FakeItopState, FAKE_ITOP_TOKENS } from "./itop/fakeItop.js";
 
@@ -566,6 +567,200 @@ describe("organizations + customer↔org mapping", () => {
     expect(res.body.itopOrgId).toBeNull();
     expect(res.body.itopOrgName).toBeNull();
     expect(res.body.match).toBe("unmatched");
+  });
+
+  describe("ticket snapshot re-linking on (re)mapping", () => {
+    let ticketSeq = 930_000_000;
+    async function seedSnapshotTicket(orgId: number, customerId: number | null) {
+      ticketSeq += 1;
+      return prisma.itopTicket.create({
+        data: {
+          id: ticketSeq,
+          class: "UserRequest",
+          ref: `R-${ticketSeq}`,
+          title: "Snapshot ticket",
+          status: "new",
+          orgId,
+          customerId,
+          lastUpdate: new Date(),
+          syncedAt: new Date(),
+        },
+      });
+    }
+    async function listTicketIds(customerId: number): Promise<number[]> {
+      const res = await call("get", `/itop/customers/${customerId}/tickets`, adminToken);
+      expect(res.status).toBe(200);
+      return res.body.tickets.map((t: { id: number }) => t.id);
+    }
+
+    it("remapping a customer to another org releases the old org's tickets and links the new org's", async () => {
+      const customer = await createCustomer({ itopOrgId: 1, itopOrgName: "Northwind Freight Sdn Bhd" });
+      const orgXTicket = await seedSnapshotTicket(1, customer.id);
+      const orgYTicket = await seedSnapshotTicket(2, null);
+      expect(await listTicketIds(customer.id)).toEqual([orgXTicket.id]);
+
+      const res = await call("patch", `/admin/itop/customers/${customer.id}`, adminToken).send({ itopOrgId: 2 });
+      expect(res.status).toBe(200);
+
+      expect(await listTicketIds(customer.id)).toEqual([orgYTicket.id]);
+      const stale = await prisma.itopTicket.findUniqueOrThrow({ where: { id: orgXTicket.id } });
+      expect(stale.customerId).toBeNull();
+    });
+
+    it("unmapping a customer (itopOrgId: null) unlinks its tickets from the snapshot", async () => {
+      const customer = await createCustomer({ itopOrgId: 1, itopOrgName: "Northwind Freight Sdn Bhd" });
+      const ticket = await seedSnapshotTicket(1, customer.id);
+
+      const res = await call("patch", `/admin/itop/customers/${customer.id}`, adminToken).send({ itopOrgId: null });
+      expect(res.status).toBe(200);
+
+      expect((await prisma.itopTicket.findUniqueOrThrow({ where: { id: ticket.id } })).customerId).toBeNull();
+    });
+
+    it("mapping a customer to an org that already has snapshot rows makes them visible immediately", async () => {
+      const customer = await createCustomer();
+      const t1 = await seedSnapshotTicket(2, null);
+      const t2 = await seedSnapshotTicket(2, null);
+      const otherOrg = await seedSnapshotTicket(1, null);
+
+      const res = await call("patch", `/admin/itop/customers/${customer.id}`, adminToken).send({ itopOrgId: 2 });
+      expect(res.status).toBe(200);
+
+      expect((await listTicketIds(customer.id)).sort()).toEqual([t1.id, t2.id].sort());
+      expect((await prisma.itopTicket.findUniqueOrThrow({ where: { id: otherOrg.id } })).customerId).toBeNull();
+    });
+
+    it("a rejected mapping (org already held by another customer) leaves the snapshot untouched", async () => {
+      const holder = await createCustomer({ itopOrgId: 1, itopOrgName: "Northwind Freight Sdn Bhd" });
+      const other = await createCustomer();
+      const ticket = await seedSnapshotTicket(1, holder.id);
+
+      const res = await call("patch", `/admin/itop/customers/${other.id}`, adminToken).send({ itopOrgId: 1 });
+      expect(res.status).toBe(409);
+      expect((await prisma.itopTicket.findUniqueOrThrow({ where: { id: ticket.id } })).customerId).toBe(holder.id);
+    });
+
+    it("POST /customers/automatch links the matched org's existing snapshot rows", async () => {
+      const customer = await createCustomer({ name: "  pt sinar logistik  " });
+      const ticket = await seedSnapshotTicket(2, null);
+
+      const res = await call("post", "/admin/itop/customers/automatch", adminToken);
+      expect(res.status).toBe(200);
+      expect((await prisma.itopTicket.findUniqueOrThrow({ where: { id: ticket.id } })).customerId).toBe(customer.id);
+    });
+  });
+
+  it("a remap waits for an in-flight sync to release the iTop sync advisory lock, then applies", async () => {
+    const customer = await createCustomer({ itopOrgId: 1, itopOrgName: "Northwind Freight Sdn Bhd" });
+    let releaseSync!: () => void;
+    const syncHeld = new Promise<void>((resolve) => {
+      releaseSync = resolve;
+    });
+    let lockTaken!: () => void;
+    const lockAcquired = new Promise<void>((resolve) => {
+      lockTaken = resolve;
+    });
+    // Stands in for a running sync: its interactive transaction holds the same
+    // `pg_try_advisory_xact_lock(hashtext(ADVISORY_LOCK_KEY))`.
+    const fakeSync = prisma.$transaction(
+      async (tx) => {
+        const rows = await tx.$queryRaw<Array<{ locked: boolean }>>`SELECT pg_try_advisory_xact_lock(hashtext(${ADVISORY_LOCK_KEY})) AS locked`;
+        expect(rows[0]?.locked).toBe(true);
+        lockTaken();
+        await syncHeld;
+      },
+      { timeout: 30_000 },
+    );
+    await lockAcquired;
+
+    let settled = false;
+    const patch = Promise.resolve(
+      call("patch", `/admin/itop/customers/${customer.id}`, adminToken).send({ itopOrgId: 2 }),
+    ).then((res) => {
+      settled = true;
+      return res;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(settled).toBe(false);
+    // Blocked on the lock before its first write: nothing has changed yet.
+    expect((await prisma.customer.findUniqueOrThrow({ where: { id: customer.id } })).itopOrgId).toBe(1);
+
+    releaseSync();
+    await fakeSync;
+    const res = await patch;
+    expect(res.status).toBe(200);
+    expect((await prisma.customer.findUniqueOrThrow({ where: { id: customer.id } })).itopOrgId).toBe(2);
+  });
+
+  it("a remap that cannot get the sync lock within the lock timeout answers 409 itop_sync_in_progress and changes nothing (PATCH and automatch)", async () => {
+    const customer = await createCustomer({ itopOrgId: 1, itopOrgName: "Northwind Freight Sdn Bhd" });
+    const ticket = await prisma.itopTicket.create({
+      data: {
+        id: 931_000_001,
+        class: "UserRequest",
+        ref: "R-931000001",
+        title: "Snapshot ticket",
+        status: "new",
+        orgId: 1,
+        customerId: customer.id,
+        lastUpdate: new Date(),
+        syncedAt: new Date(),
+      },
+    });
+    const unmapped = await createCustomer({ name: "  pt sinar logistik  " });
+
+    let releaseSync!: () => void;
+    const syncHeld = new Promise<void>((resolve) => {
+      releaseSync = resolve;
+    });
+    let lockTaken!: () => void;
+    const lockAcquired = new Promise<void>((resolve) => {
+      lockTaken = resolve;
+    });
+    const fakeSync = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT pg_try_advisory_xact_lock(hashtext(${ADVISORY_LOCK_KEY})) AS locked`;
+        lockTaken();
+        await syncHeld;
+      },
+      { timeout: 30_000 },
+    );
+    await lockAcquired;
+
+    setMappingLockTimeoutMs(250);
+    try {
+      const patch = await call("patch", `/admin/itop/customers/${customer.id}`, adminToken).send({ itopOrgId: 2 });
+      expect(patch.status).toBe(409);
+      expect(patch.body.code).toBe("itop_sync_in_progress");
+      expect(patch.body.error).toBe("An iTop sync is running. Try again in a minute.");
+
+      const unmap = await call("patch", `/admin/itop/customers/${customer.id}`, adminToken).send({ itopOrgId: null });
+      expect(unmap.status).toBe(409);
+      expect(unmap.body.code).toBe("itop_sync_in_progress");
+
+      const automatch = await call("post", "/admin/itop/customers/automatch", adminToken);
+      expect(automatch.status).toBe(409);
+      expect(automatch.body.code).toBe("itop_sync_in_progress");
+    } finally {
+      setMappingLockTimeoutMs(15_000);
+      releaseSync();
+      await fakeSync;
+    }
+
+    // Nothing changed: mapping and snapshot link are as before.
+    const after = await prisma.customer.findUniqueOrThrow({ where: { id: customer.id } });
+    expect(after.itopOrgId).toBe(1);
+    expect((await prisma.itopTicket.findUniqueOrThrow({ where: { id: ticket.id } })).customerId).toBe(customer.id);
+    expect((await prisma.customer.findUniqueOrThrow({ where: { id: unmapped.id } })).itopOrgId).toBeNull();
+
+    // Once the sync finishes the same request goes through.
+    const ok = await call("patch", `/admin/itop/customers/${customer.id}`, adminToken).send({ itopOrgId: 2 });
+    expect(ok.status).toBe(200);
+
+    // Unmapped customers aren't swept by resetItopTestState; later automatch
+    // tests create a customer with this exact name.
+    await prisma.customer.delete({ where: { id: unmapped.id } });
   });
 
   it("POST /customers/automatch maps only exact (case-insensitive, trimmed) names", async () => {

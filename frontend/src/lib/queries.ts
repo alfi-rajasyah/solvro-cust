@@ -8,7 +8,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { apiRequest, apiRequestWithHeaders } from "./api";
+import { apiRequest, apiRequestWithHeaders, setToken, setTokenRotating } from "./api";
 import { useAuth, type Role } from "./auth";
 import { dateToDay, dayFromIso, isoFromDay } from "./dateField";
 import { shouldPauseRefresh, subscribeDragActivity } from "./dragActivity";
@@ -37,7 +37,6 @@ export interface UserSummary {
   username: string;
   email: string;
   role: Role;
-  permissions: string[];
   /** Inactive accounts stay in the list; pickers filter them out. */
   active: boolean;
   avatarUrl: string | null;
@@ -101,6 +100,12 @@ export interface CustomerSummary {
   tamId: number | null;
   tam: { id: number; username: string } | null;
   _count: { projects: number };
+  /**
+   * Server-computed for the caller (GET /customers and GET /customers/:id):
+   * may they reassign this customer's owner? The rule counts projects the
+   * caller cannot see, which the client cannot.
+   */
+  canChangeOwner?: boolean;
   // GET /customers only (backend/src/routes/customers.ts): overdue tasks and
   // open risks summed over the caller's visible projects of this customer,
   // plus the weekly update filed for the current ISO week (null = none).
@@ -224,6 +229,7 @@ export type ActivityEntityType =
   | "risk"
   | "note"
   | "member"
+  | "epic"
   | "share_link";
 export type ActivityAction = "created" | "updated" | "deleted" | "added" | "removed";
 
@@ -865,7 +871,7 @@ export interface NavBadgesResponse {
 
 // Light sidebar counts — 60 s fresh, refetched when the tab regains focus so
 // a review marked elsewhere (or a new day) shows up without a page reload.
-export function useNavBadges() {
+export function useNavBadges(enabled = true) {
   const today = dateToDay(new Date())!;
   return useQuery({
     queryKey: queryKeys.navBadges(today),
@@ -874,6 +880,7 @@ export function useNavBadges() {
     staleTime: 60_000,
     refetchOnWindowFocus: true,
     placeholderData: (prev) => prev,
+    enabled,
   });
 }
 
@@ -882,22 +889,23 @@ export function useNavBadges() {
 // request that's guaranteed to 400. `placeholderData` keeps the previous
 // page of results rendered while the next keystroke's query is in flight —
 // prevents the list flashing empty on every char.
-export function useSearch(q: string) {
+export function useSearch(q: string, allowed = true) {
   return useQuery<SearchResults>({
     queryKey: queryKeys.search(q),
     queryFn: ({ signal }) =>
       apiRequest<SearchResults>(`/search?q=${encodeURIComponent(q)}`, { signal }),
-    enabled: q.trim().length >= 2,
+    enabled: allowed && q.trim().length >= 2,
     staleTime: 30_000,
     placeholderData: (prev) => prev,
   });
 }
 
-export function useUsers() {
+export function useUsers(enabled = true) {
   return useQuery({
     queryKey: queryKeys.users,
     queryFn: ({ signal }) => apiRequest<UserSummary[]>("/users", { signal }),
     staleTime: 60_000,
+    enabled,
   });
 }
 
@@ -970,7 +978,7 @@ export function useLiveRefresh() {
   return liveRefreshOptions(qc);
 }
 
-export function useCustomers() {
+export function useCustomers(enabled = true) {
   // `health.overdueCount` depends on the caller's local day — see useProjects.
   // The day is appended to the key (the bare ["customers"] prefix that
   // mutations invalidate still matches it).
@@ -980,6 +988,7 @@ export function useCustomers() {
     queryFn: ({ signal }) =>
       apiRequest<CustomerSummary[]>(`/customers?today=${today}`, { signal }),
     staleTime: 30_000,
+    enabled,
   });
 }
 
@@ -2268,6 +2277,7 @@ export function useCreateEpic(projectId: number) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projectEpics(projectId) });
+      invalidateProjectActivity(qc, projectId);
     },
   });
 }
@@ -2291,6 +2301,7 @@ export function useUpdateEpic() {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: queryKeys.projectEpics(data.projectId) });
       qc.invalidateQueries({ queryKey: queryKeys.epic(data.id) });
+      invalidateProjectActivity(qc, data.projectId);
     },
   });
 }
@@ -2311,6 +2322,7 @@ export function useDeleteEpic() {
       // so the epic chip clears everywhere it was rendered.
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
       qc.invalidateQueries({ queryKey: ["tasks"] });
+      invalidateProjectActivity(qc, projectId);
     },
   });
 }
@@ -3413,21 +3425,10 @@ export function useLogTicketTimeFor() {
       // an install's TimeSpent creation ever bumps the ticket's own
       // `last_update`.
       qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(variables.customerId) });
+      // A task panel's ticket chip reads the by-ref cache — refresh it too.
+      qc.invalidateQueries({ queryKey: queryKeys.itopTicketByRefRoot });
     },
   });
-}
-
-/** Thin wrapper over `useLogTicketTimeFor` fixing `ticketId`/`customerId` —
- * `TicketTimer.tsx`'s only call site. */
-export function useLogTicketTime(ticketId: number, customerId: number) {
-  const mutation = useLogTicketTimeFor();
-  function mutate(
-    input: { startedAt: string; endedAt: string; title?: string },
-    options?: Parameters<typeof mutation.mutate>[1],
-  ) {
-    return mutation.mutate({ ticketId, customerId, ...input }, options);
-  }
-  return { ...mutation, mutate };
 }
 
 // `onSuccess`'s cache write is deliberately conditional: a `staleAfterWrite`
@@ -3479,6 +3480,8 @@ export function useTicketActionFor(customerId: number) {
         );
       }
       qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(customerId) });
+      // A task panel's ticket chip reads the by-ref cache — refresh it too.
+      qc.invalidateQueries({ queryKey: queryKeys.itopTicketByRefRoot });
       qc.invalidateQueries({ queryKey: queryKeys.itopDailyRoot });
     },
   });
@@ -3518,6 +3521,8 @@ export function useAddTicketLog(ticketId: number, customerId: number) {
         );
       }
       qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(customerId) });
+      // A task panel's ticket chip reads the by-ref cache — refresh it too.
+      qc.invalidateQueries({ queryKey: queryKeys.itopTicketByRefRoot });
       qc.invalidateQueries({ queryKey: queryKeys.itopDailyRoot });
     },
   });
@@ -3608,6 +3613,8 @@ export function useCreateTicket(customerId: number) {
         });
       }
       qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(customerId) });
+      // A task panel's ticket chip reads the by-ref cache — refresh it too.
+      qc.invalidateQueries({ queryKey: queryKeys.itopTicketByRefRoot });
       qc.invalidateQueries({ queryKey: queryKeys.itopDailyRoot });
     },
   });
@@ -3902,8 +3909,23 @@ export function useAdminSetActive() {
 
 export function useChangeMyPassword() {
   return useMutation({
-    mutationFn: (input: { currentPassword: string; newPassword: string }) =>
-      apiRequest<void>("/auth/change-password", { method: "POST", body: input }),
+    mutationFn: async (input: { currentPassword: string; newPassword: string }) => {
+      // Requests already in flight answer 401 once the server has bumped the
+      // token version; api.ts must not read that as a sign-out meanwhile.
+      setTokenRotating(true);
+      try {
+        const res = await apiRequest<{ token: string }>("/auth/change-password", {
+          method: "POST",
+          body: input,
+        });
+        // The change revoked the token this tab holds: store the replacement
+        // before any other request fires, so none is sent with the stale one.
+        setToken(res.token);
+        return res;
+      } finally {
+        setTokenRotating(false);
+      }
+    },
   });
 }
 

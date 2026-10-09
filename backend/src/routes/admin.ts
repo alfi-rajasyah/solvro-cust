@@ -8,6 +8,9 @@ import { requireAuth, requireAdmin } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { bustAuthConfigCache } from "../authConfig.js";
+import { normalizeUsername, USERNAME_MAX } from "../lib/username.js";
+import { recordActivity, shortLabel, type ActivityChanges } from "../lib/activity.js";
+import { notifyForEvent } from "../lib/notifications.js";
 
 export const adminRouter = Router();
 
@@ -76,7 +79,9 @@ adminRouter.get("/users", async (_req, res) => {
 
 const createUserSchema = z.object({
   email: z.string().email(),
-  username: z.string().min(1).max(50),
+  // Length only here; the character rule and the case-insensitive clash
+  // check run in the handler (lib/username.ts).
+  username: z.string().min(1).max(USERNAME_MAX * 2),
   password: z.string().min(8).max(200),
   role: z.string().min(1).max(50),
 });
@@ -85,13 +90,32 @@ adminRouter.post(
   "/users",
   validate("body", createUserSchema),
   async (req, res) => {
-    const { email, username, password, role } = req.body as z.infer<
+    const { email, username: rawUsername, password, role } = req.body as z.infer<
       typeof createUserSchema
     >;
+
+    const username = normalizeUsername(rawUsername);
+    if (username === null) {
+      throw new HttpError(
+        400,
+        "username_invalid",
+        `Username must be 1-${USERNAME_MAX} characters: Latin letters, digits, spaces, and . _ ' - only`,
+      );
+    }
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       throw new HttpError(409, "email_in_use", "A user with that email already exists");
+    }
+    // Case-insensitive on purpose: "Admin" beside "admin" is the same
+    // look-alike problem as a homoglyph. Raw `lower() = lower()` rather than
+    // Prisma's `mode: "insensitive"`, which compiles to ILIKE and would read
+    // the allowed `_` as a one-character wildcard.
+    const usernameClash = await prisma.$queryRaw<Array<{ id: number }>>`
+      SELECT id FROM users WHERE lower(username) = lower(${username}) LIMIT 1
+    `;
+    if (usernameClash.length > 0) {
+      throw new HttpError(409, "username_in_use", "A user with that username already exists");
     }
 
     const targetRole = await prisma.role.findUnique({
@@ -190,9 +214,11 @@ adminRouter.patch(
     if (req.user!.sub === id && active === false) {
       throw new HttpError(400, "self_deactivate", "Admins cannot deactivate themselves");
     }
+    // Deactivating also bumps tokenVersion: the account's sessions end for
+    // good, so a later reactivation does not resurrect tokens issued before.
     const updated = await prisma.user.update({
       where: { id },
-      data: { active },
+      data: active ? { active } : { active, tokenVersion: { increment: 1 } },
       select: { id: true, username: true, email: true, active: true },
     });
     res.json(updated);
@@ -265,11 +291,25 @@ adminRouter.post(
   validate("params", idParamSchema),
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
+    // An admin resetting their own password would end their own session with
+    // a temp password nobody can relay — they use Settings instead.
+    if (req.user!.sub === id) {
+      throw new HttpError(
+        400,
+        "self_reset",
+        "Use Settings > Change password for your own account",
+      );
+    }
     // 12-char URL-safe temp password. Returned ONCE in the response so the
     // admin can relay it to the user out-of-band (no mail infra in dev).
     const tempPassword = randomBytes(9).toString("base64url");
     const passwordHash = await bcrypt.hash(tempPassword, 10);
-    await prisma.user.update({ where: { id }, data: { passwordHash } });
+    // tokenVersion bump: the reset also ends the account's live sessions —
+    // whoever held the old password holds no session.
+    await prisma.user.update({
+      where: { id },
+      data: { passwordHash, tokenVersion: { increment: 1 } },
+    });
     res.json({ tempPassword });
   },
 );
@@ -560,14 +600,43 @@ adminRouter.put(
     // No role-name requirement: any active user can be a project's TAM
     // (admin's choice). Role names no longer gate this.
 
-    const updated = await prisma.project.update({
-      where: { id: projectId },
-      data: { tamId: newTamId },
-      include: {
-        tam: { select: { id: true, username: true } },
-        customer: { select: { id: true, name: true } },
-        _count: { select: { tasks: true } },
-      },
+    // Same record as PATCH /projects/:id when it changes the TAM: one `updated`
+    // event with `changes.tam = { from, to }` (ids and usernames only), and the
+    // new TAM is notified (never the acting admin). A re-assignment to the
+    // current TAM changes nothing and records nothing.
+    const updated = await prisma.$transaction(async (tx) => {
+      // Lock first so a concurrent save serialises and the diff is against the
+      // row this write actually replaces.
+      await tx.$queryRaw`SELECT id FROM projects WHERE id = ${projectId} FOR NO KEY UPDATE`;
+      const before = await tx.project.findUnique({
+        where: { id: projectId },
+        select: { tam: { select: { id: true, username: true } } },
+      });
+      if (!before) throw new HttpError(404, "not_found", "Project not found");
+      const result = await tx.project.update({
+        where: { id: projectId },
+        data: { tamId: newTamId },
+        include: {
+          tam: { select: { id: true, username: true } },
+          customer: { select: { id: true, name: true } },
+          _count: { select: { tasks: true } },
+        },
+      });
+      const changes: ActivityChanges = {};
+      if (before.tam.id !== result.tam.id) {
+        changes.tam = { from: before.tam, to: result.tam } as Prisma.InputJsonObject;
+      }
+      const event = await recordActivity(tx, {
+        projectId,
+        actorId: req.user!.sub,
+        entityType: "project",
+        entityId: projectId,
+        action: "updated",
+        entityLabel: shortLabel(result.name),
+        changes,
+      });
+      await notifyForEvent(tx, event);
+      return result;
     });
     res.json(updated);
   },

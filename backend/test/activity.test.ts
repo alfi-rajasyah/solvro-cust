@@ -600,3 +600,264 @@ describe("retention", () => {
     expect(left).toEqual(["edge", "fresh"]);
   });
 });
+
+describe("project creation", () => {
+  it("records a created event with the TAM and customer (ids and names, no emails)", async () => {
+    const { tam, customer } = await fixture();
+    const res = await request(app)
+      .post("/projects")
+      .set(auth(tam.token))
+      .send({ name: "Fresh project", customerId: customer.id });
+    expect(res.status).toBe(201);
+    const events = await eventsOf(res.body.id);
+    expect(events).toHaveLength(1);
+    const tamRow = await prisma.user.findUniqueOrThrow({ where: { id: tam.userId } });
+    expect(events[0]).toMatchObject({
+      actorId: tam.userId,
+      entityType: "project",
+      entityId: res.body.id,
+      action: "created",
+      entityLabel: "Fresh project",
+    });
+    expect(events[0]!.changes).toEqual({
+      tam: { id: tam.userId, username: tamRow.username },
+      customer: { id: customer.id, name: customer.name },
+    });
+    expect(JSON.stringify(events)).not.toContain("@example.com");
+  });
+
+  it("an admin creating a project for a TAM notifies that TAM; a TAM creating their own is not notified", async () => {
+    const { tam, customer } = await fixture();
+    const admin = await createUserWithRole("ADMIN");
+    const res = await request(app)
+      .post("/projects")
+      .set(auth(admin.token))
+      .send({ name: "Admin-created", customerId: customer.id, tamId: tam.userId });
+    expect(res.status).toBe(201);
+    const [event] = await eventsOf(res.body.id);
+    const rows = await prisma.notification.findMany({ where: { userId: tam.userId } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ reason: "assigned", activityEventId: event!.id });
+    expect(await prisma.notification.count({ where: { userId: admin.userId } })).toBe(0);
+
+    const own = await request(app)
+      .post("/projects")
+      .set(auth(tam.token))
+      .send({ name: "Self-created", customerId: customer.id });
+    expect(own.status).toBe(201);
+    expect(await prisma.notification.count({ where: { activityEvent: { projectId: own.body.id } } })).toBe(0);
+  });
+});
+
+describe("project TAM changes", () => {
+  const notificationsOf = (userId: number) =>
+    prisma.notification.findMany({ where: { userId }, orderBy: { id: "asc" } });
+
+  it("logs the TAM as from/to (ids and usernames) and notifies the new TAM, not the actor", async () => {
+    const { tam, other, project } = await fixture();
+    const res = await request(app)
+      .patch(`/projects/${project.id}`)
+      .set(auth(tam.token))
+      .send({ tamId: other.userId });
+    expect(res.status).toBe(200);
+    const events = await eventsOf(project.id);
+    expect(events).toHaveLength(1);
+    const [tamRow, otherRow] = await Promise.all(
+      [tam, other].map((u) => prisma.user.findUniqueOrThrow({ where: { id: u.userId } })),
+    );
+    expect(events[0]!.changes).toEqual({
+      tam: {
+        from: { id: tam.userId, username: tamRow!.username },
+        to: { id: other.userId, username: otherRow!.username },
+      },
+    });
+    expect(JSON.stringify(events)).not.toContain("@example.com");
+
+    const newTam = await notificationsOf(other.userId);
+    expect(newTam).toHaveLength(1);
+    expect(newTam[0]).toMatchObject({ reason: "assigned", activityEventId: events[0]!.id });
+    expect(await notificationsOf(tam.userId)).toHaveLength(0);
+  });
+
+  it("does not notify on an unrelated update, an inactive new TAM, or a re-save of the same TAM", async () => {
+    const { tam, project } = await fixture();
+    await request(app).patch(`/projects/${project.id}`).set(auth(tam.token)).send({ name: "Just a rename" });
+    expect(await prisma.notification.count({ where: { activityEvent: { projectId: project.id } } })).toBe(0);
+
+    const again = await request(app)
+      .patch(`/projects/${project.id}`)
+      .set(auth(tam.token))
+      .send({ tamId: tam.userId });
+    expect(again.status).toBe(200);
+    expect(await eventsOf(project.id)).toHaveLength(1);
+
+    const inactive = await createUserWithRole("TAM");
+    await prisma.user.update({ where: { id: inactive.userId }, data: { active: false } });
+    const admin = await createUserWithRole("ADMIN");
+    const res = await request(app)
+      .patch(`/projects/${project.id}`)
+      .set(auth(admin.token))
+      .send({ tamId: inactive.userId });
+    expect(res.status).toBe(200);
+    expect(await eventsOf(project.id)).toHaveLength(2);
+    expect(await notificationsOf(inactive.userId)).toHaveLength(0);
+  });
+});
+
+describe("epics", () => {
+  it("create, update and delete each record one event; a no-op PATCH records nothing; descriptions never appear as text", async () => {
+    const { tam, other, project } = await fixture();
+    const created = await request(app)
+      .post(`/projects/${project.id}/epics`)
+      .set(auth(tam.token))
+      .send({ title: "Launch", description: "secret epic text", ownerId: other.userId, dueDate: "2026-11-05" });
+    expect(created.status).toBe(201);
+    const epicId = created.body.id as number;
+    const otherRow = await prisma.user.findUniqueOrThrow({ where: { id: other.userId } });
+    let events = await eventsOf(project.id);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      actorId: tam.userId,
+      entityType: "epic",
+      entityId: epicId,
+      action: "created",
+      entityLabel: "Launch",
+    });
+    expect(events[0]!.changes).toEqual({
+      owner: { from: null, to: { id: other.userId, username: otherRow.username } },
+      dueDate: { from: null, to: "2026-11-05" },
+    });
+
+    // Identical values and a position-only write are not changes.
+    const noop = await request(app)
+      .patch(`/epics/${epicId}`)
+      .set(auth(tam.token))
+      .send({ title: "Launch", status: "TODO", position: 0 });
+    expect(noop.status).toBe(200);
+    expect(await eventsOf(project.id)).toHaveLength(1);
+
+    const updated = await request(app)
+      .patch(`/epics/${epicId}`)
+      .set(auth(tam.token))
+      .send({
+        title: "Launch v2",
+        status: "IN_PROGRESS",
+        color: "#112233",
+        ownerId: null,
+        startDate: "2026-11-01",
+        description: "new secret text",
+      });
+    expect(updated.status).toBe(200);
+    events = await eventsOf(project.id);
+    expect(events).toHaveLength(2);
+    expect(events[1]).toMatchObject({ entityType: "epic", entityId: epicId, action: "updated", entityLabel: "Launch v2" });
+    expect(events[1]!.changes).toEqual({
+      title: { from: "Launch", to: "Launch v2" },
+      status: { from: "TODO", to: "IN_PROGRESS" },
+      color: { from: "#94a3b8", to: "#112233" },
+      owner: { from: { id: other.userId, username: otherRow.username }, to: null },
+      startDate: { from: null, to: "2026-11-01" },
+      description: { changed: true },
+    });
+    expect(JSON.stringify(events)).not.toContain("secret");
+
+    const task = await makeTask(project.id, { epicId });
+    await makeTask(project.id, { epicId, position: 1 });
+    const del = await request(app).delete(`/epics/${epicId}`).set(auth(tam.token));
+    expect(del.status).toBe(204);
+    events = await eventsOf(project.id);
+    expect(events).toHaveLength(3);
+    expect(events[2]).toMatchObject({
+      entityType: "epic",
+      entityId: epicId,
+      action: "deleted",
+      entityLabel: "Launch v2",
+      changes: { taskCount: 2 },
+    });
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: task.id } })).epicId).toBeNull();
+    // Epics never notify.
+    expect(await prisma.notification.count({ where: { activityEvent: { projectId: project.id } } })).toBe(0);
+  });
+
+  it("a rejected epic write (no project:write) records nothing", async () => {
+    const { tam, project } = await fixture();
+    const created = await request(app)
+      .post(`/projects/${project.id}/epics`)
+      .set(auth(tam.token))
+      .send({ title: "Guarded" });
+    const auditor = await createUserWithRole("AUDITOR");
+    const patch = await request(app).patch(`/epics/${created.body.id}`).set(auth(auditor.token)).send({ title: "x" });
+    expect(patch.status).toBe(403);
+    const del = await request(app).delete(`/epics/${created.body.id}`).set(auth(auditor.token));
+    expect(del.status).toBe(403);
+    expect(await eventsOf(project.id)).toHaveLength(1);
+  });
+});
+
+describe("Admin › Project Override (PUT /admin/projects/reassign)", () => {
+  it("logs the TAM change as from/to, notifies the new TAM and not the acting admin", async () => {
+    const { tam, other, project } = await fixture();
+    const admin = await createUserWithRole("ADMIN");
+    const res = await request(app)
+      .put("/admin/projects/reassign")
+      .set(auth(admin.token))
+      .send({ projectId: project.id, newTamId: other.userId });
+    expect(res.status).toBe(200);
+    expect(res.body.tam.id).toBe(other.userId);
+
+    const events = await eventsOf(project.id);
+    expect(events).toHaveLength(1);
+    const [tamRow, otherRow] = await Promise.all(
+      [tam, other].map((u) => prisma.user.findUniqueOrThrow({ where: { id: u.userId } })),
+    );
+    expect(events[0]).toMatchObject({
+      actorId: admin.userId,
+      entityType: "project",
+      entityId: project.id,
+      action: "updated",
+    });
+    expect(events[0]!.changes).toEqual({
+      tam: {
+        from: { id: tam.userId, username: tamRow!.username },
+        to: { id: other.userId, username: otherRow!.username },
+      },
+    });
+    expect(JSON.stringify(events)).not.toContain("@example.com");
+
+    const rows = await prisma.notification.findMany({ where: { activityEvent: { projectId: project.id } } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ userId: other.userId, reason: "assigned", activityEventId: events[0]!.id });
+    expect(await prisma.notification.count({ where: { userId: admin.userId } })).toBe(0);
+  });
+
+  it("an admin assigning themselves is not notified; reassigning to the current TAM records nothing; an unknown project is 404", async () => {
+    const { tam, project } = await fixture();
+    const admin = await createUserWithRole("ADMIN");
+    const self = await request(app)
+      .put("/admin/projects/reassign")
+      .set(auth(admin.token))
+      .send({ projectId: project.id, newTamId: admin.userId });
+    expect(self.status).toBe(200);
+    expect(await eventsOf(project.id)).toHaveLength(1);
+    expect(await prisma.notification.count({ where: { userId: admin.userId } })).toBe(0);
+
+    const same = await request(app)
+      .put("/admin/projects/reassign")
+      .set(auth(admin.token))
+      .send({ projectId: project.id, newTamId: admin.userId });
+    expect(same.status).toBe(200);
+    expect(await eventsOf(project.id)).toHaveLength(1);
+
+    const missing = await request(app)
+      .put("/admin/projects/reassign")
+      .set(auth(admin.token))
+      .send({ projectId: 999_999_999, newTamId: tam.userId });
+    expect(missing.status).toBe(404);
+
+    const nonAdmin = await request(app)
+      .put("/admin/projects/reassign")
+      .set(auth(tam.token))
+      .send({ projectId: project.id, newTamId: tam.userId });
+    expect(nonAdmin.status).toBe(403);
+  });
+});

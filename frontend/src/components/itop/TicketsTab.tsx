@@ -24,6 +24,7 @@
 // doesn't hit the same-object race scope/class avoid by staying local).
 import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/reui/alert";
+import { hasPermission, useAuth } from "@/lib/auth";
 import {
   useCustomerTickets,
   useItopStatus,
@@ -58,7 +59,10 @@ export function TicketsTab({
 
   const status = useItopStatus();
   const myToken = useMyItopToken();
-  const canCreateTicket = (status.data?.actionsEnabled ?? false) && (myToken.data?.set ?? false);
+  const { user } = useAuth();
+  // POST /itop/tickets needs task:write — no entry point for users without it.
+  const canCreateTicket =
+    hasPermission(user, "task:write") && (status.data?.actionsEnabled ?? false) && (myToken.data?.set ?? false);
 
   const { data, isLoading, isError, error } = useCustomerTickets(customerId, {
     scope,
@@ -71,6 +75,19 @@ export function TicketsTab({
     poll: true,
   });
 
+  // isError is checked before the `!data` skeleton guard (a failed first load has
+  // no data, and would otherwise show the skeleton forever); a failed background
+  // poll with data already on screen keeps the stale table instead.
+  if (isError && !data) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>
+          Could not load tickets{error ? `: ${(error as Error).message}` : "."}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
   if (isLoading || !data) {
     return (
       <div className="space-y-2">
@@ -78,16 +95,6 @@ export function TicketsTab({
           <div key={i} className="h-10 animate-pulse rounded-sm bg-surface-container-low" />
         ))}
       </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <Alert variant="destructive">
-        <AlertDescription>
-          Could not load tickets{error ? `: ${(error as Error).message}` : "."}
-        </AlertDescription>
-      </Alert>
     );
   }
 

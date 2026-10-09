@@ -144,12 +144,24 @@ test.describe("Notifications", () => {
 
   test("with nothing to read the list shows the caught-up state", async ({ page }, testInfo) => {
     const base = apiBase(testInfo);
-    const { b, projectId } = await setup(base);
-    await loginViaUi(page, b.email, PASSWORD);
-    await page.goto(`/projects/${projectId}/overview`, { waitUntil: "networkidle" });
+    // A is neither the TAM nor a member of the project, so nothing reaches them.
+    const { a } = await setup(base);
+    await loginViaUi(page, a.email, PASSWORD);
+    await page.goto("/projects", { waitUntil: "networkidle" });
     const bell = page.getByTestId("notifications-button");
     await expect(bell).toHaveAttribute("aria-label", "Notifications");
     await bell.click();
     await expect(page.getByText("You're all caught up")).toBeVisible();
+  });
+
+  test("being made a project's TAM notifies them", async ({ page }, testInfo) => {
+    const base = apiBase(testInfo);
+    const { b, projectId } = await setup(base);
+    await loginViaUi(page, b.email, PASSWORD);
+    await page.goto(`/projects/${projectId}/overview`, { waitUntil: "networkidle" });
+    const bell = page.getByTestId("notifications-button");
+    await expect(bell).toHaveAttribute("aria-label", "Notifications, 1 unread");
+    await bell.click();
+    await expect(page.getByTestId("notification-item").first()).toContainText("made you TAM of Notify Project");
   });
 });

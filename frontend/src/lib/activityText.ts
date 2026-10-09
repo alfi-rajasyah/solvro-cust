@@ -82,6 +82,11 @@ const FIELD_NOUN: Record<string, string> = {
   assignedToId: "assignee",
   customer: "customer",
   customerId: "customer",
+  // A project's TAM seat and an epic's own columns.
+  tam: "TAM",
+  tamId: "TAM",
+  color: "color",
+  owner: "owner",
   itopTicketRef: "iTop ticket",
   probability: "probability",
   impact: "impact",
@@ -369,6 +374,17 @@ function buildBody(event: ActivityEvent): Parts {
       }
       break;
     }
+    case "epic":
+      if (event.action === "created") return named("created", "epic", "an epic");
+      if (event.action === "deleted") {
+        const n = changes?.taskCount;
+        const tasks = typeof n === "number" && n > 0 ? [txt(` (${n} ${n === 1 ? "task" : "tasks"})`)] : [];
+        return [...named("deleted", "epic", "an epic"), ...tasks];
+      }
+      if (event.action === "updated") {
+        return updateSentence({ ...event, entityLabel: label }, changes ?? {}, "an epic", "epic");
+      }
+      break;
     case "member":
       if (event.action === "added") {
         return label

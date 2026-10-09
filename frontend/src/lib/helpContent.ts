@@ -232,6 +232,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     title: "Customers",
     icon: "groups",
     route: "/customers",
+    requires: "project:read",
     summary: "Every project belongs to a customer. The customer page gathers its projects, services, weekly updates, and tickets.",
     entries: [
       {
@@ -265,6 +266,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     title: "Daily Review",
     icon: "edit_note",
     route: "/daily-review",
+    requires: "project:read",
     summary: "Your daily routine: walk through each customer's active projects, write a note, and mark them reviewed.",
     entries: [
       {
@@ -300,6 +302,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     title: "Weekly Sync",
     icon: "table_chart",
     route: "/weekly-sync",
+    requires: "project:read",
     summary: "One update per customer per week: a mid-week check on Wednesday and a reflection on Friday, read together on Monday.",
     entries: [
       {
@@ -360,6 +363,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     title: "Utilization",
     icon: "schedule",
     route: "/utilization",
+    requires: "project:read",
     summary: "Hours logged per customer per day, read from iTop's time tracking.",
     entries: [
       {

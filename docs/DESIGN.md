@@ -250,6 +250,16 @@ Body weight is **450**, not the CSS-default 400 — this only renders correctly 
 
 These seven named roles are also registered as `font-size` keys in the `tailwind-merge` config (`extendTailwindMerge`'s `theme.text` list in `frontend/src/lib/utils.ts`'s `cn()` helper) — without that registration, `twMerge`'s default classifier doesn't recognize `text-h1`/`text-label-caps`/etc. as size utilities, so an unmatched name falls through to the color-utility validator and can silently evict (or be evicted by) a real `text-{color}` class combined with it in the same `cn()` call. Any future named role must be added to that list too, or it inherits the same latent bug.
 
+**Binding rules adopted with the UI sync (2026-10-09; `docs/archive/plans/internal-sync.md`):**
+
+- **Words come from `frontend/src/lib/labels.ts`.** Every status, priority, risk level, project status and weekly-health value shown to a user uses its label map (To do · In progress · Done; Low · Medium · High · Urgent; Planning · Active · On hold · …). Never render a raw enum value or a hand-written label map in a component.
+- **Dates come from `frontend/src/lib/formatDate.ts`.** Day-first, 24-hour (`28 Sep`, `22 – 28 Aug`, `28 Sep, 14:22`, `5 min ago`); calendar days format in UTC, timestamps in local time; a range outside the current year shows its year. No `toLocaleDateString`, month lists or relative-time helpers in components; dates render in the body font, not `font-mono`.
+- **No text under 12px.** `text-meta` is the smallest role (chips, links, counts, captions); `text-label-caps` for uppercase micro-labels; `text-xs` for helper and error text. Arbitrary `text-[Npx]` below 12px is a violation.
+- **Buttons, link-buttons and tabs are sentence case** (`font-semibold`, no `uppercase tracking-wider`). `tracking-wider` is never added next to `text-label-caps` — the role already carries its tracking.
+- **Destructive confirmations use `ConfirmModal` with the `danger` tone**, never the browser's `confirm()`. Dialogs move focus inside on open and restore it on close (`hooks/useDialogFocus.ts`).
+- **Loading states are skeletons from `frontend/src/components/skeletons/`**, shown after a 150 ms delay so fast loads do not flash; no bare grey blocks and no spinners for page content.
+- **Top-bar titles and breadcrumbs come from `frontend/src/lib/routeMeta.ts`**; no page falls back to "Solvro". A new route registers its title there (`routeMeta.test.ts` pins them).
+
 ---
 
 ## 3. Radii
@@ -334,13 +344,6 @@ Nothing else gets a shadow. No card shadows, no hover-lift shadows, no focus-rin
 | `TaskStatusChip` | TODO | gray | `bg-surface-container-high text-on-surface-variant` |
 | | IN_PROGRESS | blue | `bg-primary/10 text-primary` |
 | | DONE | emerald | `bg-chip-emerald-bg text-chip-emerald-text` |
-| `StageChip` | ASSESSMENT | gray | `bg-surface-container-high text-on-surface-variant` |
-| | RFP / POC / TECHNICAL_CLARIFICATION | blue | `bg-primary/10 text-primary` |
-| | DELIVER_PROPOSAL | amber | `bg-chip-amber-bg text-chip-amber-text` |
-| | WAITING_RESPONSE | violet | `bg-chip-violet-bg text-chip-violet-text` |
-| | WON | emerald | `bg-chip-emerald-bg text-chip-emerald-text` |
-| | DROP | rose | `bg-chip-rose-bg text-chip-rose-text` |
-| | HOLD | amber + `pause_circle` glyph | `bg-chip-amber-bg text-chip-amber-text` (icon disambiguates from DELIVER_PROPOSAL) |
 
 `LabelChip.tsx` and `EpicChip.tsx` are not tone chips: the user-chosen colour is a 8px dot plus a `color-mix(… 14%, transparent)` background tint, and the text is always `text-on-surface` (so any stored colour stays readable in both themes). Both use the same `text-meta font-semibold leading-[18px]` rhythm as `CHIP_BASE`; `EpicChip` also truncates at `max-w-[160px]`.
 

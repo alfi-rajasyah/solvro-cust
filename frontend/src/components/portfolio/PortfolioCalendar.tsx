@@ -151,7 +151,7 @@ export function PortfolioCalendar({
               {MONTH_ABBR.map((label, i) => (
                 <div
                   key={label}
-                  className={`px-1.5 py-1.5 text-center font-display text-label-caps uppercase tracking-widest text-on-surface-variant ${
+                  className={`px-1.5 py-1.5 text-center font-display text-label-caps uppercase text-on-surface-variant ${
                     i > 0 ? "border-l border-outline-variant" : ""
                   }`}
                 >

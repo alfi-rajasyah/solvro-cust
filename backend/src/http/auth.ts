@@ -1,12 +1,30 @@
 import type { RequestHandler } from "express";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { env } from "../env.js";
+import { prisma } from "../prisma.js";
 import { HttpError } from "./errors.js";
 
+/**
+ * The acting user as every route sees it (`req.user`). Since the 2026-10
+ * security hardening (docs/archive/plans/internal-sync.md) `role` and
+ * `permissions` come from the database on every request, not from the
+ * token — a role change or a permission edit applies to live sessions at once.
+ */
 export interface JwtPayload {
   sub: number;
   role: string;
   permissions: string[];
+}
+
+/**
+ * What the signed token actually carries: the user id and the user's
+ * `tokenVersion` at issue time. A password change or an admin reset bumps
+ * the version (routes/auth.ts, routes/admin.ts; so does a deactivation) and
+ * every older token stops verifying.
+ */
+export interface TokenClaims {
+  sub: number;
+  ver: number;
 }
 
 /**
@@ -18,49 +36,103 @@ export function hasPermission(payload: JwtPayload, permission: string): boolean 
   return payload.permissions.includes("*") || payload.permissions.includes(permission);
 }
 
+/** A Role's JSON `permissions` column as a clean string array. */
+export function permissionsOf(raw: unknown): string[] {
+  return Array.isArray(raw) ? raw.filter((p): p is string => typeof p === "string") : [];
+}
+
 declare module "express-serve-static-core" {
   interface Request {
     user?: JwtPayload;
   }
 }
 
-export function signToken(payload: JwtPayload): string {
+/**
+ * Issues a session token: the user id and the user's current
+ * `tokenVersion`. Nothing else is embedded — role and permissions are read
+ * from the database on every request.
+ */
+export function signToken(claims: TokenClaims): string {
   const opts: SignOptions = { expiresIn: env.JWT_EXPIRES_IN as SignOptions["expiresIn"] };
-  return jwt.sign(payload, env.JWT_SECRET, opts);
+  return jwt.sign(claims, env.JWT_SECRET, opts);
 }
 
-export function verifyToken(token: string): JwtPayload {
+export function verifyToken(token: string): TokenClaims {
   const decoded = jwt.verify(token, env.JWT_SECRET);
   if (typeof decoded === "string") {
     throw new HttpError(401, "invalid_token", "Invalid token");
   }
   const sub = decoded.sub;
-  const role = (decoded as { role?: unknown }).role;
-  const perms = (decoded as { permissions?: unknown }).permissions;
-  if (typeof sub !== "number" || typeof role !== "string" || role.length === 0) {
+  const ver = (decoded as { ver?: unknown }).ver;
+  if (typeof sub !== "number") {
     throw new HttpError(401, "invalid_token", "Invalid token payload");
   }
-  // Old tokens (issued before permissions were embedded) carry no permissions
-  // claim — treat them as empty so they can't accidentally inherit access.
-  // Users will get fresh permissions on next login.
-  const permissions = Array.isArray(perms)
-    ? perms.filter((p): p is string => typeof p === "string")
-    : [];
-  return { sub, role, permissions };
+  // Tokens issued before the version claim existed embedded a role and a
+  // permission list that can no longer be trusted — reject them so every
+  // pre-upgrade session ends at deploy and signs in again.
+  if (typeof ver !== "number") {
+    throw new HttpError(401, "token_revoked", "Your session has expired. Please sign in again.");
+  }
+  return { sub, ver };
+}
+
+/**
+ * The per-request account check: the user must still exist, be active, and
+ * hold the token's version. Two cheap primary-key queries per request (the
+ * user, then its role — Prisma resolves the nested select that way). 401
+ * (not 403) on every failure so the frontend signs the session out.
+ */
+async function resolveUser(claims: TokenClaims): Promise<JwtPayload> {
+  const user = await prisma.user.findUnique({
+    where: { id: claims.sub },
+    select: {
+      active: true,
+      tokenVersion: true,
+      role: { select: { roleName: true, permissions: true } },
+    },
+  });
+  if (!user) {
+    throw new HttpError(401, "unauthenticated", "This account no longer exists");
+  }
+  if (!user.active) {
+    throw new HttpError(401, "account_disabled", "Account has been deactivated");
+  }
+  if (user.tokenVersion !== claims.ver) {
+    throw new HttpError(401, "token_revoked", "Your session has expired. Please sign in again.");
+  }
+  return {
+    sub: claims.sub,
+    role: user.role.roleName,
+    permissions: permissionsOf(user.role.permissions),
+  };
 }
 
 export const requireAuth: RequestHandler = (req, _res, next) => {
+  // Several routers share a mount path (`/projects` carries several — app.ts),
+  // and each one runs its own `router.use(requireAuth)`. The first pass
+  // resolved the account; the later passes must not repeat the lookup.
+  // Only this middleware ever sets `req.user`.
+  if (req.user) return next();
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) {
     return next(new HttpError(401, "unauthenticated", "Missing bearer token"));
   }
+  let claims: TokenClaims;
   try {
-    req.user = verifyToken(header.slice("Bearer ".length).trim());
-    next();
+    claims = verifyToken(header.slice("Bearer ".length).trim());
   } catch (err) {
     if (err instanceof HttpError) return next(err);
-    next(new HttpError(401, "unauthenticated", "Invalid or expired token"));
+    return next(new HttpError(401, "unauthenticated", "Invalid or expired token"));
   }
+  // Express 4 does not catch a rejected promise from a handler — route both
+  // outcomes through `next` explicitly.
+  resolveUser(claims).then(
+    (user) => {
+      req.user = user;
+      next();
+    },
+    (err: unknown) => next(err),
+  );
 };
 
 export function requireRole(...roles: string[]): RequestHandler {

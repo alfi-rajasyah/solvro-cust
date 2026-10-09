@@ -143,6 +143,23 @@ describe("access control", () => {
   });
 });
 
+describe("project:read gate", () => {
+  it("403s a PENDING user on every scope, but a TAM still gets 200", async () => {
+    await configureItop();
+    const pending = await createUserWithRole("PENDING");
+    const tam = await createUserWithRole("TAM");
+
+    for (const scope of ["me", "tam", "customer"]) {
+      const res = await call("get", `/utilization?week=${WEEK_KEY}&scope=${scope}`, pending.token);
+      expect(res.status, scope).toBe(403);
+      expect(res.body.code, scope).toBe("forbidden");
+    }
+
+    const ok = await call("get", `/utilization?week=${WEEK_KEY}&scope=me`, tam.token);
+    expect(ok.status).toBe(200);
+  });
+});
+
 describe("validation", () => {
   it("400s validation_error for an invalid week key", async () => {
     await configureItop();
@@ -462,16 +479,114 @@ describe("scope=tam", () => {
   });
 });
 
+describe("scope=tam capacity (TAM-capable users only)", () => {
+  it("counts only active iTop-matched users whose role holds task:write or *; STAKEHOLDER, AUDITOR and inactive users add no capacity", async () => {
+    await configureItop();
+    const admin = await createAdminAndToken();
+    const tam = await createUserWithRole("TAM");
+    const stakeholder = await createUserWithRole("STAKEHOLDER");
+    const auditor = await createUserWithRole("AUDITOR");
+    const inactiveTam = await createUserWithRole("TAM");
+    await prisma.user.update({ where: { id: inactiveTam.userId }, data: { active: false } });
+
+    // Other suites leave active mapped users in the shared test DB, so assert
+    // on the delta against a baseline taken while this test's users are
+    // still unmapped rather than on an absolute number.
+    const baseline = await call("get", `/utilization?week=${WEEK_KEY}&scope=tam`, admin.token);
+    expect(baseline.status).toBe(200);
+    const capacityPerUser: number = baseline.body.capacityHoursPerWeek;
+    const baseCapacity: number = baseline.body.tiles.capacityHours;
+
+    const base = 960_000_000 + Math.floor(Math.random() * 1_000_000) * 10;
+    for (const [i, u] of [tam, stakeholder, auditor, inactiveTam].entries()) {
+      await prisma.user.update({ where: { id: u.userId }, data: { itopUserId: base + i } });
+    }
+
+    const res = await call("get", `/utilization?week=${WEEK_KEY}&scope=tam`, admin.token);
+    expect(res.status).toBe(200);
+    // Only the active TAM counts: +1 user of capacity.
+    expect(res.body.tiles.capacityHours).toBe(baseCapacity + capacityPerUser * 1);
+
+    // An active mapped admin (role "*") is TAM-capable and does count.
+    await prisma.user.update({ where: { id: admin.userId }, data: { itopUserId: base + 5 } });
+    const withAdmin = await call("get", `/utilization?week=${WEEK_KEY}&scope=tam`, admin.token);
+    expect(withAdmin.body.tiles.capacityHours).toBe(baseCapacity + capacityPerUser * 2);
+
+    // scope=customer uses the same multiplier.
+    const customerScope = await call("get", `/utilization?week=${WEEK_KEY}&scope=customer`, admin.token);
+    expect(customerScope.body.tiles.capacityHours).toBe(baseCapacity + capacityPerUser * 2);
+  });
+
+  it("still shows a read-only user's logged hours as a row while adding no capacity", async () => {
+    await configureItop();
+    const admin = await createAdminAndToken();
+    const stakeholder = await createUserWithRole("STAKEHOLDER");
+    await prisma.user.update({
+      where: { id: stakeholder.userId },
+      data: { itopUserId: 961_000_000 + Math.floor(Math.random() * 1_000_000) },
+    });
+    const baseline = await call("get", `/utilization?week=${WEEK_KEY}&scope=tam`, admin.token);
+
+    await createTimeEntry({
+      userId: stakeholder.userId,
+      startDate: new Date(`${WEEK_MONDAY}T08:00:00.000Z`),
+      durationMinutes: 120,
+    });
+
+    const res = await call("get", `/utilization?week=${WEEK_KEY}&scope=tam`, admin.token);
+    const row = res.body.rows.find((r: { key: string }) => r.key === `user:${stakeholder.userId}`);
+    expect(row.total).toBe(2);
+    expect(res.body.tiles.hoursLogged).toBe(2);
+    expect(res.body.tiles.capacityHours).toBe(baseline.body.tiles.capacityHours);
+  });
+});
+
 describe("truncated", () => {
   // The route's MAX_ENTRIES cap (10,000) isn't exposed as a test-adjustable
-  // constant — there's no existing test-only-hook pattern in this codebase
-  // to piggyback on, and adding one just for this would be a bigger change
-  // than the flag itself. Seeding 10,000+ rows to force `truncated: true`
-  // for real is possible but expensive for a single boolean assertion; this
-  // just proves the flag is present and false for a normal, well-under-cap
-  // week — the `orderBy` fix itself is what makes the cap deterministic
-  // when it IS hit, which is exercised implicitly by every other test here
-  // never seeing a truncated, wrong-subset result.
+  // constant, so the cap tests seed that many rows in one createMany (a single
+  // statement, cheap) rather than hooking the route.
+  const CAP = 10_000;
+
+  async function seedWeekEntries(count: number, userId: number): Promise<void> {
+    const base = 980_000_000;
+    await prisma.itopTimeEntry.createMany({
+      data: Array.from({ length: count }, (_, i) => ({
+        id: base + i,
+        itopUserId: base + i,
+        userId,
+        startDate: new Date(`${WEEK_MONDAY}T08:00:00.000Z`),
+        durationMinutes: 1,
+        syncedAt: new Date(),
+      })),
+    });
+  }
+
+  it("is false for a week with exactly the cap of entries, true (and capped) one past it", async () => {
+    await configureItop();
+    const me = await createUserWithRole("TAM");
+    await seedWeekEntries(CAP, me.userId);
+
+    const atCap = await call("get", `/utilization?week=${WEEK_KEY}&scope=me`, me.token);
+    expect(atCap.status).toBe(200);
+    expect(atCap.body.truncated).toBe(false);
+
+    await prisma.itopTimeEntry.create({
+      data: {
+        id: 990_000_000,
+        itopUserId: 990_000_000,
+        userId: me.userId,
+        startDate: new Date(`${WEEK_MONDAY}T09:00:00.000Z`),
+        durationMinutes: 1,
+        syncedAt: new Date(),
+      },
+    });
+    const pastCap = await call("get", `/utilization?week=${WEEK_KEY}&scope=me`, me.token);
+    expect(pastCap.status).toBe(200);
+    expect(pastCap.body.truncated).toBe(true);
+    // The extra probe row is dropped, not counted: totals reflect exactly CAP entries.
+    expect(pastCap.body.tiles.hoursLogged).toBe(Math.round((CAP / 60) * 10) / 10);
+  });
+
   it("is false for a normal week with a handful of entries", async () => {
     await configureItop();
     const me = await createUserWithRole("TAM");

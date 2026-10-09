@@ -5,9 +5,9 @@ import {
 } from "@/components/portfolio/PortfolioCalendar";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { ProjectStatusChip } from "@/components/StatusChip";
-import { dayLabel } from "@/lib/dailyReviewStats";
 import { dateToDay, dayFromIso } from "@/lib/dateField";
-import { fmtDayLong } from "@/lib/formatDate";
+import { hasPermission, useAuth } from "@/lib/auth";
+import { fmtDay, fmtDayLong } from "@/lib/formatDate";
 import {
   type OverviewResponse,
   type ProjectHealth,
@@ -43,6 +43,10 @@ export function Overview() {
 
 function OverviewBody({ data }: { data: OverviewResponse }) {
   const { overdue, dueThisWeek, openRisks } = data.workCounts;
+  // GET /notes/recent needs project:read (docs/archive/plans/internal-sync.md);
+  // without it the panel would only show a 403 error.
+  const { user } = useAuth();
+  const canReadNotes = hasPermission(user, "project:read");
   // Per-project task-overdue and open-risk counts come from GET /projects
   // (server-computed `health`); the overview portfolio rows don't carry them.
   const { data: projects } = useProjects();
@@ -170,15 +174,17 @@ function OverviewBody({ data }: { data: OverviewResponse }) {
 
       {/* Recent notes — the heading stays a direct child of this panel
           (daily-review.spec.ts walks ancestor::div[1] from it). */}
-      <div className="min-w-0 rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
-        <header className="mb-3 flex items-center justify-between">
-          <h3 className="font-display text-sm font-bold text-on-surface">Recent notes</h3>
-          <Link to="/daily-review" className="text-meta font-semibold text-primary hover:underline">
-            Daily Review →
-          </Link>
-        </header>
-        <RecentNotesFeed />
-      </div>
+      {canReadNotes && (
+        <div className="min-w-0 rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
+          <header className="mb-3 flex items-center justify-between">
+            <h3 className="font-display text-sm font-bold text-on-surface">Recent notes</h3>
+            <Link to="/daily-review" className="text-meta font-semibold text-primary hover:underline">
+              Daily Review →
+            </Link>
+          </header>
+          <RecentNotesFeed />
+        </div>
+      )}
     </>
   );
 }
@@ -266,7 +272,7 @@ function RecentNoteRow({ note }: { note: RecentNote }) {
   return (
     <li className="py-2 first:pt-0 last:pb-0">
       <div className="flex items-baseline gap-2 text-meta text-on-surface-variant">
-        <span className="shrink-0 font-mono tabular-nums">{day ? dayLabel(day) : "—"}</span>
+        <span className="shrink-0 tabular-nums">{day ? fmtDay(day) : "—"}</span>
         <span className="min-w-0 truncate">
           {note.customer ? (
             <Link to={`/customers/${note.customer.id}`} className="hover:text-primary hover:underline">

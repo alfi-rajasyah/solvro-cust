@@ -1,10 +1,15 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
-import { requireAuth } from "../http/auth.js";
+import { requireAuth, requirePermission } from "../http/auth.js";
 
 export const usersRouter = Router();
 
-usersRouter.use(requireAuth);
+// The in-app people directory (assignee, member and @mention pickers).
+// Gate (2026-10 security hardening): a caller needs `project:read` — a
+// PENDING account (no permissions) used to list every user here. The
+// response carries what the pickers need and no access map: the role's
+// permission list is not returned.
+usersRouter.use(requireAuth, requirePermission("project:read"));
 
 usersRouter.get("/", async (_req, res) => {
   const users = await prisma.user.findMany({
@@ -14,26 +19,18 @@ usersRouter.get("/", async (_req, res) => {
       email: true,
       active: true,
       avatarUrl: true,
-      role: { select: { roleName: true, permissions: true } },
+      role: { select: { roleName: true } },
     },
     orderBy: { username: "asc" },
   });
   res.json(
-    users.map((u) => {
-      const permissions = Array.isArray(u.role.permissions)
-        ? (u.role.permissions as unknown[]).filter(
-            (p): p is string => typeof p === "string",
-          )
-        : [];
-      return {
-        id: u.id,
-        username: u.username,
-        email: u.email,
-        active: u.active,
-        avatarUrl: u.avatarUrl,
-        role: u.role.roleName,
-        permissions,
-      };
-    }),
+    users.map((u) => ({
+      id: u.id,
+      username: u.username,
+      email: u.email,
+      active: u.active,
+      avatarUrl: u.avatarUrl,
+      role: u.role.roleName,
+    })),
   );
 });

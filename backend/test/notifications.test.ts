@@ -407,7 +407,7 @@ describe("visibility arms for recipients", () => {
 
   it("notifies an assignee who sees the project only through project:view-all or *", async () => {
     const { tam, project } = await fixture();
-    const stakeholder = await createUserWithRole("STAKEHOLDER");
+    const stakeholder = await createUserWithRole("AUDITOR");
     const admin = await createUserWithRole("ADMIN");
     for (const viewer of [stakeholder, admin]) {
       const task = await makeTask(project.id, { assignedToId: viewer.userId });
@@ -433,7 +433,7 @@ describe("visibility arms for recipients", () => {
 
   it("the batch check agrees with projectVisibilityFilter for every arm", async () => {
     const { tam, other, third, project } = await fixture();
-    const stakeholder = await createUserWithRole("STAKEHOLDER");
+    const stakeholder = await createUserWithRole("AUDITOR");
     const admin = await createUserWithRole("ADMIN");
     const stranger = await createUserWithRole("TAM");
     const inactiveMember = await createUserWithRole("TAM");

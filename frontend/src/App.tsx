@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AdminGuard } from "@/components/AdminGuard";
 import { AuthGuard } from "@/components/AuthGuard";
 import { ExecutiveGuard } from "@/components/ExecutiveGuard";
+import { PermissionGuard } from "@/components/PermissionGuard";
 import { Shell } from "@/components/layout/Shell";
 import { Admin } from "@/pages/Admin";
 import { CustomerDetail } from "@/pages/CustomerDetail";
@@ -64,12 +65,51 @@ export function App() {
           <Route path="risks" element={<ProjectRisks />} />
           <Route path="services" element={<ProjectServices />} />
         </Route>
-        <Route path="customers" element={<Customers />} />
-        <Route path="customers/:id" element={<CustomerDetail />} />
-        <Route path="daily-review" element={<DailyReview />} />
-        <Route path="weekly-sync" element={<WeeklySync />} />
+        {/* Customers and Daily Review are gated on project:read, like their nav
+            entries and API routes (docs/archive/plans/internal-sync.md). */}
+        <Route
+          path="customers"
+          element={
+            <PermissionGuard permission="project:read">
+              <Customers />
+            </PermissionGuard>
+          }
+        />
+        <Route
+          path="customers/:id"
+          element={
+            <PermissionGuard permission="project:read">
+              <CustomerDetail />
+            </PermissionGuard>
+          }
+        />
+        <Route
+          path="daily-review"
+          element={
+            <PermissionGuard permission="project:read">
+              <DailyReview />
+            </PermissionGuard>
+          }
+        />
+        <Route
+          path="weekly-sync"
+          element={
+            <PermissionGuard permission="project:read">
+              <WeeklySync />
+            </PermissionGuard>
+          }
+        />
         <Route path="tasks" element={<Tasks />} />
-        <Route path="utilization" element={<Utilization />} />
+        {/* Utilization is gated on project:read, like its nav entry — hours mean
+            nothing without project access (docs/archive/plans/internal-sync.md). */}
+        <Route
+          path="utilization"
+          element={
+            <PermissionGuard permission="project:read">
+              <Utilization />
+            </PermissionGuard>
+          }
+        />
         <Route path="work-logs" element={<Navigate to="/utilization" replace />} />
         <Route
           path="executive"

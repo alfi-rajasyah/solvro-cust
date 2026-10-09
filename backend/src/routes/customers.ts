@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Prisma, WeeklyHealth, WeeklyStatus } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { requireAuth, requirePermission, hasPermission, type JwtPayload } from "../http/auth.js";
+import { logger } from "../logger.js";
 // services router lives in ./services.ts; this file owns the customer-side mapping.
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
@@ -172,6 +173,37 @@ function normalizeText(value: string | null | undefined): string | null | undefi
   return trimmed.length === 0 ? null : trimmed;
 }
 
+/**
+ * Which of these customers the caller may reassign (PATCH `tamId`) — the one
+ * rule behind both the PATCH check and the `canChangeOwner` flag the reads
+ * return, so they cannot drift (docs/archive/plans/internal-sync.md): a
+ * view-all caller, or the current owner; on an UNOWNED customer, also a caller
+ * who is the TAM of every project under it, counting projects the caller
+ * cannot see (none at all qualifies). One grouped query however many rows.
+ */
+async function reassignableCustomerIds(
+  user: JwtPayload,
+  customers: ReadonlyArray<{ id: number; tamId: number | null }>,
+): Promise<Set<number>> {
+  if (hasPermission(user, "project:view-all")) return new Set(customers.map((c) => c.id));
+  const allowed = new Set<number>();
+  const unownedIds: number[] = [];
+  for (const c of customers) {
+    if (c.tamId === user.sub) allowed.add(c.id);
+    else if (c.tamId === null) unownedIds.push(c.id);
+  }
+  if (unownedIds.length > 0) {
+    const foreign = await prisma.project.groupBy({
+      by: ["customerId"],
+      where: { customerId: { in: unownedIds }, tamId: { not: user.sub } },
+      _count: { _all: true },
+    });
+    const blocked = new Set(foreign.map((f) => f.customerId));
+    for (const id of unownedIds) if (!blocked.has(id)) allowed.add(id);
+  }
+  return allowed;
+}
+
 export const customersRouter = Router();
 
 customersRouter.use(requireAuth);
@@ -183,7 +215,12 @@ const customersListQuerySchema = z.object({
     .optional(),
 });
 
-customersRouter.get("/", validate("query", customersListQuerySchema), async (req, res) => {
+// Read gate (2026-10 security hardening): the list and the detail need
+// `project:read` — a PENDING account used to list every unowned customer
+// here. Sub-resources keep their own `project:read` / `project:write` gates.
+const customerReadGate = requirePermission("project:read");
+
+customersRouter.get("/", customerReadGate, validate("query", customersListQuerySchema), async (req, res) => {
   const user = req.user!;
   const { today } = req.query as unknown as z.infer<typeof customersListQuerySchema>;
   const customers = await prisma.customer.findMany({
@@ -260,11 +297,13 @@ customersRouter.get("/", validate("query", customersListQuerySchema), async (req
   }
   const weeklyByCustomer = new Map(weeklyRows.map((w) => [w.customerId, w]));
 
+  const reassignable = await reassignableCustomerIds(user, customers);
   res.json(
     customers.map((c) => {
       const weekly = weeklyByCustomer.get(c.id);
       return {
         ...c,
+        canChangeOwner: reassignable.has(c.id),
         health: {
           overdueCount: overdueByCustomer.get(c.id) ?? 0,
           openRiskCount: risksByCustomer.get(c.id) ?? 0,
@@ -307,7 +346,7 @@ const customerDetailQuerySchema = z.object({
     .optional(),
 });
 
-customersRouter.get("/:id", validate("params", idParamSchema), validate("query", customerDetailQuerySchema), async (req, res) => {
+customersRouter.get("/:id", customerReadGate, validate("params", idParamSchema), validate("query", customerDetailQuerySchema), async (req, res) => {
   const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
   const { today } = req.query as unknown as z.infer<typeof customerDetailQuerySchema>;
   const customer = await prisma.customer.findFirst({
@@ -323,8 +362,10 @@ customersRouter.get("/:id", validate("params", idParamSchema), validate("query",
     customer.projects.map((p) => p.id),
     today,
   );
+  const reassignable = await reassignableCustomerIds(req.user!, [customer]);
   res.json({
     ...customer,
+    canChangeOwner: reassignable.has(customer.id),
     projects: customer.projects.map((p) => ({ ...p, health: health.get(p.id) })),
   });
 });
@@ -452,11 +493,27 @@ customersRouter.patch(
       throw new HttpError(404, "customer_not_found", "Customer not found");
     }
 
-    // Changing the owner is owner-only (a project member sees the customer
-    // through the project, but must not be able to take it over). Re-saving
-    // the current owner — the edit form's steady state — is not a change.
-    if (body.tamId !== undefined && body.tamId !== existing.tamId) {
-      await ensureCustomerOwnerAccess(user, id);
+    // Changing the owner (docs/archive/plans/internal-sync.md): the current
+    // owner, or a view-all caller, may do it. On an UNOWNED customer only a
+    // caller who is the TAM of every project under it (all of them, visible
+    // or not; zero projects qualifies) may claim it. Owning a customer grants
+    // every project under it through `customer.tamId`, so being TAM of ONE
+    // project must not be enough. Re-saving the current owner — the edit
+    // form's steady state — is not a change.
+    const ownerChange = body.tamId !== undefined && body.tamId !== existing.tamId;
+    if (ownerChange) {
+      const mayReassign = (
+        await reassignableCustomerIds(user, [{ id, tamId: existing.tamId }])
+      ).has(id);
+      if (!mayReassign) {
+        throw new HttpError(
+          403,
+          "owner_only",
+          existing.tamId === null
+            ? "An unowned customer can be claimed only by the TAM of all its projects"
+            : "Only the customer's current owner can reassign it",
+        );
+      }
     }
 
     const data: Prisma.CustomerUpdateInput = {};
@@ -491,6 +548,14 @@ customersRouter.patch(
       data,
       include: { tam: { select: { id: true, username: true } } },
     });
+    if (ownerChange) {
+      // ActivityEvent has no customer scope (project only), so the owner
+      // change is recorded in the structured application log.
+      logger.info(
+        { event: "customer.owner_changed", customerId: id, actorId: user.sub, from: existing.tamId, to: updated.tamId },
+        "customer owner changed",
+      );
+    }
     res.json(updated);
   },
 );

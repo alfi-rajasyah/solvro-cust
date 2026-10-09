@@ -151,11 +151,11 @@ describe("POST /projects/:id/epics and GET /projects/:id/epics", () => {
     expect(res.status).toBe(404);
   });
 
-  // STAKEHOLDER has project:read + project:view-all but no project:write, so
+  // AUDITOR has project:read + project:view-all but no project:write, so
   // this exercises the permission gate independent of visibility (mirrors
   // taskDuplicate.test.ts's "403s without task:write").
   it("403s create for a caller who can see the project but lacks project:write", async () => {
-    const stakeholder = await createUserWithRole("STAKEHOLDER");
+    const stakeholder = await createUserWithRole("AUDITOR");
     const res = await request(app)
       .post(`/projects/${projectId}/epics`)
       .set("Authorization", `Bearer ${stakeholder.token}`)
@@ -284,7 +284,7 @@ describe("PATCH /epics/:id — position re-pack", () => {
 
   it("403s a PATCH for a caller who can see the epic but lacks project:write", async () => {
     const epic = await createEpic(projectId, { title: "Visible" });
-    const stakeholder = await createUserWithRole("STAKEHOLDER");
+    const stakeholder = await createUserWithRole("AUDITOR");
 
     const res = await request(app)
       .patch(`/epics/${epic.id}`)
@@ -372,7 +372,7 @@ describe("DELETE /epics/:id", () => {
 
   it("403s for a caller who can see the epic but lacks project:write", async () => {
     const epic = await createEpic(projectId, { title: "Visible" });
-    const stakeholder = await createUserWithRole("STAKEHOLDER");
+    const stakeholder = await createUserWithRole("AUDITOR");
     const res = await request(app)
       .delete(`/epics/${epic.id}`)
       .set("Authorization", `Bearer ${stakeholder.token}`);

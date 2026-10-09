@@ -258,7 +258,7 @@ describe("POST /projects/:id/members", () => {
 
   it("403 without project:write (read-only view-all user)", async () => {
     const { member, project } = await fixture();
-    const viewer = await createUserWithRole("STAKEHOLDER");
+    const viewer = await createUserWithRole("AUDITOR");
     const res = await request(app)
       .post(`/projects/${project.id}/members`)
       .set(auth(viewer.token))

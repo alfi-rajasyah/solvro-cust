@@ -95,6 +95,10 @@ model User {
   roleId                 Int                   @map("role_id")
   role                   Role                  @relation(fields: [roleId], references: [id])
   active                 Boolean               @default(true)
+  // Session version (2026-10 security hardening). Embedded in every JWT as
+  // `ver` and compared on every request (http/auth.ts); bumped by a password
+  // change, an admin reset or a deactivation so older tokens stop verifying.
+  tokenVersion           Int                   @default(0) @map("token_version")
   createdAt              DateTime              @default(now()) @map("created_at")
   projectsAsTAM          Project[]             @relation("ProjectTAM")
   projectBaselinesLocked Project[]             @relation("ProjectBaselineLockedBy")

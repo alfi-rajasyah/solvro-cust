@@ -32,6 +32,7 @@ import {
   type KanbanMoveEvent,
 } from "@/components/reui/kanban";
 import { ApiError } from "@/lib/api";
+import { hasPermission, useAuth } from "@/lib/auth";
 import {
   useCustomerTickets,
   useItopStatus,
@@ -77,7 +78,9 @@ export function TicketBoard({
   const myToken = useMyItopToken();
   const actionsEnabled = status.data?.actionsEnabled ?? false;
   const tokenSet = myToken.data?.set ?? false;
-  const canAct = actionsEnabled && tokenSet;
+  const { user } = useAuth();
+  const canWrite = hasPermission(user, "task:write");
+  const canAct = canWrite && actionsEnabled && tokenSet;
 
   // Two requests total, not one per column (dispatch budget): "ongoing"
   // covers New/Assigned/Pending (plus escalated/approval-flavored variants,
@@ -196,12 +199,12 @@ export function TicketBoard({
 
   return (
     <div>
-      {!actionsEnabled && (
+      {canWrite && !actionsEnabled && (
         <p className="mb-2 text-xs text-on-surface-variant">
           Actions from Solvro are off (Admin › iTop) — cards can&apos;t be moved here.
         </p>
       )}
-      {actionsEnabled && !tokenSet && (
+      {canWrite && actionsEnabled && !tokenSet && (
         <p className="mb-2 text-xs text-on-surface-variant">
           Add your personal iTop token in{" "}
           <Link to="/settings" className="font-semibold underline">

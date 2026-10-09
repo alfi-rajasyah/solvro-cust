@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Modal } from "@/components/Modal";
+import { SkeletonRegion } from "@/components/skeletons/SkeletonRegion";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { Chip } from "@/components/StatusChip";
 import { ApiError } from "@/lib/api";
@@ -204,16 +206,11 @@ function ProjectShareDialog({
             Guest links
           </h3>
           {links.isLoading ? (
-            <div className="space-y-2" data-testid="share-links-loading">
-              <span className="sr-only">Loading links</span>
+            <SkeletonRegion className="space-y-2" data-testid="share-links-loading">
               {[0, 1].map((i) => (
-                <div
-                  key={i}
-                  aria-hidden="true"
-                  className="h-12 animate-pulse rounded-sm bg-surface-container-low"
-                />
+                <Skeleton key={i} className="h-12" />
               ))}
-            </div>
+            </SkeletonRegion>
           ) : links.isError ? (
             <p className="text-xs text-error">Couldn't load the guest links.</p>
           ) : (links.data ?? []).length === 0 ? (

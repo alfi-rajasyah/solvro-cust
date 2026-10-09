@@ -107,9 +107,9 @@ The PWA layer (vite-plugin-pwa / Workbox) precaches the app shell and serves `/a
 
 ### Authorization model
 
-- A sign-in returns a JWT whose payload is `{ sub, role, permissions[] }`. The permission list is copied from the role at sign-in. `*` is the wildcard that satisfies every check and is what makes a role an admin.
+- A sign-in returns a JWT whose payload is `{ sub, ver }` — the user id and a session version. The server loads the account, role and permission list from the database on every request, so a role change applies at once; a password change, an admin reset or a deactivation bumps the version and ends the account's sessions. `*` is the wildcard that satisfies every check and is what makes a role an admin.
 - **Permissions** — `project:view-all`, `project:read`, `project:write`, `task:read`, `task:write`, `report:executive`.
-- **Built-in roles** — `ADMIN` = `*`. `TAM` = project read/write + task read/write. `STAKEHOLDER` = project read + view-all. `PENDING` = nothing.
+- **Built-in roles** — `ADMIN` = `*`. `TAM` = project read/write + task read/write. `STAKEHOLDER` = project read only (the projects it is attached to). `PENDING` = nothing.
 - **Project visibility** (`lib/visibility.ts`) — `project:view-all` sees everything. Everyone else sees a project where they are the TAM, or the owning TAM of its customer. A **customer** is visible when the caller owns it, when nobody owns it, or when it has a visible project.
 - **Hidden means 404.** A resource outside the caller's visibility answers `404 not_found`, not `403`, so its existence is not revealed. A `customerId` sent as a body field answers `400 customer_not_found` instead.
 - **Executive is org-wide by design.** `report:executive` is itself the grant, so the visibility filter is not applied to that report.
@@ -150,7 +150,7 @@ The backend is a JSON REST API. Routers mount without an `/api` prefix; the fron
 
 ### Key flows
 
-**Sign-in.** `POST /auth/login` takes an email and password; `POST /auth/google` takes a Google ID token, which the server verifies against the admin-configured client ID and allowed domains, creating a `PENDING` user on first sight. Both return a JWT and the user's profile. The frontend stores the token in `localStorage` and sends it as a bearer header on every call; an old token without a permissions claim is treated as having none.
+**Sign-in.** `POST /auth/login` takes an email and password; `POST /auth/google` takes a Google ID token, which the server verifies against the admin-configured client ID and allowed domains, creating a `PENDING` user on first sight. Both return a JWT and the user's profile. The frontend stores the token in `localStorage` and sends it as a bearer header on every call; a token without a session version (issued before the server-side check) is rejected with 401 `token_revoked`, and the app signs the user out on any 401.
 
 **Task ordering.** Top-level tasks share one dense `0..n-1` `position` per project; subtasks share one per parent. A `PATCH /tasks/:id` that carries `position`, `parentTaskId`, or `sectionId` moves the task inside a single transaction: the old sibling list closes its gap and the new one opens a slot, so List, Kanban, and Gantt always agree. Baseline dates are not accepted on this route.
 
