@@ -7,6 +7,7 @@ import { CustomerFormModal } from "@/components/CustomerFormModal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { TicketPanel } from "@/components/itop/TicketPanel";
 import { TicketsTab, type TicketsTabView } from "@/components/itop/TicketsTab";
+import { OutlineDocsTab } from "@/components/outline/OutlineDocsTab";
 import { ServiceMappingList } from "@/components/services/ServiceMappingList";
 import { Tabs } from "@/components/Tabs";
 import { ApiError } from "@/lib/api";
@@ -19,10 +20,11 @@ import {
   useCustomerWeeklyUpdates,
   useDeleteCustomer,
   useItopStatus,
+  useOutlineConfig,
   useUpdateCustomerServices,
 } from "@/lib/queries";
 
-type Tab = "overview" | "services" | "tickets";
+type Tab = "overview" | "services" | "tickets" | "docs";
 
 
 export function CustomerDetail() {
@@ -31,6 +33,7 @@ export function CustomerDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canMutate = hasPermission(user, "project:write");
+  const { data: outlineConfig } = useOutlineConfig();
 
   const { data: customer, isLoading, isError, error } = useCustomer(customerId);
   const deleteCustomer = useDeleteCustomer();
@@ -72,6 +75,8 @@ export function CustomerDetail() {
     { key: "overview", label: "Overview" },
     { key: "services", label: "Services" },
     ...(ticketsAvailable ? [{ key: "tickets" as const, label: "Tickets" }] : []),
+    // Outline pages under the customer's link; only offered once an Outline address is set.
+    ...(outlineConfig?.baseUrl ? [{ key: "docs" as const, label: "Docs" }] : []),
   ];
 
   const initialTab = (() => {
@@ -91,7 +96,7 @@ export function CustomerDetail() {
       setTab(t as Tab);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, ticketsAvailable]);
+  }, [searchParams, ticketsAvailable, outlineConfig?.baseUrl]);
 
   function handleTabChange(next: Tab) {
     setTab(next);
@@ -236,6 +241,14 @@ export function CustomerDetail() {
           />
         )}
         {tab === "services" && <ServicesTab customer={customer} canMutate={canMutate} />}
+        {tab === "docs" && (
+          <OutlineDocsTab
+            scope="customers"
+            id={customer.id}
+            outlineUrl={customer.outlineUrl}
+            canWrite={canMutate}
+          />
+        )}
         {tab === "tickets" && ticketsAvailable && (
           <TicketsTab
             customerId={customer.id}

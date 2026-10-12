@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { ApiError } from "./api";
 import {
   absoluteShareUrl,
+  guestErrorCopy,
   MIN_BAR_PERCENT,
   normalizeShareLabel,
   phaseStatusOf,
@@ -139,5 +141,18 @@ describe("timelineLayout", () => {
     expect(timelineLayout(phases, "2026-09-30").today).toBeNull();
     expect(timelineLayout(phases, "2026-10-11").today).toBeNull();
     expect(timelineLayout(phases, null).today).toBeNull();
+  });
+});
+
+describe("guestErrorCopy", () => {
+  it("treats an unknown or expired link as final", () => {
+    const copy = guestErrorCopy(new ApiError(404, "not found", null));
+    expect(copy.final).toBe(true);
+    expect(copy.title).toBe("This link has expired or is no longer available");
+  });
+  it("lets a guest retry after rate limiting or a failure", () => {
+    expect(guestErrorCopy(new ApiError(429, "slow down", null))).toMatchObject({ final: false, icon: "hourglass_top" });
+    expect(guestErrorCopy(new ApiError(500, "boom", null)).final).toBe(false);
+    expect(guestErrorCopy(new TypeError("network")).title).toBe("Something went wrong");
   });
 });

@@ -41,10 +41,40 @@ async function openNavigationOnMobile(page: Page, testInfo: TestInfo) {
 
 const sidebarOutlineLink = (page: Page) => page.getByTestId("sidebar-outline-link");
 
+/** The deployment's current Outline address (null when none is set). */
+async function currentBaseUrl(testInfo: TestInfo, token: string): Promise<string | null> {
+  const res = await fetch(`${apiBase(testInfo)}/api/admin/settings/outline`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`GET /admin/settings/outline failed: ${res.status}`);
+  return ((await res.json()) as { baseUrl: string | null }).baseUrl;
+}
+
 test.describe("Outline links", () => {
+  // Changing the Outline address server-side disconnects every user's Outline
+  // account and drops all recorded mentions, so this spec must never touch an
+  // address somebody configured: it runs only on a stack with none, and puts back
+  // exactly what it found.
+  let initialBaseUrl: string | null = null;
+
+  test.beforeAll(async ({ seededProject }, testInfo) => {
+    initialBaseUrl = await currentBaseUrl(testInfo, seededProject.token);
+  });
+
+  test.beforeEach(() => {
+    test.skip(
+      initialBaseUrl !== null,
+      "An Outline address is configured on this stack; changing it would disconnect real users",
+    );
+  });
+
   test.afterAll(async ({ seededProject }, testInfo) => {
-    // Leave the stack as found: no base URL, no project/customer links.
-    await api(testInfo, seededProject.token, "/admin/settings/outline", "PATCH", { baseUrl: "" });
+    // Leave the stack as found: the original (unset) address, no project/customer links.
+    if ((await currentBaseUrl(testInfo, seededProject.token)) !== initialBaseUrl) {
+      await api(testInfo, seededProject.token, "/admin/settings/outline", "PATCH", {
+        baseUrl: initialBaseUrl ?? "",
+      });
+    }
     await api(testInfo, seededProject.token, `/projects/${seededProject.projectId}`, "PATCH", {
       outlineUrl: "",
     });
@@ -61,6 +91,9 @@ test.describe("Outline links", () => {
     await page.getByRole("button", { name: "Outline", exact: true }).click();
     await expect(page.getByText("Outline workspace")).toBeVisible();
     await expect(page.getByText("Not set", { exact: true })).toBeVisible();
+    // The tab also carries the OAuth app and webhook cards (docs/archive/plans/outline-integration.md, B6).
+    await expect(page.getByTestId("outline-api-card")).toBeVisible();
+    await expect(page.getByTestId("outline-webhook-card")).toBeVisible();
 
     await page.getByRole("button", { name: "Set address" }).click();
     const dialog = page.getByRole("dialog", { name: "Outline address" });

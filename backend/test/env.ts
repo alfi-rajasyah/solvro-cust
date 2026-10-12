@@ -19,3 +19,5 @@ process.env.SECRETS_KEY =
   process.env.SECRETS_KEY ?? "c29sdnJvLXRlc3Qtc2VjcmV0cy1rZXktMzItYnl0ZXM=";
 process.env.CORS_ORIGIN = process.env.CORS_ORIGIN ?? "*";
 process.env.LOG_LEVEL = process.env.LOG_LEVEL ?? "error";
+// Pinned so URL expectations never depend on the host environment.
+process.env.APP_URL = "http://localhost:5173";

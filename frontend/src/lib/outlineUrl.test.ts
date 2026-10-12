@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isOutlineAuthorizeUrl,
   OUTLINE_URL_MAX_LENGTH,
   parseOutlineBaseUrl,
   parseOutlineUrl,
@@ -73,5 +74,33 @@ describe("safeOutlineHref", () => {
     expect(safeOutlineHref("javascript:alert(1)")).toBeNull();
     expect(safeOutlineHref(null)).toBeNull();
     expect(safeOutlineHref("")).toBeNull();
+  });
+});
+
+describe("isOutlineAuthorizeUrl", () => {
+  const base = "https://docs.acme.com";
+  it("accepts a URL on the configured Outline origin", () => {
+    expect(isOutlineAuthorizeUrl("https://docs.acme.com/oauth/authorize?client_id=x&state=y", base)).toBe(true);
+    expect(isOutlineAuthorizeUrl("https://docs.acme.com:443/oauth/authorize", base)).toBe(true);
+  });
+  it("refuses another origin, port, scheme or lookalike host", () => {
+    for (const bad of [
+      "https://evil.example/oauth/authorize",
+      "https://docs.acme.com.evil.example/oauth/authorize",
+      "http://docs.acme.com/oauth/authorize",
+      "https://docs.acme.com:8443/oauth/authorize",
+      "javascript:alert(1)",
+      "//docs.acme.com/oauth/authorize",
+      "/oauth/authorize",
+      "",
+    ]) {
+      expect(isOutlineAuthorizeUrl(bad, base), bad).toBe(false);
+    }
+  });
+  it("refuses anything without a configured address or a string", () => {
+    expect(isOutlineAuthorizeUrl("https://docs.acme.com/x", null)).toBe(false);
+    expect(isOutlineAuthorizeUrl("https://docs.acme.com/x", undefined)).toBe(false);
+    expect(isOutlineAuthorizeUrl(undefined, base)).toBe(false);
+    expect(isOutlineAuthorizeUrl({ href: "https://docs.acme.com" }, base)).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 # Plan: Outline integration (links → Outline in Solvro → Solvro in Outline)
 
 - **Date:** 2026-10-09
-- **Status:** approved 2026-10-09 (mockup and §2 decisions). Phase A in progress on `feat/outline-links`; Phases B and C follow, each as its own PR.
+- **Status:** approved 2026-10-09 (mockup and §2 decisions). Phase A shipped (PR #27). Phases B and C ship together as ONE branch and PR, `feat/outline-api-embed` (user decision 2026-10-09); tasks keep their B/C ids and run in waves.
 - **Research:** `docs/ideas/outline-knowledge-base.md` §10 (link-out decision), §11 (gap research).
 - **Mockup (approved look, 2026-10-09):** https://claude.ai/artifact/Vhf62KES65HwWN6qLC2tfj —
   page 1 "Link-only plan" = Phase A, page 2 "Closing the gap" = Phases B (Tier 1) and C (Tier 2).
@@ -22,7 +22,7 @@ token — see D3).
 
 | # | Decision | Proposal | Status |
 |---|---|---|---|
-| D1 | Scope | Phases A, B, C in that order; each phase = 1 branch = 1 PR into `develop` | **approved 2026-10-09** |
+| D1 | Scope | Phases A, B, C in that order. A = its own PR (#27); B + C = one combined branch/PR into `develop` | **approved 2026-10-09** (combined B+C: user, 2026-10-09) |
 | D2 | Outline identity for reads and writes | Per-user OAuth token only (`User.outlineAccessTokenEnc`), accepted only when Outline's `auth.info` email = the user's Solvro email. Solvro holds **no** Outline API key or admin token. Same shape as the iTop write rule. | **approved 2026-10-09** — prove it on a real self-hosted Outline on the dev VM (`~/outline-dev`, like `~/itop-dev`) before Phase B code: B1 runs there |
 | D3 | Group/permission sync | Not built (would need an Outline admin token, conflicts with D2) | proposed |
 | D4 | Mentions storage | Solvro stores only Outline doc id, title, URL and the Solvro ids found — never page text | proposed |
@@ -75,10 +75,30 @@ Wave 1: A1 ∥ A2 → wave 2: A3.
 - Guest share payload and exports contain no Outline URL.
 - `curl -I` on `/`, `/projects/1`, `/share/x` shows `frame-ancestors 'self'`.
 
-## 4. Phase B — Tier 1: Outline inside Solvro (`feat/outline-api`)
+## 4. Phase B — Tier 1: Outline inside Solvro (branch `feat/outline-api-embed`, shared with C)
 
 Mockup page 2, row "Tier 1". Builds on Phase A's `outlineUrl` fields as the anchor — no extra
 mapping UI.
+
+### B1 spike findings (real Outline 1.10.1, 2026-10-09) — these OVERRIDE the design below where they differ
+
+Evidence: dev instance `~/outline-dev` (README there); spike scripts and redacted evidence were kept outside the repo.
+
+| # | Finding | Consequence for the build |
+|---|---|---|
+| F1 | OAuth endpoints `/oauth/authorize` (GET → consent page), `/oauth/token`, `/oauth/revoke`; grants `authorization_code`, `refresh_token`; client auth `client_secret_post`. **Token requests must be `application/x-www-form-urlencoded`** (JSON → 400). PKCE S256 supported (optional for confidential clients). `state` required. Codes valid 300 s, single-use. Consent screen shows every time. Cancel → `?error=access_denied` **without `state`**. | Form-encode token/refresh/revoke calls; use PKCE S256 anyway; callback handles a stateless `access_denied` (show "Connection cancelled", store nothing). |
+| F2 | Scopes: `read`, `write`, `create`, `<namespace>:read|write|create`, or `/api/ns.method`; `*` not allowed. **`read create` covers every Phase B call** (auth.info, collections/documents info+list+tree, templates.list, search, documents.create); update/delete → 403. | Request `read create` only (least privilege). |
+| F3 | Redirect URIs: exact match; **https required unless loopback** (a plain-http non-loopback URI is accepted at registration but fails after Authorize with a misleading `redirect_uri does not match`). | Admin card shows the exact redirect URI to register; `docs/CONFIGURATION.md`: production callback must be https. |
+| F4 | Tokens: access `ol_at_…` (1 h, `OAUTH_PROVIDER_ACCESS_TOKEN_LIFETIME`), refresh `ol_rt_…` (30 days sliding). **Refresh rotates BOTH tokens**; old access token dies at once; confidential client must send `client_secret`; replaying a rotated refresh token after 10 s **revokes the whole grant**. `/oauth/revoke` (RFC 7009) kills the pair. Tokens only in the `Authorization` header. **Suspending/deleting the Outline user destroys all grants permanently** (401 / `invalid_grant`). | Store the new pair atomically; **single-flight refresh per user** (row lock or advisory lock); refresh only when needed (expiry − 60 s or on 401); `invalid_grant` → clear tokens → UI shows "Reconnect". Disconnect also calls `/oauth/revoke`. |
+| F5 | `auth.info` → `data.user.{id,name,email,role}` with `read` scope. `createdBy` elsewhere has no email. | D2 email check uses `auth.info`; also store `outlineUserId`. |
+| F6 | `collections.info` / `documents.info` accept UUID, urlId or full slug. **`documents.list` `collectionId`/`parentDocumentId` accept UUIDs only** (deprecated for a `filters` list) and return direct children only. **`collections.documents` / `documents.documents` return the whole tree in one call** (`{id,url,title,children}`, no page text, accept urlId). List items carry full markdown `text`. Pagination `limit` ≤ 100, `offset`. | Anchor resolver: urlId → `*.info` → UUID; Docs tab tree from `collections.documents` / `documents.documents` (no text → nothing to drop). Never return Outline `text` to the client. |
+| F7 | Permissions: hidden collection → absent from list/search; `*.info` → 403 `authorization_error`; unknown → 404 `not_found`. **A trashed doc still returns 200 with `deletedAt` set.** | D5 visibility = 200 **and** `deletedAt == null` **and** `archivedAt == null`; 403/404 = hidden. |
+| F8 | `templates.list` (no collection filter) → workspace templates; `documents.create` with `templateId` + `collectionId` or `parentDocumentId` (UUID) + `title` + `publish` → creator = acting user. **`url` is relative** (`/doc/<slug>-<urlId>`). | Prefix every Outline `url` with `OutlineConfig.baseUrl`. |
+| F9 | `documents.search` → `data[].{ranking, context, document}`; **`context` contains `<b>…</b>` HTML**; respects permissions; 100/min. | Render the snippet as text with highlights parsed from `<b>` only (never `dangerouslySetInnerHTML` of Outline HTML); return only `{id,title,url,snippet}` to the client. |
+| F10 | Webhooks: header `Outline-Signature: t=<ms>,s=<hex>`, HMAC-SHA256(secret, `${t}.${rawBody}`), **`t` in milliseconds**; **no secret configured → no header**; payload `{id, actorId, webhookSubscriptionId, createdAt, event, payload:{id, model}}` with full markdown in `model.text`; **no retries**, 5 s timeout, redirects = errors; **auto-disabled** after ≥ 10 deliveries in 24 h with ≥ 80 % failures (re-enable via `webhookSubscriptions.update`); subscriptions need an admin session/key (OAuth refused). Events seen: `documents.create`, `.publish`, `.update` (+ `.title_change`), `.archive`, `.unarchive`, `.unpublish`, `.delete`; editor typing → one `documents.update` ~4 s later. **Outline refuses to deliver to private IP addresses unless `ALLOWED_PRIVATE_IP_ADDRESSES` is set on Outline.** | Verify with ms timestamps (±5 min); **reject a delivery without the header**; respond < 5 s (verify, extract, upsert — no Outline calls in the request path); Admin shows "last delivery" and warns when it is older than a threshold; the admin registers the webhook in Outline (Solvro holds no admin key); `docs/CONFIGURATION.md` explains `ALLOWED_PRIVATE_IP_ADDRESSES` for same-network deployments. |
+| F11 | Rate limits are counted **per client IP as well as per token**: all Solvro users share each route's limit via the backend's IP. Defaults: global 1000/60 s; `documents.list`/`search` 100/min; **`/oauth/token|authorize|revoke` 100/hour**. 429 carries `Retry-After`. | Short per-user caches (docs tree 60 s, mentions visibility 5 min); debounce ⌘K (≥ 300 ms, ≥ 2 chars); never refresh tokens eagerly; 429 → `outline_rate_limited` with retry-after, no retry loop. |
+| F12 | Solvro authenticates with a Bearer header (`backend/src/http/auth.ts`), not a cookie, so the browser's navigation to the OAuth callback carries no Solvro identity. | `POST /outline/oauth/start` is an authenticated XHR returning the authorize URL; the callback identifies the user **only** via the signed, single-use, short-lived `state` (user id + PKCE verifier reference). |
+| F13 | `CORS_ORIGIN` is a comma list or `*` (`backend/src/app.ts`), so it cannot serve as the app origin. | New env `APP_URL` (the public Solvro origin) for link extraction and the callback/redirect URIs. |
 
 ### Design
 
@@ -124,7 +144,7 @@ mapping UI.
 
 | # | Task | Area | Depends | Spine |
 |---|---|---|---|---|
-| B1 | Spike: on the dev Outline, register an OAuth app, confirm authorize/token paths, PKCE, token lifetime, `templates.list`, `documents.list` filters for a doc vs a collection `urlId`, webhook signature. Record findings in this plan. | backend | Phase A merged | — |
+| B1 | Spike on the dev Outline — **done 2026-10-09**, findings F1–F13 above (webhook delivery proven from source; live delivery verified end to end on the dev Outline with `ALLOWED_PRIVATE_IP_ADDRESSES` set, 2026-10-09) | backend | Phase A merged | — |
 | B2 | Migration + config/admin routes for OAuth and webhook secrets + tests | backend | B1 | yes (schema) |
 | B3 | OAuth flow, client, identity check, disconnect, refresh + tests (mismatch email → nothing stored) | backend | B2 | — |
 | B4 | Anchor resolver + docs list + templates + create doc + search endpoints + tests | backend | B3 | — |
@@ -132,7 +152,7 @@ mapping UI.
 | B6 | Frontend: Settings connect card, Admin cards, Docs tab (project + customer), New doc dialog | frontend | B4 | yes (`lib/queries.ts`) |
 | B7 | Frontend: ⌘K Outline group (debounced, own query), task panel "Mentioned in Outline" | frontend | B4, B5 | yes (`lib/queries.ts`) |
 
-Waves: B1 → B2 → (B3 ∥ B5) → B4 → (B6 ∥ B7, worktree isolation — both touch `lib/queries.ts`).
+Waves: see the combined B + C wave plan at the end of §5.
 
 ### Acceptance
 
@@ -143,14 +163,17 @@ Waves: B1 → B2 → (B3 ∥ B5) → B4 → (B6 ∥ B7, worktree isolation — b
   removing the link removes it; a page the viewer cannot open shows only as a count.
 - No Outline page text is stored (DB check in the webhook test).
 
-## 5. Phase C — Tier 2: Solvro inside Outline (`feat/outline-embed`)
+## 5. Phase C — Tier 2: Solvro inside Outline (branch `feat/outline-api-embed`, shared with B)
 
 Mockup page 2, row "Tier 2".
 
 ### Design
 
-- **Frame allow-list (D8):** `frontend/nginx.conf` becomes `nginx.conf.template` (the nginx image runs
-  `envsubst` on `/etc/nginx/templates/*.template` for defined variables only). New env
+- **Frame allow-list (D8):** `frontend/nginx.conf` stays a plain file; only the widened snippet
+  `frontend/nginx-frame-protection-embed.conf.template` is rendered by the nginx image's envsubst at start, from a
+  value validated (fail-closed) by `frontend/nginx-embed-frame-ancestors.envsh`. nginx widens framing only on the
+  exact paths the SPA renders (`/embed/projects/<id>/(tasks|status|timeline)`, `/share/<token>`); the SPA never
+  navigates out of those prefixes. New env
   `EMBED_FRAME_ANCESTORS` (e.g. `https://docs.acme.com`) → `/embed/*` and `/share/*` send
   `frame-ancestors 'self' ${EMBED_FRAME_ANCESTORS}`; every other location keeps `'self'`.
   `setup.sh` asks for the Outline address; `docs/CONFIGURATION.md` documents D6.
@@ -166,12 +189,23 @@ Mockup page 2, row "Tier 2".
 
 | # | Task | Area | Depends | Spine |
 |---|---|---|---|---|
-| C1 | nginx template + `EMBED_FRAME_ANCESTORS` + Dockerfile + `setup.sh` prompt + `docs/CONFIGURATION.md` + header e2e. Phase A ships one shared `frontend/nginx-frame-protection.conf` (`frame-ancestors 'self'` + `X-Frame-Options`) included per location: C1 adds a `location ^~ /embed/` that rewrites to the shell (like `/share/`), swaps the include in `/embed/` and `/share/` for the widened one, decides whether to drop `X-Frame-Options` there (ignored when `frame-ancestors` is present), and adds `/^\/embed\//` to Workbox `navigateFallbackDenylist` in `frontend/vite.config.ts` — otherwise the service worker serves `/embed/*` from the precached shell with `'self'` and the frame is blocked | ops | Phase B merged | yes (nginx, setup.sh, docker) |
+| C1 | nginx template + `EMBED_FRAME_ANCESTORS` + Dockerfile + `setup.sh` prompt + `docs/CONFIGURATION.md` + header e2e. Phase A ships one shared `frontend/nginx-frame-protection.conf` (`frame-ancestors 'self'` + `X-Frame-Options`) included per location: C1 adds a `location ^~ /embed/` that rewrites to the shell (like `/share/`), swaps the include in `/embed/` and `/share/` for the widened one, decides whether to drop `X-Frame-Options` there (ignored when `frame-ancestors` is present), and adds `/^\/embed\//` to Workbox `navigateFallbackDenylist` in `frontend/vite.config.ts` — otherwise the service worker serves `/embed/*` from the precached shell with `'self'` and the frame is blocked | ops | — | yes (nginx, setup.sh, docker) |
 | C2 | Embed routes + embed layout + signed-out state + e2e | frontend | — | — |
 | C3 | Embed dialog | frontend | C2 | — |
 | C4 | Guest `?embed=1` mode | frontend | — | — |
 
-Waves: (C1 ∥ C2 ∥ C4) → C3.
+Waves: see below.
+
+### Combined B + C waves (one branch, one PR — user decision 2026-10-09)
+
+| Wave | Tasks (parallel) | Why this grouping |
+|---|---|---|
+| 1 | B2 (schema + config + `APP_URL`) ∥ C1 (nginx/ops) ∥ C2 (embed routes) | disjoint areas: backend schema, nginx/setup/vite, new frontend routes |
+| 2 | B3 (OAuth + client) ∥ B5 (webhook + mentions) ∥ C4 (guest embed) | B3/B5 both need B2's schema; C4 is frontend-only |
+| 3 | B4 (anchor + docs + templates + search) ∥ C3 (embed dialog) | B4 needs B3's client |
+| 4 | B6 (Settings/Admin/Docs tab/New doc) ∥ B7 (⌘K + mentions panel) | both touch `lib/queries.ts` — strict file ownership, `Edit` only |
+
+Full gates after each wave; instant opus review per spine task; one phase review over the combined diff.
 
 ### Acceptance
 

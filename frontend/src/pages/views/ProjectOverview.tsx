@@ -16,6 +16,7 @@ import { useProjectContext } from "../ProjectDetail";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { scoreClass, scoreLevel } from "@/components/RiskFormModal";
+import { OutlineMentions } from "@/components/OutlineMentions";
 import { ProjectActivity } from "@/components/ProjectActivity";
 import { Chip } from "@/components/StatusChip";
 import { dateToDay, dayFromIso } from "@/lib/dateField";
@@ -163,6 +164,7 @@ export function ProjectOverview() {
           <StatusBreakdown tasks={tasks ?? []} />
           <TopRisks projectId={project.id} />
           <ProjectNotesPanel projectId={project.id} />
+          <OutlineMentions scope={{ kind: "project", id: project.id }} variant="card" />
         </div>
       </div>
 

@@ -10,6 +10,7 @@ import {
 import { EpicChip } from "./EpicChip";
 import { InlineDateRangeEditor } from "./InlineDateRangeEditor";
 import { LabelPicker } from "./LabelPicker";
+import { OutlineMentions } from "./OutlineMentions";
 import { TASK_STATUS_TONE_CLASS } from "./StatusChip";
 import { TaskConflictDialog } from "./TaskConflictDialog";
 import { TaskTicketField } from "@/components/itop/TaskTicketField";
@@ -960,6 +961,9 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               )}
             </div>
           )}
+
+          {/* Outline pages that link to this task (hidden when there is nothing to show). */}
+          <OutlineMentions scope={{ kind: "task", id: task.id }} variant="block" />
 
           {error && (
             <Alert variant="destructive" className="mt-4">
