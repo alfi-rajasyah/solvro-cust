@@ -162,7 +162,8 @@ jobs:
   e2e:
     name: e2e (${{ matrix.project }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The desktop half alone runs about 20 minutes (Outline specs added 2026-10-12).
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -219,6 +220,11 @@ jobs:
           load: true
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+      # The widened /embed/ + /share/ framing header must collapse to 'self' for
+      # any unsafe or missing EMBED_FRAME_ANCESTORS (header-injection guard).
+      - name: Check frame-ancestors rendering (fail-closed)
+        run: ci/check-frame-ancestors.sh solvro-ci-frontend:latest
 
       - name: Start stack
         run: docker compose -f ci/docker-compose.ci.yml up -d --no-build

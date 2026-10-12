@@ -1,0 +1,40 @@
+# Decides, per request, whether the framing headers are widened to the Outline
+# origin. Included once at http level from nginx.conf (a `map` cannot live in a
+# location); the static snippet nginx-frame-protection-embed.conf then sends the
+# two resulting variables from /embed/ and /share/ locations.
+#
+# Why a map on $request_uri: nginx matches locations on the DECODED, normalised
+# URI, but the browser keeps the URI exactly as sent. `/embed%2Fprojects%2F1%2Ftasks`
+# or `/x/..%2Fembed/projects/1/tasks` would hit the widened locations, yet no SPA
+# route matches the raw path — its catch-all then navigates to the full app inside
+# the allowed frame. So the widening requires the RAW request URI to be exactly
+# one of the framable pages (query string allowed); anything else served from
+# those locations gets the strict headers. (`$` here is the regex end anchor; a raw
+# request URI cannot contain a newline.)
+#
+# This is a TEMPLATE: the nginx image's /docker-entrypoint.d/20-envsubst-on-
+# templates.sh renders it at container start into
+# /etc/nginx/snippets/frame-protection-embed-map.conf (NGINX_ENVSUBST_OUTPUT_DIR),
+# substituting ONLY the EMBED_FRAME_* variables (NGINX_ENVSUBST_FILTER). Both are
+# produced by /docker-entrypoint.d/15-embed-frame-ancestors.envsh, so a bad value
+# can only ever narrow this back to 'self'.
+#
+# EMBED_FRAME_ANCESTORS_SAFE  the validated form of the EMBED_FRAME_ANCESTORS
+#                        setting: space-separated http(s) origins (empty =
+#                        embedding disabled). The raw setting is never read here.
+# EMBED_FRAME_XFO        SAMEORIGIN when the allow-list is empty, empty when set.
+#                        nginx's add_header skips a header whose value is empty.
+#
+# Why X-Frame-Options is conditional: it cannot express an allow-list
+# (ALLOW-FROM is dead) and every current browser ignores it when
+# `frame-ancestors` is present, so a populated allow-list drops it. With
+# embedding disabled it stays, so legacy browsers that only know
+# X-Frame-Options keep the protection on these pages as well.
+map $request_uri $embed_frame_csp {
+  default "frame-ancestors 'self'";
+  "~^/(embed/projects/[0-9]+/(tasks|status|timeline)|share/[A-Za-z0-9_-]+)/?(\?|$)" "frame-ancestors 'self' ${EMBED_FRAME_ANCESTORS_SAFE}";
+}
+map $request_uri $embed_frame_xfo {
+  default "SAMEORIGIN";
+  "~^/(embed/projects/[0-9]+/(tasks|status|timeline)|share/[A-Za-z0-9_-]+)/?(\?|$)" "${EMBED_FRAME_XFO}";
+}

@@ -36,6 +36,7 @@ services:
       SECRETS_KEY: ${SECRETS_KEY:?SECRETS_KEY is required}
       JWT_EXPIRES_IN: 8h
       CORS_ORIGIN: "*"
+      APP_URL: http://localhost:8080
       LOG_LEVEL: info
     command: >
       sh -c "npx prisma migrate deploy && npx prisma db seed && node dist/index.js"
@@ -49,5 +50,9 @@ services:
       target: runtime
     depends_on:
       - backend
+    environment:
+      # Lets e2e/tests/frame-headers.spec.ts assert the widened /embed/ and
+      # /share/ frame-ancestors; the host is a placeholder, never contacted.
+      EMBED_FRAME_ANCESTORS: https://docs.example.com
     ports:
       - "127.0.0.1:8080:80"

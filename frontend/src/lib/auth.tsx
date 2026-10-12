@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  ApiError,
   apiRequest,
   FORBIDDEN_EVENT,
   getToken,
@@ -124,6 +125,16 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
 
 const REFRESH_THROTTLE_MS = 30_000;
 
+/** Only an authentication failure (401) ends a session; network errors, timeouts and 5xx do not. */
+export function shouldEndSession(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 401;
+}
+
+/** Backoff for the boot `/auth/me` retry: 2 s, 4 s, 8 s … capped at 30 s. */
+export function bootRetryDelayMs(attempt: number): number {
+  return Math.min(30_000, 2_000 * 2 ** attempt);
+}
+
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -164,27 +175,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Rehydrate from /auth/me on boot when we have a token. This refreshes the
   // cached user (notably the `permissions` array, which may be missing or
-  // stale on bundles upgraded from before that field existed). If the token
-  // is invalid/expired the call 401s and we log the user out cleanly.
+  // stale on bundles upgraded from before that field existed). ONLY a 401
+  // ends the session (an invalid/expired/revoked token): a network failure, a
+  // timeout or a 5xx — a backend restart, say — must not sign everyone out
+  // (embeds included). The session is kept (`userVerified` stays false, so the
+  // permission guards do not redirect) and the call is retried with backoff.
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    // Timed out so a request that never settles ends in the catch below
-    // (clean logout → /login) instead of leaving the permission guards on
-    // "Loading…" forever.
-    apiRequest<AuthUser>("/auth/me", { signal: AbortSignal.timeout(15_000) })
-      .then((fresh) => {
-        if (cancelled) return;
-        setUser(fresh);
-        setUserVerified(true);
-        setStatus("authenticated");
-      })
-      .catch(() => {
-        if (cancelled || pageUnloading) return;
-        logout();
-      });
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function attempt(n: number) {
+      // Timed out so a request that never settles ends in the catch below
+      // instead of leaving the permission guards on "Loading…" forever.
+      apiRequest<AuthUser>("/auth/me", { signal: AbortSignal.timeout(15_000) })
+        .then((fresh) => {
+          if (cancelled) return;
+          setUser(fresh);
+          setUserVerified(true);
+          setStatus("authenticated");
+        })
+        .catch((err: unknown) => {
+          if (cancelled || pageUnloading) return;
+          if (shouldEndSession(err)) {
+            logout();
+            return;
+          }
+          retryTimer = setTimeout(() => attempt(n + 1), bootRetryDelayMs(n));
+        });
+    }
+    attempt(0);
+
     return () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
     };
   }, [token, logout]);
 

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { CardGridSkeleton } from "@/components/skeletons";
+import { OutlineConnectCard } from "@/components/outline/OutlineConnectCard";
 import { ServiceCatalogueManager } from "@/components/services/ServiceCatalogueManager";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
@@ -93,6 +94,11 @@ export function Settings() {
           already have stored — DELETE is open — so the section stays for them,
           without the save form. */}
       <ItopTokenSection canSave={hasPermission(user, "task:write")} />
+
+      {/* Connect the user's own Outline account (and show the outcome of a
+          return from Outline's consent screen). Hidden while the install has no
+          Outline address. */}
+      <OutlineConnectCard />
 
       {hasPermission(user, "project:write") && (
         <section className="rounded-sm border border-outline-variant bg-surface-container-lowest p-5">

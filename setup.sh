@@ -27,6 +27,17 @@
 #                   the bundled nginx only; 2 when a tunnel or CDN sits in
 #                   front of it; or a comma list of loopback/linklocal/
 #                   uniquelocal/IPs/CIDRs). Saved to .env when set.
+#   APP_URL         the public address users reach Solvro on (a bare http(s)
+#                   origin, e.g. https://solvro.acme.com). The backend builds
+#                   the Outline OAuth redirect / webhook URLs from it. Prompted
+#                   on a fresh install (default: the bind address + website
+#                   port); saved to .env. On a re-run, pass it in the
+#                   environment to change it (older installs get the default).
+#   EMBED_FRAME_ANCESTORS  Outline address(es) allowed to embed Solvro pages in
+#                   an iframe (space-separated http(s) origins, e.g.
+#                   https://docs.acme.com). Default empty = embedding off.
+#                   Saved to .env when set; on a re-run, pass it in the
+#                   environment to change it.
 # To change BIND_ADDR / frontend / backend later, edit ~/solvro/.env and
 # `docker compose up -d`. Changing whether/where Postgres is published
 # requires re-running this script.
@@ -92,6 +103,56 @@ is_trust_proxy() {
       || "$entry" =~ ^[0-9a-fA-F:.]*:[0-9a-fA-F:.]*(/[0-9]{1,3})?$ ]] || return 1
   done
   return 0
+}
+
+# One bare http(s) origin (scheme://host[:port], one trailing "/" tolerated):
+# prints it without the slash and returns 0, or returns 1. No path, query,
+# login, wildcard or other character may pass: the value ends up in a response
+# header (EMBED_FRAME_ANCESTORS) or in OAuth redirect URLs (APP_URL).
+normalise_origin() {
+  local LC_ALL=C tok="${1%/}"
+  [[ "$tok" =~ ^https?://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]{1,5})?$ ]] || return 1
+  printf '%s' "$tok"
+}
+
+# Normalises EMBED_FRAME_ANCESTORS-style input: whitespace/comma separated
+# http(s) origins -> single-space list. Prints the result and returns 0, or
+# returns 1 on any entry that is not a plain origin or a list over 2000 chars.
+# The frontend container re-validates the value at start (fail closed), so this
+# only fails early with a clear message.
+normalise_frame_origins() {
+  local LC_ALL=C out="" tok one
+  (( ${#1} <= 2000 )) || return 1
+  set -f
+  for tok in ${1//,/ }; do
+    one="$(normalise_origin "$tok")" || { set +f; return 1; }
+    out="${out:+$out }$one"
+  done
+  set +f
+  printf '%s' "$out"
+}
+
+# Reads KEY from ~/solvro/.env WITHOUT sourcing it (a hand-edited, unquoted
+# value with spaces would otherwise be executed as a command): last assignment,
+# one pair of surrounding quotes removed. Prints nothing when absent.
+env_file_get() {
+  local line
+  line="$(grep -E "^${1}=" "$ENV_FILE" | tail -n 1)" || true
+  line="${line#*=}"
+  line="${line%\"}"; line="${line#\"}"
+  line="${line%\'}"; line="${line#\'}"
+  printf '%s' "$line"
+}
+
+# Sets KEY="VALUE" (quoted) in ~/solvro/.env, replacing any earlier line for
+# KEY. VALUE must already be validated (no quotes or shell metacharacters).
+env_file_set() {
+  local tmp
+  tmp="$(mktemp "$ENV_FILE.XXXXXX")"
+  grep -v "^${1}=" "$ENV_FILE" > "$tmp" || true
+  printf '%s="%s"\n' "$1" "$2" >> "$tmp"
+  chmod 600 "$tmp"
+  mv "$tmp" "$ENV_FILE"
 }
 
 # URL for the success/update message, from BIND_ADDR + FRONTEND_PORT.
@@ -162,6 +223,7 @@ COMPOSE_HEAD
     environment:
       NODE_ENV: production
       PORT: 3000
+      APP_URL: "${APP_URL:-}"
       DATABASE_URL: postgresql://solvro:${POSTGRES_PASSWORD}@postgres:5432/solvro?schema=public
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: 8h
@@ -181,6 +243,9 @@ COMPOSE_HEAD
     pull_policy: always
     depends_on:
       - backend
+    environment:
+      # Outline origin(s) allowed to frame /embed/* and /share/*; empty = off.
+      EMBED_FRAME_ANCESTORS: "${EMBED_FRAME_ANCESTORS:-}"
     ports:
       - "${BIND_ADDR:-127.0.0.1}:${FRONTEND_PORT:-80}:80"
 
@@ -191,6 +256,11 @@ COMPOSE_REST
   } > "$COMPOSE_FILE"
 }
 
+# Values passed in the environment, captured before ~/solvro/.env can overwrite
+# them: on a re-run they update the saved setting.
+REQ_APP_URL="${APP_URL:-}"
+REQ_EMBED="${EMBED_FRAME_ANCESTORS:-}"
+
 # ------------------------------------------------------------------ branch: update vs fresh install
 if [[ -f "$ENV_FILE" ]]; then
   echo "Existing install detected (~/solvro/.env present). Pulling new images and restarting..."
@@ -198,8 +268,10 @@ if [[ -f "$ENV_FILE" ]]; then
   # port vars — the compose ${VAR:-default} fallbacks keep them on 80/3000
   # and Postgres unpublished, exactly as before (now bound to 127.0.0.1).
   set -a
+  # APP_URL and EMBED_FRAME_ANCESTORS are read separately below: they may hold
+  # spaces and be unquoted in a hand-edited file, which sourcing would run.
   # shellcheck disable=SC1090
-  . "$ENV_FILE"
+  . <(grep -vE '^(APP_URL|EMBED_FRAME_ANCESTORS)=' "$ENV_FILE")
   set +a
   # Older installs predate SECRETS_KEY (secrets-at-rest for integration
   # tokens) — generate it once and append, never overwriting an existing value.
@@ -207,6 +279,47 @@ if [[ -f "$ENV_FILE" ]]; then
     SECRETS_KEY=$(openssl rand -base64 32)
     echo "SECRETS_KEY=$SECRETS_KEY" >> "$ENV_FILE"
   fi
+  # Outline embedding allow-list: a value passed in the environment replaces the
+  # saved one; either way it is validated and re-saved quoted.
+  EMBED_FRAME_ANCESTORS="${REQ_EMBED:-$(env_file_get EMBED_FRAME_ANCESTORS)}"
+  if [[ -n "$EMBED_FRAME_ANCESTORS" ]]; then
+    if NORMALISED="$(normalise_frame_origins "$EMBED_FRAME_ANCESTORS")"; then
+      EMBED_FRAME_ANCESTORS="$NORMALISED"
+      [[ -n "$EMBED_FRAME_ANCESTORS" ]] && env_file_set EMBED_FRAME_ANCESTORS "$EMBED_FRAME_ANCESTORS"
+    elif [[ -n "$REQ_EMBED" ]]; then
+      echo "ERROR: EMBED_FRAME_ANCESTORS must be a space-separated list of http(s) origins such as https://docs.example.com (got '$REQ_EMBED')."
+      exit 1
+    else
+      echo "WARNING: EMBED_FRAME_ANCESTORS in $ENV_FILE is not a list of http(s) origins; the website will refuse all embedding until it is fixed."
+    fi
+  fi
+  export EMBED_FRAME_ANCESTORS
+
+  # Public Solvro address. Older installs predate it: try to save the default
+  # derived from the bind address + website port and say so. If that guess is
+  # not a valid origin, APP_URL stays unset — the backend then starts with the
+  # Outline integration disabled (and says so in its boot log).
+  APP_URL="${REQ_APP_URL:-$(env_file_get APP_URL)}"
+  if [[ -n "$APP_URL" ]]; then
+    if NORMALISED="$(normalise_origin "$APP_URL")"; then
+      APP_URL="$NORMALISED"
+      env_file_set APP_URL "$APP_URL"
+    elif [[ -n "$REQ_APP_URL" ]]; then
+      echo "ERROR: APP_URL must be a bare http(s) address such as https://solvro.example.com — no path, query or login (got '$REQ_APP_URL')."
+      exit 1
+    else
+      echo "WARNING: APP_URL in $ENV_FILE is not a bare http(s) address; the Outline integration stays disabled until it is fixed."
+    fi
+  elif DERIVED_APP_URL="$(normalise_origin "$(app_url)")"; then
+    APP_URL="$DERIVED_APP_URL"
+    env_file_set APP_URL "$APP_URL"
+    echo "NOTE: APP_URL was not set; saved $APP_URL. If users reach Solvro on another address, re-run with APP_URL=https://... or edit $ENV_FILE."
+  else
+    APP_URL=""
+    echo "NOTE: APP_URL is not set and no address could be derived from this server; the Outline integration stays disabled. Re-run with APP_URL=https://... or edit $ENV_FILE."
+  fi
+  export APP_URL
+
   write_compose_file
   docker compose pull
   docker compose up -d
@@ -274,6 +387,8 @@ BACKEND_PORT="${BACKEND_PORT:-}"
 POSTGRES_PORT="${POSTGRES_PORT:-}"
 BIND_ADDR="${BIND_ADDR:-}"
 TRUST_PROXY="${TRUST_PROXY:-}"
+EMBED_FRAME_ANCESTORS="$REQ_EMBED"
+APP_URL="$REQ_APP_URL"
 
 if [[ -r /dev/tty ]]; then
   [[ -z "$FRONTEND_PORT" ]] && \
@@ -284,6 +399,8 @@ if [[ -r /dev/tty ]]; then
     read -r -p "Postgres host port (blank = keep private) []: " POSTGRES_PORT </dev/tty
   [[ -z "$BIND_ADDR" ]] && \
     read -r -p "Bind address [127.0.0.1] (0.0.0.0 = all interfaces): " BIND_ADDR </dev/tty
+  [[ -z "$EMBED_FRAME_ANCESTORS" ]] && \
+    read -r -p "Outline address allowed to embed Solvro, e.g. https://docs.example.com (blank = no embedding) []: " EMBED_FRAME_ANCESTORS </dev/tty
 fi
 
 FRONTEND_PORT="${FRONTEND_PORT:-80}"
@@ -324,6 +441,31 @@ if [[ -n "$TRUST_PROXY" ]]; then
   }
 fi
 
+# Public address: the prompt default is derived from the bind address + website
+# port; no tty → the default is taken silently.
+if [[ -z "$APP_URL" && -r /dev/tty ]]; then
+  read -r -p "Public Solvro address [$(normalise_origin "$(app_url)" || echo "none")]: " APP_URL </dev/tty
+fi
+if [[ -n "$APP_URL" ]]; then
+  APP_URL="$(normalise_origin "$APP_URL")" || {
+    echo "ERROR: APP_URL must be a bare http(s) address such as https://solvro.example.com — no path, query or login."
+    exit 1
+  }
+elif APP_URL="$(normalise_origin "$(app_url)")"; then
+  :
+else
+  # e.g. 0.0.0.0 on a host with no discoverable IP: leave it unset rather than
+  # save a placeholder — the Outline integration stays disabled until it is set.
+  APP_URL=""
+  echo "NOTE: could not derive a public address; APP_URL is left unset (Outline integration disabled). Set it in $ENV_FILE later."
+fi
+if [[ -n "$EMBED_FRAME_ANCESTORS" ]]; then
+  EMBED_FRAME_ANCESTORS="$(normalise_frame_origins "$EMBED_FRAME_ANCESTORS")" || {
+    echo "ERROR: EMBED_FRAME_ANCESTORS must be a space-separated list of http(s) origins such as https://docs.example.com — no paths, wildcards or other characters."
+    exit 1
+  }
+fi
+
 # hex (not base64): base64's `/` `+` `=` are unsafe in the DATABASE_URL
 # userinfo and truncate it (P1013 "invalid port number"). 24 bytes = 192 bits.
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
@@ -339,9 +481,12 @@ BIND_ADDR=$BIND_ADDR
 FRONTEND_PORT=$FRONTEND_PORT
 BACKEND_PORT=$BACKEND_PORT
 EOF
+[[ -n "$APP_URL" ]] && echo "APP_URL=\"$APP_URL\"" >> "$ENV_FILE"
 [[ -n "$POSTGRES_PORT" ]] && echo "POSTGRES_PORT=$POSTGRES_PORT" >> "$ENV_FILE"
 # Quoted: the value may hold spaces ("loopback, uniquelocal") and .env is sourced by bash on update.
 [[ -n "$TRUST_PROXY" ]] && echo "TRUST_PROXY=\"$TRUST_PROXY\"" >> "$ENV_FILE"
+# Quoted for the same reason (a list of origins is space-separated).
+[[ -n "$EMBED_FRAME_ANCESTORS" ]] && echo "EMBED_FRAME_ANCESTORS=\"$EMBED_FRAME_ANCESTORS\"" >> "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
 write_compose_file
@@ -389,7 +534,7 @@ docker compose exec -T \
   -e ADMIN_PASSWORD="$ADMIN_PASSWORD" \
   backend npx tsx scripts/create-admin.ts
 
-APP_URL="$(app_url)"
+LOCAL_URL="$(app_url)"
 
 echo
 echo "============================================================"
@@ -399,18 +544,20 @@ else
   echo " Solvro is running (bound to $BIND_ADDR — reachable on the network)."
 fi
 echo
-echo "   URL:       $APP_URL"
+echo "   URL:       $LOCAL_URL"
+echo "   Public:    ${APP_URL:-not set}  (APP_URL — Outline OAuth/webhook URLs are built from it)"
 echo "   Login as:  $ADMIN_EMAIL"
 echo
 echo "   Ports:     website $FRONTEND_PORT · API $BACKEND_PORT · Postgres ${POSTGRES_PORT:-not published}"
 echo "   Bind:      $BIND_ADDR"
+echo "   Embedding: ${EMBED_FRAME_ANCESTORS:-off (pages cannot be framed)}"
 echo
 if [[ "$BIND_ADDR" == "127.0.0.1" ]]; then
   echo " Reachable only from this server. From your machine, tunnel:"
   echo "   ssh -L ${FRONTEND_PORT}:localhost:${FRONTEND_PORT} <user>@<server>"
-  echo "   then open $APP_URL"
+  echo "   then open $LOCAL_URL"
 else
-  echo " Reachable on the network at $APP_URL"
+  echo " Reachable on the network at $LOCAL_URL"
   echo " NOTE: only the in-app login protects it — keep it behind a trusted"
   echo "       network / VPN / firewall. (Postgres stays private on 127.0.0.1.)"
 fi
@@ -419,12 +566,12 @@ echo " Useful commands (run from $DEPLOY_DIR):"
 echo "   docker compose ps              # check container status"
 echo "   docker compose logs -f backend # tail backend logs"
 echo "   bash setup.sh                  # re-run to update images"
-echo "   # change bind address / ports later: edit ~/solvro/.env then"
+echo "   # change bind address / ports / EMBED_FRAME_ANCESTORS later: edit ~/solvro/.env then"
 echo "   docker compose up -d"
 echo
 echo " To enable Google sign-in:"
 echo "   1. Create an OAuth 2.0 Client ID in Google Cloud Console"
-echo "      (Web application, add $APP_URL as an Authorized JS origin —"
+echo "      (Web application, add ${APP_URL:-$LOCAL_URL} as an Authorized JS origin —"
 echo "      use the exact host:port you reach Solvro on)."
 echo "   2. Sign in as admin → Admin → Sign-in tab → paste the Client ID,"
 echo "      add at least one allowed email domain, click Save."

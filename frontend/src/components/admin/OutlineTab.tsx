@@ -1,10 +1,13 @@
-// Admin "Outline" tab: the address of the deployment's self-hosted Outline.
-// Solvro only links to it (sidebar item for every user, plus optional
-// per-project / per-customer links) — it reads and writes nothing in Outline.
+// Admin "Outline" tab: the address of the deployment's self-hosted Outline, the
+// OAuth app users connect through ("API access") and the webhook that feeds
+// "Mentioned in Outline". Solvro stores no Outline API key or admin token:
+// every Outline call runs under the signed-in user's own OAuth token.
 // Backend: backend/src/routes/outlineAdmin.ts
 // (docs/archive/plans/outline-integration.md §3). Card pattern follows the
 // Sign-in tab in pages/Admin.tsx.
 import { useEffect, useId, useState } from "react";
+import { DISCONNECT_WARNING, OutlineApiCard } from "@/components/admin/OutlineApiCard";
+import { OutlineWebhookCard } from "@/components/admin/OutlineWebhookCard";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Modal } from "@/components/Modal";
 import { Chip } from "@/components/StatusChip";
@@ -36,7 +39,8 @@ export function OutlineTab() {
     <div className="space-y-4">
       <p className="text-sm text-on-surface-variant">
         Set the address of your self-hosted Outline. Solvro shows it as an "Outline" link in the
-        sidebar for every user. Solvro only links to Outline — it reads and writes nothing there.
+        sidebar for every user. To list pages, search and create docs, register an OAuth app in
+        Outline and add its client below; each user then connects their own account in Settings.
       </p>
 
       <div className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
@@ -110,6 +114,9 @@ export function OutlineTab() {
         </div>
       </div>
 
+      <OutlineApiCard settings={data} />
+      <OutlineWebhookCard settings={data} />
+
       <OutlineSettingsModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -132,6 +139,7 @@ function OutlineSettingsModal({
   const [baseUrl, setBaseUrl] = useState(initialBaseUrl);
   const [error, setError] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [confirmChange, setConfirmChange] = useState<string | null>(null);
   const inputId = useId();
   const helperId = `${inputId}-help`;
 
@@ -141,6 +149,7 @@ function OutlineSettingsModal({
       setBaseUrl(initialBaseUrl);
       setError(null);
       setConfirmRemove(false);
+      setConfirmChange(null);
     }
   }, [open, initialBaseUrl]);
 
@@ -149,9 +158,11 @@ function OutlineSettingsModal({
     try {
       await update.mutateAsync({ baseUrl: next });
       setConfirmRemove(false);
+      setConfirmChange(null);
       onClose();
     } catch (err) {
       setConfirmRemove(false);
+      setConfirmChange(null);
       setError(err instanceof ApiError ? err.message : "Could not save the Outline address.");
     }
   }
@@ -160,6 +171,12 @@ function OutlineSettingsModal({
     const parsed = parseOutlineBaseUrl(baseUrl);
     if (!parsed.ok) {
       setError(parsed.error);
+      return;
+    }
+    // Pointing Solvro at a different address disconnects every user (their stored
+    // tokens belong to the old one), so an existing address needs a confirmation.
+    if (initialBaseUrl !== "" && parsed.value !== initialBaseUrl) {
+      setConfirmChange(parsed.value ?? "");
       return;
     }
     void save(parsed.value);
@@ -173,7 +190,7 @@ function OutlineSettingsModal({
     <>
     <Modal
       open={open}
-      onClose={confirmRemove ? () => {} : onClose}
+      onClose={confirmRemove || confirmChange !== null ? () => {} : onClose}
       title="Outline address"
       widthClass="max-w-xl"
       footer={
@@ -250,7 +267,7 @@ function OutlineSettingsModal({
           />
           <p id={helperId} className="mt-1 text-xs text-on-surface-variant">
             http:// or https:// only, without a login, query string or fragment. Empty hides the
-            sidebar link.
+            sidebar link. {DISCONNECT_WARNING}
           </p>
         </div>
       </form>
@@ -260,8 +277,18 @@ function OutlineSettingsModal({
       onClose={() => setConfirmRemove(false)}
       onConfirm={() => void save(null)}
       title="Remove Outline link"
-      body="Remove the Outline link? The sidebar link disappears for everyone."
+      body="Remove the Outline link? The sidebar link disappears for everyone, and every user's Outline connection is dropped."
       confirmLabel="Remove"
+      confirmTone="danger"
+      busy={update.isPending}
+    />
+    <ConfirmModal
+      open={confirmChange !== null}
+      onClose={() => setConfirmChange(null)}
+      onConfirm={() => void save(confirmChange || null)}
+      title="Change the Outline address?"
+      body="Changing the address disconnects every user's Outline account and clears the “Mentioned in Outline” index. They will have to connect again in Settings."
+      confirmLabel="Change address"
       confirmTone="danger"
       busy={update.isPending}
     />

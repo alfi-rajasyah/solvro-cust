@@ -49,8 +49,11 @@ export default defineConfig({
         // runtime route, so without this denylist it wins for navigations.
         // Guest-link navigations (/share/<token>) must also reach nginx, which
         // sends them no-store + Referrer-Policy: no-referrer; a precached
-        // shell would serve them without those headers.
-        navigateFallbackDenylist: [/^\/api\//, /^\/share\//],
+        // shell would serve them without those headers. /embed/* navigations
+        // (Outline iframes) likewise need nginx's widened frame-ancestors —
+        // the precached shell carries the strict 'self' header and the frame
+        // would be blocked.
+        navigateFallbackDenylist: [/^\/api\//, /^\/share\//, /^\/embed\//],
         runtimeCaching: [
           {
             // API responses carry auth state and must always be fresh —

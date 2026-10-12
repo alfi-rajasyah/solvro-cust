@@ -1,5 +1,6 @@
 // Pure helpers for guest links (docs/archive/plans/collaboration-and-sharing.md,
 // L4): the owner's link list and the public guest timeline. No React, no I/O.
+import { ApiError } from "@/lib/api";
 import { dayFromIso } from "@/lib/dateField";
 import type { PublicPhaseStatus, ShareLink } from "@/lib/queries";
 
@@ -132,4 +133,39 @@ export function timelineLayout(
   const t = dayNumber(todayDay);
   const today = t !== null && t >= min && t <= max ? ((t - min + 0.5) / total) * 100 : null;
   return { range: { start: dayString(min), end: dayString(max) }, bars, today };
+}
+
+export interface GuestErrorCopy {
+  icon: string;
+  title: string;
+  hint: string;
+  /** Expired, revoked or unknown: nothing to retry. */
+  final: boolean;
+}
+
+/** What a guest sees when the public payload could not be loaded (full page and embed alike). */
+export function guestErrorCopy(error: unknown): GuestErrorCopy {
+  const status = error instanceof ApiError ? error.status : null;
+  if (status === 429) {
+    return {
+      icon: "hourglass_top",
+      title: "Too many requests — try again in a minute",
+      hint: "You have opened this page too many times in a short while.",
+      final: false,
+    };
+  }
+  if (status === 404) {
+    return {
+      icon: "link_off",
+      title: "This link has expired or is no longer available",
+      hint: "Ask the person who shared it with you for a new link.",
+      final: true,
+    };
+  }
+  return {
+    icon: "error",
+    title: "Something went wrong",
+    hint: "The project could not be loaded. Check your connection and try again.",
+    final: false,
+  };
 }

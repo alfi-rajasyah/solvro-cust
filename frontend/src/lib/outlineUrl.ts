@@ -52,3 +52,15 @@ export function safeOutlineHref(url: string | null | undefined): string | null {
   const parsed = parseOutlineUrl(url);
   return parsed.ok ? parsed.value : null;
 }
+
+/** http(s) and on the configured Outline's origin - nothing else may be navigated to. */
+export function isOutlineAuthorizeUrl(url: unknown, baseUrl: string | null | undefined): boolean {
+  if (typeof url !== "string" || !baseUrl) return false;
+  try {
+    const target = new URL(url);
+    if (target.protocol !== "http:" && target.protocol !== "https:") return false;
+    return target.origin === new URL(baseUrl).origin;
+  } catch {
+    return false;
+  }
+}

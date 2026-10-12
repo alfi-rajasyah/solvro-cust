@@ -8,7 +8,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { apiRequest, apiRequestWithHeaders, setToken, setTokenRotating } from "./api";
+import { ApiError, apiRequest, apiRequestWithHeaders, setToken, setTokenRotating } from "./api";
 import { useAuth, type Role } from "./auth";
 import { dateToDay, dayFromIso, isoFromDay } from "./dateField";
 import { shouldPauseRefresh, subscribeDragActivity } from "./dragActivity";
@@ -20,6 +20,8 @@ import {
   type TaskExpected,
 } from "./taskConflict";
 import { parseWeekKey } from "./isoWeek";
+import type { OutlineMentionsData } from "./outlineMentions";
+import type { OutlineSnippetSegment } from "./outlineSnippet";
 
 export type ProjectStatus =
   | "PLANNING"
@@ -703,6 +705,12 @@ export const queryKeys = {
   // Outline base URL for every signed-in user (sidebar link); the admin
   // settings live under adminQueryKeys.outlineSettings.
   outlineConfig: ["outline", "config"] as const,
+  // B6 (Docs tab / Settings connect): the signed-in user's Outline connection,
+  // the workspace templates, and a project's / customer's page tree.
+  outlineMe: ["outline", "me"] as const,
+  outlineTemplates: ["outline", "templates"] as const,
+  outlineDocsAll: ["outline", "docs"] as const,
+  outlineDocs: (scope: OutlineDocsScope, id: number) => ["outline", "docs", scope, id] as const,
   overview: ["overview"] as const,
   users: ["users"] as const,
   projects: (filter?: ProjectsFilter) => ["projects", filter ?? {}] as const,
@@ -761,6 +769,14 @@ export const queryKeys = {
   tasks: (filter?: TasksFilter) => ["tasks", filter ?? {}] as const,
   comments: (taskId: number) => ["tasks", taskId, "comments"] as const,
   search: (q: string) => ["search", q] as const,
+  // B7: ⌘K Outline group and "Mentioned in Outline" (task panel, project Overview).
+  // Prefix keys: everything a disconnect / address change must drop.
+  outlineMentionsAll: ["outline", "mentions"] as const,
+  outlineSearchAll: ["outline", "search"] as const,
+  outlineSearch: (q: string) => ["outline", "search", q] as const,
+  taskOutlineMentions: (taskId: number) => ["outline", "mentions", "task", taskId] as const,
+  projectOutlineMentions: (projectId: number) =>
+    ["outline", "mentions", "project", projectId] as const,
   executiveReport: () => ["executive-report"] as const,
   // `today` is folded into the key by the caller (see useDailyReview) —
   // same day-boundary rationale as useOverview/useExecutiveReport below.
@@ -1487,6 +1503,9 @@ export function useUpdateProject(id: number) {
       qc.invalidateQueries({ queryKey: queryKeys.customers });
       // excludeFromPortfolio changes reshape the executive roll-up too.
       qc.invalidateQueries({ queryKey: queryKeys.executiveReport() });
+      // The Docs tab resolves the project's Outline link: a changed link must not
+      // keep showing the old page tree.
+      qc.invalidateQueries({ queryKey: queryKeys.outlineDocs("projects", id) });
     },
   });
 }
@@ -1549,6 +1568,8 @@ export function useUpdateCustomer(id: number) {
       // Reassigning `tamId` can add or remove this customer from the Daily
       // Review page's customer scope (Decision 14).
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      // Same for the customer Docs tab and its Outline link.
+      qc.invalidateQueries({ queryKey: queryKeys.outlineDocs("customers", id) });
     },
   });
 }
@@ -4158,6 +4179,17 @@ export function useOutlineConfig() {
 
 export interface OutlineAdminSettings {
   baseUrl: string | null;
+  /** The OAuth client id registered in Outline; the secret is write-only (only `…Set` is returned). */
+  oauthClientId: string | null;
+  oauthClientSecretSet: boolean;
+  webhookSecretSet: boolean;
+  lastWebhookAt: string | null;
+  /** False when the server has no APP_URL (production has no default). */
+  appUrlConfigured: boolean;
+  appUrlWarning: string | null;
+  /** Browser-facing URLs to register in Outline; null while APP_URL is unset. */
+  redirectUri: string | null;
+  webhookUrl: string | null;
   updatedAt: string;
   updatedBy: { id: number; username: string } | null;
 }
@@ -4173,7 +4205,12 @@ export function useOutlineAdminSettings() {
 export function useUpdateOutlineAdminSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { baseUrl: string | null }) =>
+    // Partial: omitted fields are kept. `oauthClientSecret` is write-only; null clears.
+    mutationFn: (input: {
+      baseUrl?: string | null;
+      oauthClientId?: string | null;
+      oauthClientSecret?: string | null;
+    }) =>
       apiRequest<OutlineAdminSettings>("/admin/settings/outline", {
         method: "PATCH",
         body: input,
@@ -4182,9 +4219,149 @@ export function useUpdateOutlineAdminSettings() {
       qc.setQueryData(adminQueryKeys.outlineSettings, fresh);
       // The sidebar item reads the user-facing copy of the same value.
       qc.invalidateQueries({ queryKey: queryKeys.outlineConfig });
+      // Changing the address or the OAuth client disconnects every user server-side.
+      qc.invalidateQueries({ queryKey: queryKeys.outlineMe });
+      qc.invalidateQueries({ queryKey: queryKeys.outlineDocsAll });
+      qc.removeQueries({ queryKey: queryKeys.outlineMentionsAll });
+      qc.removeQueries({ queryKey: queryKeys.outlineSearchAll });
     },
   });
 }
+
+// ---- Outline inside Solvro (B6: docs/archive/plans/outline-integration.md) ----
+// Connect card (Settings), Docs tab + New doc dialog, and the Admin API/webhook
+// cards. Every Outline call runs under the signed-in user's own OAuth token on the
+// server; none of these hooks ever carries a token or page text.
+
+export interface OutlineMe {
+  configured: boolean;
+  connected: boolean;
+  outlineEmail: string | null;
+  expiresAt: string | null;
+}
+
+/** Pass `enabled = false` until the Outline address is known to be set: no Outline, no request. */
+export function useOutlineMe(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.outlineMe,
+    queryFn: ({ signal }) => apiRequest<OutlineMe>("/outline/me", { signal }),
+    staleTime: 60_000,
+    enabled,
+  });
+}
+
+/** Starts the OAuth connection: resolves to Outline's authorize URL (a top-level navigation target). */
+export function useStartOutlineConnect() {
+  return useMutation({
+    mutationFn: () =>
+      apiRequest<{ authorizeUrl: string }>("/outline/oauth/start", { method: "POST" }),
+  });
+}
+
+export function useDisconnectOutline() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiRequest<void>("/outline/me", { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.outlineMe });
+      qc.invalidateQueries({ queryKey: queryKeys.outlineDocsAll });
+      qc.removeQueries({ queryKey: queryKeys.outlineTemplates });
+      // B7's Outline-backed data holds page titles the user can no longer open.
+      qc.removeQueries({ queryKey: queryKeys.outlineMentionsAll });
+      qc.removeQueries({ queryKey: queryKeys.outlineSearchAll });
+    },
+  });
+}
+
+export type OutlineDocsScope = "projects" | "customers";
+
+export interface OutlineDocNode {
+  id: string;
+  title: string;
+  /** Absolute Outline URL. */
+  url: string;
+  children: OutlineDocNode[];
+}
+
+/** What the Docs tab shows for the link: null anchor = no link; the flag states carry no tree. */
+export interface OutlineDocsResponse {
+  anchor:
+    | null
+    | { outside: true }
+    | { unsupported: true }
+    | { hidden: true }
+    | { kind: "doc" | "collection"; title: string; url: string };
+  tree?: OutlineDocNode[];
+}
+
+/** Errors that a retry cannot fix: not connected (409), rate limited (429), reconnect needed. */
+function noRetryOnOutlineError(failureCount: number, error: unknown): boolean {
+  if (error instanceof ApiError && [404, 409, 429].includes(error.status)) return false;
+  return failureCount < 1;
+}
+
+export function useOutlineDocs(scope: OutlineDocsScope, id: number | null) {
+  return useQuery({
+    queryKey: queryKeys.outlineDocs(scope, id ?? 0),
+    queryFn: ({ signal }) =>
+      apiRequest<OutlineDocsResponse>(`/${scope}/${id}/outline/docs`, { signal }),
+    enabled: id !== null,
+    // The server caches the tree for 60 s per user (Outline's rate limit is shared).
+    staleTime: 60_000,
+    retry: noRetryOnOutlineError,
+  });
+}
+
+export interface OutlineTemplate {
+  id: string;
+  title: string;
+}
+
+export function useOutlineTemplates(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.outlineTemplates,
+    queryFn: ({ signal }) => apiRequest<OutlineTemplate[]>("/outline/templates", { signal }),
+    enabled,
+    staleTime: 5 * 60_000,
+    retry: noRetryOnOutlineError,
+  });
+}
+
+export interface CreateOutlineDocInput {
+  title: string;
+  templateId?: string;
+  parentDocumentId?: string;
+  publish: boolean;
+}
+
+export function useCreateOutlineDoc(scope: OutlineDocsScope, id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateOutlineDocInput) =>
+      apiRequest<{ id: string; title: string; url: string }>(`/${scope}/${id}/outline/docs`, {
+        method: "POST",
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.outlineDocs(scope, id) });
+    },
+  });
+}
+
+/** Generates a new webhook signing secret; the plaintext is in the response and never again. */
+export function useRotateOutlineWebhookSecret() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiRequest<{ webhookSecret: string }>("/admin/settings/outline/webhook-secret/rotate", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: adminQueryKeys.outlineSettings });
+    },
+  });
+}
+// ---- end Outline inside Solvro (B6) ----
 
 export function useItopSettings() {
   return useQuery({
@@ -4455,6 +4632,58 @@ export function useDeleteDependency(projectId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projectDependencies(projectId) });
     },
+  });
+}
+
+// ---- Outline in Solvro, part 2 (B7: docs/archive/plans/outline-integration.md) ----
+// ⌘K "Outline" group (its OWN query, so Solvro results never wait on Outline) and
+// "Mentioned in Outline" on a task / project. Both run under the signed-in user's
+// own Outline token on the server and carry no page text.
+
+export interface OutlineSearchResult {
+  id: string;
+  title: string;
+  /** Absolute Outline URL; still goes through `safeOutlineHref` before it reaches an href. */
+  url: string;
+  /** Plain-text segments with highlight flags - rendered as text, never as HTML. */
+  snippet: OutlineSnippetSegment[];
+}
+
+export function useOutlineSearch(q: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.outlineSearch(q),
+    queryFn: ({ signal }) =>
+      apiRequest<OutlineSearchResult[]>(`/outline/search?q=${encodeURIComponent(q)}`, { signal }),
+    enabled: enabled && q.trim().length >= 2,
+    // Outline's search limit is shared by every Solvro user (one client IP).
+    staleTime: 60_000,
+    retry: noRetryOnOutlineError,
+    // Keep the previous rows up while the next keystroke's query is in flight; the
+    // palette gates consumption on its live query, so a reopen never shows them.
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useTaskOutlineMentions(taskId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.taskOutlineMentions(taskId),
+    queryFn: ({ signal }) =>
+      apiRequest<OutlineMentionsData>(`/tasks/${taskId}/outline-mentions`, { signal }),
+    enabled,
+    // The server caches per-viewer page access for 5 minutes; a minute is plenty here.
+    staleTime: 60_000,
+    retry: noRetryOnOutlineError,
+  });
+}
+
+export function useProjectOutlineMentions(projectId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.projectOutlineMentions(projectId),
+    queryFn: ({ signal }) =>
+      apiRequest<OutlineMentionsData>(`/projects/${projectId}/outline-mentions`, { signal }),
+    enabled,
+    staleTime: 60_000,
+    retry: noRetryOnOutlineError,
   });
 }
 

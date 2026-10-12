@@ -16,6 +16,7 @@ import { OutlineLinkButton } from "@/components/OutlineLinkButton";
 import { ProjectFormModal } from "@/components/ProjectFormModal";
 import { ProjectHeaderFacts } from "@/components/ProjectHeaderFacts";
 import { ProjectMembersButton } from "@/components/ProjectMembers";
+import { EmbedInOutlineDialog } from "@/components/EmbedInOutline";
 import { ProjectShareButton } from "@/components/ProjectShare";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
@@ -36,6 +37,7 @@ import { safeOutlineHref } from "@/lib/outlineUrl";
 import {
   type ProjectDetail as ProjectDetailType,
   useDeleteProject,
+  useOutlineConfig,
   useProject,
 } from "@/lib/queries";
 
@@ -53,6 +55,8 @@ const TABS = [
   { to: "timeline", label: "Timeline" },
   { to: "risks", label: "Risks" },
   { to: "services", label: "Services" },
+  // Outline pages under the project's link; only offered once an Outline address is set.
+  { to: "docs", label: "Docs" },
 ];
 
 export interface ProjectOutletContext {
@@ -65,8 +69,12 @@ export function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const projectId = id ? Number(id) : null;
   const { user } = useAuth();
+  const { data: outlineConfig } = useOutlineConfig();
+  // Outline features exist only once an administrator has set an Outline address.
+  const embedAvailable = Boolean(outlineConfig?.baseUrl);
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [embedOpen, setEmbedOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -208,7 +216,9 @@ export function ProjectDetail() {
                   title="More project actions"
                   className={[
                     "h-8 w-8 items-center justify-center rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30",
-                    canDelete ? "inline-flex" : "inline-flex md:hidden",
+                    // On desktop the menu only holds Delete and "Embed in Outline";
+                    // with neither on offer, the trigger stays a phone-only control.
+                    canDelete || embedAvailable ? "inline-flex" : "inline-flex md:hidden",
                   ].join(" ")}
                 >
                   <span className="material-symbols-outlined text-base" aria-hidden="true">
@@ -256,6 +266,14 @@ export function ProjectDetail() {
                 </span>
                 {contextOpen ? "Hide project context" : "Show project context"}
               </DropdownMenuItem>
+              {embedAvailable && (
+                <DropdownMenuItem onClick={() => setEmbedOpen(true)} className="text-xs">
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">
+                    integration_instructions
+                  </span>
+                  Embed in Outline
+                </DropdownMenuItem>
+              )}
               {canDelete && (
                 <DropdownMenuItem
                   variant="destructive"
@@ -301,7 +319,7 @@ export function ProjectDetail() {
           the tabs off-screen. */}
       <div className="relative mb-6">
         <nav className="flex gap-6 overflow-x-auto overflow-y-clip whitespace-nowrap border-b border-outline-variant">
-          {TABS.map((tab) => (
+          {TABS.filter((tab) => tab.to !== "docs" || embedAvailable).map((tab) => (
             <NavLink
               key={tab.to}
               to={tab.to}
@@ -340,6 +358,14 @@ export function ProjectDetail() {
         canChangeOwnership={isOwner}
       />
 
+      {embedAvailable && (
+        <EmbedInOutlineDialog
+          project={project}
+          open={embedOpen}
+          onClose={() => setEmbedOpen(false)}
+          canCreateGuestLink={canEdit && isOwner}
+        />
+      )}
       <ConfirmModal
         open={confirmDeleteOpen}
         onClose={() => setConfirmDeleteOpen(false)}

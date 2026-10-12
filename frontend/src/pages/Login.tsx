@@ -43,7 +43,12 @@ export function Login() {
   const location = useLocation();
   // Shared by the password path, the Google path and the already-signed-in
   // redirect below; only an in-app path is accepted.
-  const from = safeRedirectPath((location.state as { from?: unknown } | null)?.from);
+  // The guard passes it through router state; the embed views' "Sign in" link
+  // opens this page in a new tab, where only a `?from=` query can carry it.
+  const from = safeRedirectPath(
+    (location.state as { from?: unknown } | null)?.from ??
+      new URLSearchParams(location.search).get("from"),
+  );
 
   // Runtime-fetched OAuth config — clientId comes from the DB (Admin > Sign-in),
   // not the build. `enabled` is true only when both clientId and at least one

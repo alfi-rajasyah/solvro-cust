@@ -20,7 +20,34 @@ export const notFoundHandler: RequestHandler = (req, res) => {
   res.status(404).json({ error: "Not found", code: "not_found", path: req.originalUrl });
 };
 
+// body-parser (express.json) errors are http-errors with a string `type`
+// ("entity.parse.failed", "entity.too.large", "encoding.unsupported", …) and
+// carry the offending request text in `err.body`. That text can hold secrets
+// (settings PATCH bodies, personal tokens), and these errors fire before auth,
+// so they are answered here as a client error and NEVER logged.
+function isBodyParserError(err: unknown): err is { type: string; status: number } {
+  if (typeof err !== "object" || err === null) return false;
+  const { type, status } = err as { type?: unknown; status?: unknown };
+  return (
+    typeof type === "string" &&
+    /^(entity|encoding|charset|request|stream|parameters)\./.test(type) &&
+    typeof status === "number"
+  );
+}
+
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+  if (isBodyParserError(err)) {
+    if (err.type === "entity.parse.failed") {
+      res.status(400).json({ error: "Request body is not valid JSON", code: "invalid_json" });
+    } else if (err.type === "entity.too.large") {
+      res.status(413).json({ error: "Request body is too large", code: "payload_too_large" });
+    } else {
+      const status = err.status >= 400 && err.status < 500 ? err.status : 400;
+      res.status(status).json({ error: "Request body could not be read", code: "invalid_request" });
+    }
+    return;
+  }
+
   if (err instanceof HttpError) {
     res
       .status(err.status)
