@@ -10,6 +10,10 @@ import { test, expect, loginViaUi } from "../fixtures/test";
 // of the stack:
 //   flock /tmp/solvro-e2e.lock npx playwright test tests/outline-docs.spec.ts
 
+// The CI stack serves the built app, whose PWA service worker would answer
+// the mocked /api fetches itself and bypass page.route (same as the iTop specs).
+test.use({ serviceWorkers: "block" });
+
 const DOCS_BASE = "https://docs.example.test";
 const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
 

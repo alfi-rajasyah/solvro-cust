@@ -9,6 +9,10 @@ import { test, expect, loginViaUi, apiBase } from "../fixtures/test";
 // on any stack. Serialize with other Playwright users of the stack:
 //   flock /tmp/solvro-e2e.lock npx playwright test tests/outline-search-mentions.spec.ts --retries=0
 
+// The CI stack serves the built app, whose PWA service worker would answer
+// the mocked /api fetches itself and bypass page.route (same as the iTop specs).
+test.use({ serviceWorkers: "block" });
+
 const DOCS = "https://docs.example.test";
 const DOC_URL = `${DOCS}/doc/launch-runbook-abc123`;
 

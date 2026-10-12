@@ -22,6 +22,10 @@ import {
 // Serialize with other Playwright users of this stack:
 //   flock /tmp/solvro-e2e.lock npx playwright test tests/embed-views.spec.ts
 
+// The CI stack serves the built app, whose PWA service worker would answer
+// the mocked /api fetches itself and bypass page.route (same as the iTop specs).
+test.use({ serviceWorkers: "block" });
+
 const PASSWORD = "EmbedViews1234!";
 
 function stamp(): string {

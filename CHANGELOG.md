@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-10-12 — Browser tests on the built app
+
+- The Outline browser tests block the app's service worker, so their mocked responses also apply on the production build that CI tests; the CI browser-test jobs may now run up to 30 minutes, since the suite grew with the Outline tests (**`e2e/tests/embed-views.spec.ts`**, **`outline-docs.spec.ts`**, **`outline-search-mentions.spec.ts`**, **`.github/workflows/ci.yml`**).
+
 ### Added — 2026-10-09 — Outline sign-in, mentions and embeds
 
 - Each user can connect their own Outline account (**`backend/src/routes/outline.ts`**, **`backend/src/lib/outline/`**): `POST /outline/oauth/start`, `GET /outline/oauth/callback`, `GET /outline/me`, `DELETE /outline/me`. A connection is accepted only when the Outline account's email matches the user's Solvro email; tokens are stored encrypted, refreshed automatically (one refresh at a time per user, even when several requests run at once) and revoked at Outline on disconnect or refusal. Solvro requests only Outline's `read create` scopes and never uses an Outline API key or admin token.
