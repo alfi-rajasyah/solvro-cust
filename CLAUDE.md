@@ -37,6 +37,7 @@ MUST/NEVER invariants. User-owned — agents read this block; only the user edit
 | `e2e/` | Playwright suite — conventions in `e2e/CLAUDE.md` |
 | `ci/` + `.github/workflows/` | CI stack; `ci.yml` is the merge gate, `docker-publish.yml` the release path |
 | `docs/ideas/` → `docs/plans/` → `docs/prompts/` | Planning pipeline — active work only |
+| `docs/guides/` | Customer-facing, task-ordered guides (server setup, iTop, Outline); they link to `CONFIGURATION.md` for detail and never copy its tables |
 | `docs/reference/` | Living reference: `paper-extraction/` (DESIGN.md's regeneration source), agent-architecture rationale |
 | `docs/DESIGN.md` | Design system ("Technical Precision") — binding, docs-keeper-owned |
 | `docs/CONFIGURATION.md` | Env vars, ports, volumes, prod deploy (`setup.sh`) — docs-keeper-owned |
