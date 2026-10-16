@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { CardGridSkeleton } from "@/components/skeletons";
+import { OutlineConnectCard } from "@/components/outline/OutlineConnectCard";
 import { ServiceCatalogueManager } from "@/components/services/ServiceCatalogueManager";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
@@ -14,7 +15,7 @@ import {
 import { useTheme, type ThemeChoice } from "@/lib/theme";
 
 export function Settings() {
-  const { user } = useAuth();
+  const { user, replaceToken } = useAuth();
   const change = useChangeMyPassword();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -39,7 +40,10 @@ export function Settings() {
       return;
     }
     try {
-      await change.mutateAsync({ currentPassword, newPassword });
+      const { token } = await change.mutateAsync({ currentPassword, newPassword });
+      // The change revoked every session of this account; the server issued
+      // a replacement for this one.
+      replaceToken(token);
       setSuccess(true);
       setCurrentPassword("");
       setNewPassword("");
@@ -85,7 +89,16 @@ export function Settings() {
         </p>
       </section>
 
-      <ItopTokenSection />
+      {/* A personal token is only usable for ticket writes, so saving one needs
+          task:write (PUT 403s otherwise). Anyone may still remove a token they
+          already have stored — DELETE is open — so the section stays for them,
+          without the save form. */}
+      <ItopTokenSection canSave={hasPermission(user, "task:write")} />
+
+      {/* Connect the user's own Outline account (and show the outcome of a
+          return from Outline's consent screen). Hidden while the install has no
+          Outline address. */}
+      <OutlineConnectCard />
 
       {hasPermission(user, "project:write") && (
         <section className="rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
@@ -170,7 +183,7 @@ export function Settings() {
 // `configured` — an install with no iTop connection at all never sees this
 // section, per the dispatch contract. Same password-input + Save/Remove
 // shape as the "Change password" section below.
-function ItopTokenSection() {
+function ItopTokenSection({ canSave }: { canSave: boolean }) {
   const { data: token, isLoading } = useMyItopToken();
   const save = useSaveMyItopToken();
   const remove = useRemoveMyItopToken();
@@ -182,6 +195,9 @@ function ItopTokenSection() {
     return <CardGridSkeleton count={1} gridClassName="grid-cols-1" />;
   }
   if (!token || !token.configured) return null;
+  // Without task:write there is nothing to save; the section only offers
+  // removing a token that is still stored.
+  if (!canSave && !token.set) return null;
 
   async function handleSave(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -239,21 +255,29 @@ function ItopTokenSection() {
       )}
 
       <form onSubmit={handleSave} className="space-y-3">
-        <Field label="My personal token">
-          <input
-            type="password"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder={token.set ? "•••••••• (set)" : "scope REST/JSON"}
-            spellCheck={false}
-            autoComplete="off"
-            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/20"
-          />
-        </Field>
-        <p className="text-[12px] text-on-surface-variant">
-          Create it in iTop under My Account › Personal tokens. Without a token, tickets are
-          read-only for you; the application token never writes.
-        </p>
+        {canSave ? (
+          <>
+            <Field label="My personal token">
+              <input
+                type="password"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder={token.set ? "•••••••• (set)" : "scope REST/JSON"}
+                spellCheck={false}
+                autoComplete="off"
+                className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/20"
+              />
+            </Field>
+            <p className="text-[12px] text-on-surface-variant">
+              Create it in iTop under My Account › Personal tokens. Without a token, tickets are
+              read-only for you; the application token never writes.
+            </p>
+          </>
+        ) : (
+          <p className="text-[12px] text-on-surface-variant">
+            Your role can no longer write to iTop, so this token is unused. You can remove it.
+          </p>
+        )}
         <div className="flex items-center justify-end gap-2">
           {token.set &&
             (confirmingRemove ? (
@@ -284,13 +308,15 @@ function ItopTokenSection() {
                 Remove
               </button>
             ))}
-          <button
-            type="submit"
-            disabled={save.isPending || !draft.trim()}
-            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-60"
-          >
-            {save.isPending ? "Saving…" : "Save"}
-          </button>
+          {canSave && (
+            <button
+              type="submit"
+              disabled={save.isPending || !draft.trim()}
+              className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-60"
+            >
+              {save.isPending ? "Saving…" : "Save"}
+            </button>
+          )}
         </div>
       </form>
     </section>

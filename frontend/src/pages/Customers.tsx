@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useNewParam } from "@/hooks/useNewParam";
 import { hasPermission, useAuth } from "@/lib/auth";
-import { canOwnCustomer, saveErrorMessage } from "@/lib/ownerAccess";
+import { canChangeCustomerOwner, canOwnCustomer, saveErrorMessage } from "@/lib/ownerAccess";
 import { WEEKLY_STATUS_LABEL } from "@/lib/labels";
 import {
   type CustomerSummary,
@@ -55,7 +55,7 @@ export function Customers() {
     }
     return map;
   }, [projects]);
-  // Owner-only actions (change owner, delete) — see lib/ownerAccess.ts.
+  // Owner-only delete — see lib/ownerAccess.ts (changing the owner is narrower, and server-decided: canChangeCustomerOwner).
   const ownsCustomer = useCallback(
     (c: CustomerSummary) => canOwnCustomer(user, c, projectTamIdsByCustomer.get(c.id) ?? []),
     [user, projectTamIdsByCustomer],
@@ -152,7 +152,7 @@ export function Customers() {
         open={editing !== null}
         onClose={() => setEditing(null)}
         customer={editing}
-        canChangeOwner={editing ? ownsCustomer(editing) : true}
+        canChangeOwner={editing ? canChangeCustomerOwner(editing) : true}
       />
       <ConfirmModal
         open={deleting !== null}

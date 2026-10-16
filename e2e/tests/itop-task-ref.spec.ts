@@ -240,7 +240,19 @@ test.describe("TaskPanel Create in iTop", () => {
 
   test("creates a ticket from the task and pins its ref", async ({ page, seededProject }, testInfo) => {
     const base = apiBase(testInfo);
-    const { token, projectId, customerId } = seededProject;
+    const { token, projectId } = seededProject;
+    // The customer the project belongs to NOW, not the one it was seeded with:
+    // the fixture project is shared by the whole worker, and
+    // itop-daily-review.spec.ts re-parents it to a customer of its own. The
+    // Create-in-iTop gate asks about the project's real customer, so mocking
+    // the seed-time one would leave the button hidden whenever that spec ran
+    // earlier in the same worker.
+    const projectRes = await fetch(
+      `${base}/api/projects/${projectId}?today=${new Date().toISOString().slice(0, 10)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const customerId = ((await projectRes.json()) as { customer: { id: number } | null }).customer?.id;
+    expect(customerId, "the fixture project has a customer").toBeDefined();
     const taskTitle = `Create ticket ${stamp()}`;
     // `createTask`'s `CreateTaskInput` has no `description` field (nothing
     // in this suite needed one before) — a raw POST here rather than
@@ -254,8 +266,8 @@ test.describe("TaskPanel Create in iTop", () => {
 
     await mockItopStatusWithActions(page);
     await mockMyToken(page);
-    await mockCustomerMapped(page, customerId);
-    await mockNewTicketSheetDeps(page, customerId);
+    await mockCustomerMapped(page, customerId!);
+    await mockNewTicketSheetDeps(page, customerId!);
 
     const createdRef = "R-009001";
     await page.route("**/api/itop/tickets", (route) => {

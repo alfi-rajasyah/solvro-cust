@@ -8,7 +8,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { apiRequest, apiRequestWithHeaders } from "./api";
+import { ApiError, apiRequest, apiRequestWithHeaders, setToken, setTokenRotating } from "./api";
 import { useAuth, type Role } from "./auth";
 import { dateToDay, dayFromIso, isoFromDay } from "./dateField";
 import { shouldPauseRefresh, subscribeDragActivity } from "./dragActivity";
@@ -20,6 +20,8 @@ import {
   type TaskExpected,
 } from "./taskConflict";
 import { parseWeekKey } from "./isoWeek";
+import type { OutlineMentionsData } from "./outlineMentions";
+import type { OutlineSnippetSegment } from "./outlineSnippet";
 
 export type ProjectStatus =
   | "PLANNING"
@@ -37,7 +39,6 @@ export interface UserSummary {
   username: string;
   email: string;
   role: Role;
-  permissions: string[];
   /** Inactive accounts stay in the list; pickers filter them out. */
   active: boolean;
   avatarUrl: string | null;
@@ -95,12 +96,20 @@ export interface CustomerSummary {
   accountManager: string | null;
   solutionArchitect: string | null;
   description: string;
+  /** Optional http(s) link to the customer's Outline page or collection. */
+  outlineUrl: string | null;
   createdAt: string;
   // TAM ownership (Decision 8, daily-review-v2-spec.md §3) — gated by
   // `project:write`, the same permission the customer form already requires.
   tamId: number | null;
   tam: { id: number; username: string } | null;
   _count: { projects: number };
+  /**
+   * Server-computed for the caller (GET /customers and GET /customers/:id):
+   * may they reassign this customer's owner? The rule counts projects the
+   * caller cannot see, which the client cannot.
+   */
+  canChangeOwner?: boolean;
   // GET /customers only (backend/src/routes/customers.ts): overdue tasks and
   // open risks summed over the caller's visible projects of this customer,
   // plus the weekly update filed for the current ISO week (null = none).
@@ -174,6 +183,8 @@ export interface ProjectSummary {
   id: number;
   name: string;
   description: string | null;
+  /** Optional http(s) link to the project's Outline page or collection. */
+  outlineUrl: string | null;
   status: ProjectStatus;
   tamId: number;
   customerId: number | null;
@@ -224,6 +235,7 @@ export type ActivityEntityType =
   | "risk"
   | "note"
   | "member"
+  | "epic"
   | "share_link";
 export type ActivityAction = "created" | "updated" | "deleted" | "added" | "removed";
 
@@ -690,6 +702,15 @@ export interface ProjectNotesWindow {
 }
 
 export const queryKeys = {
+  // Outline base URL for every signed-in user (sidebar link); the admin
+  // settings live under adminQueryKeys.outlineSettings.
+  outlineConfig: ["outline", "config"] as const,
+  // B6 (Docs tab / Settings connect): the signed-in user's Outline connection,
+  // the workspace templates, and a project's / customer's page tree.
+  outlineMe: ["outline", "me"] as const,
+  outlineTemplates: ["outline", "templates"] as const,
+  outlineDocsAll: ["outline", "docs"] as const,
+  outlineDocs: (scope: OutlineDocsScope, id: number) => ["outline", "docs", scope, id] as const,
   overview: ["overview"] as const,
   users: ["users"] as const,
   projects: (filter?: ProjectsFilter) => ["projects", filter ?? {}] as const,
@@ -748,6 +769,14 @@ export const queryKeys = {
   tasks: (filter?: TasksFilter) => ["tasks", filter ?? {}] as const,
   comments: (taskId: number) => ["tasks", taskId, "comments"] as const,
   search: (q: string) => ["search", q] as const,
+  // B7: ⌘K Outline group and "Mentioned in Outline" (task panel, project Overview).
+  // Prefix keys: everything a disconnect / address change must drop.
+  outlineMentionsAll: ["outline", "mentions"] as const,
+  outlineSearchAll: ["outline", "search"] as const,
+  outlineSearch: (q: string) => ["outline", "search", q] as const,
+  taskOutlineMentions: (taskId: number) => ["outline", "mentions", "task", taskId] as const,
+  projectOutlineMentions: (projectId: number) =>
+    ["outline", "mentions", "project", projectId] as const,
   executiveReport: () => ["executive-report"] as const,
   // `today` is folded into the key by the caller (see useDailyReview) —
   // same day-boundary rationale as useOverview/useExecutiveReport below.
@@ -865,7 +894,7 @@ export interface NavBadgesResponse {
 
 // Light sidebar counts — 60 s fresh, refetched when the tab regains focus so
 // a review marked elsewhere (or a new day) shows up without a page reload.
-export function useNavBadges() {
+export function useNavBadges(enabled = true) {
   const today = dateToDay(new Date())!;
   return useQuery({
     queryKey: queryKeys.navBadges(today),
@@ -874,6 +903,7 @@ export function useNavBadges() {
     staleTime: 60_000,
     refetchOnWindowFocus: true,
     placeholderData: (prev) => prev,
+    enabled,
   });
 }
 
@@ -882,22 +912,23 @@ export function useNavBadges() {
 // request that's guaranteed to 400. `placeholderData` keeps the previous
 // page of results rendered while the next keystroke's query is in flight —
 // prevents the list flashing empty on every char.
-export function useSearch(q: string) {
+export function useSearch(q: string, allowed = true) {
   return useQuery<SearchResults>({
     queryKey: queryKeys.search(q),
     queryFn: ({ signal }) =>
       apiRequest<SearchResults>(`/search?q=${encodeURIComponent(q)}`, { signal }),
-    enabled: q.trim().length >= 2,
+    enabled: allowed && q.trim().length >= 2,
     staleTime: 30_000,
     placeholderData: (prev) => prev,
   });
 }
 
-export function useUsers() {
+export function useUsers(enabled = true) {
   return useQuery({
     queryKey: queryKeys.users,
     queryFn: ({ signal }) => apiRequest<UserSummary[]>("/users", { signal }),
     staleTime: 60_000,
+    enabled,
   });
 }
 
@@ -970,7 +1001,7 @@ export function useLiveRefresh() {
   return liveRefreshOptions(qc);
 }
 
-export function useCustomers() {
+export function useCustomers(enabled = true) {
   // `health.overdueCount` depends on the caller's local day — see useProjects.
   // The day is appended to the key (the bare ["customers"] prefix that
   // mutations invalidate still matches it).
@@ -980,6 +1011,7 @@ export function useCustomers() {
     queryFn: ({ signal }) =>
       apiRequest<CustomerSummary[]>(`/customers?today=${today}`, { signal }),
     staleTime: 30_000,
+    enabled,
   });
 }
 
@@ -1406,6 +1438,8 @@ export function useTasksWithTotal(filter: TasksFilter = {}) {
 export interface CreateProjectInput {
   name: string;
   description?: string;
+  /** Optional http(s) link to the project's Outline page; null for none. Validated server-side. */
+  outlineUrl?: string | null;
   tamId?: number;
   customerId: number;
   status?: ProjectStatus;
@@ -1448,6 +1482,7 @@ export function useCreateProject() {
 export interface UpdateProjectInput {
   name?: string;
   description?: string | null;
+  outlineUrl?: string | null;
   status?: ProjectStatus;
   tamId?: number;
   customerId?: number;
@@ -1468,6 +1503,9 @@ export function useUpdateProject(id: number) {
       qc.invalidateQueries({ queryKey: queryKeys.customers });
       // excludeFromPortfolio changes reshape the executive roll-up too.
       qc.invalidateQueries({ queryKey: queryKeys.executiveReport() });
+      // The Docs tab resolves the project's Outline link: a changed link must not
+      // keep showing the old page tree.
+      qc.invalidateQueries({ queryKey: queryKeys.outlineDocs("projects", id) });
     },
   });
 }
@@ -1498,6 +1536,7 @@ export interface CustomerInput {
   accountManager?: string;
   solutionArchitect?: string;
   description: string;
+  outlineUrl?: string | null;
   // TAM ownership gate is `project:write` (Decision 8) — the same
   // permission this form already requires to submit; there's no
   // `customer:write`. Nullable to support unassigning.
@@ -1529,6 +1568,8 @@ export function useUpdateCustomer(id: number) {
       // Reassigning `tamId` can add or remove this customer from the Daily
       // Review page's customer scope (Decision 14).
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      // Same for the customer Docs tab and its Outline link.
+      qc.invalidateQueries({ queryKey: queryKeys.outlineDocs("customers", id) });
     },
   });
 }
@@ -2268,6 +2309,7 @@ export function useCreateEpic(projectId: number) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projectEpics(projectId) });
+      invalidateProjectActivity(qc, projectId);
     },
   });
 }
@@ -2291,6 +2333,7 @@ export function useUpdateEpic() {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: queryKeys.projectEpics(data.projectId) });
       qc.invalidateQueries({ queryKey: queryKeys.epic(data.id) });
+      invalidateProjectActivity(qc, data.projectId);
     },
   });
 }
@@ -2311,6 +2354,7 @@ export function useDeleteEpic() {
       // so the epic chip clears everywhere it was rendered.
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
       qc.invalidateQueries({ queryKey: ["tasks"] });
+      invalidateProjectActivity(qc, projectId);
     },
   });
 }
@@ -3413,21 +3457,10 @@ export function useLogTicketTimeFor() {
       // an install's TimeSpent creation ever bumps the ticket's own
       // `last_update`.
       qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(variables.customerId) });
+      // A task panel's ticket chip reads the by-ref cache — refresh it too.
+      qc.invalidateQueries({ queryKey: queryKeys.itopTicketByRefRoot });
     },
   });
-}
-
-/** Thin wrapper over `useLogTicketTimeFor` fixing `ticketId`/`customerId` —
- * `TicketTimer.tsx`'s only call site. */
-export function useLogTicketTime(ticketId: number, customerId: number) {
-  const mutation = useLogTicketTimeFor();
-  function mutate(
-    input: { startedAt: string; endedAt: string; title?: string },
-    options?: Parameters<typeof mutation.mutate>[1],
-  ) {
-    return mutation.mutate({ ticketId, customerId, ...input }, options);
-  }
-  return { ...mutation, mutate };
 }
 
 // `onSuccess`'s cache write is deliberately conditional: a `staleAfterWrite`
@@ -3479,6 +3512,8 @@ export function useTicketActionFor(customerId: number) {
         );
       }
       qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(customerId) });
+      // A task panel's ticket chip reads the by-ref cache — refresh it too.
+      qc.invalidateQueries({ queryKey: queryKeys.itopTicketByRefRoot });
       qc.invalidateQueries({ queryKey: queryKeys.itopDailyRoot });
     },
   });
@@ -3518,6 +3553,8 @@ export function useAddTicketLog(ticketId: number, customerId: number) {
         );
       }
       qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(customerId) });
+      // A task panel's ticket chip reads the by-ref cache — refresh it too.
+      qc.invalidateQueries({ queryKey: queryKeys.itopTicketByRefRoot });
       qc.invalidateQueries({ queryKey: queryKeys.itopDailyRoot });
     },
   });
@@ -3608,6 +3645,8 @@ export function useCreateTicket(customerId: number) {
         });
       }
       qc.invalidateQueries({ queryKey: queryKeys.customerTicketsRoot(customerId) });
+      // A task panel's ticket chip reads the by-ref cache — refresh it too.
+      qc.invalidateQueries({ queryKey: queryKeys.itopTicketByRefRoot });
       qc.invalidateQueries({ queryKey: queryKeys.itopDailyRoot });
     },
   });
@@ -3779,6 +3818,7 @@ export const adminQueryKeys = {
   itopOrganizations: ["admin", "itop", "organizations"] as const,
   itopCustomers: ["admin", "itop", "customers"] as const,
   itopPersons: ["admin", "itop", "persons"] as const,
+  outlineSettings: ["admin", "settings", "outline"] as const,
 };
 
 export interface AdminRole {
@@ -3902,8 +3942,23 @@ export function useAdminSetActive() {
 
 export function useChangeMyPassword() {
   return useMutation({
-    mutationFn: (input: { currentPassword: string; newPassword: string }) =>
-      apiRequest<void>("/auth/change-password", { method: "POST", body: input }),
+    mutationFn: async (input: { currentPassword: string; newPassword: string }) => {
+      // Requests already in flight answer 401 once the server has bumped the
+      // token version; api.ts must not read that as a sign-out meanwhile.
+      setTokenRotating(true);
+      try {
+        const res = await apiRequest<{ token: string }>("/auth/change-password", {
+          method: "POST",
+          body: input,
+        });
+        // The change revoked the token this tab holds: store the replacement
+        // before any other request fires, so none is sent with the stale one.
+        setToken(res.token);
+        return res;
+      } finally {
+        setTokenRotating(false);
+      }
+    },
   });
 }
 
@@ -4105,6 +4160,208 @@ export interface ItopPersonsResponse {
   users: ItopPersonRow[];
   unmatched: number;
 }
+
+// ---- Outline links (docs/archive/plans/outline-integration.md, Phase A) -----
+// Solvro only links to Outline: a base URL for the sidebar item, and optional
+// per-project / per-customer links. No Outline API is called.
+
+export interface OutlineConfig {
+  baseUrl: string | null;
+}
+
+export function useOutlineConfig() {
+  return useQuery({
+    queryKey: queryKeys.outlineConfig,
+    queryFn: ({ signal }) => apiRequest<OutlineConfig>("/outline/config", { signal }),
+    staleTime: 10 * 60_000,
+  });
+}
+
+export interface OutlineAdminSettings {
+  baseUrl: string | null;
+  /** The OAuth client id registered in Outline; the secret is write-only (only `…Set` is returned). */
+  oauthClientId: string | null;
+  oauthClientSecretSet: boolean;
+  webhookSecretSet: boolean;
+  lastWebhookAt: string | null;
+  /** False when the server has no APP_URL (production has no default). */
+  appUrlConfigured: boolean;
+  appUrlWarning: string | null;
+  /** Browser-facing URLs to register in Outline; null while APP_URL is unset. */
+  redirectUri: string | null;
+  webhookUrl: string | null;
+  updatedAt: string;
+  updatedBy: { id: number; username: string } | null;
+}
+
+export function useOutlineAdminSettings() {
+  return useQuery({
+    queryKey: adminQueryKeys.outlineSettings,
+    queryFn: ({ signal }) =>
+      apiRequest<OutlineAdminSettings>("/admin/settings/outline", { signal }),
+  });
+}
+
+export function useUpdateOutlineAdminSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    // Partial: omitted fields are kept. `oauthClientSecret` is write-only; null clears.
+    mutationFn: (input: {
+      baseUrl?: string | null;
+      oauthClientId?: string | null;
+      oauthClientSecret?: string | null;
+    }) =>
+      apiRequest<OutlineAdminSettings>("/admin/settings/outline", {
+        method: "PATCH",
+        body: input,
+      }),
+    onSuccess: (fresh) => {
+      qc.setQueryData(adminQueryKeys.outlineSettings, fresh);
+      // The sidebar item reads the user-facing copy of the same value.
+      qc.invalidateQueries({ queryKey: queryKeys.outlineConfig });
+      // Changing the address or the OAuth client disconnects every user server-side.
+      qc.invalidateQueries({ queryKey: queryKeys.outlineMe });
+      qc.invalidateQueries({ queryKey: queryKeys.outlineDocsAll });
+      qc.removeQueries({ queryKey: queryKeys.outlineMentionsAll });
+      qc.removeQueries({ queryKey: queryKeys.outlineSearchAll });
+    },
+  });
+}
+
+// ---- Outline inside Solvro (B6: docs/archive/plans/outline-integration.md) ----
+// Connect card (Settings), Docs tab + New doc dialog, and the Admin API/webhook
+// cards. Every Outline call runs under the signed-in user's own OAuth token on the
+// server; none of these hooks ever carries a token or page text.
+
+export interface OutlineMe {
+  configured: boolean;
+  connected: boolean;
+  outlineEmail: string | null;
+  expiresAt: string | null;
+}
+
+/** Pass `enabled = false` until the Outline address is known to be set: no Outline, no request. */
+export function useOutlineMe(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.outlineMe,
+    queryFn: ({ signal }) => apiRequest<OutlineMe>("/outline/me", { signal }),
+    staleTime: 60_000,
+    enabled,
+  });
+}
+
+/** Starts the OAuth connection: resolves to Outline's authorize URL (a top-level navigation target). */
+export function useStartOutlineConnect() {
+  return useMutation({
+    mutationFn: () =>
+      apiRequest<{ authorizeUrl: string }>("/outline/oauth/start", { method: "POST" }),
+  });
+}
+
+export function useDisconnectOutline() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiRequest<void>("/outline/me", { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.outlineMe });
+      qc.invalidateQueries({ queryKey: queryKeys.outlineDocsAll });
+      qc.removeQueries({ queryKey: queryKeys.outlineTemplates });
+      // B7's Outline-backed data holds page titles the user can no longer open.
+      qc.removeQueries({ queryKey: queryKeys.outlineMentionsAll });
+      qc.removeQueries({ queryKey: queryKeys.outlineSearchAll });
+    },
+  });
+}
+
+export type OutlineDocsScope = "projects" | "customers";
+
+export interface OutlineDocNode {
+  id: string;
+  title: string;
+  /** Absolute Outline URL. */
+  url: string;
+  children: OutlineDocNode[];
+}
+
+/** What the Docs tab shows for the link: null anchor = no link; the flag states carry no tree. */
+export interface OutlineDocsResponse {
+  anchor:
+    | null
+    | { outside: true }
+    | { unsupported: true }
+    | { hidden: true }
+    | { kind: "doc" | "collection"; title: string; url: string };
+  tree?: OutlineDocNode[];
+}
+
+/** Errors that a retry cannot fix: not connected (409), rate limited (429), reconnect needed. */
+function noRetryOnOutlineError(failureCount: number, error: unknown): boolean {
+  if (error instanceof ApiError && [404, 409, 429].includes(error.status)) return false;
+  return failureCount < 1;
+}
+
+export function useOutlineDocs(scope: OutlineDocsScope, id: number | null) {
+  return useQuery({
+    queryKey: queryKeys.outlineDocs(scope, id ?? 0),
+    queryFn: ({ signal }) =>
+      apiRequest<OutlineDocsResponse>(`/${scope}/${id}/outline/docs`, { signal }),
+    enabled: id !== null,
+    // The server caches the tree for 60 s per user (Outline's rate limit is shared).
+    staleTime: 60_000,
+    retry: noRetryOnOutlineError,
+  });
+}
+
+export interface OutlineTemplate {
+  id: string;
+  title: string;
+}
+
+export function useOutlineTemplates(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.outlineTemplates,
+    queryFn: ({ signal }) => apiRequest<OutlineTemplate[]>("/outline/templates", { signal }),
+    enabled,
+    staleTime: 5 * 60_000,
+    retry: noRetryOnOutlineError,
+  });
+}
+
+export interface CreateOutlineDocInput {
+  title: string;
+  templateId?: string;
+  parentDocumentId?: string;
+  publish: boolean;
+}
+
+export function useCreateOutlineDoc(scope: OutlineDocsScope, id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateOutlineDocInput) =>
+      apiRequest<{ id: string; title: string; url: string }>(`/${scope}/${id}/outline/docs`, {
+        method: "POST",
+        body: input,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.outlineDocs(scope, id) });
+    },
+  });
+}
+
+/** Generates a new webhook signing secret; the plaintext is in the response and never again. */
+export function useRotateOutlineWebhookSecret() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiRequest<{ webhookSecret: string }>("/admin/settings/outline/webhook-secret/rotate", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: adminQueryKeys.outlineSettings });
+    },
+  });
+}
+// ---- end Outline inside Solvro (B6) ----
 
 export function useItopSettings() {
   return useQuery({
@@ -4375,6 +4632,58 @@ export function useDeleteDependency(projectId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projectDependencies(projectId) });
     },
+  });
+}
+
+// ---- Outline in Solvro, part 2 (B7: docs/archive/plans/outline-integration.md) ----
+// ⌘K "Outline" group (its OWN query, so Solvro results never wait on Outline) and
+// "Mentioned in Outline" on a task / project. Both run under the signed-in user's
+// own Outline token on the server and carry no page text.
+
+export interface OutlineSearchResult {
+  id: string;
+  title: string;
+  /** Absolute Outline URL; still goes through `safeOutlineHref` before it reaches an href. */
+  url: string;
+  /** Plain-text segments with highlight flags - rendered as text, never as HTML. */
+  snippet: OutlineSnippetSegment[];
+}
+
+export function useOutlineSearch(q: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.outlineSearch(q),
+    queryFn: ({ signal }) =>
+      apiRequest<OutlineSearchResult[]>(`/outline/search?q=${encodeURIComponent(q)}`, { signal }),
+    enabled: enabled && q.trim().length >= 2,
+    // Outline's search limit is shared by every Solvro user (one client IP).
+    staleTime: 60_000,
+    retry: noRetryOnOutlineError,
+    // Keep the previous rows up while the next keystroke's query is in flight; the
+    // palette gates consumption on its live query, so a reopen never shows them.
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useTaskOutlineMentions(taskId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.taskOutlineMentions(taskId),
+    queryFn: ({ signal }) =>
+      apiRequest<OutlineMentionsData>(`/tasks/${taskId}/outline-mentions`, { signal }),
+    enabled,
+    // The server caches per-viewer page access for 5 minutes; a minute is plenty here.
+    staleTime: 60_000,
+    retry: noRetryOnOutlineError,
+  });
+}
+
+export function useProjectOutlineMentions(projectId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.projectOutlineMentions(projectId),
+    queryFn: ({ signal }) =>
+      apiRequest<OutlineMentionsData>(`/projects/${projectId}/outline-mentions`, { signal }),
+    enabled,
+    staleTime: 60_000,
+    retry: noRetryOnOutlineError,
   });
 }
 

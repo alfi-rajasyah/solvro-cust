@@ -2,11 +2,16 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AdminGuard } from "@/components/AdminGuard";
 import { AuthGuard } from "@/components/AuthGuard";
 import { ExecutiveGuard } from "@/components/ExecutiveGuard";
+import { PermissionGuard } from "@/components/PermissionGuard";
 import { Shell } from "@/components/layout/Shell";
 import { Admin } from "@/pages/Admin";
 import { CustomerDetail } from "@/pages/CustomerDetail";
 import { Customers } from "@/pages/Customers";
 import { DailyReview } from "@/pages/DailyReview";
+import { EmbedInvalidLink } from "@/components/embed/EmbedInvalidLink";
+import { EmbedStatus } from "@/pages/embed/EmbedStatus";
+import { EmbedTasks } from "@/pages/embed/EmbedTasks";
+import { EmbedTimeline } from "@/pages/embed/EmbedTimeline";
 import { Executive } from "@/pages/Executive";
 import { Help } from "@/pages/Help";
 import { Login } from "@/pages/Login";
@@ -25,6 +30,7 @@ import { ProjectList } from "@/pages/views/ProjectList";
 import { ProjectOverview } from "@/pages/views/ProjectOverview";
 import { ProjectRisks } from "@/pages/views/ProjectRisks";
 import { ProjectServices } from "@/pages/views/ProjectServices";
+import { ProjectDocs } from "@/pages/views/ProjectDocs";
 import { ProjectTimeline } from "@/pages/views/ProjectTimeline";
 
 /**
@@ -42,6 +48,17 @@ export function App() {
       <Route path="/login" element={<Login />} />
       {/* Guest link view: outside AuthGuard and the app shell, never redirects. */}
       <Route path="/share/:token" element={<PublicShare />} />
+      {/* Unknown paths under the two framable prefixes render in place. The global
+          catch-all below redirects to the app, which must never happen inside a
+          frame that was allowed by the widened frame-ancestors for these prefixes. */}
+      <Route path="share/*" element={<EmbedInvalidLink kind="guest" />} />
+      {/* Outline embeds: outside AuthGuard and the app shell (no sidebar, top bar
+          or install banner). They settle sign-in themselves and never redirect to
+          the login form, which cannot run inside a frame. */}
+      <Route path="embed/projects/:id/tasks" element={<EmbedTasks />} />
+      <Route path="embed/projects/:id/status" element={<EmbedStatus />} />
+      <Route path="embed/projects/:id/timeline" element={<EmbedTimeline />} />
+      <Route path="embed/*" element={<EmbedInvalidLink kind="embed" />} />
 
       <Route
         element={
@@ -63,13 +80,53 @@ export function App() {
           <Route path="timeline" element={<ProjectTimeline />} />
           <Route path="risks" element={<ProjectRisks />} />
           <Route path="services" element={<ProjectServices />} />
+          <Route path="docs" element={<ProjectDocs />} />
         </Route>
-        <Route path="customers" element={<Customers />} />
-        <Route path="customers/:id" element={<CustomerDetail />} />
-        <Route path="daily-review" element={<DailyReview />} />
-        <Route path="weekly-sync" element={<WeeklySync />} />
+        {/* Customers and Daily Review are gated on project:read, like their nav
+            entries and API routes (docs/archive/plans/internal-sync.md). */}
+        <Route
+          path="customers"
+          element={
+            <PermissionGuard permission="project:read">
+              <Customers />
+            </PermissionGuard>
+          }
+        />
+        <Route
+          path="customers/:id"
+          element={
+            <PermissionGuard permission="project:read">
+              <CustomerDetail />
+            </PermissionGuard>
+          }
+        />
+        <Route
+          path="daily-review"
+          element={
+            <PermissionGuard permission="project:read">
+              <DailyReview />
+            </PermissionGuard>
+          }
+        />
+        <Route
+          path="weekly-sync"
+          element={
+            <PermissionGuard permission="project:read">
+              <WeeklySync />
+            </PermissionGuard>
+          }
+        />
         <Route path="tasks" element={<Tasks />} />
-        <Route path="utilization" element={<Utilization />} />
+        {/* Utilization is gated on project:read, like its nav entry — hours mean
+            nothing without project access (docs/archive/plans/internal-sync.md). */}
+        <Route
+          path="utilization"
+          element={
+            <PermissionGuard permission="project:read">
+              <Utilization />
+            </PermissionGuard>
+          }
+        />
         <Route path="work-logs" element={<Navigate to="/utilization" replace />} />
         <Route
           path="executive"

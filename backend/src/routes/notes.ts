@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth } from "../http/auth.js";
+import { requireAuth, requirePermission } from "../http/auth.js";
 import { validate } from "../http/validate.js";
 import { customerVisibilityFilter, projectVisibilityFilter } from "../lib/visibility.js";
 import { isValidDayString, utcMidnightOfDayString, utcStartOfToday } from "../lib/dateBoundary.js";
@@ -43,7 +43,11 @@ function dayOf(d: Date): string {
 
 export const notesRouter = Router();
 
-notesRouter.use(requireAuth);
+// `project:read` gate (2026-10 security hardening): the feed aggregates notes
+// a caller could not read one by one — a PENDING account (no permissions)
+// used to read operations notes on unowned customers here while
+// GET /customers/:id/notes refused it. Same gate as the direct routes.
+notesRouter.use(requireAuth, requirePermission("project:read"));
 
 notesRouter.get(
   "/recent",

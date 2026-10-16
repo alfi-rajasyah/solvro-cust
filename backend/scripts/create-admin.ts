@@ -38,6 +38,9 @@ async function main() {
       passwordHash,
       roleId: adminRole.id,
       active: true,
+      // A reset through this script ends the account's existing sessions,
+      // like an admin reset in the app (docs/archive/plans/internal-sync.md).
+      tokenVersion: { increment: 1 },
     },
     create: {
       username,

@@ -2,13 +2,35 @@ import type { IncomingMessage } from "node:http";
 import { stdSerializers, type Logger } from "pino";
 import { pinoHttp } from "pino-http";
 
-// Request logging with secrets scrubbed. Two things must never reach a log:
+// Request logging with secrets scrubbed. Three things must never reach a log:
+//  - the Authorization header (a bearer JWT, valid for JWT_EXPIRES_IN);
+//  - any other secret-bearing header: the iTop webhook secret
+//    (X-Solvro-Webhook-Secret), the Outline webhook signature
+//    (Outline-Signature) and cookies;
 //  - a guest-link token (GET /public/share/<token>, and the page URL
 //    /share/<token> that shows up in a Referer) — anyone reading the logs
 //    could otherwise open the link;
-//  - the Authorization header (a bearer JWT).
+//  - the Outline OAuth callback's `code` (a single-use authorization code) and
+//    `state` query parameters (GET /outline/oauth/callback).
 
 const SHARE_TOKEN_IN_PATH = /(\/share\/)[^/?#\s"']+/gi;
+
+const OUTLINE_CALLBACK_PATH = /\/outline\/oauth\/callback\/*(?=[?#]|$)/i;
+const OUTLINE_CALLBACK_PARAMS = /([?&](?:code|state)=)[^&#\s"']*/gi;
+
+/** Masks `code`/`state` in a URL that points at the Outline OAuth callback; other URLs pass through. */
+export function redactOutlineOAuthParams(text: string): string {
+  return OUTLINE_CALLBACK_PATH.test(text) ? text.replace(OUTLINE_CALLBACK_PARAMS, "$1[redacted]") : text;
+}
+
+/** Header names (lower-case, as pino's serializer emits them) whose value is masked. */
+const SECRET_HEADERS = [
+  "authorization",
+  "x-solvro-webhook-secret",
+  "outline-signature",
+  "cookie",
+  "set-cookie",
+] as const;
 
 /** Replaces the token segment of any `/share/<token>` (page or API path). */
 export function redactShareTokens(text: string): string {
@@ -25,18 +47,43 @@ type SerializedReq = ReturnType<typeof stdSerializers.req>;
  */
 export function redactSerializedRequest(s: SerializedReq): SerializedReq {
   const headers = { ...s.headers } as Record<string, unknown>;
-  if (headers.authorization !== undefined) headers.authorization = "[redacted]";
+  for (const name of SECRET_HEADERS) {
+    if (headers[name] !== undefined) headers[name] = "[redacted]";
+  }
   for (const name of ["referer", "referrer"]) {
     const v = headers[name];
     if (typeof v === "string") headers[name] = redactShareTokens(v);
   }
-  return { ...s, url: redactShareTokens(String(s.url ?? "")), headers } as SerializedReq;
+  const url = redactOutlineOAuthParams(redactShareTokens(String(s.url ?? "")));
+  // pino's req serializer also emits the parsed query object; mask it on the callback too.
+  const out = { ...s, url, headers } as SerializedReq & { query?: Record<string, unknown> };
+  if (out.query && OUTLINE_CALLBACK_PATH.test(String(s.url ?? ""))) {
+    const query = { ...out.query };
+    for (const key of ["code", "state"]) if (query[key] !== undefined) query[key] = "[redacted]";
+    out.query = query;
+  }
+  return out;
+}
+
+type SerializedRes = ReturnType<typeof stdSerializers.res>;
+
+/**
+ * Same masking for the RESPONSE headers pino-http logs (`Set-Cookie` only ever
+ * appears there; no route sets one today, so this guards a future one).
+ */
+export function redactSerializedResponse(s: SerializedRes): SerializedRes {
+  if (!s.headers) return s;
+  const headers = { ...s.headers } as Record<string, unknown>;
+  for (const name of SECRET_HEADERS) {
+    if (headers[name] !== undefined) headers[name] = "[redacted]";
+  }
+  return { ...s, headers } as SerializedRes;
 }
 
 export function createRequestLogger(logger: Logger) {
   return pinoHttp({
     logger,
-    serializers: { req: redactSerializedRequest },
+    serializers: { req: redactSerializedRequest, res: redactSerializedResponse },
     // The address `req.ip` resolves to under TRUST_PROXY — what the public
     // share rate limiter keys on. `remoteAddress` alone is the proxy behind nginx.
     customProps: (req) => ({ clientIp: (req as IncomingMessage & { ip?: string }).ip }),

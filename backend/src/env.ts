@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { z } from "zod";
 import { parseTrustProxy } from "./http/trustProxy.js";
+import { resolveAppUrl } from "./lib/outline/appUrl.js";
 
 const schema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -20,6 +21,29 @@ const schema = z.object({
       },
     ),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
+  // The public origin of this Solvro deployment (e.g. https://solvro.acme.com):
+  // the Outline OAuth redirect URI / webhook URL are derived from it and Solvro
+  // links in Outline pages are recognised against it. CORS_ORIGIN cannot serve
+  // (comma list or `*`). A bare http(s) origin - no path, query or login.
+  // Defaults to the dev address outside production; in production an unset
+  // value stays null and the Outline features answer 409 outline_app_url_unset
+  // (requireAppUrl) rather than building localhost links.
+  // docs/archive/plans/outline-integration.md (F13).
+  APP_URL: z
+    .string()
+    .optional()
+    .transform((value, ctx) => {
+      const resolved = resolveAppUrl(value, process.env.NODE_ENV ?? "development");
+      if (resolved === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "APP_URL must be the public Solvro origin: an http(s) address with no path, query string, fragment or login (e.g. https://solvro.acme.com)",
+        });
+        return z.NEVER;
+      }
+      return resolved;
+    }),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   // How many reverse-proxy hops (or which subnets) `req.ip` may trust, i.e.
   // read from X-Forwarded-For — a hop count ("1" = nginx only, "2" = a tunnel or

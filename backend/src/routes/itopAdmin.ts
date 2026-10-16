@@ -24,7 +24,7 @@ import {
   makeItopClient,
 } from "../lib/itop/config.js";
 import { ITOP_ORGANIZATION_OUTPUT_FIELDS, type ItopOrganizationFields } from "../lib/itop/types.js";
-import { syncTickets, syncUsers } from "../lib/itop/sync.js";
+import { ADVISORY_LOCK_KEY, syncTickets, syncUsers } from "../lib/itop/sync.js";
 import { isValidTimeZone, utcToZonedWallTime, zonedWallTimeToUtc } from "../lib/itop/timezone.js";
 // One-directional import (itop.ts never imports from this file) — busts
 // Task 6.2's GET /services cache alongside every place here that busts the
@@ -526,6 +526,74 @@ itopAdminRouter.get("/customers", async (_req, res) => {
   res.json(await listCustomerOrgRows());
 });
 
+// Writes a customer's iTop mapping AND re-links the ticket snapshot in one
+// transaction, so itop_tickets.customer_id never goes stale: tickets linked to
+// this customer via a previous org are released, and tickets already in the
+// snapshot for the newly mapped org are linked immediately (without waiting
+// for the next sync tick to re-resolve them).
+//
+// The transaction's FIRST statements bound the wait (`lock_timeout`, local to
+// this transaction) and take the sync's own advisory lock (`_xact`, released at
+// COMMIT/ROLLBACK): a remap waits briefly for an in-flight sync instead of
+// interleaving with it (a sync resolving tickets against the old org map would
+// re-link rows the remap just moved), and a sync that starts while the remap
+// holds the lock skips via its try-lock. A sync that outlasts the wait answers
+// 409 `itop_sync_in_progress` — never a request hanging for the length of a
+// sync — and nothing has changed.
+let mappingLockTimeoutMs = 15_000;
+/** Test hook: shortens (or restores) the wait for the sync lock. */
+export function setMappingLockTimeoutMs(ms: number): void {
+  mappingLockTimeoutMs = ms;
+}
+
+/** Postgres 55P03 lock_not_available, however Prisma surfaces it for a raw statement. */
+function isLockNotAvailable(err: unknown): boolean {
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    const meta = err.meta as { code?: unknown; message?: unknown } | undefined;
+    if (meta?.code === "55P03") return true;
+  }
+  const message = err instanceof Error ? err.message : "";
+  return message.includes("55P03") || message.includes("lock timeout");
+}
+
+async function setCustomerOrgMapping(
+  customerId: number,
+  mapping: { itopOrgId: number; itopOrgName: string } | null,
+) {
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT set_config('lock_timeout', ${`${mappingLockTimeoutMs}ms`}, true)`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ADVISORY_LOCK_KEY}))`;
+        const updated = await tx.customer.update({
+          where: { id: customerId },
+          data: { itopOrgId: mapping?.itopOrgId ?? null, itopOrgName: mapping?.itopOrgName ?? null },
+        });
+        await tx.itopTicket.updateMany({
+          where: {
+            customerId,
+            ...(mapping ? { orgId: { not: mapping.itopOrgId } } : {}),
+          },
+          data: { customerId: null },
+        });
+        if (mapping) {
+          await tx.itopTicket.updateMany({
+            where: { orgId: mapping.itopOrgId },
+            data: { customerId },
+          });
+        }
+        return updated;
+      },
+      { timeout: 30_000 },
+    );
+  } catch (err) {
+    if (isLockNotAvailable(err)) {
+      throw new HttpError(409, "itop_sync_in_progress", "An iTop sync is running. Try again in a minute.");
+    }
+    throw err;
+  }
+}
+
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 const updateCustomerOrgSchema = z.object({ itopOrgId: z.number().int().positive().nullable() });
 
@@ -541,10 +609,7 @@ itopAdminRouter.patch(
     if (!customer) throw new HttpError(404, "not_found", "Customer not found");
 
     if (itopOrgId === null) {
-      const updated = await prisma.customer.update({
-        where: { id },
-        data: { itopOrgId: null, itopOrgName: null },
-      });
+      const updated = await setCustomerOrgMapping(id, null);
       res.json(toCustomerRow(updated));
       return;
     }
@@ -556,10 +621,7 @@ itopAdminRouter.patch(
     }
 
     try {
-      const updated = await prisma.customer.update({
-        where: { id },
-        data: { itopOrgId, itopOrgName: org.name },
-      });
+      const updated = await setCustomerOrgMapping(id, { itopOrgId, itopOrgName: org.name });
       res.json(toCustomerRow(updated));
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
@@ -601,10 +663,7 @@ itopAdminRouter.post("/customers/automatch", async (_req, res) => {
     if (candidates.length === 1) {
       const org = candidates[0];
       try {
-        await prisma.customer.update({
-          where: { id: customer.id },
-          data: { itopOrgId: org.id, itopOrgName: org.name },
-        });
+        await setCustomerOrgMapping(customer.id, { itopOrgId: org.id, itopOrgName: org.name });
         mappedOrgIds.add(org.id);
         matched += 1;
       } catch (err) {

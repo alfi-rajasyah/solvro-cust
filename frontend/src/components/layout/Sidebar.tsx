@@ -2,7 +2,8 @@ import { Fragment } from "react";
 import { NavLink } from "react-router-dom";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { NAV_COMMANDS, NAV_GROUPS, type NavCommand } from "@/lib/navCommands";
-import { useNavBadges } from "@/lib/queries";
+import { useNavBadges, useOutlineConfig } from "@/lib/queries";
+import { safeOutlineHref } from "@/lib/outlineUrl";
 import { useSidebar } from "./SidebarContext";
 import { BrandMark } from "@/components/BrandMark";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -104,10 +105,92 @@ function NavItem({
   );
 }
 
+// External link to the deployment's Outline (Admin › Outline sets the address).
+// Not a NAV_COMMANDS entry on purpose: that catalogue is route-only (routeMeta,
+// help content and the ⌘K palette all navigate inside the app), and an external
+// address has no route. Rendered last in the Workspace group, new tab, only when
+// an admin has set a base URL (docs/archive/plans/outline-integration.md §3).
+function OutlineNavItem({
+  href,
+  expanded,
+  onNavigate,
+}: {
+  href: string;
+  expanded: boolean;
+  onNavigate: () => void;
+}) {
+  const linkClass = [
+    "group relative flex items-center rounded-sm transition-colors duration-150 text-slate-400 hover:bg-white/5 hover:text-slate-100",
+    expanded ? "gap-2.5 px-3 py-2 text-[13px]" : "h-10 w-10 justify-center",
+  ].join(" ");
+
+  const content = (
+    <>
+      <span aria-hidden className="material-symbols-outlined text-[20px]">
+        menu_book
+      </span>
+      {expanded ? <span>Outline</span> : <span className="sr-only">Outline</span>}
+      {expanded && (
+        <span
+          aria-hidden
+          className="material-symbols-outlined ml-auto text-base text-slate-500 group-hover:text-slate-300"
+        >
+          open_in_new
+        </span>
+      )}
+      <span className="sr-only">(opens in a new tab)</span>
+    </>
+  );
+
+  if (expanded) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={onNavigate}
+        className={linkClass}
+        data-testid="sidebar-outline-link"
+      >
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={(props) => (
+          <a
+            {...props}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => {
+              props.onClick?.(e);
+              onNavigate();
+            }}
+            className={linkClass}
+            data-testid="sidebar-outline-link"
+          >
+            {content}
+          </a>
+        )}
+      />
+      <TooltipContent side="right" sideOffset={RAIL_TOOLTIP_OFFSET} positionerClassName="z-60">
+        Outline (opens in a new tab)
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function Sidebar() {
   const { expanded, toggle, close } = useSidebar();
   const { user } = useAuth();
-  const { data: badges } = useNavBadges();
+  // The counts are Daily Review scope (project data) — nothing to count, so no request, without project:read.
+  const { data: badges } = useNavBadges(hasPermission(user, "project:read"));
+  const { data: outline } = useOutlineConfig();
+  const outlineHref = safeOutlineHref(outline?.baseUrl);
   const visible = NAV_COMMANDS.filter((i) => !i.requires || hasPermission(user, i.requires));
   const groups = NAV_GROUPS.map((group) => ({
     group,
@@ -191,6 +274,9 @@ export function Sidebar() {
                       onNavigate={close}
                     />
                   ))}
+                  {group === "Workspace" && outlineHref && (
+                    <OutlineNavItem href={outlineHref} expanded={expanded} onNavigate={close} />
+                  )}
                 </div>
               </Fragment>
             ))}

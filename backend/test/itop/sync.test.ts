@@ -806,6 +806,78 @@ describe("syncTimeEntries", () => {
     expect(rows.map((r) => r.durationMinutes)).toEqual([50, 90]);
   });
 
+  it("skips a TimeSpent row without a parseable start_date instead of inventing one, and the run still succeeds", async () => {
+    const state = seedFakeItop();
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, "app-token-readonly");
+
+    const userA = await createUserWithRole("TAM");
+    await prisma.user.update({ where: { id: userA.userId }, data: { email: "rina.s@example.co.id" } });
+    await syncUsers();
+
+    const badId = state.nextId++;
+    state.timeSpent.set(badId, {
+      id: badId,
+      user_id: "1",
+      org_id: "1",
+      // Not empty: the fake applies the sync's `start_date >= cutoff` filter
+      // as a string comparison, so an empty value would never be returned at
+      // all. "z-..." sorts after any cutoff (the row IS returned) and still
+      // fails parseItopDate's strict shape check.
+      start_date: "z-not-a-date",
+      end_date: "",
+      duration: "3600",
+      title: "no start date",
+      ticketRef: "R-004512",
+    });
+
+    const result = await syncTimeEntries({ full: true });
+    expect(result.error).toBeUndefined();
+    expect(result.ran).toBe(true);
+    expect(await prisma.itopTimeEntry.findUnique({ where: { id: badId } })).toBeNull();
+    // A start-date skip counts in `skipped`, same as a row that throws.
+    expect(result.skipped).toBe(1);
+    // Rina's well-formed fixture rows still land.
+    expect(await prisma.itopTimeEntry.count({ where: { itopUserId: 1 } })).toBeGreaterThan(0);
+  });
+
+  it("a TimeSpent row that throws on upsert (an out-of-range duration) is counted in skipped, and a previously stored copy survives the full-sync prune", async () => {
+    const state = seedFakeItop();
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, "app-token-readonly");
+
+    const userA = await createUserWithRole("TAM");
+    await prisma.user.update({ where: { id: userA.userId }, data: { email: "rina.s@example.co.id" } });
+    await syncUsers();
+
+    const first = await syncTimeEntries({ full: true });
+    expect(first.error).toBeUndefined();
+    expect(first.skipped).toBe(0);
+
+    // The Rina/90-minute fixture row (unique duration among the seeds).
+    const [targetId, target] = [...state.timeSpent.entries()].find(([, e]) => e.duration === String(90 * 60))!;
+    const stored = await prisma.itopTimeEntry.findUniqueOrThrow({ where: { id: targetId } });
+
+    // iTop now returns that same row with a duration whose minute count
+    // overflows the integer column: the upsert itself throws (a garbage
+    // user_id can't be used here — the fake's `user_id IN (...)` filter would
+    // simply not return the row), the loop counts it in `skipped` and carries on.
+    target.duration = "9999999999999";
+
+    const second = await syncTimeEntries({ full: true });
+    expect(second.ran).toBe(true);
+    expect(second.error).toBeUndefined();
+    expect(second.skipped).toBe(1);
+
+    // The row is still in seenIds, so the full-sync prune must not delete the
+    // copy stored from the earlier, valid response — and must not rewrite it.
+    const after = await prisma.itopTimeEntry.findUnique({ where: { id: targetId } });
+    expect(after).not.toBeNull();
+    expect(after!.itopUserId).toBe(stored.itopUserId);
+    expect(after!.durationMinutes).toBe(stored.durationMinutes);
+    expect(second.removed).toBe(0);
+  });
+
   it("a full sync drops an entry iTop no longer returns, within the pull window", async () => {
     const state = seedFakeItop();
     const { baseUrl } = await startFake(state);

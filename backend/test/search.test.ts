@@ -23,6 +23,25 @@ describe("GET /search", () => {
     expect(res.status).toBe(401);
   });
 
+  it("rejects a PENDING account (no project:read) with 403", async () => {
+    const pending = await createUserWithRole("PENDING");
+    const res = await request(app)
+      .get("/search")
+      .query({ q: "anything" })
+      .set("Authorization", `Bearer ${pending.token}`);
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("forbidden");
+  });
+
+  it("lets a TAM search", async () => {
+    const tam = await createUserWithRole("TAM");
+    const res = await request(app)
+      .get("/search")
+      .query({ q: "anything" })
+      .set("Authorization", `Bearer ${tam.token}`);
+    expect(res.status).toBe(200);
+  });
+
   it("rejects q shorter than 2 chars and missing q with 400", async () => {
     const { token } = await createAdminAndToken();
     const short = await request(app)

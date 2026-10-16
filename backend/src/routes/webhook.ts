@@ -7,13 +7,19 @@
 // immediate incremental pull instead of waiting for the next tick. Carries
 // no trust in anything iTop sends beyond the shared secret header — see
 // docs/archive/plans/itop-integration.md §2 deviation 6 and Task 4.1.
-import { Router } from "express";
+import express, { Router } from "express";
 import crypto from "node:crypto";
 import { logger } from "../logger.js";
 import { HttpError } from "../http/errors.js";
+import { createRateLimiter } from "../http/rateLimit.js";
 import { getItopConfig } from "../lib/itop/config.js";
 import { open, SecretBoxError } from "../lib/secretBox.js";
 import { requestSync } from "../lib/itop/scheduler.js";
+import { z } from "zod";
+import { prisma } from "../prisma.js";
+import { env } from "../env.js";
+import { verifyOutlineSignature } from "../lib/outline/webhookSignature.js";
+import { clampTitle, deleteDocMentions, syncDocMentions, toRelativeDocPath } from "../lib/outline/mentions.js";
 
 export const webhookRouter = Router();
 
@@ -137,3 +143,208 @@ webhookRouter.post("/itop", async (req, res) => {
   requestSync({ full: false });
   res.status(202).json({ accepted: true });
 });
+
+// ---------------------------------------------------------------------------
+// POST /webhook/outline - Outline's webhook (docs/archive/plans/outline-integration.md,
+// D4 / F10 / B5). Same rules as the iTop nudge above (unauthenticated, mounted
+// before express.json(), two sliding rate-limit windows, coalesced rejection
+// warns), plus:
+//  - the body is read RAW (express.raw) because the HMAC covers the exact bytes;
+//  - it carries the full markdown of the page (`model.text`), so the body is never
+//    logged and never stored: links are extracted in memory (D4);
+//  - Outline gives a delivery 5 s and never retries, so the handler only verifies,
+//    parses, extracts and writes - no Outline API call in the request path.
+// ---------------------------------------------------------------------------
+
+const OUTLINE_SIGNATURE_HEADER = "Outline-Signature";
+// Far wider than the iTop nudge: Outline fires on every page edit (~4 s after
+// typing, F10) and never retries, so a dropped delivery is a lost update. These
+// only cap the cost of a flood.
+const OUTLINE_MAX_ALL_CALLS = 300;
+const OUTLINE_MAX_ACCEPTED = 120;
+
+// Pre-auth window over EVERY call, keyed per client IP (rateLimitKey: IPv6 as /56)
+// so one noisy or hostile client cannot spend the budget real Outline deliveries
+// need. The accepted window below stays GLOBAL: only a holder of the webhook secret
+// gets past the signature check, so it bounds the DB-write cost of genuine traffic
+// no matter how many addresses it arrives from.
+const outlineAllCallsLimiter = createRateLimiter({
+  limit: OUTLINE_MAX_ALL_CALLS,
+  windowMs: RATE_LIMIT_WINDOW_MS,
+});
+let outlineAcceptedAt: number[] = [];
+let outlineLastWarnAt = 0;
+let outlineWarnsSuppressed = 0;
+let outlineWarnCallsForTests = 0;
+let outlineAppUrlWarned = false;
+
+/** Test-only: clears the Outline webhook's windows and warn coalescing. */
+export function resetOutlineWebhookStateForTests(): void {
+  outlineAllCallsLimiter.reset();
+  outlineAcceptedAt = [];
+  outlineLastWarnAt = 0;
+  outlineWarnsSuppressed = 0;
+  outlineWarnCallsForTests = 0;
+  outlineAppUrlWarned = false;
+}
+
+/** Test-only: how many warn lines the Outline webhook actually emitted since the last reset. */
+export function getOutlineWebhookWarnCallsForTests(): number {
+  return outlineWarnCallsForTests;
+}
+
+// One warn line per interval for any rejection, folding in how many it covers.
+// Never carries the body, the signature or the secret.
+function warnOutlineRejected(reason: string): void {
+  const now = Date.now();
+  if (now - outlineLastWarnAt >= REJECTION_WARN_INTERVAL_MS) {
+    const total = outlineWarnsSuppressed + 1;
+    logger.warn(
+      total > 1
+        ? `Outline webhook: rejected ${total} calls in the last ${REJECTION_WARN_INTERVAL_MS / 1000}s (latest: ${reason})`
+        : `Outline webhook: rejected a call (${reason})`,
+    );
+    outlineWarnCallsForTests += 1;
+    outlineLastWarnAt = now;
+    outlineWarnsSuppressed = 0;
+  } else {
+    outlineWarnsSuppressed += 1;
+  }
+}
+
+
+// Events that put a page's mentions back in line with its current text, and
+// those that remove them. Anything else is acknowledged and ignored.
+const OUTLINE_SYNC_EVENTS = new Set([
+  "documents.publish",
+  "documents.update",
+  "documents.title_change",
+  "documents.create",
+  "documents.unarchive",
+]);
+const OUTLINE_REMOVE_EVENTS = new Set(["documents.delete", "documents.archive", "documents.unpublish"]);
+
+const outlineDeliverySchema = z.object({
+  event: z.string().max(100),
+  payload: z
+    .object({
+      id: z.string().max(200).optional(),
+      model: z
+        .object({
+          id: z.string().max(200).optional(),
+          urlId: z.string().max(200).nullish(),
+          title: z.string().nullish(),
+          text: z.string().nullish(),
+          url: z.string().nullish(),
+          publishedAt: z.string().nullish(),
+          archivedAt: z.string().nullish(),
+          deletedAt: z.string().nullish(),
+        })
+        .partial()
+        .optional(),
+    })
+    .optional(),
+});
+
+webhookRouter.post(
+  "/outline",
+  outlineAllCallsLimiter.middleware,
+  express.raw({ type: "*/*", limit: "2mb" }),
+  async (req, res) => {
+    // Outline sends no signature header at all when the subscription has no secret (F10).
+    const signature = req.get(OUTLINE_SIGNATURE_HEADER);
+    if (!signature) {
+      warnOutlineRejected("no signature header");
+      throw new HttpError(401, "unauthorized", "Invalid webhook signature");
+    }
+
+    const config = await prisma.outlineConfig.findUnique({
+      where: { id: "default" },
+      select: { webhookSecretEnc: true },
+    });
+    if (!config?.webhookSecretEnc) {
+      warnOutlineRejected("no webhook secret configured");
+      throw new HttpError(401, "unauthorized", "Invalid webhook signature");
+    }
+    let secret: string;
+    try {
+      secret = open(config.webhookSecretEnc);
+    } catch (err) {
+      if (err instanceof SecretBoxError) {
+        warnOutlineRejected("stored secret could not be decrypted (SECRETS_KEY rotated?)");
+        throw new HttpError(401, "unauthorized", "Invalid webhook signature");
+      }
+      throw err;
+    }
+
+    // express.raw leaves `{}` when no body was sent; that can never verify.
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    const verdict = verifyOutlineSignature(signature, rawBody, secret);
+    if (verdict !== "ok") {
+      warnOutlineRejected(`signature ${verdict}`);
+      throw new HttpError(401, "unauthorized", "Invalid webhook signature");
+    }
+
+    const acceptedNow = Date.now();
+    outlineAcceptedAt = outlineAcceptedAt.filter((t) => acceptedNow - t < RATE_LIMIT_WINDOW_MS);
+    if (outlineAcceptedAt.length >= OUTLINE_MAX_ACCEPTED) {
+      warnOutlineRejected("accepted-call rate limit");
+      throw new HttpError(429, "rate_limited", "Too many webhook calls");
+    }
+    outlineAcceptedAt.push(acceptedNow);
+
+    // The delivery is authentic: record it for the Admin "last delivery" line.
+    // Targeted update - must not move the admin audit stamp (updatedAt / updatedById).
+    await prisma.outlineConfig.updateMany({
+      where: { id: "default" },
+      data: { lastWebhookAt: new Date() },
+    });
+
+    // Never echo or log the parse error: Node quotes a slice of the body in it.
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(rawBody.toString("utf8"));
+    } catch {
+      throw new HttpError(400, "invalid_json", "Webhook body is not valid JSON");
+    }
+    const parsed = outlineDeliverySchema.safeParse(parsedJson);
+    if (!parsed.success) {
+      throw new HttpError(400, "invalid_payload", "Unexpected webhook payload");
+    }
+    const { event, payload } = parsed.data;
+    const model = payload?.model;
+    const docId = model?.id ?? payload?.id;
+
+    if (!docId || (!OUTLINE_SYNC_EVENTS.has(event) && !OUTLINE_REMOVE_EVENTS.has(event))) {
+      res.status(200).json({ accepted: true });
+      return;
+    }
+
+    if (OUTLINE_REMOVE_EVENTS.has(event)) {
+      await deleteDocMentions(docId);
+    } else if (model?.deletedAt || model?.archivedAt || model?.publishedAt === null) {
+      // Trashed, archived or (still / again) a draft: not a page anyone links to.
+      await deleteDocMentions(docId);
+    } else if (env.APP_URL === null) {
+      // No Solvro origin to recognise links against: take the delivery, skip extraction.
+      if (!outlineAppUrlWarned) {
+        outlineAppUrlWarned = true;
+        logger.warn("Outline webhook: APP_URL is not set, so Solvro links in Outline pages are not recorded");
+      }
+    } else {
+      await syncDocMentions(
+        {
+          docId,
+          title: clampTitle(model?.title),
+          docPath: toRelativeDocPath(model?.url, model?.urlId ?? docId),
+          text: model?.text ?? "",
+        },
+        env.APP_URL,
+      );
+    }
+
+    // Event name and page id only - the body (full page text) and the signature stay out of the log.
+    logger.debug({ event, docId }, "Outline webhook: delivery processed");
+    res.status(200).json({ accepted: true });
+  },
+);

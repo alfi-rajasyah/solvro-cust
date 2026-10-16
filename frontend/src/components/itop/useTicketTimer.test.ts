@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatElapsed, readStoredTimer } from "./useTicketTimer";
+import {
+  claimInFlightStop,
+  formatElapsed,
+  inFlightStopKey,
+  readStoredTimer,
+  shouldApplyAfterClose,
+  type StoredTicketTimer,
+} from "./useTicketTimer";
 
 describe("formatElapsed", () => {
   it("pads single-digit units to two digits", () => {
@@ -100,5 +107,49 @@ describe("readStoredTimer", () => {
       ...valid,
       startedAt: nearFuture,
     });
+  });
+});
+
+describe("shouldApplyAfterClose (compare-and-clear for a Stop that resolves late)", () => {
+  const closed = { ticketId: 4512, startedAt: "2026-10-09T08:00:00.000Z" };
+  const stored = (over: Partial<StoredTicketTimer> = {}): StoredTicketTimer => ({
+    userId: 7,
+    ticketId: 4512,
+    customerId: 42,
+    ref: "R-004512",
+    startedAt: "2026-10-09T08:00:00.000Z",
+    ...over,
+  });
+
+  it("applies when the stored timer is still the one that was closed", () => {
+    expect(shouldApplyAfterClose(stored(), closed)).toBe(true);
+  });
+
+  it("stop resolves after unmount while a newer timer is stored: leaves the newer timer alone", () => {
+    // Same ticket restarted, and a different ticket started, since the Stop was sent.
+    expect(shouldApplyAfterClose(stored({ startedAt: "2026-10-09T09:30:00.000Z" }), closed)).toBe(false);
+    expect(shouldApplyAfterClose(stored({ ticketId: 9001, ref: "R-009001" }), closed)).toBe(false);
+  });
+
+  it("does nothing when no timer is stored any more (discarded or stopped in another tab)", () => {
+    expect(shouldApplyAfterClose(null, closed)).toBe(false);
+  });
+});
+
+describe("claimInFlightStop (a second Stop on the same timer is a no-op)", () => {
+  it("claims once per user+start instant, then refuses until released", () => {
+    const inFlight = new Set<string>();
+    const key = inFlightStopKey(7, "2026-10-09T08:00:00.000Z");
+    expect(claimInFlightStop(key, inFlight)).toBe(true);
+    expect(claimInFlightStop(key, inFlight)).toBe(false);
+    inFlight.delete(key);
+    expect(claimInFlightStop(key, inFlight)).toBe(true);
+  });
+
+  it("keys on user and start instant, so another timer or user is not blocked", () => {
+    const inFlight = new Set<string>();
+    expect(claimInFlightStop(inFlightStopKey(7, "2026-10-09T08:00:00.000Z"), inFlight)).toBe(true);
+    expect(claimInFlightStop(inFlightStopKey(7, "2026-10-09T09:00:00.000Z"), inFlight)).toBe(true);
+    expect(claimInFlightStop(inFlightStopKey(8, "2026-10-09T08:00:00.000Z"), inFlight)).toBe(true);
   });
 });

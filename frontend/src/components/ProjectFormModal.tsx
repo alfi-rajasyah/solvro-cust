@@ -1,6 +1,8 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Modal } from "./Modal";
+import { OutlineUrlField } from "./OutlineUrlField";
 import { Alert, AlertDescription } from "@/components/reui/alert";
+import { parseOutlineUrl } from "@/lib/outlineUrl";
 import { useAuth } from "@/lib/auth";
 import { saveErrorMessage } from "@/lib/ownerAccess";
 import { PROJECT_STATUS_LABEL, taskStatusOptions } from "@/lib/labels";
@@ -77,6 +79,9 @@ export function ProjectFormModal({
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [outlineUrl, setOutlineUrl] = useState("");
+  const [outlineUrlError, setOutlineUrlError] = useState<string | null>(null);
+  const outlineUrlInput = useRef<HTMLInputElement>(null);
   const [tamId, setTamId] = useState<number | "">("");
   const [customerId, setCustomerId] = useState<number | "">("");
   const [status, setStatus] = useState<ProjectStatus>("PLANNING");
@@ -87,9 +92,11 @@ export function ProjectFormModal({
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setOutlineUrlError(null);
     if (project) {
       setName(project.name);
       setDescription(project.description ?? "");
+      setOutlineUrl(project.outlineUrl ?? "");
       setTamId(project.tamId);
       setCustomerId(project.customerId ?? "");
       setStatus(project.status);
@@ -98,6 +105,7 @@ export function ProjectFormModal({
     } else {
       setName("");
       setDescription("");
+      setOutlineUrl("");
       setTamId("");
       setCustomerId("");
       setStatus("PLANNING");
@@ -127,12 +135,21 @@ export function ProjectFormModal({
       setError("Customer is required.");
       return;
     }
+    // Client-side twin of the server rule (http/https, ≤ 2048, empty clears).
+    const parsedOutline = parseOutlineUrl(outlineUrl);
+    if (!parsedOutline.ok) {
+      setOutlineUrlError(parsedOutline.error);
+      outlineUrlInput.current?.focus();
+      return;
+    }
+    setOutlineUrlError(null);
 
     try {
       if (isEdit && project) {
         await update.mutateAsync({
           name: name.trim(),
           description: description.trim() || null,
+          outlineUrl: parsedOutline.value,
           ...(canChangeOwnership
             ? {
                 tamId: tamId === "" ? undefined : Number(tamId),
@@ -148,6 +165,7 @@ export function ProjectFormModal({
         const created = await create.mutateAsync({
           name: name.trim(),
           description: description.trim() || undefined,
+          outlineUrl: parsedOutline.value,
           tamId: tamId === "" ? undefined : Number(tamId),
           customerId: Number(customerId),
           status,
@@ -211,6 +229,18 @@ export function ProjectFormModal({
             className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           />
         </Field>
+
+        <OutlineUrlField
+          value={outlineUrl}
+          onChange={(v) => {
+            setOutlineUrl(v);
+            setOutlineUrlError(null);
+          }}
+          error={outlineUrlError}
+          noun="project"
+          inputRef={outlineUrlInput}
+          inputClassName="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+        />
 
         <Field label="Customer" required>
           <select

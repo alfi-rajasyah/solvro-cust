@@ -1,8 +1,8 @@
 # Idea: Outline as Solvro's knowledge base (Confluence replacement)
 
 - **Date:** 2026-09-26
-- **Status:** research. User answers 2026-09-26 (§8) **reject the Outline sidecar**
-  and point to a native Solvro knowledge space. Nothing here is approved to build.
+- **Status:** research. 2026-10-07 decision (§10) supersedes §8: **link-out only**, no native wiki.
+  Nothing here is approved to build.
 - **Question asked:** can Outline (getoutline.com) become the Solvro feature that
   replaces Atlassian Confluence? What are the possibility, the integration, and the
   architecture?
@@ -333,3 +333,86 @@ comes first.** This is a reading of the licence text, not legal advice.
    Head start for §8, same Solvro stack.
 3. **Buy a commercial licence** from Outline for the current version — the only way to
    ship today's Outline to outside customers.
+
+---
+
+## 10. User decision (2026-10-07) — link-out only
+
+- **Decision:** the wiki is **not** a native Solvro feature. Solvro shows a link that
+  opens the self-hosted Outline in a new tab. This supersedes §8 (option C) and §8.4.
+- **Consequences:**
+  - No API client, no tokens, no webhooks, no new editor dependencies.
+  - Solvro never bundles Outline: no Outline/Redis service in `setup.sh`. Each
+    deployment runs its own Outline, so Solvro is not a BSL "Document Service" (§7.1 —
+    a reading of the licence text, not legal advice).
+  - Solvro stores only URLs; no document content enters Solvro, so the
+    INTERNAL-notes export guardrail is not touched.
+- **Settled 2026-10-09 (was open):** where the link lives — one global sidebar link (admin-set base URL),
+  a per-customer / per-project URL field, or both.
+
+---
+
+## 11. Closing the gap to Jira ↔ Confluence (researched 2026-10-07)
+
+Question: the §10 link-out is far from the Jira–Confluence integration. What can close
+the gap, and what cannot? Verified against Outline `main` source (v1.10.1 era).
+
+### 11.1 Outline extension points (facts)
+
+| Extension point | Fact | Source |
+|---|---|---|
+| Generic iframe embed | The last embed descriptor (`id: "embed"`) matches **any** `https?://` URL and renders it in an iframe. | `shared/editor/embeds/index.tsx` |
+| Link unfurl (hover preview) | `urls.unfurl` tries public shares → mentions → internal docs → `Hook.UnfurlProvider` plugins. Plugins get the acting user; external results are cached (1 h default). | `server/routes/api/urls/urls.ts` |
+| Iframely provider | Enabled when `IFRAMELY_URL` is a non-default host (no key needed). Request: `GET ${IFRAMELY_URL}/{type}?url=…&api_key=…`. **No user identity is sent.** Cache: **1 day**. Response: `meta.title/description/site`, `links.thumbnail/icon`. | `plugins/iframely/server/{index,iframely}.ts` |
+| Rich in-app integrations (GitHub, Linear, GitLab issue chips) | Built as server plugins inside Outline's code. No runtime plugin loading — a new one means a custom Outline build. | `plugins/` |
+| Webhooks | Admin-created. Events include `documents.create/publish/update/delete/move/title_change`, `revisions.create`, `comments.*`, `collections.*`, `groups.*`. Document payload is presented with `includeText: true` — **the full markdown arrives in the webhook**. | `plugins/webhooks/server/tasks/DeliverWebhookTask.ts` |
+| API | `documents.list` (`parentDocumentId`, `backlinkDocumentId`, `filters`), `documents.search`, `documents.create` (`templateId`, `collectionId`, `parentDocumentId`, `publish`), `comments.create`, `groups.create/add_user`, `collections.add_group`. OAuth 2.0 apps with scopes. | `server/routes/api/documents/schema.ts`, developers page |
+| Client-side extensions (toolbar buttons, slash commands, text-selection actions) | None. Editor UI changes need a fork. | repo structure |
+
+### 11.2 Solvro facts that decide feasibility
+
+- Session token lives in `localStorage` (`frontend/src/lib/api.ts`). Browsers partition
+  iframe storage by top-level **site**: a Solvro iframe inside Outline is signed in only
+  when both share a registrable domain (`solvro.acme.com` + `docs.acme.com`). On
+  different domains the iframe shows the login screen, and Google sign-in refuses to run
+  framed.
+- (Fixed in Outline Phase A, 2026-10-09 — kept as the finding that motivated it.) The bundled `frontend/nginx.conf` set **no** `X-Frame-Options` / `frame-ancestors`, so
+  any site can frame Solvro today (clickjacking exposure). helmet only covers API
+  responses. Any embed work must add `frame-ancestors 'self' <outline origin>`, which
+  also closes this gap.
+- Guest share links (`routes/publicShare.ts`) already give a read-only, token-scoped
+  project timeline that needs no session.
+
+### 11.3 Feature map
+
+| Jira ↔ Confluence feature | Solvro ↔ Outline | How | Limits |
+|---|---|---|---|
+| Link project ↔ space | **Yes** | §10 links | — |
+| Space page tree inside Jira project | **Yes** | `documents.list` under the linked collection/doc, per-user OAuth token | Read-only list; open in Outline |
+| Create page from template (e.g. kickoff, meeting notes) | **Yes** | `documents.create` + `templateId`, per-user token | — |
+| Cross-app search | **One way** | Solvro ⌘K adds `documents.search` (per-user token → Outline permissions apply) | Outline cannot search Solvro |
+| "Mentioned in" back-links on issues | **Yes** | Webhook `documents.update/publish` carries markdown → Solvro extracts its own task/project URLs → stores doc id + title | Titles shown to Solvro users who may lack access in Outline → show only docs the viewer can open (check with their token) or show a count |
+| Live issue table / roadmap inside a page (Jira macro) | **Yes, with conditions** | Outline generic embed of a new compact Solvro embed view (task list / status / Gantt strip) | Signed-in only on a shared parent domain; else use a guest share link (read-only, public token). Needs `frame-ancestors` |
+| Smart link with status chip | **Partial** | Solvro answers as the `IFRAMELY_URL` provider for its own URLs (title, status, due date) and forwards or rejects others | No user identity → no per-user permission check; up to 1 day stale; replaces general web previews unless Solvro proxies them |
+| Create issue from selected page text | **No** (without fork) | Outline has no client extension point | Workaround: paste the Outline URL into a Solvro task's source field |
+| Shared permissions | **Partial** | Sync Solvro project members → an Outline group per project (`groups.*`, `collections.add_group`) | Needs an Outline admin token — conflicts with the "writes under the user's own identity" rule (§8 answer 4) → user decision |
+| Single sign-on | **Yes (already)** | Both use the same Google Workspace account | Two sign-ins, same account; a shared session is not possible |
+| Comments sync | **No value** | `comments.create` exists, but mirroring threads duplicates both apps | — |
+| Rich native chips like GitHub/Linear in Outline | **Only with a custom Outline build** | Write a Solvro plugin (`Hook.UnfurlProvider`) and ship a patched image | BSL allows modification, but every Outline upgrade means a rebuild; internal plugin API is not stable — not recommended |
+
+### 11.4 What the gap costs
+
+- **Tier 1 — Solvro side only (Outline API + webhook):** docs list, create-from-template,
+  ⌘K search, back-links. Needs `OutlineConfig` (base URL, OAuth client, webhook secret),
+  per-user OAuth connect, `POST /webhook/outline`. Pattern = the iTop integration.
+- **Tier 2 — Solvro inside Outline:** embed view + `frame-ancestors`; optional Iframely
+  shim for previews. Deployment rule: Outline and Solvro on one parent domain.
+- **Out of reach without a fork:** create-task-from-selection, native status chips with
+  per-user permissions, Outline searching Solvro.
+
+---
+
+## 12. Plan
+
+2026-10-09: the user approved the mockup (links + Tier 1 + Tier 2). Plan:
+`docs/plans/outline-integration.md` (Phases A, B, C).

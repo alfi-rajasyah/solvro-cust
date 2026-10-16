@@ -32,7 +32,7 @@ Seven tabs under `/projects/:id`: Overview, List, Kanban, Gantt, Timeline, Risks
 - **Daily Review** (`/daily-review`) — a weekly, per-customer page: dated notes per project, operations notes per customer for issues outside any project, an explicit "Mark reviewed" stamp, and actionable overdue-task and open-risk lists. One request loads the whole page.
 - **Weekly Sync** (`/weekly-sync`) — two tables for Monday's read. **Mid-week**: one row per highlight with its own risk and action. **Reflection**: one row per achievement with its outstanding issue, lesson learned, next-week focus, and manager decision (rows that need a decision pin to the top). Each customer carries a Green / Amber / Red health and a Draft / Done status. Both forms draft themselves from the week's notes, and "Copy as table" puts the rows on the clipboard as TSV and HTML for pasting into a document.
 - **Recent notes** — a seven-day feed of project and operations notes on the Overview page.
-- Notes carry an `INTERNAL` / `CUSTOMER_FACING` visibility. Internal notes never reach an export or a search result.
+- Notes stay inside Solvro: no export, search result, or guest link includes them. Each project note is stored as `INTERNAL` by default, and only a `CUSTOMER_FACING` note may ever reach customer-facing output.
 
 ### Portfolio and leadership
 
@@ -56,6 +56,16 @@ Solvro connects to an external [iTop](https://www.itophub.io/) ITSM instance, co
 - **Time** — **Utilization** (`/utilization`, the old `/work-logs` URL redirects here) shows hours per customer per week drawn from iTop's Time Tracking extension; every TAM sees their own hours, and holders of the Executive-report permission also get "By TAM" and "By customer" views. A Start/Stop timer on the ticket panel — one running timer per user, shown as a compact pill in the top bar — logs a Time Tracking entry in iTop under the user's own identity the moment it's stopped.
 - **Live sync** — an optional per-install webhook secret lets iTop's own "on ticket update" trigger nudge Solvro into an immediate sync instead of waiting for the next scheduled pull.
 - **Actions from Solvro** — opt-in per install (Admin > iTop) and per TAM (a personal iTop token saved in Settings): once both are on, a ticket can be assigned, set pending, resolved, closed, reopened, or given a log entry straight from Solvro's ticket panel. Every write happens under the acting TAM's own iTop identity — iTop stays the owner of what a ticket can do and who can do it.
+
+### Outline integration
+
+Solvro connects to your own self-hosted [Outline](https://www.getoutline.com/) wiki, configured once at Admin > Outline:
+
+- **Links** — an "Outline" item in the sidebar, and an optional Outline link on each customer and project, shown as a button in its header.
+- **Docs tab** — a customer's or project's Outline pages, listed from under its Outline link, with a "New doc" dialog that creates a page from an Outline template.
+- **Search and mentions** — the ⌘K palette also searches your Outline pages, and tasks and projects show the Outline pages that link to them ("Mentioned in Outline").
+- **Embeds** — read-only task table, status card, and timeline pages that an Outline page can embed ("Embed in Outline" in the project's ⋯ menu).
+- **Your own account** — each user connects their own Outline account from Settings. Solvro stores no Outline API key: every Outline call runs under that user's own sign-in, and only when the Outline email matches the Solvro email.
 
 ## Architecture
 
@@ -107,9 +117,9 @@ The PWA layer (vite-plugin-pwa / Workbox) precaches the app shell and serves `/a
 
 ### Authorization model
 
-- A sign-in returns a JWT whose payload is `{ sub, role, permissions[] }`. The permission list is copied from the role at sign-in. `*` is the wildcard that satisfies every check and is what makes a role an admin.
+- A sign-in returns a JWT whose payload is `{ sub, ver }` — the user id and a session version. The server loads the account, role and permission list from the database on every request, so a role change applies at once; a password change, an admin reset or a deactivation bumps the version and ends the account's sessions. `*` is the wildcard that satisfies every check and is what makes a role an admin.
 - **Permissions** — `project:view-all`, `project:read`, `project:write`, `task:read`, `task:write`, `report:executive`.
-- **Built-in roles** — `ADMIN` = `*`. `TAM` = project read/write + task read/write. `STAKEHOLDER` = project read + view-all. `PENDING` = nothing.
+- **Built-in roles** — `ADMIN` = `*`. `TAM` = project read/write + task read/write. `STAKEHOLDER` = project read only (the projects it is attached to). `PENDING` = nothing.
 - **Project visibility** (`lib/visibility.ts`) — `project:view-all` sees everything. Everyone else sees a project where they are the TAM, or the owning TAM of its customer. A **customer** is visible when the caller owns it, when nobody owns it, or when it has a visible project.
 - **Hidden means 404.** A resource outside the caller's visibility answers `404 not_found`, not `403`, so its existence is not revealed. A `customerId` sent as a body field answers `400 customer_not_found` instead.
 - **Executive is org-wide by design.** `report:executive` is itself the grant, so the visibility filter is not applied to that report.
@@ -150,7 +160,7 @@ The backend is a JSON REST API. Routers mount without an `/api` prefix; the fron
 
 ### Key flows
 
-**Sign-in.** `POST /auth/login` takes an email and password; `POST /auth/google` takes a Google ID token, which the server verifies against the admin-configured client ID and allowed domains, creating a `PENDING` user on first sight. Both return a JWT and the user's profile. The frontend stores the token in `localStorage` and sends it as a bearer header on every call; an old token without a permissions claim is treated as having none.
+**Sign-in.** `POST /auth/login` takes an email and password; `POST /auth/google` takes a Google ID token, which the server verifies against the admin-configured client ID and allowed domains, creating a `PENDING` user on first sight. Both return a JWT and the user's profile. The frontend stores the token in `localStorage` and sends it as a bearer header on every call; a token without a session version (issued before the server-side check) is rejected with 401 `token_revoked`, and the app signs the user out on any 401.
 
 **Task ordering.** Top-level tasks share one dense `0..n-1` `position` per project; subtasks share one per parent. A `PATCH /tasks/:id` that carries `position`, `parentTaskId`, or `sectionId` moves the task inside a single transaction: the old sibling list closes its gap and the new one opens a slot, so List, Kanban, and Gantt always agree. Baseline dates are not accepted on this route.
 
@@ -189,6 +199,8 @@ ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=change-me BIND_ADDR=0.0.0.0 FRONTEND_
 ```
 
 To upgrade, run `git pull` and then `bash setup.sh` again: the script detects the existing install, pulls new images, and restarts without prompting.
+
+The full install and upgrade guide is [INSTALL.md](INSTALL.md). To run iTop or Outline on the same server, see [Server setup](docs/guides/server-setup.md).
 
 ### Local development
 
@@ -237,6 +249,16 @@ cd e2e && npm ci && npx playwright install chromium && npm test   # desktop + mo
 
 The backend test setup refuses any database whose name does not end in `_test`, then migrates it and truncates every table before the run. Point `DATABASE_URL` at a dedicated database such as `solvro_test`. Playwright defaults to `BASE_URL=http://localhost:8080` (the stack above) and signs in with `ADMIN_EMAIL` / `ADMIN_PASSWORD` from the environment, so create that admin with `admin:create` first. `npm run test:desktop` and `npm run test:mobile` run one project.
 
+## Integrations
+
+iTop and Outline are optional. Solvro does not ship or deploy either one: each deployment runs its own instance, and an admin connects it inside Solvro.
+
+- **[iTop guide](docs/guides/itop.md)** — install iTop, prepare tokens and people, connect it at Admin > iTop, and turn on actions and the webhook.
+- **[Outline guide](docs/guides/outline.md)** — install Outline, set `APP_URL`, connect it at Admin > Outline, and set up mentions and embeds.
+- **[Server setup](docs/guides/server-setup.md)** — run Solvro, iTop, and Outline on one server: sizing, DNS, ports, reverse proxy, and backups.
+
+All guides: [docs/guides/](docs/guides/index.md).
+
 ## Repository Layout
 
 | Path | Contents |
@@ -246,6 +268,7 @@ The backend test setup refuses any database whose name does not end in `_test`, 
 | `e2e/` | Playwright suite — auth, Kanban and List drag, Gantt, date picker, Daily Review, Weekly Sync, search, PWA, smoke |
 | `ci/` | The production-shaped compose stack GitHub Actions builds and tests |
 | `.github/workflows/` | `ci.yml` (merge gate) and `docker-publish.yml` (GHCR release) |
+| `docs/guides/` | Step-by-step guides: server setup, iTop, Outline |
 | `setup.sh` | One-shot production installer and updater |
 | `CHANGELOG.md` | Running record of every change, Keep a Changelog style |
 

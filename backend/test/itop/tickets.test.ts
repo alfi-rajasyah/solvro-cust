@@ -68,6 +68,7 @@ interface TicketOverrides {
   slaTtrPassed?: boolean;
   resolutionDate?: Date | null;
   syncedAt?: Date;
+  privateLog?: Array<{ date: string | null; author: string | null; message: string }>;
 }
 
 async function createTicket(overrides: TicketOverrides = {}) {
@@ -96,6 +97,7 @@ async function createTicket(overrides: TicketOverrides = {}) {
       slaTtrPassed: overrides.slaTtrPassed ?? false,
       resolutionDate: overrides.resolutionDate ?? null,
       syncedAt: overrides.syncedAt ?? new Date(),
+      ...(overrides.privateLog ? { privateLog: overrides.privateLog } : {}),
     },
   });
 }
@@ -166,6 +168,108 @@ describe("access control", () => {
       const res = await call(method, path);
       expect(res.status, `${method.toUpperCase()} ${path}`).toBe(401);
     }
+  });
+});
+
+describe("permission gating (docs/archive/plans/internal-sync.md)", () => {
+  // PENDING holds no permissions at all, so every read route except /status is
+  // 403 — even for an unowned customer that customerVisibilityFilter would
+  // otherwise show them.
+  it("403s a PENDING user on tickets, ticket-by-id, by-ref, refresh, daily, services and contacts, but 200s /status", async () => {
+    await configureItop();
+    const { token } = await createUserWithRole("PENDING");
+    const customer = await createCustomer({ itopOrgId: 80, itopOrgName: "Unowned Org" });
+    const ticket = await createTicket({ customerId: customer.id, orgId: 80, status: "new" });
+
+    const forbidden = [
+      await call("get", `/itop/customers/${customer.id}/tickets`, token),
+      await call("get", `/itop/tickets/${ticket.id}`, token),
+      await call("get", `/itop/tickets/by-ref/${ticket.ref}`, token),
+      await call("post", "/itop/refresh", token).send({}),
+      await call("get", "/itop/daily?date=2026-09-22", token),
+      await call("get", "/itop/services", token),
+      await call("get", `/itop/customers/${customer.id}/contacts`, token),
+    ];
+    for (const res of forbidden) {
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe("forbidden");
+    }
+
+    const status = await call("get", "/itop/status", token);
+    expect(status.status).toBe(200);
+    expect(status.body.configured).toBe(true);
+  });
+
+  it("403s before validation or visibility run (a bad id is 403, not 400/404, for a caller without project:read)", async () => {
+    const { token } = await createUserWithRole("PENDING");
+    expect((await call("get", "/itop/customers/999999/tickets", token)).status).toBe(403);
+    expect((await call("get", "/itop/tickets/999999999", token)).status).toBe(403);
+  });
+
+  it("lets a TAM read its customer's tickets (project:read)", async () => {
+    const tam = await createUserWithRole("TAM");
+    const customer = await createCustomer({ tamId: tam.userId, itopOrgId: 85, itopOrgName: "TAM Org" });
+    const ticket = await createTicket({ customerId: customer.id, orgId: 85, status: "new" });
+
+    const list = await call("get", `/itop/customers/${customer.id}/tickets`, tam.token);
+    expect(list.status).toBe(200);
+    expect(list.body.tickets.map((t: { id: number }) => t.id)).toEqual([ticket.id]);
+    expect((await call("get", `/itop/tickets/${ticket.id}`, tam.token)).status).toBe(200);
+  });
+
+  it("lets a project:read-only role (STAKEHOLDER) read an unowned customer's tickets", async () => {
+    const stakeholder = await createUserWithRole("STAKEHOLDER");
+    const customer = await createCustomer({ itopOrgId: 86, itopOrgName: "Open Org" });
+    await createTicket({ customerId: customer.id, orgId: 86, status: "new" });
+
+    const list = await call("get", `/itop/customers/${customer.id}/tickets`, stakeholder.token);
+    expect(list.status).toBe(200);
+    expect(list.body.tickets).toHaveLength(1);
+  });
+
+  it("lets an AUDITOR (project:read + project:view-all) read a TAM-owned customer's tickets", async () => {
+    const owner = await createUserWithRole("TAM");
+    const auditor = await createUserWithRole("AUDITOR");
+    const customer = await createCustomer({ tamId: owner.userId, itopOrgId: 81, itopOrgName: "Owned Org" });
+    const ticket = await createTicket({ customerId: customer.id, orgId: 81, status: "new" });
+
+    const list = await call("get", `/itop/customers/${customer.id}/tickets`, auditor.token);
+    expect(list.status).toBe(200);
+    expect(list.body.tickets.map((t: { id: number }) => t.id)).toEqual([ticket.id]);
+    expect((await call("get", `/itop/tickets/${ticket.id}`, auditor.token)).status).toBe(200);
+  });
+});
+
+describe("private case log visibility", () => {
+  const PRIVATE_NOTE = { date: "2026-09-20 10:00:00", author: "Rina S.", message: "agent-only: customer is hostile" };
+
+  it("returns the private log to a TAM (task:write) but an empty one to an AUDITOR (read-only view-all), on both single-ticket routes", async () => {
+    const tam = await createUserWithRole("TAM");
+    const auditor = await createUserWithRole("AUDITOR");
+    const customer = await createCustomer({ tamId: tam.userId, itopOrgId: 83, itopOrgName: "Log Org" });
+    const ticket = await createTicket({ customerId: customer.id, orgId: 83, status: "new", privateLog: [PRIVATE_NOTE] });
+
+    for (const path of [`/itop/tickets/${ticket.id}`, `/itop/tickets/by-ref/${ticket.ref}`]) {
+      const asTam = await call("get", path, tam.token);
+      expect(asTam.status, path).toBe(200);
+      expect(asTam.body.privateLog, path).toEqual([PRIVATE_NOTE]);
+
+      const asAuditor = await call("get", path, auditor.token);
+      expect(asAuditor.status, path).toBe(200);
+      expect(asAuditor.body.privateLog, path).toEqual([]);
+      expect(JSON.stringify(asAuditor.body), path).not.toContain("hostile");
+    }
+  });
+
+  it("also hides the private log from a STAKEHOLDER reading an unowned customer", async () => {
+    const stakeholder = await createUserWithRole("STAKEHOLDER");
+    const customer = await createCustomer({ itopOrgId: 84, itopOrgName: "Open Log Org" });
+    const ticket = await createTicket({ customerId: customer.id, orgId: 84, status: "new", privateLog: [PRIVATE_NOTE] });
+
+    const res = await call("get", `/itop/tickets/${ticket.id}`, stakeholder.token);
+    expect(res.status).toBe(200);
+    expect(res.body.privateLog).toEqual([]);
+    expect(JSON.stringify(res.body)).not.toContain("hostile");
   });
 });
 

@@ -97,7 +97,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
       ].join(" ")}
     >
       <div className="flex items-center justify-between border-b border-outline-variant px-5 py-4">
-        <span className="font-display text-label-caps uppercase tracking-widest text-on-surface-variant">
+        <span className="font-display text-label-caps uppercase text-on-surface-variant">
           Project context
         </span>
         <button
@@ -126,7 +126,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
         </section>
 
         <section>
-          <h3 className="mb-2 font-display text-label-caps uppercase tracking-widest text-on-surface-variant">
+          <h3 className="mb-2 font-display text-label-caps uppercase text-on-surface-variant">
             Stakeholders
           </h3>
           <dl className="space-y-1.5 text-[13px]">
@@ -155,7 +155,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
         </section>
 
         <section>
-          <h3 className="mb-2 font-display text-label-caps uppercase tracking-widest text-on-surface-variant">
+          <h3 className="mb-2 font-display text-label-caps uppercase text-on-surface-variant">
             Baseline
           </h3>
           <dl className="space-y-1.5 text-[13px]">
@@ -173,7 +173,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
               type="button"
               onClick={() => setConfirmingBaseline(true)}
               disabled={lockBaseline.isPending}
-              className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-[12px] font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="material-symbols-outlined text-[17px]" aria-hidden="true">
                 {project.baselineLockedAt ? "bookmark" : "bookmark_add"}
@@ -189,7 +189,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
           {baselineNotice && (
             <p
               role="status"
-              className="mt-2 flex items-center gap-1 text-[12px] font-semibold text-primary"
+              className="mt-2 flex items-center gap-1 text-meta font-semibold text-primary"
             >
               <span className="material-symbols-outlined text-[15px]">check_circle</span>
               {baselineNotice}
@@ -204,7 +204,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
 
         {exportHandlers && (
           <section>
-            <h3 className="mb-2 font-display text-label-caps uppercase tracking-widest text-on-surface-variant">
+            <h3 className="mb-2 font-display text-label-caps uppercase text-on-surface-variant">
               Export schedule
             </h3>
             <div className="grid grid-cols-3 gap-2">
@@ -212,7 +212,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                 type="button"
                 onClick={() => runExport("excel")}
                 disabled={exporting !== null}
-                className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-[12px] font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span className="material-symbols-outlined text-[17px]">
                   table_view
@@ -223,7 +223,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                 type="button"
                 onClick={() => runExport("pdf")}
                 disabled={exporting !== null}
-                className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-[12px] font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span className="material-symbols-outlined text-[17px]">
                   picture_as_pdf
@@ -234,7 +234,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                 type="button"
                 onClick={() => runExport("pdfTab")}
                 disabled={exporting !== null}
-                className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-[12px] font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span className="material-symbols-outlined text-[17px]">
                   open_in_new
@@ -256,28 +256,28 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
 
         {project.customer && (
           <section>
-            <h3 className="mb-2 font-display text-label-caps uppercase tracking-widest text-on-surface-variant">
-              Documents
+            <h3 className="mb-2 font-display text-label-caps uppercase text-on-surface-variant">
+              Customer
             </h3>
             <Link
-              to={`/customers/${project.customer.id}?tab=documents`}
+              to={`/customers/${project.customer.id}`}
               className="flex items-start gap-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-3 transition-colors hover:border-primary/40"
             >
               <span
                 className="material-symbols-outlined text-primary"
                 style={{ fontVariationSettings: "'FILL' 1" }}
               >
-                description
+                business
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-display text-sm font-semibold text-on-surface">
-                  Customer documents
+                  Customer account
                 </p>
-                <p className="mt-0.5 text-[12px] text-on-surface-variant">
-                  Open the Documents resource for {project.customer.name}.
+                <p className="mt-0.5 text-meta text-on-surface-variant">
+                  Open the account page for {project.customer.name}.
                 </p>
-                <span className="mt-2 inline-flex items-center gap-1 text-[12px] font-semibold text-primary">
-                  Go to Documents
+                <span className="mt-2 inline-flex items-center gap-1 text-meta font-semibold text-primary">
+                  Go to customer
                   <span className="material-symbols-outlined text-[15px]">
                     chevron_right
                   </span>

@@ -83,45 +83,60 @@ model Role {
 }
 
 model User {
-  id                     Int                   @id @default(autoincrement())
-  username               String                @unique
-  email                  String                @unique
+  id                     Int                 @id @default(autoincrement())
+  username               String              @unique
+  email                  String              @unique
   // Nullable since Google-provisioned users have no password.
   // POST /auth/login rejects users with a null hash (HTTP 401 "google_only").
-  passwordHash           String?               @map("password_hash")
+  passwordHash           String?             @map("password_hash")
   // Google `sub` claim. Unique per Google identity; null for password-only users.
-  googleSub              String?               @unique @map("google_sub")
-  avatarUrl              String?               @map("avatar_url")
-  roleId                 Int                   @map("role_id")
-  role                   Role                  @relation(fields: [roleId], references: [id])
-  active                 Boolean               @default(true)
-  createdAt              DateTime              @default(now()) @map("created_at")
-  projectsAsTAM          Project[]             @relation("ProjectTAM")
-  projectBaselinesLocked Project[]             @relation("ProjectBaselineLockedBy")
+  googleSub              String?             @unique @map("google_sub")
+  avatarUrl              String?             @map("avatar_url")
+  roleId                 Int                 @map("role_id")
+  role                   Role                @relation(fields: [roleId], references: [id])
+  active                 Boolean             @default(true)
+  // Session version (2026-10 security hardening). Embedded in every JWT as
+  // `ver` and compared on every request (http/auth.ts); bumped by a password
+  // change, an admin reset or a deactivation so older tokens stop verifying.
+  tokenVersion           Int                 @default(0) @map("token_version")
+  createdAt              DateTime            @default(now()) @map("created_at")
+  projectsAsTAM          Project[]           @relation("ProjectTAM")
+  projectBaselinesLocked Project[]           @relation("ProjectBaselineLockedBy")
   assignedTasks          Task[]
   epicsOwned             Epic[]
   comments               Comment[]
   projectNotes           ProjectNote[]
-  authConfigUpdates      AuthConfig[]          @relation("AuthConfigUpdatedBy")
-  tamCustomers           Customer[]            @relation("CustomerTam")
+  authConfigUpdates      AuthConfig[]        @relation("AuthConfigUpdatedBy")
+  tamCustomers           Customer[]          @relation("CustomerTam")
   customerNotes          CustomerNote[]
   weeklyUpdates          WeeklyUpdate[]
   projectReviews         ProjectReview[]
-  itopConfigUpdates      ItopConfig[]          @relation("ItopConfigUpdatedBy")
+  itopConfigUpdates      ItopConfig[]        @relation("ItopConfigUpdatedBy")
+  outlineConfigUpdates   OutlineConfig[]     @relation("OutlineConfigUpdatedBy")
   // iTop Person/User object keys this account is matched to (by email).
-  itopPersonId           Int?                  @unique @map("itop_person_id")
-  itopUserId             Int?                  @unique @map("itop_user_id")
+  itopPersonId           Int?                @unique @map("itop_person_id")
+  itopUserId             Int?                @unique @map("itop_user_id")
   itopTimeEntries        ItopTimeEntry[]
   // Personal iTop token (Phase 5 write path, backend/src/routes/itopUser.ts).
   // Sealed at rest (lib/secretBox.ts) — never the plaintext token. Writes to
   // iTop always use this token for the acting user; the application token
   // (ItopConfig.appTokenEnc) is read-only and never used for a write.
-  itopTokenEnc           String?               @map("itop_token_enc")
-  itopTokenCheckedAt     DateTime?             @map("itop_token_checked_at")
-  itopTokenPersonName    String?               @map("itop_token_person_name")
-  itopTokenExpiresAt     DateTime?             @map("itop_token_expires_at")
-  projectMemberships     ProjectMember[]       @relation("ProjectMemberUser")
-  projectMembersAdded    ProjectMember[]       @relation("ProjectMemberAddedBy")
+  itopTokenEnc           String?             @map("itop_token_enc")
+  itopTokenCheckedAt     DateTime?           @map("itop_token_checked_at")
+  itopTokenPersonName    String?             @map("itop_token_person_name")
+  itopTokenExpiresAt     DateTime?           @map("itop_token_expires_at")
+  // Personal Outline OAuth tokens (docs/archive/plans/outline-integration.md, D2).
+  // Both sealed at rest (lib/secretBox.ts). An Outline call always runs under the
+  // acting user's own token, accepted only when `auth.info` returned this
+  // account's Solvro email; Solvro holds no Outline application/admin token.
+  outlineAccessTokenEnc  String?             @map("outline_access_token_enc")
+  outlineRefreshTokenEnc String?             @map("outline_refresh_token_enc")
+  outlineTokenExpiresAt  DateTime?           @map("outline_token_expires_at")
+  outlineUserId          String?             @unique @map("outline_user_id")
+  outlineEmail           String?             @map("outline_email")
+  outlineOAuthStates     OutlineOAuthState[]
+  projectMemberships     ProjectMember[]     @relation("ProjectMemberUser")
+  projectMembersAdded    ProjectMember[]     @relation("ProjectMemberAddedBy")
   activityEvents         ActivityEvent[]
   shareLinksCreated      ShareLink[]
   notifications          Notification[]
@@ -179,10 +194,82 @@ model ItopConfig {
   @@map("itop_config")
 }
 
+// Singleton row (id="default") holding the deployment's Outline address,
+// editable by an admin without a redeploy (docs/archive/plans/outline-integration.md).
+// Base URL (Phase A) plus the OAuth client the admin registered in Outline and the
+// webhook secret (docs/archive/plans/outline-integration.md). Solvro holds no Outline
+// API key or admin token (Guardrails: Outline calls never use an application token);
+// the OAuth client secret and webhook secret are sealed (lib/secretBox.ts) and
+// never returned by the API.
+model OutlineConfig {
+  id                   String    @id @default("default")
+  baseUrl              String?   @map("base_url")
+  oauthClientId        String?   @map("oauth_client_id")
+  oauthClientSecretEnc String?   @map("oauth_client_secret_enc")
+  webhookSecretEnc     String?   @map("webhook_secret_enc")
+  lastWebhookAt        DateTime? @map("last_webhook_at")
+  // The admin audit stamp ("updated by / at"): set explicitly by the admin routes,
+  // NOT @updatedAt, so system writes such as lastWebhookAt never move it.
+  updatedAt            DateTime  @default(now()) @map("updated_at")
+  updatedById          Int?      @map("updated_by_id")
+  updatedBy            User?     @relation("OutlineConfigUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("outline_config")
+}
+
+// Single-use OAuth `state` (F12): the callback is a top-level browser navigation
+// with no Solvro bearer token, so the row id (a random nonce) is the only thing
+// tying it back to the user who started the flow. Holds the sealed PKCE verifier;
+// deleted on use and purged once expired (lib/outline/oauthState.ts).
+model OutlineOAuthState {
+  id              String   @id
+  userId          Int      @map("user_id")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeVerifierEnc String   @map("code_verifier_enc")
+  createdAt       DateTime @default(now()) @map("created_at")
+  expiresAt       DateTime @map("expires_at")
+
+  @@index([expiresAt])
+  @@index([userId])
+  @@map("outline_oauth_states")
+}
+
+// An Outline page that links to a Solvro project or task (D4): only the doc id,
+// title and Outline's RELATIVE path (F8, e.g. /doc/slug-urlId; the base URL is
+// prefixed at read time so a changed base URL never leaves stale links) are
+// stored - never page text. A row is EITHER project-level (`projectId` only) OR
+// task-level (`taskId` only): the migration's CHECK num_nonnulls(...) = 1
+// enforces it. Project-level reads must therefore be
+//   project_id = $1 OR task_id IN (SELECT id FROM tasks WHERE project_id = $1).
+// The unique index is NULLS NOT DISTINCT (hand-added in the migration - Prisma
+// cannot express it) so the NULL arm really dedupes. Nullable members mean
+// Prisma has no compound-unique `where` (use createMany({ skipDuplicates }) /
+// deleteMany).
+model OutlineMention {
+  id           Int      @id @default(autoincrement())
+  outlineDocId String   @map("outline_doc_id")
+  docTitle     String   @map("doc_title")
+  docPath      String   @map("doc_path")
+  projectId    Int?     @map("project_id")
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskId       Int?     @map("task_id")
+  task         Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([outlineDocId, projectId, taskId])
+  @@index([projectId])
+  @@index([taskId])
+  @@map("outline_mentions")
+}
+
 model Project {
   id                   Int              @id @default(autoincrement())
   name                 String
   description          String?
+  // Optional link to this project's Outline page or collection (http/https,
+  // validated by lib/outlineUrl.ts). Never inherited from the customer and
+  // never part of the guest payload or any export.
+  outlineUrl           String?          @map("outline_url")
   tamId                Int              @map("tam_id")
   customerId           Int?             @map("customer_id")
   tam                  User             @relation("ProjectTAM", fields: [tamId], references: [id])
@@ -215,6 +302,7 @@ model Project {
   members              ProjectMember[]
   activityEvents       ActivityEvent[]
   shareLinks           ShareLink[]
+  outlineMentions      OutlineMention[]
 
   @@index([tamId])
   @@index([customerId])
@@ -293,6 +381,9 @@ model Customer {
   accountManager    String?           @map("account_manager")
   solutionArchitect String?           @map("solution_architect")
   description       String            @db.Text
+  // Optional link to this customer's Outline page or collection (http/https,
+  // validated by lib/outlineUrl.ts). Never part of the guest payload or any export.
+  outlineUrl        String?           @map("outline_url")
   createdAt         DateTime          @default(now()) @map("created_at")
   projects          Project[]
   services          CustomerService[]
@@ -393,6 +484,7 @@ model Task {
   // Dependency edges (Gantt connector arrows).
   predecessors      TaskDependency[] @relation("DependencySuccessor")
   successors        TaskDependency[] @relation("DependencyPredecessor")
+  outlineMentions   OutlineMention[]
   // Optional pin to one iTop ticket ref (e.g. "R-000123"), validated in
   // routes/tasks.ts. Free-form string, not an FK to ItopTicket — the ref may
   // not exist in the local snapshot yet (unmapped org, not synced, or the
@@ -511,16 +603,16 @@ model Label {
 }
 
 model Comment {
-  id        Int      @id @default(autoincrement())
-  taskId    Int      @map("task_id")
-  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  authorId  Int      @map("author_id")
-  author    User     @relation(fields: [authorId], references: [id])
-  body      String   @db.Text
+  id               Int      @id @default(autoincrement())
+  taskId           Int      @map("task_id")
+  task             Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId         Int      @map("author_id")
+  author           User     @relation(fields: [authorId], references: [id])
+  body             String   @db.Text
   // Users @mentioned in the body: only active users who could see the project
   // when the comment was written (routes/tasks.ts filters before storing).
-  mentionedUserIds Int[] @default([]) @map("mentioned_user_ids")
-  createdAt DateTime @default(now()) @map("created_at")
+  mentionedUserIds Int[]    @default([]) @map("mentioned_user_ids")
+  createdAt        DateTime @default(now()) @map("created_at")
 
   @@index([taskId])
   @@index([authorId])
@@ -679,23 +771,23 @@ model ProjectReview {
 // iTop object key, not a Solvro-assigned autoincrement — never generated
 // here. Log columns (public/private) are added in a later phase.
 model ItopTicket {
-  id                Int       @id
+  id                Int             @id
   class             String
-  ref               String    @unique
+  ref               String          @unique
   title             String
   status            String
-  operationalStatus String?   @map("operational_status")
+  operationalStatus String?         @map("operational_status")
   priority          String?
-  agentPersonId     Int?      @map("agent_person_id")
-  agentName         String?   @map("agent_name")
-  teamName          String?   @map("team_name")
-  serviceName       String?   @map("service_name")
-  callerName        String?   @map("caller_name")
-  orgId             Int       @map("org_id")
-  customerId        Int?      @map("customer_id")
-  customer          Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  startDate         DateTime? @map("start_date")
-  lastUpdate        DateTime  @map("last_update")
+  agentPersonId     Int?            @map("agent_person_id")
+  agentName         String?         @map("agent_name")
+  teamName          String?         @map("team_name")
+  serviceName       String?         @map("service_name")
+  callerName        String?         @map("caller_name")
+  orgId             Int             @map("org_id")
+  customerId        Int?            @map("customer_id")
+  customer          Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  startDate         DateTime?       @map("start_date")
+  lastUpdate        DateTime        @map("last_update")
   // Escalation DEADLINES (a point in time), not the SLA stopwatch itself —
   // confirmed against a real iTop 3.2.2 install that the bare `tto`/`ttr`
   // ticket attributes are JSON integers (elapsed clock seconds), which is
@@ -705,17 +797,17 @@ model ItopTicket {
   // lib/itop/types.ts's ITOP_TICKET_OUTPUT_FIELDS doc comment.
   tto               DateTime?
   ttr               DateTime?
-  slaTtoPassed      Boolean   @default(false) @map("sla_tto_passed")
-  slaTtrPassed      Boolean   @default(false) @map("sla_ttr_passed")
-  resolutionDate    DateTime? @map("resolution_date")
+  slaTtoPassed      Boolean         @default(false) @map("sla_tto_passed")
+  slaTtrPassed      Boolean         @default(false) @map("sla_ttr_passed")
+  resolutionDate    DateTime?       @map("resolution_date")
   // Case log entries (Phase 5, backend/src/lib/itop/sync.ts). Normalised
   // JSON array `Array<{ date: string|null (ISO), author: string|null,
   // message: string }>` capped at the last 50 entries, newest last — never
   // the raw iTop `{ entries: [...] }` shape. `withLogs` on toTicketRow
   // (routes/itop.ts) gates whether these reach a response.
-  publicLog         Json?     @map("public_log")
-  privateLog        Json?     @map("private_log")
-  syncedAt          DateTime  @map("synced_at")
+  publicLog         Json?           @map("public_log")
+  privateLog        Json?           @map("private_log")
+  syncedAt          DateTime        @map("synced_at")
   itopTimeEntries   ItopTimeEntry[]
 
   @@index([customerId, status])

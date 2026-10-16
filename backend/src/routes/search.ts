@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth } from "../http/auth.js";
+import { requireAuth, requirePermission } from "../http/auth.js";
 import { validate } from "../http/validate.js";
 import { customerVisibilityFilter, projectVisibilityFilter } from "../lib/visibility.js";
 
@@ -23,7 +23,9 @@ const GROUP_LIMIT = 8;
 
 export const searchRouter = Router();
 
-searchRouter.use(requireAuth);
+// `project:read` gate (2026-10 security hardening): a PENDING account (no
+// permissions) used to search unowned customers here.
+searchRouter.use(requireAuth, requirePermission("project:read"));
 
 searchRouter.get("/", validate("query", searchQuerySchema), async (req, res) => {
   const { q } = req.query as unknown as z.infer<typeof searchQuerySchema>;

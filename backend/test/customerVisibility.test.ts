@@ -41,7 +41,7 @@ async function createProject(overrides: { tamId: number; customerId?: number | n
   });
 }
 
-// STAKEHOLDER (seeded: project:read + project:view-all, no project:write —
+// STAKEHOLDER (seeded: project:read, no project:write —
 // backend/prisma/seed.ts) can't reach POST /customers at all: the route
 // gates on project:write before Decision 4's tamId branch ever runs, so a
 // real STAKEHOLDER token 403s at the permission middleware. To exercise
@@ -98,9 +98,9 @@ describe("GET /customers — visibility (criterion 1)", () => {
     expect(ids).not.toContain(unrelated.id);
   });
 
-  it("STAKEHOLDER (project:view-all) and ADMIN (*) see every customer (criterion 3)", async () => {
+  it("AUDITOR (project:view-all) and ADMIN (*) see every customer (criterion 3)", async () => {
     const { owned, attached, unowned, unrelated } = await fourCustomerFixture();
-    const stakeholder = await createUserWithRole("STAKEHOLDER");
+    const stakeholder = await createUserWithRole("AUDITOR");
     const admin = await createAdminAndToken();
 
     for (const token of [stakeholder.token, admin.token]) {

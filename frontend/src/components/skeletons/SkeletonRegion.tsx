@@ -13,17 +13,20 @@ export function SkeletonRegion({
   className,
   delayMs = 150,
   announce = true,
+  "data-testid": testId,
   children,
 }: {
   className?: string;
   delayMs?: number;
   announce?: boolean;
+  /** On the region itself, so it is present from the first paint (the body is delayed). */
+  "data-testid"?: string;
   children: ReactNode;
 }) {
   const visible = useDelayedFlag(true, delayMs);
   const a11y = announce ? { role: "status", "aria-busy": true } : { "aria-hidden": true };
   return (
-    <div className={className} {...a11y}>
+    <div className={className} data-testid={testId} {...a11y}>
       {announce && <span className="sr-only">Loading…</span>}
       {visible && children}
     </div>

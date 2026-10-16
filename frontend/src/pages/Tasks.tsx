@@ -14,7 +14,7 @@ import { Alert, AlertDescription } from "@/components/reui/alert";
 import { Tabs } from "@/components/Tabs";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { TaskStatusChip } from "@/components/StatusChip";
-import { useAuth } from "@/lib/auth";
+import { hasPermission, useAuth } from "@/lib/auth";
 import { dateToDay, dayFromIso } from "@/lib/dateField";
 import { fmtDay, fmtDue } from "@/lib/formatDate";
 import { parseWeekKey, weekKeyOf } from "@/lib/isoWeek";
@@ -106,8 +106,10 @@ export function Tasks() {
   const { user } = useAuth();
   const [editTask, setEditTask] = useState<TaskWithProject | null>(null);
 
-  const { data: users } = useUsers();
-  const { data: customers } = useCustomers();
+  // /users and /customers need project:read; without it the filters stay empty.
+  const canRead = hasPermission(user, "project:read");
+  const { data: users } = useUsers(canRead);
+  const { data: customers } = useCustomers(canRead);
 
   const filterFields = useMemo<FilterFieldConfig<string>[]>(
     () => [
@@ -196,7 +198,7 @@ export function Tasks() {
         header: ({ column }) => <DataGridColumnHeader column={column} title="ID" />,
         enableSorting: false,
         cell: ({ row }) => (
-          <span className="font-mono text-label-caps uppercase tracking-widest text-on-surface-variant">
+          <span className="font-mono text-label-caps uppercase text-on-surface-variant">
             T-{String(row.original.id).padStart(3, "0")}
           </span>
         ),

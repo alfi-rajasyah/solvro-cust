@@ -11,6 +11,7 @@ import { Modal } from "@/components/Modal";
 import { ProjectStatusChip } from "@/components/StatusChip";
 import { Tabs } from "@/components/Tabs";
 import { ItopTab } from "@/components/admin/ItopTab";
+import { OutlineTab } from "@/components/admin/OutlineTab";
 import { ApiError } from "@/lib/api";
 import {
   type AdminProject,
@@ -42,7 +43,7 @@ import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll
 import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type Tab = "users" | "roles" | "signin" | "projects" | "itop";
+type Tab = "users" | "roles" | "signin" | "projects" | "itop" | "outline";
 
 const TAB_ITEMS: ReadonlyArray<{ key: Tab; label: string }> = [
   { key: "users", label: "Users" },
@@ -50,6 +51,7 @@ const TAB_ITEMS: ReadonlyArray<{ key: Tab; label: string }> = [
   { key: "signin", label: "Sign-in" },
   { key: "projects", label: "Project Override" },
   { key: "itop", label: "iTop" },
+  { key: "outline", label: "Outline" },
 ];
 
 // Domain regex matches the backend validator (PATCH /admin/settings/auth).
@@ -87,6 +89,7 @@ export function Admin() {
         {tab === "signin" && <SignInTab />}
         {tab === "projects" && <ProjectsTab />}
         {tab === "itop" && <ItopTab />}
+        {tab === "outline" && <OutlineTab />}
       </div>
     </div>
   );
@@ -325,7 +328,9 @@ function UsersTab() {
             <button
               type="button"
               onClick={() => setResettingUser(u)}
-              className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-semibold"
+              disabled={isSelf}
+              className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 font-semibold"
+              title={isSelf ? "Use Settings › Change password for your own account" : undefined}
             >
               Reset password
             </button>

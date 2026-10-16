@@ -10,6 +10,7 @@ import {
 import { EpicChip } from "./EpicChip";
 import { InlineDateRangeEditor } from "./InlineDateRangeEditor";
 import { LabelPicker } from "./LabelPicker";
+import { OutlineMentions } from "./OutlineMentions";
 import { TASK_STATUS_TONE_CLASS } from "./StatusChip";
 import { TaskConflictDialog } from "./TaskConflictDialog";
 import { TaskTicketField } from "@/components/itop/TaskTicketField";
@@ -180,9 +181,13 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   // someone else's new value). Single-click edits use the live row.
   const [editBase, setEditBase] = useState<Task | null>(null);
 
+  // True while a sheet opened from inside the panel (the iTop New-ticket
+  // sheet) is showing: Escape belongs to that sheet, and closing the panel
+  // under a pending create would unmount the field that pins the new ref.
+  const [nestedSheetOpen, setNestedSheetOpen] = useState(false);
   // The conflict dialog and the delete confirm are modals with their own
   // Escape handling — the same keypress must not also close the panel.
-  const modalOpen = conflict !== null || confirmDelete;
+  const modalOpen = conflict !== null || confirmDelete || nestedSheetOpen;
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" && !modalOpen) onClose();
@@ -781,6 +786,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                   taskTitle={task.title}
                   taskDescription={task.description}
                   onSave={(ref) => patch({ itopTicketRef: ref })}
+                  onCreateSheetOpenChange={setNestedSheetOpen}
                 />
               </>
             )}
@@ -955,6 +961,9 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               )}
             </div>
           )}
+
+          {/* Outline pages that link to this task (hidden when there is nothing to show). */}
+          <OutlineMentions scope={{ kind: "task", id: task.id }} variant="block" />
 
           {error && (
             <Alert variant="destructive" className="mt-4">

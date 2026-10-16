@@ -16,10 +16,12 @@ import { useProjectContext } from "../ProjectDetail";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { scoreClass, scoreLevel } from "@/components/RiskFormModal";
+import { OutlineMentions } from "@/components/OutlineMentions";
 import { ProjectActivity } from "@/components/ProjectActivity";
 import { Chip } from "@/components/StatusChip";
 import { dateToDay, dayFromIso } from "@/lib/dateField";
 import { fmtDay } from "@/lib/formatDate";
+import { TASK_STATUS_LABEL } from "@/lib/labels";
 import { type Task, useProjectNotes, useProjectRisks, useProjectTasks } from "@/lib/queries";
 
 export function ProjectOverview() {
@@ -162,6 +164,7 @@ export function ProjectOverview() {
           <StatusBreakdown tasks={tasks ?? []} />
           <TopRisks projectId={project.id} />
           <ProjectNotesPanel projectId={project.id} />
+          <OutlineMentions scope={{ kind: "project", id: project.id }} variant="card" />
         </div>
       </div>
 
@@ -250,9 +253,9 @@ function StatusBreakdown({ tasks }: { tasks: Task[] }) {
             )}
           </div>
           <dl className="mt-3 space-y-1.5 text-xs">
-            <BreakdownRow swatch="bg-primary" label="Done" count={done} />
-            <BreakdownRow swatch="bg-primary/45" label="In progress" count={inProgress} />
-            <BreakdownRow swatch="bg-surface-container-high" label="To do" count={todo} />
+            <BreakdownRow swatch="bg-primary" label={TASK_STATUS_LABEL.DONE} count={done} />
+            <BreakdownRow swatch="bg-primary/45" label={TASK_STATUS_LABEL.IN_PROGRESS} count={inProgress} />
+            <BreakdownRow swatch="bg-surface-container-high" label={TASK_STATUS_LABEL.TODO} count={todo} />
           </dl>
         </>
       )}

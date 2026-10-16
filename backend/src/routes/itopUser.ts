@@ -1,6 +1,10 @@
 // Personal iTop token management — Phase 5 (write path), Task 5.1. Mounted
-// at /itop/me in src/app.ts, `requireAuth` only (no admin gate: every user
-// manages their own token). A pasted token is accepted only when it
+// at /itop/me in src/app.ts, `requireAuth` (no admin gate: every user manages
+// their own token). GET /token is open to every authenticated user so the UI
+// can show "not applicable"; PUT requires `task:write`, since a personal token
+// is only ever used for writes (routes/itop.ts's write routes require the same
+// permission). DELETE is open: anyone may remove the token they have stored,
+// including after losing `task:write`. A pasted token is accepted only when it
 // belongs, in iTop, to the SAME PERSON as the Solvro account saving it
 // (matched by email) — user decision 2026-09-22 (docs/archive/plans/itop-integration.md
 // §1 decision 8, docs/archive/plans/itop-integration-spec.md "What one action looks
@@ -13,7 +17,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { logger } from "../logger.js";
-import { requireAuth } from "../http/auth.js";
+import { requireAuth, requirePermission } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { open, seal, SecretBoxError } from "../lib/secretBox.js";
@@ -116,6 +120,7 @@ function checkPutTokenRateLimit(userId: number): void {
 
 itopUserRouter.put(
   "/token",
+  requirePermission("task:write"),
   validate("body", putTokenSchema),
   async (req, res) => {
     checkPutTokenRateLimit(req.user!.sub);

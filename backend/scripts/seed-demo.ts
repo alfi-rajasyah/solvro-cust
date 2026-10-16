@@ -1,8 +1,10 @@
 // Wipes every data table and loads a small, human-readable demo workspace:
 // four customers, six projects (one per status), sections, epics, labels,
 // tasks with subtasks and dependencies, risks, daily notes, operations
-// notes, and weekly updates. Dates are relative to the day the script runs,
-// so the Gantt, overdue flags, and Daily Review always look current.
+// notes, weekly updates, project members, and an activity log with
+// notifications derived from the project data. Dates are relative to the day
+// the script runs, so the Gantt, overdue flags, and Daily Review always look
+// current.
 //
 // DESTRUCTIVE — dev/demo databases only. Keeps roles, the auth_config and
 // itop_config singletons (settings preserved), and the migration history;
@@ -16,6 +18,7 @@
 
 import {
   PrismaClient,
+  type Prisma,
   type Priority,
   type ProjectStatus,
   type RiskCategory,
@@ -37,6 +40,16 @@ const DAY_MS = 86_400_000;
 /** UTC midnight `offset` days from today — the app's date contract. */
 function day(offset: number): Date {
   return new Date(TODAY.getTime() + offset * DAY_MS);
+}
+
+/** A timestamp on day `offset` at `hour` UTC — for events that need a time of day. */
+function at(offset: number, hour: number): Date {
+  return new Date(day(offset).getTime() + hour * 3_600_000);
+}
+
+/** The "yyyy-MM-dd" calendar day `offset` days from today — how the activity log stores dates. */
+function dayString(offset: number): string {
+  return day(offset).toISOString().slice(0, 10);
 }
 
 /** Offset (in days) of the ISO Monday `weeksAgo` weeks before this week's. */
@@ -112,6 +125,8 @@ interface ProjectSpec {
   description: string;
   customer: string;
   tam: UserKey;
+  /** Who created the project, when not its TAM — an admin creating it for a TAM notifies that TAM. */
+  createdBy?: UserKey;
   status: ProjectStatus;
   service: [string, string[]];
   /** Day offset the baseline was locked, when the project has one. */
@@ -358,6 +373,7 @@ const PROJECTS: ProjectSpec[] = [
   },
   {
     name: "Bank Arta — Azure Landing Zone",
+    createdBy: "admin",
     description:
       "Build an OJK-compliant Azure landing zone (hub-and-spoke network, identity controls, policy baseline) and move the first internal workload onto it.",
     customer: "Bank Arta Sejahtera",
@@ -670,6 +686,175 @@ const CUSTOMER_NOTES: Array<[string, UserKey, number, string, string]> = [
   ["Kopi Senja", "maya", -1, "POS outage at store 2", "POS lost connection for 40 minutes after the ISP router rebooted. Not related to the Wi-Fi project. Opened a ticket with the ISP."],
 ];
 
+
+// ------------------------------------------------------------- activity ---
+
+/**
+ * Writes what the app itself would have written for a project: the creation
+ * event (and the TAM's notification when someone else created it), its epics,
+ * the member rows the app adds when someone is assigned a task or comments on
+ * one (each with its "added" event, dated before the task it unlocks), the task
+ * created / status-change events, and the comment events. Notifications go only
+ * to people who can see the project, as the real recipient filter does:
+ * its TAM, its members, the customer's TAM and view-all roles (ADMIN —
+ * STAKEHOLDER holds `project:read` only).
+ *
+ * Events are inserted in time order, because the feed pages by event id.
+ */
+async function seedActivity(
+  p: ProjectSpec,
+  projectId: number,
+  customerId: number,
+  epicIds: Map<string, number>,
+  taskIds: Map<string, number>,
+  commentRows: Array<{ id: number; taskKey: string; author: UserKey; offset: number }>,
+  users: Record<UserKey, number>,
+) {
+  const ref = (u: UserKey) => ({ id: users[u], username: USERS[u].username });
+  const customerTam = CUSTOMERS.find((c) => c.name === p.customer)!.tam;
+
+  // Members: everyone besides the TAM and the customer's TAM who is assigned a
+  // task (or subtask) or comments, from the day they first appear.
+  const firstSeen = new Map<UserKey, number>();
+  const seen = (u: UserKey | undefined, offset: number) => {
+    if (!u || u === p.tam || u === customerTam) return;
+    const cur = firstSeen.get(u);
+    if (cur === undefined || offset < cur) firstSeen.set(u, offset);
+  };
+  for (const t of p.tasks) {
+    seen(t.assignee, t.start ?? -30);
+    for (const s of t.subtasks ?? []) seen(s.assignee, s.start ?? t.start ?? -30);
+    for (const [author, offset] of t.comments ?? []) seen(author, offset);
+  }
+  const members = [...firstSeen.keys()];
+  const canSee = (u: UserKey) =>
+    u === p.tam || u === customerTam || members.includes(u) || USERS[u].role === "ADMIN";
+
+  // The project is created the day before anything in it starts.
+  const earliest = Math.min(
+    -1,
+    p.baselineLocked ?? 0,
+    ...p.tasks.map((t) => t.start ?? -30),
+    ...(p.epics ?? []).map((e) => e.start ?? 0),
+    ...firstSeen.values(),
+  );
+  const createdDay = earliest - 1;
+  const creator = p.createdBy ?? p.tam;
+
+  interface Pending {
+    when: Date;
+    data: Prisma.ActivityEventUncheckedCreateInput;
+    notify?: Array<{ userId: number; reason: string; readAt: Date | null }>;
+  }
+  const pending: Pending[] = [];
+  const add = (
+    when: Date,
+    actor: UserKey,
+    entityType: string,
+    entityId: number,
+    action: string,
+    entityLabel: string,
+    changes?: Prisma.InputJsonObject,
+    notify?: Pending["notify"],
+  ) =>
+    pending.push({
+      when,
+      data: { projectId, actorId: users[actor], entityType, entityId, action, entityLabel, changes, createdAt: when },
+      notify,
+    });
+
+  add(
+    at(createdDay, 8),
+    creator,
+    "project",
+    projectId,
+    "created",
+    p.name,
+    { tam: ref(p.tam), customer: { id: customerId, name: p.customer } },
+    creator !== p.tam ? [{ userId: users[p.tam], reason: "assigned", readAt: at(createdDay + 1, 9) }] : undefined,
+  );
+  for (const e of p.epics ?? []) {
+    const changes: Record<string, Prisma.InputJsonValue> = {};
+    if (e.owner) changes.owner = { from: null, to: ref(e.owner) };
+    if (e.start !== undefined) changes.startDate = { from: null, to: dayString(e.start) };
+    if (e.due !== undefined) changes.dueDate = { from: null, to: dayString(e.due) };
+    add(at(createdDay, 8), p.tam, "epic", epicIds.get(e.title)!, "created", e.title, changes as Prisma.InputJsonObject);
+  }
+  for (const m of members) {
+    add(at(Math.min(firstSeen.get(m)!, -1), 8), p.tam, "member", users[m], "added", USERS[m].username);
+  }
+
+  // Activity derived from the task data: the TAM created each top-level task on
+  // its start day (assigned ones notify the assignee), the assignee moved it
+  // to "In progress" on that day and to "Done" on its due day — never later
+  // than yesterday, so nothing sits in the future.
+  for (const t of p.tasks) {
+    const taskId = taskIds.get(t.key)!;
+    const start = t.start ?? -30;
+    const assignee = t.assignee ?? null;
+    const actor = assignee ?? p.tam;
+    add(
+      at(Math.min(start, -1), 9),
+      p.tam,
+      "task",
+      taskId,
+      "created",
+      t.title,
+      assignee ? { assignee: { from: null, to: ref(assignee) } } : {},
+      assignee && assignee !== p.tam && canSee(assignee)
+        ? [{ userId: users[assignee], reason: "assigned", readAt: start < -7 ? at(start, 12) : null }]
+        : undefined,
+    );
+    if (t.status !== "TODO") {
+      add(at(Math.min(start, -1), 10), actor, "task", taskId, "updated", t.title, {
+        status: { from: "TODO", to: "IN_PROGRESS" },
+      });
+    }
+    if (t.status === "DONE") {
+      add(at(Math.min(t.due ?? start, -1), 16), actor, "task", taskId, "updated", t.title, {
+        status: { from: "IN_PROGRESS", to: "DONE" },
+      });
+    }
+  }
+  for (const c of commentRows) {
+    const task = p.tasks.find((t) => t.key === c.taskKey)!;
+    const assignee = task.assignee ?? null;
+    add(
+      at(c.offset, 10),
+      c.author,
+      "comment",
+      c.id,
+      "created",
+      task.title,
+      { taskId: taskIds.get(task.key)! },
+      assignee && assignee !== c.author && canSee(assignee)
+        ? [{ userId: users[assignee], reason: "commented", readAt: c.offset < -7 ? at(c.offset, 14) : null }]
+        : undefined,
+    );
+  }
+
+  for (const m of members) {
+    await prisma.projectMember.create({
+      data: {
+        projectId,
+        userId: users[m],
+        addedById: users[p.tam],
+        createdAt: at(Math.min(firstSeen.get(m)!, -1), 8),
+      },
+    });
+  }
+  // Stable sort: ties keep their insertion order (project, epics, members, tasks).
+  const ordered = pending.map((e, i) => ({ e, i })).sort((a, b) => a.e.when.getTime() - b.e.when.getTime() || a.i - b.i);
+  for (const { e } of ordered) {
+    const event = await prisma.activityEvent.create({ data: e.data });
+    for (const n of e.notify ?? []) {
+      await prisma.notification.create({
+        data: { userId: n.userId, activityEventId: event.id, reason: n.reason, readAt: n.readAt, createdAt: e.when },
+      });
+    }
+  }
+}
+
 // ------------------------------------------------------------------ run ---
 
 async function wipe() {
@@ -790,6 +975,7 @@ async function main() {
     }
 
     const taskIds = new Map<string, number>();
+    const commentRows: Array<{ id: number; taskKey: string; author: UserKey; offset: number }> = [];
     for (const [i, t] of p.tasks.entries()) {
       const startDate = t.start !== undefined ? day(t.start) : null;
       const dueDate = t.due !== undefined ? day(t.due) : null;
@@ -836,9 +1022,10 @@ async function main() {
         taskCount++;
       }
       for (const [author, offset, body] of t.comments ?? []) {
-        await prisma.comment.create({
-          data: { taskId: task.id, authorId: users[author], body, createdAt: new Date(day(offset).getTime() + 10 * 3_600_000) },
+        const comment = await prisma.comment.create({
+          data: { taskId: task.id, authorId: users[author], body, createdAt: at(offset, 10) },
         });
+        commentRows.push({ id: comment.id, taskKey: t.key, author, offset });
       }
     }
 
@@ -862,10 +1049,12 @@ async function main() {
           authorId: users[p.tam],
           body,
           noteDate: day(offset),
-          createdAt: new Date(day(offset).getTime() + 9 * 3_600_000),
+          createdAt: at(offset, 9),
         },
       });
     }
+
+    await seedActivity(p, project.id, customers.get(p.customer)!, epics, taskIds, commentRows, users);
   }
 
   // Operations notes (issues outside any project).

@@ -1,13 +1,17 @@
 import { useEffect, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { BrandMark } from "@/components/BrandMark";
+import { SkeletonRegion } from "@/components/skeletons/SkeletonRegion";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Chip, ProjectStatusChip } from "@/components/StatusChip";
-import { ApiError } from "@/lib/api";
 import { dateToDay } from "@/lib/dateField";
 import { fmtAgo, fmtDay, fmtDayFull, fmtRange } from "@/lib/formatDate";
 import { MILESTONE_UPCOMING_LABEL, PHASE_STATUS_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
+import { GuestEmbed } from "@/pages/embed/GuestEmbed";
+import { isGuestEmbed } from "@/lib/embedViews";
 import { type PublicShare as PublicShareData, usePublicShare } from "@/lib/queries";
 import {
+  guestErrorCopy,
   PHASE_STATUS_TONE,
   phaseStatusOf,
   timelineLayout,
@@ -56,8 +60,15 @@ function useGuestDocument(title: string | null) {
 
 export function PublicShare() {
   const { token } = useParams<{ token: string }>();
+  const [params] = useSearchParams();
   const { data, isLoading, error, refetch } = usePublicShare(token);
   useGuestDocument(data?.project.name ?? null);
+
+  // `?embed=1`: the same payload without the page chrome, for a frame inside
+  // another page (docs/archive/plans/outline-integration.md, Phase C).
+  if (isGuestEmbed(params.get("embed"))) {
+    return <GuestEmbed data={data} isLoading={isLoading} error={error} onRetry={() => void refetch()} />;
+  }
 
   return (
     <div className="min-h-screen bg-background text-on-surface">
@@ -91,47 +102,27 @@ export function PublicShare() {
 
 function GuestSkeleton() {
   return (
-    <div role="status" aria-busy="true" data-testid="guest-loading" className="space-y-6">
-      <span className="sr-only">Loading project</span>
-      <div aria-hidden="true" className="space-y-3">
-        <div className="h-8 w-2/3 animate-pulse rounded-sm bg-surface-container" />
-        <div className="h-4 w-1/3 animate-pulse rounded-sm bg-surface-container" />
+    <SkeletonRegion className="space-y-6" data-testid="guest-loading">
+      <div className="space-y-3">
+        <Skeleton className="h-8 w-2/3" />
+        <Skeleton className="h-4 w-1/3" />
       </div>
-      <div
-        aria-hidden="true"
-        className="space-y-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-4"
-      >
+      <div className="space-y-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-10 animate-pulse rounded-sm bg-surface-container-low" />
+          <Skeleton key={i} className="h-10" />
         ))}
       </div>
-      <div
-        aria-hidden="true"
-        className="space-y-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-4"
-      >
+      <div className="space-y-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
         {[0, 1].map((i) => (
-          <div key={i} className="h-8 animate-pulse rounded-sm bg-surface-container-low" />
+          <Skeleton key={i} className="h-8" />
         ))}
       </div>
-    </div>
+    </SkeletonRegion>
   );
 }
 
 function GuestError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  const status = error instanceof ApiError ? error.status : null;
-  const rateLimited = status === 429;
-  const unavailable = status === 404;
-  const icon = rateLimited ? "hourglass_top" : unavailable ? "link_off" : "error";
-  const title = rateLimited
-    ? "Too many requests — try again in a minute"
-    : unavailable
-      ? "This link has expired or is no longer available"
-      : "Something went wrong";
-  const hint = rateLimited
-    ? "You have opened this page too many times in a short while."
-    : unavailable
-      ? "Ask the person who shared it with you for a new link."
-      : "The project could not be loaded. Check your connection and try again.";
+  const { icon, title, hint, final } = guestErrorCopy(error);
   return (
     <div
       role="alert"
@@ -143,7 +134,7 @@ function GuestError({ error, onRetry }: { error: unknown; onRetry: () => void })
       </span>
       <h1 className="font-display text-h2 text-on-surface">{title}</h1>
       <p className="text-sm text-on-surface-variant">{hint}</p>
-      {!unavailable && (
+      {!final && (
         <button
           type="button"
           onClick={onRetry}

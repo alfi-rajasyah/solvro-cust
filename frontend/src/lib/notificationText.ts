@@ -17,11 +17,34 @@ const REASON_PHRASE: Record<string, { before: string }> = {
 };
 
 /**
+ * A project created with you as its TAM, or handed to you: "rina made you TAM
+ * of Acme rollout". A missing project name falls back to the activity sentence.
+ */
+function describeProjectRoleNotification(n: AppNotification, actor: string): NotificationSentence | null {
+  const project =
+    (typeof n.projectName === "string" && n.projectName) ||
+    (typeof n.event.entityLabel === "string" && n.event.entityLabel) ||
+    null;
+  if (!project) return null;
+  const parts: ActivityPart[] = [
+    { kind: "actor", text: actor },
+    { kind: "text", text: " made you TAM of " },
+    { kind: "entity", text: project },
+  ];
+  return { parts, text: parts.map((p) => p.text).join("") };
+}
+
+/**
  * "rina assigned you Task", "rina commented on Task", "rina mentioned you on
- * Task". An unknown reason, or no task title to name, falls back to the
- * activity sentence for the underlying event.
+ * Task"; for a project seat "rina made you TAM of Acme rollout". An unknown
+ * reason, or no title to name, falls back to the activity sentence for the
+ * underlying event.
  */
 export function describeNotification(n: AppNotification): NotificationSentence {
+  if (n.event?.entityType === "project" && n.reason === "assigned") {
+    const sentence = describeProjectRoleNotification(n, n.event.actor?.username || "Someone");
+    if (sentence) return sentence;
+  }
   const phrase = Object.prototype.hasOwnProperty.call(REASON_PHRASE, n.reason)
     ? REASON_PHRASE[n.reason]
     : null;

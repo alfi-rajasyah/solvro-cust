@@ -12,7 +12,7 @@ import { createApp } from "../../src/app.js";
 import { prisma } from "../../src/prisma.js";
 import { signToken } from "../../src/http/auth.js";
 import { bustItopConfigCache } from "../../src/lib/itop/config.js";
-import { seedRoles } from "../testAuth.js";
+import { createUserWithRole, seedRoles } from "../testAuth.js";
 import { createFakeItop, seedFakeItop, type FakeItopState, FAKE_ITOP_TOKENS } from "./fakeItop.js";
 
 const app = createApp();
@@ -77,7 +77,7 @@ async function createUserWithEmail(email: string): Promise<{ userId: number; tok
       active: true,
     },
   });
-  const token = signToken({ sub: user.id, role: role.roleName, permissions: role.permissions as string[] });
+  const token = signToken({ sub: user.id, ver: 0 });
   return { userId: user.id, token };
 }
 
@@ -111,6 +111,45 @@ describe("access control", () => {
     expect((await call("put", "/itop/me/token", undefined, { token: "x".repeat(20) })).status).toBe(401);
     expect((await call("delete", "/itop/me/token")).status).toBe(401);
   });
+});
+
+describe("task:write gating", () => {
+  // A personal token is only ever used for writes, so a user who can't write
+  // (STAKEHOLDER, PENDING) must not store one: PUT is 403. GET stays open so
+  // the Settings UI can render "not applicable" instead of erroring, and DELETE
+  // is open so anyone can remove a token they already have stored.
+  for (const roleName of ["STAKEHOLDER", "PENDING"]) {
+    it(`${roleName}: PUT 403, GET 200 and nothing stored`, async () => {
+      const { userId, token } = await createUserWithRole(roleName);
+
+      const put = await call("put", "/itop/me/token", token, { token: FAKE_ITOP_TOKENS.rina });
+      expect(put.status).toBe(403);
+      expect(put.body.code).toBe("forbidden");
+
+      const get = await call("get", "/itop/me/token", token);
+      expect(get.status).toBe(200);
+      expect(get.body.set).toBe(false);
+
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+      expect(user.itopTokenEnc).toBeNull();
+    });
+
+    it(`${roleName}: DELETE removes a token that is still stored (e.g. after losing task:write)`, async () => {
+      const { userId, token } = await createUserWithRole(roleName);
+      await prisma.user.update({
+        where: { id: userId },
+        data: { itopTokenEnc: "v1:left-over", itopTokenPersonName: "Rina S." },
+      });
+
+      const del = await call("delete", "/itop/me/token", token);
+      expect(del.status).toBe(204);
+
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+      expect(user.itopTokenEnc).toBeNull();
+      expect(user.itopTokenPersonName).toBeNull();
+      expect((await call("get", "/itop/me/token", token)).body.set).toBe(false);
+    });
+  }
 });
 
 describe("PUT /itop/me/token", () => {

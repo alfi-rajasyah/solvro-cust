@@ -22,7 +22,8 @@ export function Projects() {
   const customerIdParam = searchParams.get("customerId");
   const customerFilter = customerIdParam ? Number(customerIdParam) : undefined;
 
-  const { data: customers } = useCustomers();
+  // GET /customers needs project:read; without it the filter just stays empty.
+  const { data: customers } = useCustomers(hasPermission(user, "project:read"));
   const { data: projects, isLoading, isError, error } = useProjects(
     customerFilter ? { customerId: customerFilter } : {},
   );

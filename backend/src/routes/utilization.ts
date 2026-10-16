@@ -5,7 +5,7 @@
 // (routes/itop.ts GET /daily) but at week granularity, via
 // lib/isoWeek.ts's parseWeekKey: `utcOffsetMinutes` (local minus UTC) moves
 // the window's position, never the underlying UTC-midnight arithmetic.
-// `scope=me` is open to anyone; `tam`/`customer` require `report:executive`
+// `scope=me` is open to anyone holding `project:read`; `tam`/`customer` require `report:executive`
 // (plan decision: docs/archive/plans/itop-integration.md §1 item 6 — no new
 // permission string is introduced for this). Mounted at /utilization in
 // src/app.ts. See docs/archive/plans/itop-integration.md Task 3.2.
@@ -13,7 +13,7 @@ import { Router } from "express";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
-import { requireAuth, hasPermission } from "../http/auth.js";
+import { requireAuth, requirePermission, hasPermission } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { getItopConfig, isItopConfigured } from "../lib/itop/config.js";
@@ -23,6 +23,10 @@ import { utcMidnightOfDayString } from "../lib/dateBoundary.js";
 export const utilizationRouter = Router();
 
 utilizationRouter.use(requireAuth);
+// The whole Utilization surface is gated on project:read (as routes/itop.ts
+// is), so a PENDING user gets 403 here and not just a hidden nav entry in the
+// frontend (docs/archive/plans/internal-sync.md).
+utilizationRouter.use(requirePermission("project:read"));
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
@@ -139,12 +143,15 @@ utilizationRouter.get(
         syncedAt: true,
       },
       orderBy: { startDate: "asc" },
-      take: MAX_ENTRIES,
+      take: MAX_ENTRIES + 1,
     });
     // True when the query above hit the cap — the frontend uses this to warn
     // that the week's totals may be understated rather than presenting them
     // as complete.
-    const truncated = entries.length >= MAX_ENTRIES;
+    // Fetched one past the cap, so a week with exactly MAX_ENTRIES entries is
+    // not flagged; only a week with more than that is.
+    const truncated = entries.length > MAX_ENTRIES;
+    if (truncated) entries.length = MAX_ENTRIES;
 
     const customerIds = new Set<number>();
     const userIds = new Set<number>();
@@ -228,7 +235,24 @@ utilizationRouter.get(
       scope === "me"
         ? prisma.customer.count({ where: { tamId: user.sub } })
         : prisma.customer.count({ where: { itopOrgId: { not: null } } }),
-      scope === "me" ? Promise.resolve(0) : prisma.user.count({ where: { active: true, itopUserId: { not: null } } }),
+      // Capacity = TAM-capable users only: a read-only account matched in iTop
+      // adds hours (its rows still show), not capacity. TAM-capable = the role
+      // holds `task:write` or the `*` wildcard (permission-based, never by
+      // role name).
+      scope === "me"
+        ? Promise.resolve(0)
+        : prisma.user.count({
+            where: {
+              active: true,
+              itopUserId: { not: null },
+              role: {
+                OR: [
+                  { permissions: { array_contains: "task:write" } },
+                  { permissions: { array_contains: "*" } },
+                ],
+              },
+            },
+          }),
     ]);
 
     const capacityHours = scope === "me" ? capacityHoursPerWeek : capacityHoursPerWeek * activeMappedUserCount;

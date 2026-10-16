@@ -1,0 +1,47 @@
+#!/bin/sh
+# Sourced (not executed) by the nginx image's /docker-entrypoint.sh, before
+# 20-envsubst-on-templates.sh renders nginx-frame-protection-embed.conf.template.
+#
+# Validates the raw EMBED_FRAME_ANCESTORS and exports the result as
+# EMBED_FRAME_ANCESTORS_SAFE (the ONLY variable the template reads, so a skipped
+# or bypassed validator can never inject the raw value) plus EMBED_FRAME_XFO.
+# It fails CLOSED: unset, empty, over-long or ANY invalid token disables
+# embedding entirely (the pages keep `frame-ancestors 'self'` + X-Frame-Options:
+# SAMEORIGIN) and logs why — never an outage. The value lands in a response
+# header, so only plain http(s) origins — scheme://host[:port] — pass; anything
+# that could smuggle another CSP directive, a wildcard or a quote (`*`, `;`, `"`,
+# paths, `data:`) rejects the whole list.
+#
+# Must never exit non-zero: the entrypoint runs under `set -e`.
+
+embed_frame_ancestors_normalise() {
+  LC_ALL=C; export LC_ALL # byte-wise character classes, whatever the image locale
+  _raw="${EMBED_FRAME_ANCESTORS:-}"
+  _valid=""
+  if [ "${#_raw}" -gt 2000 ]; then
+    echo "15-embed-frame-ancestors: ERROR: EMBED_FRAME_ANCESTORS is longer than 2000 characters; ignored, embedding disabled" >&2
+  else
+    set -f # tokens are untrusted: no glob expansion while splitting
+    for _tok in $(printf '%s' "$_raw" | tr '\n\r\t,' '    '); do
+      _tok="${_tok%/}"
+      if printf '%s' "$_tok" | grep -Eq '^https?://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]{1,5})?$'; then
+        _valid="${_valid:+$_valid }$_tok"
+      else
+        echo "15-embed-frame-ancestors: ERROR: '$_tok' is not an http(s) origin; EMBED_FRAME_ANCESTORS ignored, embedding disabled" >&2
+        _valid=""
+        break
+      fi
+    done
+    set +f
+  fi
+  EMBED_FRAME_ANCESTORS_SAFE="$_valid"
+  if [ -n "$_valid" ]; then
+    EMBED_FRAME_XFO=""
+    echo "15-embed-frame-ancestors: /embed/ and /share/ may be framed by: $_valid"
+  else
+    EMBED_FRAME_XFO="SAMEORIGIN"
+  fi
+  export EMBED_FRAME_ANCESTORS_SAFE EMBED_FRAME_XFO
+}
+
+embed_frame_ancestors_normalise || { EMBED_FRAME_ANCESTORS_SAFE=""; EMBED_FRAME_XFO="SAMEORIGIN"; export EMBED_FRAME_ANCESTORS_SAFE EMBED_FRAME_XFO; }

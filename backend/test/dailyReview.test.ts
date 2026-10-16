@@ -266,8 +266,8 @@ describe("GET /daily-review — scope (Decisions 8-10)", () => {
     expect(allProjectDtos(res.body).map((p) => p.name)).toContain("Visible To Admin");
   });
 
-  it("STAKEHOLDER (project:view-all) sees all ACTIVE projects and every tamId-set customer", async () => {
-    const stakeholder = await createUserWithRole("STAKEHOLDER");
+  it("AUDITOR (project:view-all) sees all ACTIVE projects and every tamId-set customer", async () => {
+    const stakeholder = await createUserWithRole("AUDITOR");
     const tam = await createUserWithRole("TAM");
     const customer = await createCustomer({ tamId: tam.userId, name: uniq("Stakeholder Customer") });
     await createProject({ tamId: tam.userId, status: "ACTIVE", customerId: customer.id, name: "Stakeholder Visible" });

@@ -7,11 +7,12 @@ import { CustomerFormModal } from "@/components/CustomerFormModal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { TicketPanel } from "@/components/itop/TicketPanel";
 import { TicketsTab, type TicketsTabView } from "@/components/itop/TicketsTab";
+import { OutlineDocsTab } from "@/components/outline/OutlineDocsTab";
 import { ServiceMappingList } from "@/components/services/ServiceMappingList";
 import { Tabs } from "@/components/Tabs";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
-import { canOwnCustomer, saveErrorMessage } from "@/lib/ownerAccess";
+import { canChangeCustomerOwner, canOwnCustomer, saveErrorMessage } from "@/lib/ownerAccess";
 import {
   type CustomerDetail as CustomerDetailType,
   useCustomer,
@@ -19,10 +20,11 @@ import {
   useCustomerWeeklyUpdates,
   useDeleteCustomer,
   useItopStatus,
+  useOutlineConfig,
   useUpdateCustomerServices,
 } from "@/lib/queries";
 
-type Tab = "overview" | "services" | "tickets";
+type Tab = "overview" | "services" | "tickets" | "docs";
 
 
 export function CustomerDetail() {
@@ -31,6 +33,7 @@ export function CustomerDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canMutate = hasPermission(user, "project:write");
+  const { data: outlineConfig } = useOutlineConfig();
 
   const { data: customer, isLoading, isError, error } = useCustomer(customerId);
   const deleteCustomer = useDeleteCustomer();
@@ -51,15 +54,18 @@ export function CustomerDetail() {
   // skips the fetch rather than skipping the hook call.
   const itopStatus = useItopStatus();
   const itopConfigured = itopStatus.data?.configured ?? false;
+  // The tickets endpoints require `project:read` (403 otherwise), so a user
+  // without it never fires the gate query and never sees the tab.
+  const canReadTickets = hasPermission(user, "project:read");
   const itopTicketsGate = useCustomerTickets(customerId ?? -1, {
     scope: "ongoing",
-    enabled: itopConfigured && customerId !== null,
+    enabled: itopConfigured && canReadTickets && customerId !== null,
     // This gate call runs on every customer page load (not just while the
     // Tickets tab is open) — no background polling here. TicketsTab.tsx's
     // own call opts into polling once the tab is actually visible.
     poll: false,
   });
-  const ticketsAvailable = itopConfigured && itopTicketsGate.data?.mapped === true;
+  const ticketsAvailable = itopConfigured && canReadTickets && itopTicketsGate.data?.mapped === true;
 
   // Latest weekly update for the header's health line; AccountOverview reads
   // the same key (limit 1) until the reader expands the history.
@@ -69,6 +75,8 @@ export function CustomerDetail() {
     { key: "overview", label: "Overview" },
     { key: "services", label: "Services" },
     ...(ticketsAvailable ? [{ key: "tickets" as const, label: "Tickets" }] : []),
+    // Outline pages under the customer's link; only offered once an Outline address is set.
+    ...(outlineConfig?.baseUrl ? [{ key: "docs" as const, label: "Docs" }] : []),
   ];
 
   const initialTab = (() => {
@@ -88,7 +96,7 @@ export function CustomerDetail() {
       setTab(t as Tab);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, ticketsAvailable]);
+  }, [searchParams, ticketsAvailable, outlineConfig?.baseUrl]);
 
   function handleTabChange(next: Tab) {
     setTab(next);
@@ -176,12 +184,14 @@ export function CustomerDetail() {
   }
 
   // Members reaching this customer through a project can edit its profile but
-  // not change its owner or delete it (server: 403 owner_only).
+  // not delete it (server: 403 owner_only); only the owner, view-all, or
+  // anyone on an unowned customer can change its owner.
   const canOwn = canOwnCustomer(
     user,
     customer,
     customer.projects.map((p) => p.tamId),
   );
+  const canChangeOwner = canChangeCustomerOwner(customer);
 
   async function handleDelete() {
     if (!customer) return;
@@ -231,6 +241,14 @@ export function CustomerDetail() {
           />
         )}
         {tab === "services" && <ServicesTab customer={customer} canMutate={canMutate} />}
+        {tab === "docs" && (
+          <OutlineDocsTab
+            scope="customers"
+            id={customer.id}
+            outlineUrl={customer.outlineUrl}
+            canWrite={canMutate}
+          />
+        )}
         {tab === "tickets" && ticketsAvailable && (
           <TicketsTab
             customerId={customer.id}
@@ -245,7 +263,7 @@ export function CustomerDetail() {
         open={editOpen}
         onClose={() => setEditOpen(false)}
         customer={customer}
-        canChangeOwner={canOwn}
+        canChangeOwner={canChangeOwner}
       />
 
       <ConfirmModal

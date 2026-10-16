@@ -112,7 +112,7 @@ async function createUserWithEmail(email: string): Promise<{ userId: number; tok
       active: true,
     },
   });
-  const token = signToken({ sub: user.id, role: role.roleName, permissions: role.permissions as string[] });
+  const token = signToken({ sub: user.id, ver: 0 });
   return { userId: user.id, token };
 }
 
@@ -260,6 +260,23 @@ describe("preconditions", () => {
     });
     expect(res.status).toBe(404);
     expect(res.body.code).toBe("customer_not_found");
+  });
+});
+
+describe("task:write gating", () => {
+  it("403s a STAKEHOLDER on POST /itop/tickets/:id/time even with a valid personal token", async () => {
+    const user = await createUserWithRole("STAKEHOLDER");
+    await linkPersonalToken(user.userId, FAKE_ITOP_TOKENS.rina);
+    const id = await ticketIdByRef("R-004535");
+
+    const now = new Date();
+    const res = await call("post", `/itop/tickets/${id}/time`, user.token, {
+      startedAt: new Date(now.getTime() - 30 * MINUTE_MS).toISOString(),
+      endedAt: now.toISOString(),
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("forbidden");
+    expect(fixture.state.writeLog.filter((w) => w.operation === "core/create")).toHaveLength(0);
   });
 });
 

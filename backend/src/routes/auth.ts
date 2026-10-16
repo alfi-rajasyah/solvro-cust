@@ -4,7 +4,8 @@ import { type TokenPayload } from "google-auth-library";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth, signToken } from "../http/auth.js";
+import { permissionsOf, requireAuth, signToken } from "../http/auth.js";
+import { normalizeUsername, USERNAME_MAX } from "../lib/username.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { getAuthConfigCached } from "../authConfig.js";
@@ -50,16 +51,8 @@ authRouter.post("/login", validate("body", loginSchema), async (req, res) => {
     throw new HttpError(403, "account_disabled", "Account has been deactivated");
   }
 
-  const permissions = Array.isArray(user.role.permissions)
-    ? (user.role.permissions as unknown[]).filter(
-        (p): p is string => typeof p === "string",
-      )
-    : [];
-  const token = signToken({
-    sub: user.id,
-    role: user.role.roleName,
-    permissions,
-  });
+  const permissions = permissionsOf(user.role.permissions);
+  const token = signToken({ sub: user.id, ver: user.tokenVersion });
   res.json({
     token,
     user: {
@@ -87,7 +80,7 @@ authRouter.get("/google/config", async (_req, res) => {
 // Google sign-in. The frontend uses Google Identity Services to obtain an
 // ID token, then forwards it here. We verify it server-side (signature,
 // audience, expiry), gate on email_verified + domain allowlist, find or
-// create the user, mint the same {sub, role, permissions} JWT that
+// create the user, mint the same {sub, ver} JWT that
 // /auth/login mints, and return an identical response shape.
 authRouter.post("/google", validate("body", googleLoginSchema), async (req, res) => {
   const config = await getAuthConfigCached();
@@ -184,7 +177,10 @@ authRouter.post("/google", validate("body", googleLoginSchema), async (req, res)
       );
     }
 
-    const baseUsername = email.split("@")[0] || `user-${googleSub.slice(0, 8)}`;
+    // Same username rule as POST /admin/users (lib/username.ts); a local
+    // part the rule rejects falls back to a neutral generated name.
+    const baseUsername =
+      normalizeUsername(email.split("@")[0] ?? "") ?? `user-${googleSub.slice(0, 8)}`;
     user = await createWithUniqueUsername({
       baseUsername,
       data: {
@@ -205,16 +201,8 @@ authRouter.post("/google", validate("body", googleLoginSchema), async (req, res)
     );
   }
 
-  const permissions = Array.isArray(user.role.permissions)
-    ? (user.role.permissions as unknown[]).filter(
-        (p): p is string => typeof p === "string",
-      )
-    : [];
-  const token = signToken({
-    sub: user.id,
-    role: user.role.roleName,
-    permissions,
-  });
+  const permissions = permissionsOf(user.role.permissions);
+  const token = signToken({ sub: user.id, ver: user.tokenVersion });
   res.json({
     token,
     user: {
@@ -244,7 +232,18 @@ async function createWithUniqueUsername({
   };
 }) {
   for (let attempt = 0; attempt < 20; attempt++) {
-    const username = attempt === 0 ? baseUsername : `${baseUsername}-${attempt + 1}`;
+    // A suffixed name stays within USERNAME_MAX (the base leaves room for "-20").
+    const username =
+      attempt === 0
+        ? baseUsername
+        : `${baseUsername.slice(0, USERNAME_MAX - 3).trimEnd()}-${attempt + 1}`;
+    // Case-insensitive like POST /admin/users: "Maya.Putri" beside "maya.putri"
+    // is the look-alike problem, so a case-variant counts as taken. Raw
+    // `lower() = lower()` — Prisma's insensitive mode would read `_` as a wildcard.
+    const taken = await prisma.$queryRaw<Array<{ id: number }>>`
+      SELECT id FROM users WHERE lower(username) = lower(${username}) LIMIT 1
+    `;
+    if (taken.length > 0) continue;
     try {
       return await prisma.user.create({
         data: { ...data, username },
@@ -274,11 +273,7 @@ authRouter.get("/me", requireAuth, async (req, res) => {
     where: { id: req.user!.sub },
     include: { role: true },
   });
-  const permissions = Array.isArray(user.role.permissions)
-    ? (user.role.permissions as unknown[]).filter(
-        (p): p is string => typeof p === "string",
-      )
-    : [];
+  const permissions = permissionsOf(user.role.permissions);
   res.json({
     id: user.id,
     username: user.username,
@@ -326,10 +321,14 @@ authRouter.post(
       );
     }
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await prisma.user.update({
+    // Bumping tokenVersion ends every other session of this account
+    // (docs/archive/plans/internal-sync.md). The caller gets a token for the
+    // new version so the session that changed the password continues.
+    const updated = await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash },
+      data: { passwordHash, tokenVersion: { increment: 1 } },
+      select: { tokenVersion: true },
     });
-    res.status(204).end();
+    res.json({ token: signToken({ sub: user.id, ver: updated.tokenVersion }) });
   },
 );

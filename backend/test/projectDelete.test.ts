@@ -110,8 +110,8 @@ describe("DELETE /projects/:id", () => {
   it("403s without project:write even when the project is visible", async () => {
     const customerId = await createCustomer();
     const projectId = await createProject(customerId, admin.userId);
-    // STAKEHOLDER carries project:read + project:view-all, never project:write.
-    const stakeholder = await createUserWithRole("STAKEHOLDER");
+    // AUDITOR carries project:read + project:view-all, never project:write.
+    const stakeholder = await createUserWithRole("AUDITOR");
     expect((await getProject(stakeholder.token, projectId)).status).toBe(200);
 
     const res = await del(stakeholder.token, projectId);
