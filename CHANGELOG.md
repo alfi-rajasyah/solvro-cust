@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-10-19 — Production runbook
+
+- New **`docs/guides/production-runbook.md`**: the order in which to install Solvro, iTop and Outline on one production server and connect them — decisions to make first, platform, iTop (native install), Outline, Solvro, reverse proxy and TLS, connections, optional features, backups — with the reason for each ordering rule and how to keep iTop and Outline off the public internet (IP allowlist or VPN). **`docs/guides/index.md`** links to it.
+
 ### Added — 2026-10-15 — Setup guides for iTop, Outline and a shared server
 
 - New step-by-step guides in **`docs/guides/`**: **`itop.md`** (install iTop, prepare the read-only application token, people and timezone, connect it at Admin > iTop, actions from Solvro, the webhook, troubleshooting), **`outline.md`** (install Outline with a minimal compose example, set `APP_URL` and `EMBED_FRAME_ANCESTORS`, connect it at Admin > Outline, mentions, embeds, troubleshooting), **`server-setup.md`** (running Solvro, iTop and Outline on one server: per-application requirements, a recommended 4 vCPU / 8 GB / 40 GB server, DNS, ports, a reverse-proxy example, backups) and **`index.md`** (reading order, with links to `INSTALL.md` and `OPERATIONS.md`).
