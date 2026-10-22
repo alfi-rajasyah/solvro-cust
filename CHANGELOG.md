@@ -15,6 +15,14 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Removed — 2026-10-22 — Unused `xlsx` dependency
+
+- **`frontend/package.json`** no longer depends on `xlsx` (SheetJS 0.18.5). Nothing imported it — the Gantt Excel export uses `exceljs` — and the npm-registry build of SheetJS carries an open high-severity advisory with no fix, so every `npm audit` failed on a package that was not even in the bundle. `package-lock.json` loses only `xlsx` and its seven own dependencies; `npm ci` and the production build were verified after the change.
+
+### Fixed — 2026-10-22 — Two people saving the same weekly update no longer overwrite each other
+
+- **`PUT /customers/:id/weekly-updates/:weekStart`** (`backend/src/routes/customers.ts`) now reads the current row and makes every decision (status, completeness, `doneAt`) inside one transaction under a per-customer lock, and accepts an optional **`expectedUpdatedAt`**: the `updatedAt` the client loaded (or `null` for "no row yet"). When the stored row has moved on, the save answers `409 stale_write` with the current row in `details.current` instead of silently replacing the other person's highlight and achievement lists. A save without `expectedUpdatedAt` keeps the previous last-write-wins behaviour for older clients. The Mid-week and Reflection sync modals send back the `updatedAt` the Daily Review payload already carries (`frontend/src/components/daily-review/MidweekSyncModal.tsx`, `ReflectionSyncModal.tsx`); the conflict message tells the user to review the other person's changes and save again. Covered in `backend/test/weeklyUpdates.test.ts`.
+
 ### Changed — 2026-10-22 — Commenting is its own permission
 
 - **`POST /tasks/:id/comments`** (`backend/src/routes/tasks.ts`) now requires a new **`task:comment`** permission. The built-in `TAM` and `STAKEHOLDER` roles receive it from the seed (`backend/prisma/seed.ts`), so a read-only stakeholder can still comment while a `PENDING` member cannot. A **custom role** that should comment must be granted `task:comment` in Admin → Roles; the permission appears in the role editor (`frontend/src/lib/auth.tsx`). The task panel hides the comment composer for a user without it (`frontend/src/components/TaskPanel.tsx`).

@@ -209,6 +209,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
     save.mutate(
       {
         weekStart: week.start,
+        expectedUpdatedAt: customer.weeklyUpdate?.updatedAt ?? null,
         health: state.health,
         status,
         achievements: rows.map((a) => ({
