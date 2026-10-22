@@ -75,7 +75,7 @@ If you bind to `0.0.0.0`, keep the server behind a trusted network, VPN, or fire
 
 ## Upgrade
 
-Pull this repository and run the installer again. It detects the existing install, keeps your ports and secrets, pulls the new images, and restarts. The database and every user stay.
+Pull this repository and run the installer again. It detects the existing install, keeps your ports and secrets, pins the release it belongs to (`IMAGE_TAG` in `~/solvro/.env`), pulls those images, and restarts. The database and every user stay. A plain `docker compose up -d` never changes the version; only a newer `setup.sh` does.
 
 ```bash
 cd solvro-cust

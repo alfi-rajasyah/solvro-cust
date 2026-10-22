@@ -15,7 +15,8 @@
 #
 # Re-runs on a server that already has ~/solvro/.env:
 #   - Detects existing install, skips prompts
-#   - Reuses the ports from ~/solvro/.env, pulls new images, restarts
+#   - Reuses the ports from ~/solvro/.env, pins IMAGE_TAG to this script's
+#     release, pulls those images, restarts
 #
 # Host binding + ports (set as env vars or answer the prompts):
 #   BIND_ADDR       interface   (default 127.0.0.1 = local-only: reach it
@@ -55,6 +56,11 @@ DEPLOY_DIR="$HOME/solvro"
 COMPOSE_FILE="$DEPLOY_DIR/docker-compose.yml"
 ENV_FILE="$DEPLOY_DIR/.env"
 VOLUME_NAME="solvro_pgdata"
+# The release this installer belongs to — the image tag it pins in
+# ~/solvro/.env (IMAGE_TAG). Bumped with VERSION on every release
+# (ci/check-version.sh keeps them equal). A newer setup.sh is the upgrade:
+# it rewrites IMAGE_TAG and pulls; a plain `docker compose up -d` never does.
+SOLVRO_IMAGE_TAG="v1.0.0"
 
 # ------------------------------------------------------------------ checks
 command -v docker >/dev/null 2>&1 || {
@@ -223,10 +229,10 @@ COMPOSE_HEAD
     cat <<'COMPOSE_REST'
 
   backend:
-    image: ghcr.io/alfi-rajasyah/solvro-cust-backend:latest
+    # Pinned to the release the installer wrote into ~/solvro/.env.
+    image: ghcr.io/alfi-rajasyah/solvro-cust-backend:${IMAGE_TAG}
     container_name: solvro-backend
     restart: unless-stopped
-    pull_policy: always
     depends_on:
       postgres:
         condition: service_healthy
@@ -268,10 +274,9 @@ COMPOSE_HEAD
     mem_limit: 768m
 
   frontend:
-    image: ghcr.io/alfi-rajasyah/solvro-cust-frontend:latest
+    image: ghcr.io/alfi-rajasyah/solvro-cust-frontend:${IMAGE_TAG}
     container_name: solvro-frontend
     restart: unless-stopped
-    pull_policy: always
     depends_on:
       backend:
         condition: service_healthy
@@ -317,6 +322,10 @@ if [[ -f "$ENV_FILE" ]]; then
     SECRETS_KEY=$(openssl rand -base64 32)
     echo "SECRETS_KEY=$SECRETS_KEY" >> "$ENV_FILE"
   fi
+  # The upgrade itself: this script's release becomes the pinned image tag.
+  IMAGE_TAG="$SOLVRO_IMAGE_TAG"
+  env_file_set IMAGE_TAG "$IMAGE_TAG"
+  export IMAGE_TAG
   # Outline embedding allow-list: a value passed in the environment replaces the
   # saved one; either way it is validated and re-saved quoted.
   EMBED_FRAME_ANCESTORS="${REQ_EMBED:-$(env_file_get EMBED_FRAME_ANCESTORS)}"
@@ -544,7 +553,9 @@ JWT_SECRET=$(openssl rand -hex 48)
 # Base64 (not hex): SECRETS_KEY must decode to exactly 32 bytes for AES-256-GCM (backend/src/env.ts).
 SECRETS_KEY=$(openssl rand -base64 32)
 
+IMAGE_TAG="$SOLVRO_IMAGE_TAG"
 cat > "$ENV_FILE" <<EOF
+IMAGE_TAG=$IMAGE_TAG
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 JWT_SECRET=$JWT_SECRET
 SECRETS_KEY=$SECRETS_KEY
@@ -638,7 +649,7 @@ echo
 echo " Useful commands (run from $DEPLOY_DIR):"
 echo "   docker compose ps              # check container status"
 echo "   docker compose logs -f backend # tail backend logs"
-echo "   bash setup.sh                  # re-run to update images"
+echo "   bash setup.sh                  # re-run a newer setup.sh to upgrade (pins IMAGE_TAG)"
 echo "   # change bind address / ports / EMBED_FRAME_ANCESTORS later: edit ~/solvro/.env then"
 echo "   docker compose up -d"
 echo

@@ -203,7 +203,7 @@ export function Login() {
           className="relative z-10 text-on-surface-variant/20"
           style={{ fontSize: 10 }}
         >
-          v1.4.0 · build 2305
+          v{__APP_VERSION__}
         </div>
       </div>
 

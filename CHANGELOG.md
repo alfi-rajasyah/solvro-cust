@@ -15,6 +15,13 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-10-22 — Release 1.0.0 and one version everywhere
+
+- First tagged release: everything below this section, back to 2026-05-01, ships as **1.0.0**. The production compose file written by `setup.sh` now pins the image tag (`IMAGE_TAG` in `~/solvro/.env`, default the release the installer belongs to) instead of `latest` with `pull_policy: always`, so a `docker compose up -d` after a config edit never pulls newer code; upgrading means running the newer `setup.sh`, which bumps `IMAGE_TAG` and pulls.
+- The login page shows the version from `frontend/package.json` (injected at build time in `frontend/vite.config.ts`) instead of a hard-coded string; `backend/package.json` and `frontend/package.json` say `1.0.0`; `VERSION` stays `v1.0.0`. New `ci/check-version.sh` (CI `typecheck` job) fails when `VERSION`, the two `package.json` files and the image tag in `setup.sh` disagree.
+
+## [1.0.0] — 2026-10-22
+
 ### Changed — 2026-10-22 — Production stack: local-only API, proxy trust, health checks, log rotation, backups, TLS guidance
 
 - **`setup.sh`** now writes a compose file that publishes the API on `127.0.0.1:${BACKEND_PORT}` whatever `BIND_ADDR` is (nginx reaches it inside the compose network; a network-reachable API bypassed nginx's headers and let a client choose its own rate-limit bucket with a forged `X-Forwarded-For`), passes `TRUST_PROXY: "${TRUST_PROXY:-loopback, uniquelocal}"` (the bundled nginx and a TLS front or tunnel on the same host, nothing a client can forge; an `.env` that still says `1` keeps working) and `CORS_ORIGIN: "${APP_URL:-*}"` (the app is same-origin; only other origins are affected). The backend gets a `healthcheck` on `/health` with a 2-minute start period for the first migration run, the frontend waits for it (`condition: service_healthy`), every container's logs rotate (`json-file`, 5 × 10 MB) and the backend and frontend carry memory limits (768 MB, 128 MB). The readiness probe and the final summary follow the local-only API. `ci/check-setup-guard.sh` asserts these blocks in the generated file.

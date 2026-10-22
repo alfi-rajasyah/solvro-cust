@@ -49,6 +49,7 @@ run() {
     bash "$ROOT/setup.sh" </dev/null >"$WORK/out-$label.log" 2>&1
   local code=$?
   [[ -e "$home/solvro/docker-compose.yml" ]] && cp "$home/solvro/docker-compose.yml" "$WORK/compose-$label.yml"
+  [[ -e "$home/solvro/.env" ]] && cp "$home/solvro/.env" "$WORK/env-$label"
   local removed=0; grep -q "^docker volume rm solvro_pgdata$" "$log" && removed=1
   local wrote=0; [[ -e "$home/solvro/.env" ]] && wrote=1
   echo "$code $removed $wrote"
@@ -86,6 +87,13 @@ compose_has   "CORS from APP_URL"           'CORS_ORIGIN: "${APP_URL:-*}"'
 compose_has   "backend health check"        "fetch('http://127.0.0.1:3000/health')"
 compose_has   "frontend waits for health"   "condition: service_healthy"
 compose_has   "log rotation"                'max-size: "10m"'
+compose_has   "image tag pinned from .env"  'solvro-cust-backend:${IMAGE_TAG}'
+compose_lacks "no pull_policy always"       'pull_policy'
+if grep -qE '^IMAGE_TAG=v[0-9]+\.[0-9]+\.[0-9]+$' "$WORK/env-no-volume-fresh-wipes"; then
+  echo "ok   .env: IMAGE_TAG pinned ($(grep '^IMAGE_TAG=' "$WORK/env-no-volume-fresh-wipes"))"
+else
+  echo "FAIL .env: IMAGE_TAG missing or not a release tag"; FAILED=1
+fi
 
 if [[ $FAILED -ne 0 ]]; then
   echo "setup.sh guard checks FAILED"
