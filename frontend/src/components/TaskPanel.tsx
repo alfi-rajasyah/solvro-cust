@@ -1034,6 +1034,10 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
  * component was never mounted and has been removed).
  */
 function PanelComments({ taskId, projectId }: { taskId: number; projectId: number }) {
+  // Posting needs task:comment (the server gate on POST /tasks/:id/comments);
+  // reading the thread needs only project:read.
+  const { user } = useAuth();
+  const canComment = hasPermission(user, "task:comment");
   const { data: comments, isLoading, isError, error } = useComments(taskId);
   const addComment = useAddComment(taskId, projectId);
   const { data: project } = useProject(projectId);
@@ -1086,14 +1090,16 @@ function PanelComments({ taskId, projectId }: { taskId: number; projectId: numbe
         </ol>
       )}
 
-      <CommentComposer
-        candidates={people}
-        isPending={addComment.isPending}
-        error={addComment.error ? (addComment.error as Error).message : null}
-        onSend={async (body, mentionedUserIds) => {
-          await addComment.mutateAsync({ body, mentionedUserIds });
-        }}
-      />
+      {canComment && (
+        <CommentComposer
+          candidates={people}
+          isPending={addComment.isPending}
+          error={addComment.error ? (addComment.error as Error).message : null}
+          onSend={async (body, mentionedUserIds) => {
+            await addComment.mutateAsync({ body, mentionedUserIds });
+          }}
+        />
+      )}
     </div>
   );
 }

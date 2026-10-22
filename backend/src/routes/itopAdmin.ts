@@ -15,6 +15,7 @@ import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { open, seal, SecretBoxError } from "../lib/secretBox.js";
 import { ItopError } from "../lib/itop/client.js";
+import { assertPublicItopUrl } from "../lib/itop/validateBaseUrl.js";
 import {
   getItopConfig,
   bustItopConfigCache,
@@ -313,6 +314,9 @@ itopAdminRouter.patch(
 
     const data: Prisma.ItopConfigUncheckedUpdateInput = { updatedById: req.user!.sub };
 
+    // https without userinfo, and — when ITOP_ALLOW_PRIVATE_HOSTS=false — a
+    // public host only (lib/itop/validateBaseUrl.ts).
+    if (typeof body.baseUrl === "string") await assertPublicItopUrl(body.baseUrl);
     if (body.baseUrl !== undefined) data.baseUrl = body.baseUrl;
     if (body.appToken !== undefined) data.appTokenEnc = sealAppToken(body.appToken);
     if (body.refreshMinutes !== undefined) data.refreshMinutes = body.refreshMinutes;
@@ -449,6 +453,9 @@ itopAdminRouter.post(
   validate("body", testConnectionSchema),
   async (req, res) => {
     const body = req.body as z.infer<typeof testConnectionSchema>;
+    // Same host policy as PATCH /settings — a probe must not reach an
+    // internal address just because it goes through /test.
+    if (body.baseUrl !== undefined) await assertPublicItopUrl(body.baseUrl);
     const config = await getItopConfig();
 
     const baseUrl = body.baseUrl ?? config.baseUrl ?? undefined;

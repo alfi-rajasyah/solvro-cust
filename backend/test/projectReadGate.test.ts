@@ -60,6 +60,23 @@ describe("project reads require project:read", () => {
     }
   });
 
+  it("commenting needs task:comment: a STAKEHOLDER member may, a PENDING member may not", async () => {
+    const stake = await projectWithMember("STAKEHOLDER");
+    const posted = await request(app)
+      .post(`/tasks/${stake.taskId}/comments`)
+      .set("Authorization", `Bearer ${stake.member.token}`)
+      .send({ body: "read-only, but allowed to comment" });
+    expect(posted.status).toBe(201);
+
+    const pending = await projectWithMember("PENDING");
+    const refused = await request(app)
+      .post(`/tasks/${pending.taskId}/comments`)
+      .set("Authorization", `Bearer ${pending.member.token}`)
+      .send({ body: "no" });
+    expect(refused.status).toBe(403);
+    expect(await prisma.comment.count({ where: { taskId: pending.taskId } })).toBe(0);
+  });
+
   it("a STAKEHOLDER member (project:read) and the TAM still read the project", async () => {
     const { tam, member, projectId } = await projectWithMember("STAKEHOLDER");
     expect((await get(`/projects/${projectId}`, member.token)).status).toBe(200);

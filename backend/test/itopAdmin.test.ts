@@ -944,3 +944,24 @@ describe("PATCH /admin/itop/settings — a baseUrl change disconnects every pers
     expect(user.itopTokenPersonName).toBe("Someone");
   });
 });
+
+// The address policy (lib/itop/validateBaseUrl.ts) applies to the persisted
+// address and to the one-off probe alike. Private and local hosts are
+// accepted by default (ITOP_ALLOW_PRIVATE_HOSTS=true — Solvro and iTop share a
+// LAN); the public-only mode is covered by the unit tests with allowPrivate
+// false, since env is parsed once at import.
+describe("iTop address policy on PATCH /settings and POST /test", () => {
+  it("accepts a private or .local https address by default", async () => {
+    for (const baseUrl of ["https://10.0.0.5:8443", "https://itop.local"]) {
+      const saved = await call("patch", "/admin/itop/settings", adminToken).send({ baseUrl });
+      expect(saved.status, `PATCH ${baseUrl}`).toBe(200);
+      expect(saved.body.baseUrl).toBe(baseUrl);
+    }
+  });
+
+  it("refuses a user name in the address", async () => {
+    const res = await call("patch", "/admin/itop/settings", adminToken).send({ baseUrl: "https://alice:pw@itop.example.com" });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("itop_url_invalid");
+  });
+});

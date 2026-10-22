@@ -15,6 +15,15 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-10-22 — Commenting is its own permission
+
+- **`POST /tasks/:id/comments`** (`backend/src/routes/tasks.ts`) now requires a new **`task:comment`** permission. The built-in `TAM` and `STAKEHOLDER` roles receive it from the seed (`backend/prisma/seed.ts`), so a read-only stakeholder can still comment while a `PENDING` member cannot. A **custom role** that should comment must be granted `task:comment` in Admin → Roles; the permission appears in the role editor (`frontend/src/lib/auth.tsx`). The task panel hides the comment composer for a user without it (`frontend/src/components/TaskPanel.tsx`).
+
+### Fixed — 2026-10-22 — iTop address policy
+
+- **`PATCH /admin/itop/settings` and `POST /admin/itop/test`** (`backend/src/routes/itopAdmin.ts`) refuse a user name or password in the iTop URL with `400 itop_url_invalid` (https was already required). New **`backend/src/lib/itop/validateBaseUrl.ts`**.
+- New backend variable **`ITOP_ALLOW_PRIVATE_HOSTS`** (`backend/src/env.ts`, `docs/CONFIGURATION.md`), default `true` because Solvro and iTop are normally deployed together on a LAN where the iTop address is a `.local` name or an RFC1918 address. Set it to `false` on an internet-facing deployment whose iTop is public: an address on `localhost`, `*.local`, `*.internal`, a single-label name, a loopback, link-local, RFC1918, CGNAT or ULA address, or a public name that resolves to one of those, is then refused with `400 itop_url_private`, so an admin session cannot aim the backend at an internal host and read the probe results. A name that does not resolve is accepted either way (the address must be savable while iTop is down). Covered in `backend/test/itop/validateBaseUrl.test.ts` and `backend/test/itopAdmin.test.ts`.
+
 ### Fixed — 2026-10-22 — Kanban drags and Daily Review status changes report a failed save
 
 - **Kanban** (`frontend/src/components/kanban-v2/SolvroKanban.tsx`): a drag, a subtask toggle or a mobile move that the server refuses (a 403 after a role change, a 409 stale write, a backend restart) now shows "Could not save the change: …" above the board. The optimistic move was already rolled back, but the card just snapped home with no message. Covered by a new browser test in `e2e/tests/kanban-dnd.spec.ts` that answers the save with a 500.

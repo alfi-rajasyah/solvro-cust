@@ -641,6 +641,10 @@ tasksRouter.get(
 
 tasksRouter.post(
   "/:id/comments",
+  // Commenting is its own permission (user decision 2026-10-22): read-only
+  // STAKEHOLDER keeps it, a PENDING member does not. Seeded on TAM and
+  // STAKEHOLDER (prisma/seed.ts); a custom role must be granted it explicitly.
+  requirePermission("task:comment"),
   validate("params", idParamSchema),
   validate("body", createCommentSchema),
   async (req, res) => {
