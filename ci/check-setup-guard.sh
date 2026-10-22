@@ -48,6 +48,7 @@ run() {
     APP_URL=http://localhost EMBED_FRAME_ANCESTORS=https://docs.example.com \
     bash "$ROOT/setup.sh" </dev/null >"$WORK/out-$label.log" 2>&1
   local code=$?
+  [[ -e "$home/solvro/docker-compose.yml" ]] && cp "$home/solvro/docker-compose.yml" "$WORK/compose-$label.yml"
   local removed=0; grep -q "^docker volume rm solvro_pgdata$" "$log" && removed=1
   local wrote=0; [[ -e "$home/solvro/.env" ]] && wrote=1
   echo "$code $removed $wrote"
@@ -68,6 +69,23 @@ check "volume-exists-refuses"      1 0 0 "$(run volume-exists-refuses 1 "")"
 check "volume-exists-force-wipes"  0 1 1 "$(run volume-exists-force-wipes 1 1)"
 check "no-volume-fresh-wipes"      0 1 1 "$(run no-volume-fresh-wipes 0 "")"
 check "daemon-down-refuses"        1 0 0 "$(run daemon-down-refuses 0 "" 1)"
+
+# The compose file a fresh install writes must keep the API local-only and
+# carry the hygiene blocks (health check, log rotation, proxy trust).
+compose="$WORK/compose-no-volume-fresh-wipes.yml"
+compose_has() { # compose_has <label> <fixed string>
+  if grep -qF -- "$2" "$compose"; then echo "ok   compose: $1"; else echo "FAIL compose: $1 (missing: $2)"; FAILED=1; fi
+}
+compose_lacks() {
+  if grep -qF -- "$2" "$compose"; then echo "FAIL compose: $1 (present: $2)"; FAILED=1; else echo "ok   compose: $1"; fi
+}
+compose_has   "API bound to 127.0.0.1"      '"127.0.0.1:${BACKEND_PORT:-3000}:3000"'
+compose_lacks "API never bound to BIND_ADDR" '${BIND_ADDR:-127.0.0.1}:${BACKEND_PORT:-3000}'
+compose_has   "proxy trust default"         'TRUST_PROXY: "${TRUST_PROXY:-loopback, uniquelocal}"'
+compose_has   "CORS from APP_URL"           'CORS_ORIGIN: "${APP_URL:-*}"'
+compose_has   "backend health check"        "fetch('http://127.0.0.1:3000/health')"
+compose_has   "frontend waits for health"   "condition: service_healthy"
+compose_has   "log rotation"                'max-size: "10m"'
 
 if [[ $FAILED -ne 0 ]]; then
   echo "setup.sh guard checks FAILED"

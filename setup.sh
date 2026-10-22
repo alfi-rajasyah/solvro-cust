@@ -24,12 +24,14 @@
 #                                or a specific LAN IP. Applies to website +
 #                                API; Postgres always stays on 127.0.0.1.)
 #   FRONTEND_PORT   website     (default 80)
-#   BACKEND_PORT    API         (default 3000)
+#   BACKEND_PORT    API         (default 3000; always bound to 127.0.0.1 —
+#                                the website's nginx reaches the API inside
+#                                the compose network, so nothing else needs it)
 #   POSTGRES_PORT   database    (default: NOT published — stays private)
-#   TRUST_PROXY     proxy hops the API trusts for the client IP (default 1 =
-#                   the bundled nginx only; 2 when a tunnel or CDN sits in
-#                   front of it; or a comma list of loopback/linklocal/
-#                   uniquelocal/IPs/CIDRs). Saved to .env when set.
+#   TRUST_PROXY     which proxies the API believes for the client IP (default
+#                   "loopback, uniquelocal" = the bundled nginx on the compose
+#                   network plus a TLS front or tunnel on this host; a hop
+#                   count such as 2 also works). Saved to .env when set.
 #   APP_URL         the public address users reach Solvro on (a bare http(s)
 #                   origin, e.g. https://solvro.acme.com). The backend builds
 #                   the Outline OAuth redirect / webhook URLs from it. Prompted
@@ -207,6 +209,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 COMPOSE_HEAD
 
     if [[ -n "${POSTGRES_PORT:-}" ]]; then
@@ -231,13 +238,34 @@ COMPOSE_HEAD
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: 8h
       SECRETS_KEY: ${SECRETS_KEY}
-      CORS_ORIGIN: "*"
+      # The browser app calls the API on its own origin, so only the public
+      # Solvro address needs to be allowed; "*" when APP_URL is unknown.
+      CORS_ORIGIN: "${APP_URL:-*}"
       LOG_LEVEL: info
-      TRUST_PROXY: "${TRUST_PROXY:-1}"
+      # The bundled nginx (compose network, a unique-local address) and a TLS
+      # front or tunnel on this host (loopback) are the proxies whose
+      # X-Forwarded-For the API believes; a direct client cannot forge it.
+      TRUST_PROXY: "${TRUST_PROXY:-loopback, uniquelocal}"
     ports:
-      - "${BIND_ADDR:-127.0.0.1}:${BACKEND_PORT:-3000}:3000"
+      # Local only, whatever BIND_ADDR is: the website's nginx proxies /api/
+      # inside the compose network, and a directly reachable API would bypass
+      # nginx's headers and rate-limit addressing.
+      - "127.0.0.1:${BACKEND_PORT:-3000}:3000"
     command: >
       sh -c "npx prisma migrate deploy && npx prisma db seed && node dist/index.js"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # First boot runs migrations and the seed before the API listens.
+      start_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    mem_limit: 768m
 
   frontend:
     image: ghcr.io/alfi-rajasyah/solvro-cust-frontend:latest
@@ -245,12 +273,19 @@ COMPOSE_HEAD
     restart: unless-stopped
     pull_policy: always
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
       # Outline origin(s) allowed to frame /embed/* and /share/*; empty = off.
       EMBED_FRAME_ANCESTORS: "${EMBED_FRAME_ANCESTORS:-}"
     ports:
       - "${BIND_ADDR:-127.0.0.1}:${FRONTEND_PORT:-80}:80"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    mem_limit: 128m
 
 volumes:
   solvro_pgdata:
@@ -541,11 +576,9 @@ docker compose pull
 echo "Starting stack..."
 docker compose up -d
 
-# Probe host for the readiness check. 0.0.0.0 binds include loopback and
-# 127.0.0.1 obviously does, so use 127.0.0.1 for both; a specific bind IP
-# does NOT bind loopback, so hit that IP directly.
-HEALTH_HOST="$BIND_ADDR"
-[[ "$BIND_ADDR" == "0.0.0.0" ]] && HEALTH_HOST="127.0.0.1"
+# The API is published on 127.0.0.1 only (see the compose file), whatever
+# BIND_ADDR the website uses.
+HEALTH_HOST="127.0.0.1"
 
 # Wait for backend to be ready (max ~120s — first boot includes migrate + seed)
 echo -n "Waiting for backend to come up"
@@ -586,7 +619,7 @@ echo "   URL:       $LOCAL_URL"
 echo "   Public:    ${APP_URL:-not set}  (APP_URL — Outline OAuth/webhook URLs are built from it)"
 echo "   Login as:  $ADMIN_EMAIL"
 echo
-echo "   Ports:     website $FRONTEND_PORT · API $BACKEND_PORT · Postgres ${POSTGRES_PORT:-not published}"
+echo "   Ports:     website $FRONTEND_PORT · API $BACKEND_PORT (127.0.0.1 only) · Postgres ${POSTGRES_PORT:-not published}"
 echo "   Bind:      $BIND_ADDR"
 echo "   Embedding: ${EMBED_FRAME_ANCESTORS:-off (pages cannot be framed)}"
 echo
@@ -597,7 +630,9 @@ if [[ "$BIND_ADDR" == "127.0.0.1" ]]; then
 else
   echo " Reachable on the network at $LOCAL_URL"
   echo " NOTE: only the in-app login protects it — keep it behind a trusted"
-  echo "       network / VPN / firewall. (Postgres stays private on 127.0.0.1.)"
+  echo "       network / VPN / firewall, and put TLS in front before anyone"
+  echo "       signs in over a network you do not control (INSTALL.md, TLS)."
+  echo "       (The API and Postgres stay private on 127.0.0.1.)"
 fi
 echo
 echo " Useful commands (run from $DEPLOY_DIR):"
@@ -615,7 +650,6 @@ echo "   2. Sign in as admin → Admin → Sign-in tab → paste the Client ID,"
 echo "      add at least one allowed email domain, click Save."
 echo "      No restart, no rebuild needed."
 echo
-echo " Backup the database before destructive operations:"
-echo "   docker run --rm -v $VOLUME_NAME:/data -v \$PWD:/backup alpine \\"
-echo "     tar czf /backup/pg-\$(date +%F).tgz -C / data"
+echo " Backup the database (consistent while the stack runs; see OPERATIONS.md §7):"
+echo "   docker compose exec -T postgres pg_dump -U solvro -Fc solvro > solvro-\$(date +%F).dump"
 echo "============================================================"

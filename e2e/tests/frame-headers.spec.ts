@@ -98,6 +98,16 @@ test.describe("frame headers", () => {
     expect(res.headers()["cache-control"]).toBe("no-store");
     expect(res.headers()["referrer-policy"]).toBe("no-referrer");
     expect(res.headers()["x-robots-tag"]).toBe("noindex");
+    expect(res.headers()["x-content-type-options"]).toBe("nosniff");
     expect(await res.text()).toContain('<div id="root">');
+  });
+
+  test("the app shell and its assets send nosniff and a strict-origin referrer policy", async ({ request, baseURL }) => {
+    skipOnDevServer(baseURL);
+    for (const path of ["/", "/projects/1", "/sw.js", "/manifest.webmanifest"]) {
+      const res = await request.get(path);
+      expect(res.headers()["x-content-type-options"], `${path} nosniff`).toBe("nosniff");
+      expect(res.headers()["referrer-policy"], `${path} referrer`).toBe("strict-origin-when-cross-origin");
+    }
   });
 });
