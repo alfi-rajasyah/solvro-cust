@@ -131,6 +131,17 @@ function toErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/**
+ * fetch() with `redirect: "error"` rejects with a TypeError whose message (or
+ * whose `cause`'s message, in Node's undici) names the redirect.
+ */
+function isRedirectError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const cause = (err as { cause?: unknown }).cause;
+  const text = `${err.message} ${cause instanceof Error ? cause.message : String(cause ?? "")}`;
+  return /redirect/i.test(text);
+}
+
 export function createItopClient(options: ItopClientOptions): ItopClient {
   const baseUrl = stripTrailingSlashes(options.baseUrl);
   const token = options.token;
@@ -166,9 +177,22 @@ export function createItopClient(options: ItopClientOptions): ItopClient {
           },
           body,
           signal: controller.signal,
+          // Never follow a redirect: `Auth-Token` is a custom header, which a
+          // cross-origin redirect would carry to whatever host the 30x names
+          // (only Authorization/Cookie are stripped), so the application token
+          // and every user's personal token would leak to a hijacked or
+          // misconfigured proxy. The configured base URL must be iTop's final
+          // address. Same rule as lib/outline/client.ts.
+          redirect: "error",
         });
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") throw timeoutError();
+        if (isRedirectError(err)) {
+          throw new ItopError({
+            code: "network",
+            message: "iTop answered with a redirect; the configured address must be iTop's final URL",
+          });
+        }
         throw new ItopError({ code: "network", message: toErrorMessage(err) });
       }
 

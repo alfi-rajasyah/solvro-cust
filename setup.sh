@@ -7,7 +7,10 @@
 #     with a default you can accept by pressing Enter
 #   - Generates random POSTGRES_PASSWORD and JWT_SECRET
 #   - Writes ~/solvro/{docker-compose.yml,.env}
-#   - Wipes any prior solvro_pgdata volume (clears stale postgres state)
+#   - Wipes any prior solvro_pgdata volume (clears stale postgres state) —
+#     but refuses when that volume already exists unless FORCE_FRESH=1 is
+#     set, because a missing ~/solvro/.env on a server with data (lost file,
+#     or a run as another Unix user) must not destroy the database
 #   - Brings the stack up and creates the admin user
 #
 # Re-runs on a server that already has ~/solvro/.env:
@@ -329,6 +332,39 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 # ------------------------------------------------------------------ fresh install
+
+# Guard BEFORE anything is prompted or written: a fresh install deletes the
+# solvro_pgdata volume further down so the new POSTGRES_PASSWORD matches an
+# empty database. Without ~/solvro/.env this script cannot tell a new server
+# from one whose env file was lost — or from a run as a different Unix user
+# ($HOME differs per user; the Docker volume is global to the host). If the
+# volume already exists, stop here, before a new .env or compose file is
+# written, unless the operator explicitly asks for the wipe with FORCE_FRESH=1.
+# The guard needs a working daemon: an `inspect` that fails for another
+# reason (daemon down, socket permission) must not read as "no volume".
+if ! docker info >/dev/null 2>&1; then
+  echo "ERROR: cannot talk to the Docker daemon. Is it running, and is $(id -un) allowed to use it (docker group)?"
+  exit 1
+fi
+if docker volume inspect "$VOLUME_NAME" >/dev/null 2>&1; then
+  if [[ "${FORCE_FRESH:-}" != "1" ]]; then
+    cat <<MSG
+ERROR: the Docker volume '$VOLUME_NAME' already exists, but $ENV_FILE does not.
+
+This looks like an existing Solvro install whose .env file is missing, or this
+script is running as a different user than the one who installed it. A fresh
+install would DELETE that volume and every record in it. Nothing was changed.
+
+  - To keep the data:  restore $ENV_FILE from your backup, then re-run.
+  - To start over with an empty database:  FORCE_FRESH=1 bash setup.sh
+
+See OPERATIONS.md, section 9.
+MSG
+    exit 1
+  fi
+  echo "FORCE_FRESH=1 is set: the existing volume '$VOLUME_NAME' will be deleted."
+fi
+
 echo "Fresh install. You'll be asked for the admin account and host ports."
 echo
 
@@ -491,7 +527,9 @@ chmod 600 "$ENV_FILE"
 
 write_compose_file
 
-# Wipe any prior bad postgres state so the new password takes effect
+# Wipe any prior bad postgres state so the new password takes effect. Safe
+# here only because the guard at the top of this branch already refused an
+# existing volume unless FORCE_FRESH=1 was given.
 echo
 echo "Clearing any prior stack and database volume..."
 docker compose down 2>/dev/null || true

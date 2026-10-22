@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
-import { requireAuth, type JwtPayload } from "../http/auth.js";
+import { requireAuth, type JwtPayload, requirePermission } from "../http/auth.js";
 import { validate } from "../http/validate.js";
 import { projectVisibilityFilter } from "../lib/visibility.js";
 import { computePortfolioRows } from "../lib/portfolio.js";
@@ -16,7 +16,10 @@ import { resolveDailyReviewScope } from "../lib/dailyReviewScope.js";
 
 export const overviewRouter = Router();
 
-overviewRouter.use(requireAuth);
+// Portfolio rows and sidebar counts are project data: `project:read` like the
+// /projects router. The Overview page and the sidebar skip these calls for a
+// user without the permission (frontend/src/pages/Overview.tsx, Sidebar.tsx).
+overviewRouter.use(requireAuth, requirePermission("project:read"));
 
 // Single source of truth for project scoping — permission-based, shared
 // with the projects router (no role-name logic).

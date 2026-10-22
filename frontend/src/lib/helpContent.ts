@@ -99,6 +99,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     title: "Projects",
     icon: "folder_managed",
     route: "/projects",
+    requires: "project:read",
     summary: "Create projects, open one to plan and track it, and lock a baseline to measure slip.",
     entries: [
       {

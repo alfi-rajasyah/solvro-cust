@@ -187,3 +187,35 @@ describe("PUT /projects/:id/services", () => {
     expect(goodRes.body.services).toHaveLength(1);
   });
 });
+
+// DELETE /services/:id cascades to every CustomerService / ProjectService
+// row, including on customers and projects the caller cannot see. It must
+// refuse while anything references the service (before this guard, any
+// project:write holder could strip assignments org-wide with a 204).
+describe("DELETE /services/:id — refused while the service is assigned", () => {
+  it("409s with the assignment counts, then deletes once the assignments are gone", async () => {
+    const customerId = await createCustomer();
+    const projectId = await createProject(customerId);
+    const serviceId = await createService();
+    const put = await request(app)
+      .put(`/projects/${projectId}/services`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ assignments: [{ serviceId, tools: [] }] });
+    expect(put.status).toBe(200);
+
+    const refused = await request(app).delete(`/services/${serviceId}`).set("Authorization", `Bearer ${token}`);
+    expect(refused.status).toBe(409);
+    expect(refused.body.code).toBe("service_in_use");
+    expect(refused.body.details).toEqual({ customers: 0, projects: 1 });
+    const stillThere = await request(app).get("/services").set("Authorization", `Bearer ${token}`);
+    expect(stillThere.body.some((s: { id: number }) => s.id === serviceId)).toBe(true);
+
+    const cleared = await request(app)
+      .put(`/projects/${projectId}/services`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ assignments: [] });
+    expect(cleared.status).toBe(200);
+    const deleted = await request(app).delete(`/services/${serviceId}`).set("Authorization", `Bearer ${token}`);
+    expect(deleted.status).toBe(204);
+  });
+});

@@ -267,6 +267,10 @@ function ConnectionCard() {
             autoComplete="off"
             className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden"
           />
+          <span className="mt-1 block text-meta text-on-surface-variant">
+            Changing the URL removes every user&apos;s personal iTop token. Each user must connect
+            iTop again in Settings.
+          </span>
         </label>
         <label className="block">
           <span className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant">

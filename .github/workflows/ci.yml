@@ -90,6 +90,12 @@ jobs:
         working-directory: e2e
         run: npm run typecheck
 
+      # The installer must refuse to delete an existing database volume when
+      # ~/solvro/.env is missing (a lost file, or a run as another user). Runs
+      # setup.sh against a docker shim — no daemon needed.
+      - name: Check setup.sh volume guard
+        run: ci/check-setup-guard.sh
+
   backend-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 25

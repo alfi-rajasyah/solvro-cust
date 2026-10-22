@@ -116,7 +116,7 @@ To raise the API log level, set `LOG_LEVEL: debug` in `~/solvro/docker-compose.y
 
 ## 9. Fresh install on a server that already has Solvro
 
-`setup.sh` treats a server **without** `~/solvro/.env` as a fresh install and **deletes the `solvro_pgdata` volume** to start clean. If you lose `.env` on a server with data, restore `.env` from your backup before running the installer, or move the volume aside first:
+`setup.sh` treats a server **without** `~/solvro/.env` as a fresh install and **deletes the `solvro_pgdata` volume** to start clean. Since 2026-10-22 it first checks whether that volume already exists: if it does, the script stops with an error before it writes anything, and deletes the volume only when you run it as `FORCE_FRESH=1 bash setup.sh`. The same check protects you when the script runs as a different Unix user than the one who installed Solvro (`~/solvro/.env` is per user; the volume is shared by the whole host). If you lose `.env` on a server with data, restore `.env` from your backup before running the installer, or move the volume aside first:
 
 ```bash
 docker volume create solvro_pgdata_keep

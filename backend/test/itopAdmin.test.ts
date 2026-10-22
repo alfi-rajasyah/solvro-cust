@@ -882,3 +882,65 @@ describe("persons match report + sync trigger", () => {
     expect(res.body.code).toBe("itop_not_configured");
   });
 });
+
+// A changed iTop address must not carry personal tokens issued for the old
+// host: routes/itop.ts would decrypt each one and send it in the Auth-Token
+// header to the new baseUrl. Before this guard, PATCH /settings changed only
+// the address and every user's token survived.
+describe("PATCH /admin/itop/settings — a baseUrl change disconnects every personal token", () => {
+  async function userWithToken(): Promise<number> {
+    const { userId } = await createUserWithRole("TAM");
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        itopTokenEnc: seal(`personal-${userId}`),
+        itopTokenPersonName: "Someone",
+        itopTokenCheckedAt: new Date(),
+        itopTokenExpiresAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    return userId;
+  }
+
+  it("nulls every user's token columns when the address really changes, and reports the count", async () => {
+    await configureItop("https://itop-old.example.com");
+    const a = await userWithToken();
+    const b = await userWithToken();
+    const { userId: untouched } = await createUserWithRole("TAM"); // never connected
+
+    const res = await call("patch", "/admin/itop/settings", adminToken).send({
+      baseUrl: "https://itop-new.example.com/",
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.baseUrl).toBe("https://itop-new.example.com");
+    expect(res.body.disconnectedUsers).toBe(2);
+
+    for (const id of [a, b, untouched]) {
+      const user = await prisma.user.findUniqueOrThrow({ where: { id } });
+      expect(user.itopTokenEnc).toBeNull();
+      expect(user.itopTokenPersonName).toBeNull();
+      expect(user.itopTokenCheckedAt).toBeNull();
+      expect(user.itopTokenExpiresAt).toBeNull();
+    }
+  });
+
+  it("keeps every token on a PATCH that repeats the stored address (also with a trailing slash) or changes other fields only", async () => {
+    await configureItop("https://itop.example.com");
+    const a = await userWithToken();
+
+    const same = await call("patch", "/admin/itop/settings", adminToken).send({
+      baseUrl: "https://itop.example.com/",
+      refreshMinutes: 7,
+    });
+    expect(same.status).toBe(200);
+    expect(same.body.disconnectedUsers).toBe(0);
+
+    const other = await call("patch", "/admin/itop/settings", adminToken).send({ actionsEnabled: false });
+    expect(other.status).toBe(200);
+    expect(other.body.disconnectedUsers).toBe(0);
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: a } });
+    expect(user.itopTokenEnc).not.toBeNull();
+    expect(user.itopTokenPersonName).toBe("Someone");
+  });
+});

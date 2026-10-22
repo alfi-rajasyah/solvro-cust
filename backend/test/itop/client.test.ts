@@ -177,6 +177,44 @@ describe("createItopClient transport errors and request shape (mocked fetchImpl)
     });
   });
 
+  it("never follows a redirect: asks fetch for redirect 'error', maps the refusal to code 'network', and treats a raw 30x as an HTTP failure", async () => {
+    // (a) The request itself carries redirect: "error" — the property that
+    // keeps Auth-Token from travelling to a 30x target.
+    const seen: RequestInit[] = [];
+    const recording = (async (_url: string, init?: RequestInit) => {
+      seen.push(init ?? {});
+      return new Response(JSON.stringify({ code: 0, message: "", objects: null }), { status: 200 });
+    }) as unknown as typeof fetch;
+    await createItopClient({ baseUrl: "http://example.invalid", token: "x", fetchImpl: recording }).listOperations();
+    expect(seen).toHaveLength(1);
+    expect(seen[0].redirect).toBe("error");
+
+    // (b) What fetch does under that mode on a 30x: reject with a TypeError.
+    let calls = 0;
+    const refusing = (async () => {
+      calls += 1;
+      throw new TypeError("fetch failed", { cause: new Error("unexpected redirect") });
+    }) as unknown as typeof fetch;
+    const client = createItopClient({ baseUrl: "http://example.invalid", token: "x", fetchImpl: refusing });
+    await expect(client.listOperations()).rejects.toMatchObject({
+      code: "network",
+      message: expect.stringContaining("redirect"),
+    });
+    expect(calls).toBe(1);
+
+    // (c) A fetch that hands back the 30x itself (a mock that ignores the
+    // mode) is still a failure, never a second request to the Location.
+    let rawCalls = 0;
+    const raw = (async () => {
+      rawCalls += 1;
+      return new Response("", { status: 302, headers: { location: "https://evil.example/" } });
+    }) as unknown as typeof fetch;
+    await expect(
+      createItopClient({ baseUrl: "http://example.invalid", token: "x", fetchImpl: raw }).listOperations(),
+    ).rejects.toMatchObject({ code: "http", status: 302 });
+    expect(rawCalls).toBe(1);
+  });
+
   it("times out (code 'timeout') when fetchImpl never resolves", async () => {
     const fetchImpl = (() => new Promise<Response>(() => {})) as unknown as typeof fetch;
 

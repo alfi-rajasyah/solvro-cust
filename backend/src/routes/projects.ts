@@ -153,7 +153,11 @@ const taskListQuerySchema = z.object({
 
 export const projectsRouter = Router();
 
-projectsRouter.use(requireAuth);
+// Every read on this router needs `project:read`, like /customers, /notes,
+// /daily-review and /users: a member with no permissions (a PENDING account
+// becomes one through task assignment or an admin reassign) passed the
+// visibility filter and could read project detail, tasks and notes.
+projectsRouter.use(requireAuth, requirePermission("project:read"));
 
 projectsRouter.get("/", validate("query", projectListQuerySchema), async (req, res) => {
   const { customerId, today } = req.query as unknown as z.infer<
@@ -1084,6 +1088,10 @@ projectsRouter.get(
   },
 );
 
+// Advisory-lock namespace for the dependency cycle check below (the key is
+// the project id). Distinct from the Outline token locks (lib/outline/tokens.ts).
+const DEPENDENCY_LOCK_NAMESPACE = 7_311;
+
 projectsRouter.post(
   "/:id/dependencies",
   requirePermission("task:write"),
@@ -1108,39 +1116,45 @@ projectsRouter.post(
     }
 
     // Reject cycles: walk forward from `successor` over existing edges; if we
-    // reach `predecessor` the new edge would close a loop.
-    const allEdges = await prisma.taskDependency.findMany({
-      where: { projectId: id },
-      select: { predecessorTaskId: true, successorTaskId: true },
-    });
-    const adj = new Map<number, number[]>();
-    for (const e of allEdges) {
-      const arr = adj.get(e.predecessorTaskId) ?? [];
-      arr.push(e.successorTaskId);
-      adj.set(e.predecessorTaskId, arr);
-    }
-    const seen = new Set<number>();
-    const stack = [body.successorTaskId];
-    while (stack.length > 0) {
-      const cur = stack.pop()!;
-      if (cur === body.predecessorTaskId) {
-        throw new HttpError(400, "cycle", "This dependency would create a cycle.");
-      }
-      if (seen.has(cur)) continue;
-      seen.add(cur);
-      for (const next of adj.get(cur) ?? []) stack.push(next);
-    }
-
+    // reach `predecessor` the new edge would close a loop. The walk and the
+    // insert run in ONE transaction under a per-project advisory lock, so two
+    // concurrent requests (A→B and B→A) are serialised and the second one
+    // sees the first edge — without the lock both walks passed and both
+    // edges were inserted, leaving a cycle nothing downstream re-checks.
     try {
-      const dep = await prisma.taskDependency.create({
-        data: {
-          projectId: id,
-          predecessorTaskId: body.predecessorTaskId,
-          successorTaskId: body.successorTaskId,
-          type: body.type ?? "HARD",
-          sourceHandle: body.sourceHandle ?? null,
-          targetHandle: body.targetHandle ?? null,
-        },
+      const dep = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DEPENDENCY_LOCK_NAMESPACE}::int, ${id}::int)`;
+        const allEdges = await tx.taskDependency.findMany({
+          where: { projectId: id },
+          select: { predecessorTaskId: true, successorTaskId: true },
+        });
+        const adj = new Map<number, number[]>();
+        for (const e of allEdges) {
+          const arr = adj.get(e.predecessorTaskId) ?? [];
+          arr.push(e.successorTaskId);
+          adj.set(e.predecessorTaskId, arr);
+        }
+        const seen = new Set<number>();
+        const stack = [body.successorTaskId];
+        while (stack.length > 0) {
+          const cur = stack.pop()!;
+          if (cur === body.predecessorTaskId) {
+            throw new HttpError(400, "cycle", "This dependency would create a cycle.");
+          }
+          if (seen.has(cur)) continue;
+          seen.add(cur);
+          for (const next of adj.get(cur) ?? []) stack.push(next);
+        }
+        return tx.taskDependency.create({
+          data: {
+            projectId: id,
+            predecessorTaskId: body.predecessorTaskId,
+            successorTaskId: body.successorTaskId,
+            type: body.type ?? "HARD",
+            sourceHandle: body.sourceHandle ?? null,
+            targetHandle: body.targetHandle ?? null,
+          },
+        });
       });
       res.status(201).json(dep);
     } catch (err) {

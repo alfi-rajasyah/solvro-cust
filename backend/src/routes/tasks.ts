@@ -208,7 +208,11 @@ function buildVisibilityWhere(user: JwtPayload): Prisma.TaskWhereInput {
 
 export const tasksRouter = Router();
 
-tasksRouter.use(requireAuth);
+// Task reads need `project:read` like the /projects router (routes/projects.ts):
+// a member with no permissions (a PENDING account becomes one through task
+// assignment) passed the visibility filter and could read task rows and
+// comment bodies here.
+tasksRouter.use(requireAuth, requirePermission("project:read"));
 
 // Cross-project list with filters
 tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) => {
