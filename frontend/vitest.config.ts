@@ -21,9 +21,13 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
+  // Pure-function tests (`.test.ts`) run in node. A component test is a
+  // `.test.tsx` file whose first line is `// @vitest-environment jsdom`, and it
+  // calls Testing Library's `cleanup` in an `afterEach` (with `globals: false`
+  // Testing Library cannot register that itself).
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     globals: false,
   },
 });

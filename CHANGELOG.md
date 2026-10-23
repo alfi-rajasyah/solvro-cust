@@ -15,6 +15,15 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-10-23 — A page that fails to render shows a message instead of a blank screen
+
+- New `frontend/src/components/AppErrorBoundary.tsx`. Before, an error thrown while rendering (a server value of the wrong shape, an edge case in a vendored engine) blanked the whole app with no way out but a manual reload.
+- **Inside the app shell** (`frontend/src/components/layout/Shell.tsx`) the boundary wraps the page area only: the sidebar and top bar stay usable, the page area shows "This page could not be shown" with **Try again** and **Reload**, and opening another page clears it. Try again and that navigation first reset the cached server data, so the page renders from freshly fetched data instead of the value that broke it (the top bar shares the project and customer queries with their pages, so dropping only unused queries would not be enough).
+- **Outside the shell** (sign-in, guest and embed pages, the app's providers) a last-resort boundary in `frontend/src/main.tsx` shows a full-screen message with Reload; it depends on no router, query or auth context.
+- Errors in event handlers and async code are not caught by a boundary (a React limit); those keep their own error states.
+- **Component tests**: the frontend test run now includes `.test.tsx` files. A file opts into a browser-like DOM with `// @vitest-environment jsdom` on its first line; the existing `.test.ts` files still run in Node (`frontend/vitest.config.ts`). New dev dependencies: `jsdom` 29, `@testing-library/react` 16 and its peer `@testing-library/dom` 10. First use: `frontend/src/components/AppErrorBoundary.test.tsx`.
+- New `e2e/tests/error-boundary.spec.ts`: a real Overview or project answer with one field set to null shows the fallback inside the shell, sidebar navigation clears it, and Try again renders the page once the server answers correctly, including on a project page whose query the top bar also reads.
+
 ### Fixed — 2026-10-23 — Bad dates and unknown user ids answer 400, not 500
 
 - **Dates**: every task, epic and project-task `startDate`/`dueDate` and the baseline's `asOfDate` in a request body goes through one schema, `backend/src/lib/dateInput.ts`: a `yyyy-MM-dd` day or an ISO date-time starting with one, a real calendar day, in the years 1900–2200. A year Postgres cannot store (for example `-271821-04-20`) used to pass validation and fail at the write as a 500; it is now a 400 `validation_error`, and so are a boolean or a number (they used to turn into a 1970 date or an epoch instant), a loose string such as `10/23/2026` (parsed in the server's time zone) and a day that does not exist such as `2026-02-30` (rolled over to 2 March). A task update's `expected` values get the same shape check without the year window, because the client echoes back what is stored. A `null` baseline `asOfDate` now locks the baseline as of now instead of 1 January 1970.
