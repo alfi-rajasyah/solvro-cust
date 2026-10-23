@@ -33,6 +33,12 @@ async function openFromSidebar(page: Page, name: RegExp) {
 }
 
 test.describe("page error boundary", () => {
+  // The built app (CI's :8080 stack) registers a PWA service worker, and
+  // Playwright's page.route cannot intercept fetches the worker handles, so
+  // the null-field answers below would never reach the page there (the dev
+  // server registers no worker). Same fix as search.spec.ts.
+  test.use({ serviceWorkers: "block" });
+
   test("a page that throws shows the fallback inside the app shell", async ({ page }) => {
     await loginViaUi(page);
     await nullField(page, isOverview, "workCounts");
