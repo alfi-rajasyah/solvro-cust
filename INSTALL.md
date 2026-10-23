@@ -47,7 +47,7 @@ The installer asks for:
 | Admin email | — | The first admin account. Others are created inside the app. |
 | Admin password | — | At least 8 characters. |
 | Website port | `80` | The port people open in the browser. |
-| API port | `3000` | The backend. Published next to the website. |
+| API port | `3000` | The backend. Always on `127.0.0.1`; the website's nginx reaches it internally. |
 | Postgres host port | not published | Leave blank unless you need direct database access. Always bound to `127.0.0.1`. |
 | Bind address | `127.0.0.1` | `127.0.0.1` = reachable from the server only. `0.0.0.0` = reachable on the network. |
 
@@ -69,11 +69,13 @@ ssh -L 80:localhost:80 <user>@<server>
 
 then open `http://localhost`.
 
-If you bind to `0.0.0.0`, keep the server behind a trusted network, VPN, or firewall. Only the in-app login protects it. Put a TLS reverse proxy in front of the website port before exposing it to the internet.
+If you bind to `0.0.0.0`, keep the server behind a trusted network, VPN, or firewall. Only the in-app login protects it.
+
+**TLS.** Solvro serves plain HTTP, and the session token travels in the clear. Before anyone signs in from a network you do not control, put TLS in front of the website port: Caddy on the same server, or a Cloudflare Tunnel. Both are described step by step in `OPERATIONS.md` section 11. With either, keep the bind address at `127.0.0.1` and set `APP_URL` to the `https://` address.
 
 ## Upgrade
 
-Pull this repository and run the installer again. It detects the existing install, keeps your ports and secrets, pulls the new images, and restarts. The database and every user stay.
+Pull this repository and run the installer again. It detects the existing install, keeps your ports and secrets, pins the release it belongs to (`IMAGE_TAG` in `~/solvro/.env`), pulls those images, and restarts. The database and every user stay. A plain `docker compose up -d` never changes the version; only a newer `setup.sh` does.
 
 ```bash
 cd solvro-cust
@@ -81,7 +83,7 @@ git pull
 bash setup.sh
 ```
 
-Each release has notes on this repository's Releases page. Read the **Action required** section before you upgrade.
+Each release has notes on this repository's Releases page. Read the **Action required** section before you upgrade, and take a database dump first (`OPERATIONS.md` section 7).
 
 ## After install
 
@@ -89,14 +91,13 @@ Each release has notes on this repository's Releases page. Read the **Action req
 
 **Change ports or the bind address later.** Edit `~/solvro/.env`, then run `docker compose up -d` from `~/solvro`. To publish or unpublish the Postgres port, edit `POSTGRES_PORT` in `~/solvro/.env` and run `bash setup.sh` again.
 
-**Back up the database.** Run from `~/solvro`:
+**Back up the database.** Run from `~/solvro` (the stack can stay up):
 
 ```bash
-docker run --rm -v solvro_pgdata:/data -v "$PWD":/backup alpine \
-  tar czf /backup/pg-$(date +%F).tgz -C / data
+docker compose exec -T postgres pg_dump -U solvro -Fc solvro > solvro-$(date +%F).dump
 ```
 
-Restore is in `OPERATIONS.md`.
+Restore, a nightly schedule and what else to keep (`~/solvro/.env`) are in `OPERATIONS.md` section 7. Take a dump before every upgrade.
 
 **Useful commands**, all from `~/solvro`:
 

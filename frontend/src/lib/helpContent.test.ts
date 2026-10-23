@@ -25,8 +25,12 @@ describe("filterHelpTopics", () => {
   });
 
   it("matches the query against titles and body text, case-insensitively", () => {
-    expect(filterHelpTopics(none, "RISK REGISTER").map((t) => t.id)).toEqual(["projects"]);
-    expect(filterHelpTopics(none, "zzz-no-match")).toEqual([]);
+    // The Projects topic is gated on project:read (like its sidebar entry), so
+    // the search runs as a reader.
+    const reader = (p: string) => p === "project:read";
+    expect(filterHelpTopics(reader, "RISK REGISTER").map((t) => t.id)).toEqual(["projects"]);
+    expect(filterHelpTopics(reader, "zzz-no-match")).toEqual([]);
+    expect(filterHelpTopics(none, "RISK REGISTER")).toEqual([]);
   });
 
   it("never lets the query reveal a gated topic", () => {

@@ -7,13 +7,14 @@ Step-by-step guides for running Solvro and connecting it to the tools around it.
 | [Install Solvro](../../INSTALL.md) | You install or upgrade Solvro on a server. |
 | [Operate Solvro](../../OPERATIONS.md) | You need the containers, files, backup and restore, or logs. |
 | [Server setup](server-setup.md) | You run Solvro, iTop, and Outline together on one server. |
+| [Production runbook](production-runbook.md) | You install all three on a production server and need the order of the steps. |
 | [iTop](itop.md) | You connect Solvro to an iTop service desk. |
 | [Outline](outline.md) | You connect Solvro to an Outline wiki. |
 
 ## Reading order
 
 1. Install Solvro with [INSTALL.md](../../INSTALL.md).
-2. If iTop or Outline will share the server, read [Server setup](server-setup.md) before you install them.
+2. If iTop or Outline will share the server, read [Server setup](server-setup.md) before you install them, and follow the [Production runbook](production-runbook.md) for the order of the steps.
 3. Connect each integration you need: [iTop](itop.md), [Outline](outline.md). Both are optional and independent of each other.
 
 ## Before you start

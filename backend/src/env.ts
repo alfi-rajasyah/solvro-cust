@@ -75,6 +75,19 @@ const schema = z.object({
     .transform((value) => value.trim().toLowerCase())
     .pipe(z.enum(["true", "false", "1", "0", "yes", "no"]))
     .transform((value) => value === "true" || value === "1" || value === "yes"),
+  // Whether an admin may store an iTop address on a private, loopback or local
+  // host (lib/itop/validateBaseUrl.ts). Default true (user decision
+  // 2026-10-22): Solvro and iTop are deployed together on a LAN, so the iTop
+  // address is normally a `.local` name or an RFC1918 address. Set "false" on
+  // an internet-facing deployment whose iTop is public, so an admin session
+  // cannot use the backend to probe the internal network. The https-only and
+  // no-userinfo rules apply either way.
+  ITOP_ALLOW_PRIVATE_HOSTS: z
+    .string()
+    .default("true")
+    .transform((value) => value.trim().toLowerCase())
+    .pipe(z.enum(["true", "false", "1", "0", "yes", "no"]))
+    .transform((value) => value === "true" || value === "1" || value === "yes"),
 });
 
 const parsed = schema.safeParse(process.env);

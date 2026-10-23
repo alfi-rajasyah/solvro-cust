@@ -163,6 +163,12 @@ const saveWeeklyUpdateSchema = z.object({
   // Same replace-in-order contract as highlights, for the Reflection
   // achievement list (D6 in docs/archive/plans/weekly-sync-achievement-rows.md).
   achievements: z.array(achievementInputSchema).max(20).optional(),
+  // Optimistic concurrency: the `updatedAt` the client loaded. When present
+  // and the stored row has moved on (someone else saved this week), the save
+  // answers 409 `stale_write` with the current row in `details` instead of
+  // silently replacing their highlights/achievements. Omitted = last write
+  // wins (older clients). `null` = the client expects no row yet.
+  expectedUpdatedAt: z.string().datetime({ offset: true }).nullable().optional(),
 });
 
 // Every Mid-week/Reflection text field goes through this one normalisation:
@@ -772,16 +778,45 @@ customersRouter.put(
     const category = normalizeText(body.category);
 
     const weekStartDate = utcMidnightOfDayString(weekStart);
-    const existing = await prisma.weeklyUpdate.findUnique({
-      where: { customerId_weekStart: { customerId: id, weekStart: weekStartDate } },
-      select: {
-        id: true,
-        status: true,
-        doneAt: true,
-        health: true,
-        _count: { select: { achievements: true } },
-      },
-    });
+    const highlights = body.highlights;
+    const achievements = body.achievements;
+
+    // Everything from the read of the current row to the last write runs in
+    // ONE transaction with the row locked, so two people saving the same
+    // customer-week (the TAM and a member, a realistic shared sync) cannot
+    // interleave: the decisions below (status, completeness, doneAt) are made
+    // on the row as it is at write time, and the optional expectedUpdatedAt
+    // check turns a concurrent edit into 409 `stale_write` instead of a
+    // silent replace of the other person's highlight and achievement lists.
+    const { result, created } = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${WEEKLY_UPDATE_LOCK_NAMESPACE}::int, ${id}::int)`;
+      const existing = await tx.weeklyUpdate.findUnique({
+        where: { customerId_weekStart: { customerId: id, weekStart: weekStartDate } },
+        select: {
+          id: true,
+          status: true,
+          doneAt: true,
+          health: true,
+          updatedAt: true,
+          _count: { select: { achievements: true } },
+        },
+      });
+
+      if (body.expectedUpdatedAt !== undefined) {
+        const expectedMs = body.expectedUpdatedAt === null ? null : new Date(body.expectedUpdatedAt).getTime();
+        const currentMs = existing ? existing.updatedAt.getTime() : null;
+        if (expectedMs !== currentMs) {
+          const current = existing
+            ? await tx.weeklyUpdate.findUniqueOrThrow({ where: { id: existing.id }, include: weeklyUpdateInclude })
+            : null;
+          throw new HttpError(
+            409,
+            "stale_write",
+            "This week's update was saved by someone else since you opened it. Review their changes, then save again.",
+            { current },
+          );
+        }
+      }
 
     // An omitted `status` leaves the stored status unchanged (DRAFT on
     // create) — a Mid-week-only save must never reopen (or otherwise
@@ -818,10 +853,7 @@ customersRouter.put(
     // this marks "the Mid-week form was saved this week", not "it has
     // text".
     const midweekTouched = category !== undefined || body.highlights !== undefined;
-    const highlights = body.highlights;
-    const achievements = body.achievements;
 
-    const result = await prisma.$transaction(async (tx) => {
       const upserted = await tx.weeklyUpdate.upsert({
         where: { customerId_weekStart: { customerId: id, weekStart: weekStartDate } },
         create: {
@@ -878,11 +910,16 @@ customersRouter.put(
         }
       }
 
-      return tx.weeklyUpdate.findUniqueOrThrow({
+      const row = await tx.weeklyUpdate.findUniqueOrThrow({
         where: { id: upserted.id },
         include: weeklyUpdateInclude,
       });
+      return { result: row, created: existing === null };
     });
-    res.status(existing ? 200 : 201).json(result);
+    res.status(created ? 201 : 200).json(result);
   },
 );
+
+// Advisory-lock namespace for the weekly-update save above (key: customer id).
+// Distinct from the dependency (routes/projects.ts) and Outline token locks.
+const WEEKLY_UPDATE_LOCK_NAMESPACE = 7_312;

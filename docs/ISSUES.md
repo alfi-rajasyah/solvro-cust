@@ -11,6 +11,21 @@ cited files; entries marked *code check* below carry the result).
 
 ## Known bugs / inconsistencies
 
+### Accepted risk — per-email sign-in lockout (2026-10-22)
+- `POST /auth/login` blocks an email for 15 minutes after 10 rejected attempts
+  (`backend/src/routes/auth.ts`, `http/loginThrottle.ts`). Anyone who knows a
+  colleague's email can therefore keep that colleague's password sign-in
+  blocked by sending 10 wrong passwords every 15 minutes, from any address.
+  Accepted (user decision 2026-10-22) because the alternative — keying the
+  counter on email + address only — would let a distributed guess run 10
+  attempts per address per email. Mitigations available if it is ever abused:
+  the per-address limit (50 failures / 15 min) already caps one source;
+  Google sign-in is unaffected; an admin password reset issues a fresh token.
+  Revisit if the app is exposed beyond the LAN.
+- The email counter table is bounded at 10 000 keys (oldest evicted), so a
+  flood of distinct emails from many addresses can evict a target's counter;
+  the per-address limit still applies. Same design as the public-share limiter.
+
 ### Gantt tree pane — residual clipping after the #118 fix (2026-07-30)
 - **Engine container clamp can re-clip the Dates/color columns.** The vendored
   engine (`clampContainer`, `reui/gantt/gantt-view.tsx:977-987`) renders the

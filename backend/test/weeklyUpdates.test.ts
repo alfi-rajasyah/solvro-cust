@@ -970,3 +970,74 @@ describe("admin user-delete blockers for notes/weekly updates", () => {
     expect(del.body.error).toMatch(/daily note/);
   });
 });
+
+// Optimistic concurrency on PUT /customers/:id/weekly-updates/:weekStart.
+// Before `expectedUpdatedAt`, two people saving the same customer-week
+// silently replaced each other's highlight and achievement lists (the route
+// read the row outside its transaction and deleted + recreated the lists).
+describe("PUT weekly update — expectedUpdatedAt", () => {
+  const WEEK = "2026-10-19"; // a Monday
+  function put(customerId: number, body: Record<string, unknown>, authToken = token) {
+    return request(app)
+      .put(`/customers/${customerId}/weekly-updates/${WEEK}`)
+      .set("Authorization", `Bearer ${authToken}`)
+      .send(body);
+  }
+
+  it("refuses a save whose expectedUpdatedAt is older than the stored row and returns the current row", async () => {
+    const customerId = await createCustomer();
+    const first = await put(customerId, { highlights: [{ title: "A" }], expectedUpdatedAt: null });
+    expect(first.status).toBe(201);
+    const loadedAt = first.body.updatedAt as string;
+    expect(typeof loadedAt).toBe("string");
+
+    // Two clients loaded the same version; the first save wins …
+    const mine = await put(customerId, { highlights: [{ title: "A" }, { title: "B" }], expectedUpdatedAt: loadedAt });
+    expect(mine.status).toBe(200);
+    // … the second is refused and told what is there now.
+    const theirs = await put(customerId, { highlights: [{ title: "C" }], expectedUpdatedAt: loadedAt });
+    expect(theirs.status).toBe(409);
+    expect(theirs.body.code).toBe("stale_write");
+    expect(theirs.body.details.current.highlights.map((h: { title: string }) => h.title)).toEqual(["A", "B"]);
+
+    // Saving on top of the current version works again.
+    const retry = await put(customerId, { highlights: [{ title: "C" }], expectedUpdatedAt: mine.body.updatedAt });
+    expect(retry.status).toBe(200);
+    expect(retry.body.highlights.map((h: { title: string }) => h.title)).toEqual(["C"]);
+  });
+
+  it("expectedUpdatedAt null means 'no row yet': refused once the row exists", async () => {
+    const customerId = await createCustomer();
+    expect((await put(customerId, { category: "x", expectedUpdatedAt: null })).status).toBe(201);
+    const again = await put(customerId, { category: "y", expectedUpdatedAt: null });
+    expect(again.status).toBe(409);
+    expect(again.body.details.current.category).toBe("x");
+  });
+
+  it("a save without expectedUpdatedAt keeps the old last-write-wins contract", async () => {
+    const customerId = await createCustomer();
+    expect((await put(customerId, { category: "x" })).status).toBe(201);
+    const second = await put(customerId, { category: "y" });
+    expect(second.status).toBe(200);
+    expect(second.body.category).toBe("y");
+  });
+
+  it("two concurrent saves on the same loaded version: exactly one wins", async () => {
+    const customerId = await createCustomer();
+    const first = await put(customerId, { achievements: [{ title: "base" }], expectedUpdatedAt: null });
+    const loadedAt = first.body.updatedAt as string;
+    const [a, b] = await Promise.all([
+      put(customerId, { achievements: [{ title: "left" }], expectedUpdatedAt: loadedAt }),
+      put(customerId, { achievements: [{ title: "right" }], expectedUpdatedAt: loadedAt }),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    const winner = a.status === 200 ? a : b;
+    const final = await request(app)
+      .get(`/customers/${customerId}/weekly-updates`)
+      .set("Authorization", `Bearer ${token}`);
+    const row = final.body.find((u: { weekStart: string }) => u.weekStart.startsWith(WEEK));
+    expect(row.achievements.map((x: { title: string }) => x.title)).toEqual(
+      winner.body.achievements.map((x: { title: string }) => x.title),
+    );
+  });
+});

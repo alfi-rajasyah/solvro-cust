@@ -7,8 +7,8 @@ import { signToken } from "../src/http/auth.js";
 // itself (which calls process.exit on completion).
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   ADMIN: ["*"],
-  TAM: ["project:read", "project:write", "task:read", "task:write"],
-  STAKEHOLDER: ["project:read"],
+  TAM: ["project:read", "project:write", "task:read", "task:write", "task:comment"],
+  STAKEHOLDER: ["project:read", "task:comment"],
   PENDING: [],
   // Test-only (not seeded by the app): a read-everything role, the kind an
   // admin can create in Admin > Roles. Stands in where a suite needs

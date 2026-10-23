@@ -22,7 +22,8 @@ export interface NavCommand {
 
 export const NAV_COMMANDS: readonly NavCommand[] = [
   { to: "/overview", label: "Overview", icon: "dashboard", group: "Workspace" },
-  { to: "/projects", label: "Projects", icon: "folder_managed", group: "Workspace" },
+  // Projects is gated on project:read like GET /projects (routes/projects.ts).
+  { to: "/projects", label: "Projects", icon: "folder_managed", group: "Workspace", requires: "project:read" },
   // Customers and Daily Review are gated on project:read like their API routes
   // (GET /customers, /daily-review 403 without it) and carry the same rule
   // through PermissionGuard in App.tsx (docs/archive/plans/internal-sync.md).

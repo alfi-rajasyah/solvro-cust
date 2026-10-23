@@ -19,6 +19,27 @@ import {
 } from "@/lib/queries";
 
 export function Overview() {
+  // GET /overview, /overview/badges and /projects need project:read. A user
+  // without it (a PENDING account waiting for a role) gets a plain notice
+  // instead of three 403s and a sign-out-looking error.
+  const { user } = useAuth();
+  if (!hasPermission(user, "project:read")) {
+    return (
+      <div className="space-y-6">
+        <h1 className="font-display text-2xl font-bold text-on-surface">Overview</h1>
+        <Alert>
+          <AlertDescription>
+            Your account has no role yet. An administrator must assign one before projects,
+            customers and tasks are visible.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+  return <OverviewLoaded />;
+}
+
+function OverviewLoaded() {
   const { data, isLoading, isError, error } = useOverview();
 
   return (

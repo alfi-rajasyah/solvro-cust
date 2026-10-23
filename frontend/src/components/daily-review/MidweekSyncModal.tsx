@@ -178,6 +178,7 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
     save.mutate(
       {
         weekStart: week.start,
+        expectedUpdatedAt: customer.weeklyUpdate?.updatedAt ?? null,
         health: state.health,
         category: state.category,
         highlights: kept.map((h) => ({ title: h.title.trim(), detail: h.detail, risk: h.risk, action: h.action })),
