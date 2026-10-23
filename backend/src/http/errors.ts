@@ -69,6 +69,14 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
       res.status(404).json({ error: "Record not found", code: "not_found" });
       return;
     }
+    // A foreign-key violation: an id in the body that names no row, or (rarer)
+    // a delete that races past its own "still referenced" check. Routes check
+    // their body ids first; this is the safety net so a missed one is a 400,
+    // not a 500. No `meta`: it names the constraint.
+    if (err.code === "P2003") {
+      res.status(400).json({ error: "Invalid reference to a related record", code: "invalid_reference" });
+      return;
+    }
     if (err.code === "P2002") {
       res.status(409).json({
         error: "Unique constraint violated",

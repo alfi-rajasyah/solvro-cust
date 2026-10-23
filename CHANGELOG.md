@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-10-23 — Bad dates and unknown user ids answer 400, not 500
+
+- **Dates**: every task, epic and project-task `startDate`/`dueDate` and the baseline's `asOfDate` in a request body goes through one schema, `backend/src/lib/dateInput.ts`: a `yyyy-MM-dd` day or an ISO date-time starting with one, a real calendar day, in the years 1900–2200. A year Postgres cannot store (for example `-271821-04-20`) used to pass validation and fail at the write as a 500; it is now a 400 `validation_error`, and so are a boolean or a number (they used to turn into a 1970 date or an epoch instant), a loose string such as `10/23/2026` (parsed in the server's time zone) and a day that does not exist such as `2026-02-30` (rolled over to 2 March). A task update's `expected` values get the same shape check without the year window, because the client echoes back what is stored. A `null` baseline `asOfDate` now locks the baseline as of now instead of 1 January 1970.
+- **User ids**: creating a project with an unknown `tamId`, a task with an unknown `assignedToId`, or an epic with an unknown `ownerId` answers 400 `tam_not_found`, `assignee_not_found` or `owner_not_found` (`backend/src/lib/userRefs.ts`), the same convention as `customer_not_found`; it used to reach the insert and fail as a 500. `backend/src/routes/customers.ts` uses the same helper for its owner check. As a safety net the error handler (`backend/src/http/errors.ts`) answers any remaining foreign-key violation (Prisma `P2003`) with 400 `invalid_reference`, without the constraint name. The update routes still answer 404 for an unknown user id (`docs/ISSUES.md`).
+- Tests: new `backend/test/inputValidation.test.ts`; the two rollback tests in `backend/test/taskAssigneeMembers.test.ts` now force the late write failure with a title Postgres cannot store (a NUL byte, itself a 500 recorded in `docs/ISSUES.md`), since an out-of-range date no longer reaches the write.
+
 ### Changed — 2026-10-22 — Release 1.0.0 and one version everywhere
 
 - First tagged release: everything below this section, back to 2026-05-01, ships as **1.0.0**. The production compose file written by `setup.sh` now pins the image tag (`IMAGE_TAG` in `~/solvro/.env`, default the release the installer belongs to) instead of `latest` with `pull_policy: always`, so a `docker compose up -d` after a config edit never pulls newer code; upgrading means running the newer `setup.sh`, which bumps `IMAGE_TAG` and pulls.
