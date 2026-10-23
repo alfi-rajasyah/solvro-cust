@@ -26,6 +26,29 @@ cited files; entries marked *code check* below carry the result).
   flood of distinct emails from many addresses can evict a target's counter;
   the per-address limit still applies. Same design as the public-share limiter.
 
+### Unknown user id: 400 on create, 404 on update (2026-10-23)
+- Creating a project, task or epic with an unknown `tamId`, `assignedToId` or
+  `ownerId` answers 400 `tam_not_found` / `assignee_not_found` /
+  `owner_not_found` (`backend/src/lib/userRefs.ts`). The update routes
+  (`PATCH /projects/:id` `tamId`, `PATCH /tasks/:id` `assignedToId`,
+  `PATCH /epics/:id` `ownerId`) still write the relation with `connect`, so an
+  unknown id there is Prisma's P2025 → 404 `not_found` "Record not found". Not a
+  500, but a 404 for a body field blurs the rule that 404 means a hidden
+  resource. Fix: call `assertUserExists` on the three update paths and change
+  the 404 expectation in `backend/test/taskAssigneeMembers.test.ts`.
+- Both paths still accept an inactive user as TAM, assignee or epic owner.
+
+### A NUL byte in a text field answers 500 (2026-10-23)
+- A string containing `\u0000` passes every Zod `z.string()` check, then
+  Postgres refuses it at the write (error 22021, a
+  `PrismaClientUnknownRequestError`), which the error handler answers as 500.
+  Any free-text body field is affected (task title, description, notes).
+- The two rollback tests in `backend/test/taskAssigneeMembers.test.ts` use this
+  on purpose as their "write fails after the assignee helper ran" trigger. A fix
+  (reject or strip NUL in a shared string schema, or map 22021 to 400) must
+  give those tests another late-failure trigger, for example a `vi.spyOn` on
+  the transaction's `task.create` / `task.update`.
+
 ### Gantt tree pane — residual clipping after the #118 fix (2026-07-30)
 - **Engine container clamp can re-clip the Dates/color columns.** The vendored
   engine (`clampContainer`, `reui/gantt/gantt-view.tsx:977-987`) renders the

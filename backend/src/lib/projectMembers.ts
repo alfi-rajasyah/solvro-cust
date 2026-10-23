@@ -12,8 +12,9 @@ type Tx = Prisma.TransactionClient | PrismaClient;
  * row. Removing the assignment later never removes the membership.
  *
  * An unknown or inactive assignee is a no-op here (the members API refuses
- * inactive users too), so the task write itself keeps reporting an unknown id
- * exactly as before. Callers invoke this only when the assignee actually
+ * inactive users too). An unknown id is reported by the caller: task create
+ * checks it first (`assertUserExists`, 400 `assignee_not_found`), task update
+ * connects the relation (404). Callers invoke this only when the assignee actually
  * changes, so re-saving a task never re-adds a member who was removed.
  *
  * Returns the added member's username when a NEW membership row was created

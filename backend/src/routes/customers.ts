@@ -6,6 +6,7 @@ import { requireAuth, requirePermission, hasPermission, type JwtPayload } from "
 import { logger } from "../logger.js";
 // services router lives in ./services.ts; this file owns the customer-side mapping.
 import { HttpError } from "../http/errors.js";
+import { assertUserExists } from "../lib/userRefs.js";
 import { validate } from "../http/validate.js";
 import { outlineUrlSchema } from "../lib/outlineUrl.js";
 import {
@@ -46,11 +47,8 @@ const updateCustomerSchema = z.object({
 });
 
 /** 400 `tam_not_found` instead of a raw P2003 → 500 on a bogus tamId. */
-async function assertTamExists(tamId: number): Promise<void> {
-  const user = await prisma.user.findUnique({ where: { id: tamId }, select: { id: true } });
-  if (!user) {
-    throw new HttpError(400, "tam_not_found", "Assigned TAM does not exist");
-  }
+function assertTamExists(tamId: number): Promise<void> {
+  return assertUserExists(prisma, tamId, "tam_not_found", "Assigned TAM does not exist");
 }
 
 const dayStringSchema = z
