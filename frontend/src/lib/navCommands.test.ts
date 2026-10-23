@@ -10,9 +10,13 @@ describe("filterNavCommands", () => {
     const labels = filterNavCommands(none, "").map((c) => c.label);
     expect(labels).toEqual([
       "Overview",
-      "Projects",
       "Settings",
     ]);
+  });
+
+  it("lists Projects only to holders of project:read, like GET /projects", () => {
+    expect(filterNavCommands(none, "").map((c) => c.label)).not.toContain("Projects");
+    expect(filterNavCommands((p) => p === "project:read", "").map((c) => c.label)).toContain("Projects");
   });
 
   it("lists Customers, Daily Review and Weekly Sync only to holders of project:read", () => {

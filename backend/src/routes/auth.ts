@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import bcrypt from "bcrypt";
 import { type TokenPayload } from "google-auth-library";
 import { Prisma } from "@prisma/client";
@@ -9,6 +9,60 @@ import { normalizeUsername, USERNAME_MAX } from "../lib/username.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { getAuthConfigCached } from "../authConfig.js";
+import { rateLimitKey } from "../http/rateLimit.js";
+import { createFailureThrottle } from "../http/loginThrottle.js";
+
+// Online password guessing is throttled on FAILURES only (http/loginThrottle.ts):
+// after LOGIN_FAILURES_PER_EMAIL rejected attempts for one email, or
+// LOGIN_FAILURES_PER_IP from one client address, within the window, the
+// sign-in routes answer 429 with Retry-After. Successful sign-ins never count,
+// so a user (or the browser test suite) who signs in often is not affected. A
+// success clears the email counter; the address counter only expires.
+export const LOGIN_FAILURES_PER_EMAIL = 10;
+export const LOGIN_FAILURES_PER_IP = 50;
+export const LOGIN_FAILURE_WINDOW_MS = 15 * 60_000;
+
+export const loginEmailThrottle = createFailureThrottle({
+  limit: LOGIN_FAILURES_PER_EMAIL,
+  windowMs: LOGIN_FAILURE_WINDOW_MS,
+});
+export const loginIpThrottle = createFailureThrottle({
+  limit: LOGIN_FAILURES_PER_IP,
+  windowMs: LOGIN_FAILURE_WINDOW_MS,
+});
+
+/** Test-only: forgets every sign-in failure counter. */
+export function resetLoginThrottlesForTests(): void {
+  loginEmailThrottle.reset();
+  loginIpThrottle.reset();
+}
+
+// Every rejected password sign-in must cost the same: without this, an unknown
+// email or a Google-only account (no hash to compare) answered in ~1 ms while
+// a real password account took a bcrypt round, which told a caller which
+// emails exist. Comparing against this throw-away hash makes the three cases
+// take the same time; its result is never trusted (see the `ok` expression).
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync("solvro-timing-equaliser-never-a-real-password", 10);
+
+const tooManyAttempts = () =>
+  new HttpError(429, "rate_limited", "Too many failed sign-in attempts. Please try again later.");
+
+/** 429 (with Retry-After) when the client address or the email is currently blocked. */
+function assertSignInAllowed(req: Request, res: Response, emailKey?: string): void {
+  const now = Date.now();
+  const ipWait = loginIpThrottle.blockedFor(rateLimitKey(req.ip), now);
+  const emailWait = emailKey ? loginEmailThrottle.blockedFor(emailKey, now) : 0;
+  const wait = Math.max(ipWait, emailWait);
+  if (wait > 0) {
+    res.setHeader("Retry-After", String(wait));
+    throw tooManyAttempts();
+  }
+}
+
+function recordSignInFailure(req: Request, emailKey?: string): void {
+  loginIpThrottle.recordFailure(rateLimitKey(req.ip));
+  if (emailKey) loginEmailThrottle.recordFailure(emailKey);
+}
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -23,33 +77,30 @@ export const authRouter = Router();
 
 authRouter.post("/login", validate("body", loginSchema), async (req, res) => {
   const { email, password } = req.body as z.infer<typeof loginSchema>;
+  const emailKey = email.trim().toLowerCase();
+  assertSignInAllowed(req, res, emailKey);
 
   const user = await prisma.user.findUnique({
     where: { email },
     include: { role: true },
   });
 
-  // Google-provisioned users have no password hash. Reject explicitly so
-  // the frontend can point them at the Google button instead of letting
-  // them keep retrying credentials that don't exist.
-  if (user && user.passwordHash === null) {
-    throw new HttpError(
-      401,
-      "google_only",
-      "This account uses Google sign-in. Please use the Google button.",
-    );
-  }
-
-  const ok =
-    user && user.passwordHash
-      ? await bcrypt.compare(password, user.passwordHash)
-      : false;
+  // One answer for an unknown email, a Google-only account (no password hash)
+  // and a wrong password: anything else tells a caller which emails exist.
+  // The login page itself hints at the Google button when Google sign-in is
+  // enabled, without a per-account signal.
+  const hash = user?.passwordHash ?? DUMMY_PASSWORD_HASH;
+  const compared = await bcrypt.compare(password, hash);
+  // Only a real stored hash can grant access; the dummy compare exists for timing alone.
+  const ok = compared && !!user?.passwordHash;
   if (!user || !ok) {
+    recordSignInFailure(req, emailKey);
     throw new HttpError(401, "invalid_credentials", "Invalid email or password");
   }
   if (!user.active) {
     throw new HttpError(403, "account_disabled", "Account has been deactivated");
   }
+  loginEmailThrottle.clear(emailKey);
 
   const permissions = permissionsOf(user.role.permissions);
   const token = signToken({ sub: user.id, ver: user.tokenVersion });
@@ -83,6 +134,8 @@ authRouter.get("/google/config", async (_req, res) => {
 // create the user, mint the same {sub, ver} JWT that
 // /auth/login mints, and return an identical response shape.
 authRouter.post("/google", validate("body", googleLoginSchema), async (req, res) => {
+  // Only the client address is known before the ID token is verified.
+  assertSignInAllowed(req, res);
   const config = await getAuthConfigCached();
   if (!config.googleClient || !config.googleClientId) {
     throw new HttpError(
@@ -109,12 +162,15 @@ authRouter.post("/google", validate("body", googleLoginSchema), async (req, res)
     });
     payload = ticket.getPayload();
   } catch {
+    recordSignInFailure(req);
     throw new HttpError(401, "invalid_token", "Google ID token verification failed");
   }
   if (!payload || !payload.email) {
+    recordSignInFailure(req);
     throw new HttpError(401, "invalid_token", "Google ID token missing email");
   }
   if (payload.email_verified !== true) {
+    recordSignInFailure(req);
     throw new HttpError(
       401,
       "email_not_verified",
@@ -129,6 +185,7 @@ authRouter.post("/google", validate("body", googleLoginSchema), async (req, res)
     (d) => d === hd || d === emailDomain,
   );
   if (!domainOk) {
+    recordSignInFailure(req);
     throw new HttpError(
       403,
       "domain_not_allowed",

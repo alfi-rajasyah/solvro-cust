@@ -49,7 +49,8 @@ The compose file sets these on the backend container. They are not meant to be e
 | `JWT_SECRET` | from `.env` | |
 | `SECRETS_KEY` | from `.env` | AES-256-GCM key for secrets at rest (iTop token). |
 | `JWT_EXPIRES_IN` | `8h` | Session length. |
-| `CORS_ORIGIN` | `*` | Which browser origins may call the API directly. |
+| `CORS_ORIGIN` | `APP_URL` (or `*` when unset) | Which other browser origins may call the API. The app itself is same-origin and never needs it. |
+| `TRUST_PROXY` | `loopback, uniquelocal` | Which proxies the API believes for the client address: the bundled nginx and a TLS front or tunnel on this host. `.env` can override it. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
 
 Google sign-in is **not** configured by environment variables. See section 6.
@@ -86,23 +87,32 @@ Sign-in stays disabled until both fields are set. A first-time Google user is cr
 
 ## 7. Backup and restore
 
-Back up (from `~/solvro`; the stack can stay up):
+Back up with `pg_dump` (from `~/solvro`; the stack stays up and the dump is consistent):
 
 ```bash
-docker run --rm -v solvro_pgdata:/data -v "$PWD":/backup alpine \
-  tar czf /backup/pg-$(date +%F).tgz -C / data
+docker compose exec -T postgres pg_dump -U solvro -Fc solvro > solvro-$(date +%F).dump
 ```
 
-Restore (from `~/solvro`; this replaces the database with the backup):
+A file copy of the data volume while Postgres runs is **not** consistent: it can miss the last transactions or refuse to start. Use the volume copy only with the stack stopped (`docker compose down` first), for example to move a server.
+
+Run the dump every night and keep the files off the server (`crontab -e`, as the user who installed Solvro):
+
+```
+15 2 * * * cd ~/solvro && docker compose exec -T postgres pg_dump -U solvro -Fc solvro > ~/backups/solvro-$(date +\%F).dump && find ~/backups -name 'solvro-*.dump' -mtime +30 -delete
+```
+
+Restore (from `~/solvro`; this replaces the database with the dump):
 
 ```bash
-docker compose down
-docker run --rm -v solvro_pgdata:/data -v "$PWD":/backup alpine \
-  sh -c 'rm -rf /data/* && tar xzf /backup/pg-YYYY-MM-DD.tgz -C /'
+docker compose stop backend frontend
+docker compose exec -T postgres psql -U solvro -d postgres -c 'DROP DATABASE solvro;' -c 'CREATE DATABASE solvro OWNER solvro;'
+docker compose exec -T postgres pg_restore -U solvro -d solvro --no-owner < solvro-YYYY-MM-DD.dump
 docker compose up -d
 ```
 
-Keep backups off the server. Take one before every upgrade.
+Test a restore once after the first install, on a spare machine or a second database, so the first real restore is not the first attempt. Take a dump before every upgrade.
+
+Also keep a copy of `~/solvro/.env`: it holds `SECRETS_KEY`, without which the stored iTop and Outline tokens in a restored database cannot be read (users would connect them again), and `JWT_SECRET`. Store it with the dumps, with the same care.
 
 ## 8. Logs
 
@@ -114,11 +124,61 @@ docker compose logs -f postgres
 
 To raise the API log level, set `LOG_LEVEL: debug` in `~/solvro/docker-compose.yml` and `docker compose up -d`. The next `setup.sh` run resets it to `info`.
 
+Container logs rotate: each container keeps at most 5 files of 10 MB (the `logging` block in the compose file), so a busy API cannot fill the disk.
+
 ## 9. Fresh install on a server that already has Solvro
 
-`setup.sh` treats a server **without** `~/solvro/.env` as a fresh install and **deletes the `solvro_pgdata` volume** to start clean. If you lose `.env` on a server with data, restore `.env` from your backup before running the installer, or move the volume aside first:
+`setup.sh` treats a server **without** `~/solvro/.env` as a fresh install and **deletes the `solvro_pgdata` volume** to start clean. Since 2026-10-22 it first checks whether that volume already exists: if it does, the script stops with an error before it writes anything, and deletes the volume only when you run it as `FORCE_FRESH=1 bash setup.sh`. The same check protects you when the script runs as a different Unix user than the one who installed Solvro (`~/solvro/.env` is per user; the volume is shared by the whole host). If you lose `.env` on a server with data, restore `.env` from your backup before running the installer, or move the volume aside first:
 
 ```bash
 docker volume create solvro_pgdata_keep
 docker run --rm -v solvro_pgdata:/from -v solvro_pgdata_keep:/to alpine cp -a /from/. /to/
 ```
+
+## 10. The backend restarts forever after an upgrade
+
+The backend runs `prisma migrate deploy` before it starts. A migration that fails half-way leaves a failed entry in the `_prisma_migrations` table, and every later start refuses to continue (`docker compose logs backend` shows `P3009`). The old schema is partly changed, so do not just retry.
+
+1. Stop the loop: `docker compose stop backend`.
+2. Read the failing migration's name from the log.
+3. Restore the dump you took before the upgrade (section 7), **or**, if you know the migration can be re-run safely, mark it rolled back and start again:
+
+```bash
+docker compose run --rm backend npx prisma migrate resolve --rolled-back <migration-name>
+docker compose up -d backend
+```
+
+4. If it fails again, keep the stack stopped, keep the logs, and ask for support with the migration name and the log lines.
+
+## 11. TLS
+
+Solvro itself serves plain HTTP on the website port. Anyone on the network path can read the session token, so put TLS in front before people sign in from a network you do not control. Keep `BIND_ADDR=127.0.0.1` and let the TLS front talk to `127.0.0.1:<FRONTEND_PORT>`. Two ways:
+
+**Caddy on the same server** (automatic certificate from Let's Encrypt; the name must resolve to this server and ports 80/443 must be reachable from the internet, or use an internal CA with `tls internal`):
+
+```
+# /etc/caddy/Caddyfile
+solvro.example.com {
+    reverse_proxy 127.0.0.1:8090
+}
+```
+
+Set `FRONTEND_PORT=8090` (so Caddy can own 80/443), `APP_URL=https://solvro.example.com`, run `bash setup.sh` again. The compose default `TRUST_PROXY=loopback, uniquelocal` already trusts a proxy on this host.
+
+**Cloudflare Tunnel** (no inbound port at all; Cloudflare terminates TLS):
+
+```bash
+cloudflared tunnel create solvro
+cloudflared tunnel route dns solvro solvro.example.com
+# config.yml: ingress: - hostname: solvro.example.com  service: http://127.0.0.1:8090
+cloudflared tunnel run solvro
+```
+
+Set `APP_URL=https://solvro.example.com`. The tunnel makes Solvro reachable from the whole internet: put a Cloudflare Access policy (allowed emails or groups) on the hostname, because only the in-app login protects it otherwise. `TRUST_PROXY=loopback, uniquelocal` is right here too (the tunnel connects from this host).
+
+Either way, Google sign-in needs the `https://` address added as an Authorized JavaScript origin (section 6).
+
+## 12. Upgrading Postgres
+
+The stack pins `postgres:15`. A newer major version does not start on a data directory written by an older one. To move: take a `pg_dump` (section 7), stop the stack, remove the volume (`docker volume rm solvro_pgdata` — this is the one time it is intended), change the image tag in the compose file, start Postgres, and `pg_restore` into it. Do this only with a tested dump in hand.
+

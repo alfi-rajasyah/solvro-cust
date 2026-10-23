@@ -12,7 +12,13 @@ import { safeRedirectPath } from "@/lib/safeRedirect";
 import { BrandMark } from "@/components/BrandMark";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 
-function messageForApiError(err: ApiError): string {
+/**
+ * The server answers every rejected password sign-in with the same
+ * `invalid_credentials` (an unknown email, a Google-only account and a wrong
+ * password are indistinguishable on purpose), so the Google hint is shown
+ * whenever Google sign-in is enabled, not per account.
+ */
+function messageForApiError(err: ApiError, googleAvailable = false): string {
   const code =
     typeof err.body === "object" && err.body !== null && "code" in err.body
       ? String((err.body as { code?: unknown }).code ?? "")
@@ -26,10 +32,12 @@ function messageForApiError(err: ApiError): string {
       return "Google sign-in isn't configured yet. Ask your admin to set up Sign-in policy.";
     case "account_disabled":
       return "This account has been deactivated. Contact your admin.";
-    case "google_only":
-      return "This account uses Google sign-in. Use the Google button above.";
     case "invalid_credentials":
-      return "Invalid email or password.";
+      return googleAvailable
+        ? "Invalid email or password. If your account uses Google sign-in, use the Google button above."
+        : "Invalid email or password.";
+    case "rate_limited":
+      return "Too many failed attempts. Wait a few minutes, then try again.";
     case "invalid_token":
       return "Google sign-in failed. Please try again.";
     default:
@@ -94,7 +102,7 @@ export function Login() {
       await login(email, password);
       navigate(from, { replace: true });
     } catch (err) {
-      if (err instanceof ApiError) setError(messageForApiError(err));
+      if (err instanceof ApiError) setError(messageForApiError(err, googleAvailable));
       else setError("Could not reach the server. Is the backend running?");
     } finally {
       setSubmitting(false);
@@ -195,7 +203,7 @@ export function Login() {
           className="relative z-10 text-on-surface-variant/20"
           style={{ fontSize: 10 }}
         >
-          v1.4.0 · build 2305
+          v{__APP_VERSION__}
         </div>
       </div>
 

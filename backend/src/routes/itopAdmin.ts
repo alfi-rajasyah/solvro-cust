@@ -15,6 +15,7 @@ import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { open, seal, SecretBoxError } from "../lib/secretBox.js";
 import { ItopError } from "../lib/itop/client.js";
+import { assertPublicItopUrl } from "../lib/itop/validateBaseUrl.js";
 import {
   getItopConfig,
   bustItopConfigCache,
@@ -313,6 +314,9 @@ itopAdminRouter.patch(
 
     const data: Prisma.ItopConfigUncheckedUpdateInput = { updatedById: req.user!.sub };
 
+    // https without userinfo, and — when ITOP_ALLOW_PRIVATE_HOSTS=false — a
+    // public host only (lib/itop/validateBaseUrl.ts).
+    if (typeof body.baseUrl === "string") await assertPublicItopUrl(body.baseUrl);
     if (body.baseUrl !== undefined) data.baseUrl = body.baseUrl;
     if (body.appToken !== undefined) data.appTokenEnc = sealAppToken(body.appToken);
     if (body.refreshMinutes !== undefined) data.refreshMinutes = body.refreshMinutes;
@@ -322,6 +326,7 @@ itopAdminRouter.patch(
 
     await getItopConfig(); // ensures the row exists before the transaction below
 
+    let disconnectedUsers = 0;
     await prisma.$transaction(
       async (tx) => {
         // Read the CURRENT stored zone from inside this transaction, not
@@ -330,6 +335,27 @@ itopAdminRouter.patch(
         // vice versa), silently skipping the backfill/lastFullSyncAt clear
         // a real change needs, or running it for a no-op PATCH.
         const currentConfig = await tx.itopConfig.findUniqueOrThrow({ where: { id: "default" } });
+
+        // A real address change disconnects every user's personal token in
+        // the same transaction. The write routes (routes/itop.ts) decrypt a
+        // user's token and send it in the Auth-Token header to whatever
+        // baseUrl is stored, so tokens issued for the old iTop must never
+        // reach a re-pointed one — whether an admin mistyped the address or
+        // an admin session was stolen. Same rule as routes/outlineAdmin.ts
+        // for the Outline address. (The normalised body value is compared;
+        // a no-op PATCH with the same address keeps every token.)
+        if (body.baseUrl !== undefined && body.baseUrl !== currentConfig.baseUrl) {
+          const wiped = await tx.user.updateMany({
+            where: { itopTokenEnc: { not: null } },
+            data: {
+              itopTokenEnc: null,
+              itopTokenPersonName: null,
+              itopTokenCheckedAt: null,
+              itopTokenExpiresAt: null,
+            },
+          });
+          disconnectedUsers = wiped.count;
+        }
 
         if (body.timezone !== undefined) {
           data.timezone = body.timezone;
@@ -358,8 +384,17 @@ itopAdminRouter.patch(
     bustItopConfigCache();
     bustItopServicesCache();
 
+    if (disconnectedUsers > 0) {
+      logger.info(
+        { disconnectedUsers },
+        "iTop address changed: personal iTop tokens removed from all users",
+      );
+    }
+
     const row = await loadConfigWithUpdater();
-    res.json(serializeConfig(row));
+    // `disconnectedUsers` tells the admin page how many people must connect
+    // their iTop account again after an address change (0 otherwise).
+    res.json({ ...serializeConfig(row), disconnectedUsers });
   },
 );
 
@@ -418,6 +453,9 @@ itopAdminRouter.post(
   validate("body", testConnectionSchema),
   async (req, res) => {
     const body = req.body as z.infer<typeof testConnectionSchema>;
+    // Same host policy as PATCH /settings — a probe must not reach an
+    // internal address just because it goes through /test.
+    if (body.baseUrl !== undefined) await assertPublicItopUrl(body.baseUrl);
     const config = await getItopConfig();
 
     const baseUrl = body.baseUrl ?? config.baseUrl ?? undefined;

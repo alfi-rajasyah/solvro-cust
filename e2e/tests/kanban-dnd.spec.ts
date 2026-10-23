@@ -193,6 +193,51 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     expect(order.indexOf("Gamma")).toBeLessThan(order.indexOf("Alpha"));
   });
 
+  test("a refused drag shows an error instead of silently snapping back", async ({ page, seededProject }) => {
+    // Before SolvroKanban passed onError to updateTask, a 403/409/5xx only
+    // rolled the optimistic move back: the card jumped home with no message.
+    await openKanban(page, seededProject.projectId);
+    const before = columnOrder(
+      await getTasks(apiBase(test.info()), seededProject.token, seededProject.projectId),
+      "TODO",
+    );
+
+    await page.route("**/api/tasks/*", async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Simulated server failure", code: "internal_error" }),
+      });
+    });
+    try {
+      // Drag the LAST TODO card onto the FIRST one: always a real move, so a
+      // PATCH is always fired whatever order earlier specs left behind (a
+      // drop-in-place fires no request — G3 — and would show no error).
+      expect(before.length, "need at least two TODO cards").toBeGreaterThanOrEqual(2);
+      const mover = before[before.length - 1];
+      const target = before[0];
+      const grip = await gripFor(page, mover, "Drag to reorder");
+      const targetBox = await page.getByText(target, { exact: true }).first().boundingBox();
+      expect(grip, `grip for ${mover} not found`).toBeTruthy();
+      expect(targetBox, `${target} card not found`).toBeTruthy();
+      await mouseDrag(page, center(grip!), { x: targetBox!.x + 60, y: targetBox!.y + 8 });
+
+      const alert = page.getByTestId("kanban-action-error");
+      await expect(alert).toBeVisible();
+      await expect(alert).toContainText("Simulated server failure");
+    } finally {
+      await page.unroute("**/api/tasks/*");
+    }
+
+    // Nothing was persisted: the server order is what it was before the drag.
+    const after = columnOrder(
+      await getTasks(apiBase(test.info()), seededProject.token, seededProject.projectId),
+      "TODO",
+    );
+    expect(after).toEqual(before);
+  });
+
   test("cross-column drag: Beta -> In Progress column", async ({ page, seededProject }) => {
     await openKanban(page, seededProject.projectId);
 

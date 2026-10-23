@@ -9,7 +9,7 @@ import { Router } from "express";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
-import { requireAuth } from "../http/auth.js";
+import { requireAuth, requirePermission } from "../http/auth.js";
 import { validate } from "../http/validate.js";
 import { ensureProjectVisible, ensureTaskVisible } from "../lib/visibility.js";
 import { checkDocsVisible } from "../lib/outline/mentionsAccess.js";
@@ -66,8 +66,11 @@ function noStore(res: import("express").Response): void {
   res.set("Cache-Control", "private, no-store");
 }
 
+// Both routers need `project:read` like the rest of the project surface
+// (outlineDocs.ts, projects.ts): visibility alone let a member with no
+// permissions read mention counts and titles.
 export const taskOutlineMentionsRouter = Router();
-taskOutlineMentionsRouter.use(requireAuth);
+taskOutlineMentionsRouter.use(requireAuth, requirePermission("project:read"));
 
 taskOutlineMentionsRouter.get(
   "/:id/outline-mentions",
@@ -81,7 +84,7 @@ taskOutlineMentionsRouter.get(
 );
 
 export const projectOutlineMentionsRouter = Router();
-projectOutlineMentionsRouter.use(requireAuth);
+projectOutlineMentionsRouter.use(requireAuth, requirePermission("project:read"));
 
 projectOutlineMentionsRouter.get(
   "/:id/outline-mentions",

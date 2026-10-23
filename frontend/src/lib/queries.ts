@@ -2982,6 +2982,9 @@ export function useDeleteCustomerNote(customerId: number) {
 // leaves it alone.
 export interface SaveWeeklyUpdateInput {
   weekStart: string;
+  // The `updatedAt` of the row the form was opened from, or null when there
+  // was none yet. The server refuses with 409 stale_write when the row moved.
+  expectedUpdatedAt?: string | null;
   health?: WeeklyHealth | null;
   status?: WeeklyStatus;
   category?: string | null;

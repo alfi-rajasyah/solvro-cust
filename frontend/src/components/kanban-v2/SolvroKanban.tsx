@@ -39,6 +39,7 @@ import {
   KanbanOverlay,
 } from "@/components/reui/kanban";
 import { Alert, AlertDescription } from "@/components/reui/alert";
+import { ApiError } from "@/lib/api";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { useDragActivityGuard } from "@/lib/dragActivity";
@@ -167,6 +168,11 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   // `null` = "No epic" (task.epicId === null), a number = one project epic.
   const [filterEpicId, setFilterEpicId] = useState<number | null | "">("");
   const [mobileSheetTask, setMobileSheetTask] = useState<Task | null>(null);
+  // A failed inline edit (drag, subtask toggle, mobile move) is rolled back by
+  // useUpdateTask; without this the card just snapped back with no message.
+  const [actionError, setActionError] = useState<string | null>(null);
+  const onActionError = (err: unknown) =>
+    setActionError(err instanceof ApiError ? err.message : "Could not update task.");
 
   // Built once from useProjectEpics, keyed by Epic.id — passed down to
   // TaskCard the same way subtaskMapAll is, so cards never call a per-card
@@ -395,7 +401,8 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
         : undefined;
     const result = mapCommitToPatch(unfilteredGlobalOrder, committedValue, { ...meta, appendToStatus });
     if (!result) return;
-    updateTask.mutate({ id: result.taskId, patch: result.patch });
+    setActionError(null);
+    updateTask.mutate({ id: result.taskId, patch: result.patch }, { onError: onActionError });
   }
 
   // Subtask checklist toggle (ProjectKanban.tsx:451-454) — DONE<->TODO,
@@ -403,7 +410,8 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   // `canToggleSubtasks` below).
   function toggleSubtaskStatus(sub: Task) {
     const next: TaskStatus = sub.status === "DONE" ? "TODO" : "DONE";
-    updateTask.mutate({ id: sub.id, patch: { status: next } });
+    setActionError(null);
+    updateTask.mutate({ id: sub.id, patch: { status: next } }, { onError: onActionError });
   }
 
   // Mobile move sheet (T8 item 3) — same column-append rule as a column-body
@@ -416,7 +424,8 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
       const unfilteredGlobalOrder = sortTasksCanonical(topLevelAll);
       const result = mapCommitToPatch(unfilteredGlobalOrder, committedValue, meta);
       if (result) {
-        updateTask.mutate({ id: result.taskId, patch: result.patch });
+        setActionError(null);
+        updateTask.mutate({ id: result.taskId, patch: result.patch }, { onError: onActionError });
       }
     }
     setMobileSheetTask(null);
@@ -455,6 +464,11 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
 
   return (
     <>
+      {actionError && (
+        <Alert variant="destructive" className="mb-3" data-testid="kanban-action-error">
+          <AlertDescription>Could not save the change: {actionError}</AlertDescription>
+        </Alert>
+      )}
       {/* Toolbar row: filter + add task (ProjectKanban.tsx:479-565) */}
       <div className="mb-3 flex items-center justify-end gap-2">
         <div className="relative">

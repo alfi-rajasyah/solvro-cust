@@ -16,6 +16,8 @@
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router-dom";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { Alert, AlertDescription } from "@/components/reui/alert";
+import { ApiError } from "@/lib/api";
 import { scoreClass, scoreLevel } from "@/components/RiskFormModal";
 import { ProjectStatusChip } from "@/components/StatusChip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -89,6 +91,11 @@ export function ProjectCard({
   const forceExpand = isFirstCard && focusRequest !== null && focusRequest.token !== dismissedFocusToken;
   const bodyExpanded = forceExpand || manualBodyExpanded;
   const [attentionExpanded, setAttentionExpanded] = useState(true);
+  // A refused status change (403 after a role change, 409 stale write, a
+  // backend restart) previously snapped the select back with no message.
+  const [actionError, setActionError] = useState<string | null>(null);
+  const onActionError = (err: unknown) =>
+    setActionError(err instanceof ApiError ? err.message : "Could not save the change.");
   const bodyId = `project-body-${project.id}`;
   const attentionId = `project-attention-${project.id}`;
 
@@ -208,6 +215,11 @@ export function ProjectCard({
           </div>
 
           <div className="relative border-b border-outline-variant px-4 py-3">
+            {actionError && (
+              <Alert variant="destructive" className="mb-3" data-testid="daily-review-action-error">
+                <AlertDescription>Could not save the change: {actionError}</AlertDescription>
+              </Alert>
+            )}
             {hasAttention ? (
               <>
                 <button
@@ -239,7 +251,13 @@ export function ProjectCard({
                               <Select
                                 items={taskStatusOptions}
                                 value={t.status}
-                                onValueChange={(v) => updateTask.mutate({ id: t.id, patch: { status: v as TaskStatus } })}
+                                onValueChange={(v) => {
+                                  setActionError(null);
+                                  updateTask.mutate(
+                                    { id: t.id, patch: { status: v as TaskStatus } },
+                                    { onError: onActionError },
+                                  );
+                                }}
                                 disabled={pending}
                               >
                                 <SelectTrigger
@@ -277,7 +295,13 @@ export function ProjectCard({
                               <Select
                                 items={riskStatusOptions}
                                 value={r.status}
-                                onValueChange={(v) => updateRisk.mutate({ id: r.id, patch: { status: v as RiskStatus } })}
+                                onValueChange={(v) => {
+                                  setActionError(null);
+                                  updateRisk.mutate(
+                                    { id: r.id, patch: { status: v as RiskStatus } },
+                                    { onError: onActionError },
+                                  );
+                                }}
                                 disabled={pending}
                               >
                                 <SelectTrigger

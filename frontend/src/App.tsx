@@ -69,8 +69,23 @@ export function App() {
       >
         <Route index element={<Navigate to="/overview" replace />} />
         <Route path="overview" element={<Overview />} />
-        <Route path="projects" element={<Projects />} />
-        <Route path="projects/:id" element={<ProjectDetail />}>
+        {/* Gated on project:read like the nav entry and GET /projects. */}
+        <Route
+          path="projects"
+          element={
+            <PermissionGuard permission="project:read">
+              <Projects />
+            </PermissionGuard>
+          }
+        />
+        <Route
+          path="projects/:id"
+          element={
+            <PermissionGuard permission="project:read">
+              <ProjectDetail />
+            </PermissionGuard>
+          }
+        >
           <Route index element={<ProjectIndexRedirect />} />
           <Route path="overview" element={<ProjectOverview />} />
           <Route path="list" element={<ProjectList />} />

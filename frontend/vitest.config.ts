@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vitest/config";
 import path from "node:path";
 
@@ -8,6 +9,13 @@ import path from "node:path";
 // app does. Node environment, .ts-only, no globals — see
 // docs/plans/kanban-reui-swap/plan.md Task 4.
 export default defineConfig({
+  // Same build-time constant vite.config.ts defines (the login page's version),
+  // so src/lib/version.test.ts and any component reading it run under vitest.
+  define: {
+    __APP_VERSION__: JSON.stringify(
+      (JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version: string }).version,
+    ),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),

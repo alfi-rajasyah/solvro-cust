@@ -96,7 +96,8 @@ async function getEpicProgress(epicId: number): Promise<{ done: number; total: n
 
 export const epicsRouter = Router();
 
-epicsRouter.use(requireAuth);
+// Same `project:read` gate as /projects and /tasks (see routes/tasks.ts).
+epicsRouter.use(requireAuth, requirePermission("project:read"));
 
 epicsRouter.get("/:id", validate("params", idParamSchema), async (req, res) => {
   const { id } = req.params as unknown as z.infer<typeof idParamSchema>;

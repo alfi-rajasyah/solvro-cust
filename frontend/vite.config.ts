@@ -3,8 +3,19 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "node:path";
+import { readFileSync } from "node:fs";
+
+// The version the login page shows (`__APP_VERSION__`). Single source:
+// frontend/package.json, which ci/check-version.sh keeps equal to VERSION,
+// backend/package.json and the image tag in setup.sh. Read with fs rather than
+// imported, so tsconfig.node.json's file list stays as it is; vitest.config.ts
+// defines the same constant for the unit tests.
+export const APP_VERSION = (
+  JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version: string }
+).version;
 
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   plugins: [
     tailwindcss(),
     react(),

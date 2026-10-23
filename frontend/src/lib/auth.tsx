@@ -51,6 +51,7 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   { value: "project:write", label: "Manage projects", hint: "Create/edit projects, risks, sections, baselines." },
   { value: "task:read", label: "View tasks", hint: "See tasks and subtasks." },
   { value: "task:write", label: "Manage tasks", hint: "Create, edit, move, and delete tasks." },
+  { value: "task:comment", label: "Comment on tasks", hint: "Post comments and mention people on tasks the user can see. Read-only roles can have this without any write permission." },
   { value: "report:executive", label: "Executive dashboard", hint: "See the org-wide Executive portfolio dashboard (all projects across all TAMs) and overdue-projects monitoring. Read-only." },
 ];
 
