@@ -5,6 +5,7 @@ import { TaskStatus } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { requireAuth, requirePermission, type JwtPayload } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
+import { dateInput } from "../lib/dateInput.js";
 import { validate } from "../http/validate.js";
 import { ensureProjectVisible } from "../lib/visibility.js";
 import { recordActivity, shortLabel } from "../lib/activity.js";
@@ -34,8 +35,8 @@ const updateEpicSchema = z.object({
   status: z.nativeEnum(TaskStatus).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   ownerId: z.number().int().positive().nullable().optional(),
-  startDate: z.coerce.date().nullable().optional(),
-  dueDate: z.coerce.date().nullable().optional(),
+  startDate: dateInput.nullable().optional(),
+  dueDate: dateInput.nullable().optional(),
   position: z.number().int().min(0).optional(),
 });
 

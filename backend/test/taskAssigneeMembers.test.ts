@@ -32,8 +32,11 @@ async function fixture() {
   return { tam, assignee, project };
 }
 
-// Valid JS date, but before Postgres' minimum date/timestamp (4713 BC).
-const OUT_OF_RANGE_DATE = "-271821-04-20T00:00:00.000Z";
+// Passes validation, then Postgres refuses it at the INSERT/UPDATE (a text
+// column cannot hold a NUL byte) — a write that fails after the assignee
+// helper already ran. (An out-of-range date was the trigger before dates were
+// range-checked at validation; see test/inputValidation.test.ts.)
+const UNSTORABLE_TITLE = "bad\u0000title";
 
 const memberRows = (projectId: number) =>
   prisma.projectMember.findMany({ where: { projectId } });
@@ -92,12 +95,12 @@ describe("POST /projects/:id/tasks — assignee becomes a member", () => {
   it("rolls the membership back when the task insert fails after the helper ran", async () => {
     const { tam, assignee, project } = await fixture();
     // Passes validation and the assignee helper, then the INSERT itself fails
-    // (a date below Postgres' minimum) — so the membership row was really
+    // (a title Postgres cannot store) — so the membership row was really
     // written inside the transaction before being rolled back.
     const res = await request(app)
       .post(`/projects/${project.id}/tasks`)
       .set(auth(tam.token))
-      .send({ title: "D", assignedToId: assignee.userId, startDate: OUT_OF_RANGE_DATE });
+      .send({ title: UNSTORABLE_TITLE, assignedToId: assignee.userId });
     expect(res.status).toBe(500);
     expect(await memberRows(project.id)).toHaveLength(0);
     expect(await prisma.task.count({ where: { projectId: project.id } })).toBe(0);
@@ -189,7 +192,7 @@ describe("PATCH /tasks/:id — assignee becomes a member", () => {
     const res = await request(app)
       .patch(`/tasks/${task.id}`)
       .set(auth(tam.token))
-      .send({ assignedToId: assignee.userId, startDate: OUT_OF_RANGE_DATE });
+      .send({ assignedToId: assignee.userId, title: UNSTORABLE_TITLE });
     expect(res.status).toBe(500);
     expect(await memberRows(project.id)).toHaveLength(0);
     const after = await prisma.task.findUniqueOrThrow({ where: { id: task.id } });

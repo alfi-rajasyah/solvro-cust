@@ -12,6 +12,7 @@ import {
 import { prisma } from "../prisma.js";
 import { hasPermission, requireAuth, requirePermission } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
+import { dateInput } from "../lib/dateInput.js";
 import { validate } from "../http/validate.js";
 import { outlineUrlSchema } from "../lib/outlineUrl.js";
 import {
@@ -35,6 +36,7 @@ import {
 import { assertEpicNotOnSubtask, assertValidEpic } from "../lib/epics.js";
 import { computeProjectHealth, computeSlipDays } from "../lib/projectHealth.js";
 import { ensureAssigneeIsMember } from "../lib/projectMembers.js";
+import { assertUserExists } from "../lib/userRefs.js";
 import {
   diffProjectChanges,
   recordActivity,
@@ -114,8 +116,8 @@ const createTaskSchema = z
     description: z.string().max(2000).optional(),
     status: z.nativeEnum(TaskStatus).optional(),
     priority: z.nativeEnum(Priority).optional(),
-    startDate: z.coerce.date().nullable().optional(),
-    dueDate: z.coerce.date().nullable().optional(),
+    startDate: dateInput.nullable().optional(),
+    dueDate: dateInput.nullable().optional(),
     isMilestone: z.boolean().optional(),
     isCriticalPath: z.boolean().optional(),
     assignedToId: z.number().int().positive().nullable().optional(),
@@ -140,8 +142,8 @@ const createEpicSchema = z.object({
   description: z.string().max(2000).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   ownerId: z.number().int().positive().nullable().optional(),
-  startDate: z.coerce.date().nullable().optional(),
-  dueDate: z.coerce.date().nullable().optional(),
+  startDate: dateInput.nullable().optional(),
+  dueDate: dateInput.nullable().optional(),
 });
 
 const taskListQuerySchema = z.object({
@@ -192,6 +194,9 @@ projectsRouter.post(
     const tamId = body.tamId ?? req.user!.sub;
     if (!(await isCustomerVisible(req.user!, body.customerId))) {
       throw new HttpError(400, "customer_not_found", "Customer not found");
+    }
+    if (body.tamId !== undefined && body.tamId !== req.user!.sub) {
+      await assertUserExists(prisma, body.tamId, "tam_not_found", "TAM not found");
     }
 
     // The project and its `created` event commit together. The event snapshots
@@ -269,7 +274,8 @@ projectsRouter.get("/:id", validate("params", idParamSchema), validate("query", 
 });
 
 const lockBaselineSchema = z.object({
-  asOfDate: z.coerce.date().optional(),
+  // Absent or null = now (the route falls back below).
+  asOfDate: dateInput.nullable().optional(),
   clear: z.boolean().optional(),
 });
 
@@ -541,6 +547,7 @@ projectsRouter.post(
       // Assigning someone who cannot see the project adds them as a member
       // (same transaction as the task write).
       if (body.assignedToId != null) {
+        await assertUserExists(tx, body.assignedToId, "assignee_not_found", "Assignee not found");
         const added = await ensureAssigneeIsMember(tx, id, body.assignedToId, req.user!.sub);
         if (added) {
           await recordActivity(tx, {
@@ -698,6 +705,9 @@ projectsRouter.post(
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
     const body = req.body as z.infer<typeof createEpicSchema>;
     await ensureProjectVisible(req.user!, id);
+    if (body.ownerId != null) {
+      await assertUserExists(prisma, body.ownerId, "owner_not_found", "Epic owner not found");
+    }
 
     // Appends at the end. Epics have no re-pack on delete (unlike tasks'
     // countSiblings, which is safe because DELETE /tasks/:id never re-packs

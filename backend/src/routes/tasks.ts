@@ -4,6 +4,7 @@ import { Prisma, Priority, TaskStatus } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { requireAuth, requirePermission, type JwtPayload } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
+import { dateInput, dateString } from "../lib/dateInput.js";
 import { validate } from "../http/validate.js";
 import { ensureTaskVisible, projectVisibilityFilter } from "../lib/visibility.js";
 import {
@@ -37,8 +38,10 @@ const expectedTaskSchema = z.object({
   description: z.string().max(2000).nullable().optional(),
   status: z.nativeEnum(TaskStatus).optional(),
   priority: z.nativeEnum(Priority).optional(),
-  startDate: z.coerce.date().nullable().optional(),
-  dueDate: z.coerce.date().nullable().optional(),
+  // Compared, never written, and echoed back from the stored row — so no year
+  // window (a row may predate it), only the shape check.
+  startDate: dateString.nullable().optional(),
+  dueDate: dateString.nullable().optional(),
   assignedToId: z.number().int().positive().nullable().optional(),
   sectionId: z.number().int().positive().nullable().optional(),
   epicId: z.number().int().positive().nullable().optional(),
@@ -64,8 +67,8 @@ const updateTaskSchema = z
     description: z.string().max(2000).nullable().optional(),
     status: z.nativeEnum(TaskStatus).optional(),
     priority: z.nativeEnum(Priority).optional(),
-    startDate: z.coerce.date().nullable().optional(),
-    dueDate: z.coerce.date().nullable().optional(),
+    startDate: dateInput.nullable().optional(),
+    dueDate: dateInput.nullable().optional(),
     isMilestone: z.boolean().optional(),
     isCriticalPath: z.boolean().optional(),
     // baselineStartDate / baselineDueDate are intentionally NOT accepted here —
