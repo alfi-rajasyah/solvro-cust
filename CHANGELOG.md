@@ -15,6 +15,15 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-10-23 — A page that fails to render shows a message instead of a blank screen
+
+- New `frontend/src/components/AppErrorBoundary.tsx`. Before, an error thrown while rendering (a server value of the wrong shape, an edge case in a vendored engine) blanked the whole app with no way out but a manual reload.
+- **Inside the app shell** (`frontend/src/components/layout/Shell.tsx`) the boundary wraps the page area only: the sidebar and top bar stay usable, the page area shows "This page could not be shown" with **Try again** and **Reload**, and opening another page clears it. Try again and that navigation first reset the cached server data, so the page renders from freshly fetched data instead of the value that broke it (the top bar shares the project and customer queries with their pages, so dropping only unused queries would not be enough).
+- **Outside the shell** (sign-in, guest and embed pages, the app's providers) a last-resort boundary in `frontend/src/main.tsx` shows a full-screen message with Reload; it depends on no router, query or auth context.
+- Errors in event handlers and async code are not caught by a boundary (a React limit); those keep their own error states.
+- **Component tests**: the frontend test run now includes `.test.tsx` files. A file opts into a browser-like DOM with `// @vitest-environment jsdom` on its first line; the existing `.test.ts` files still run in Node (`frontend/vitest.config.ts`). New dev dependencies: `jsdom` 29, `@testing-library/react` 16 and its peer `@testing-library/dom` 10. First use: `frontend/src/components/AppErrorBoundary.test.tsx`.
+- New `e2e/tests/error-boundary.spec.ts`: a real Overview or project answer with one field set to null shows the fallback inside the shell, sidebar navigation clears it, and Try again renders the page once the server answers correctly, including on a project page whose query the top bar also reads.
+
 ### Changed — 2026-10-22 — Release 1.0.0 and one version everywhere
 
 - First tagged release: everything below this section, back to 2026-05-01, ships as **1.0.0**. The production compose file written by `setup.sh` now pins the image tag (`IMAGE_TAG` in `~/solvro/.env`, default the release the installer belongs to) instead of `latest` with `pull_policy: always`, so a `docker compose up -d` after a config edit never pulls newer code; upgrading means running the newer `setup.sh`, which bumps `IMAGE_TAG` and pulls.
