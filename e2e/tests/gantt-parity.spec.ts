@@ -436,10 +436,8 @@ test.describe("gantt parity — ReUI engine (desktop)", () => {
     // Not shown until the toggle is clicked.
     await expect(page.locator("[data-baseline-rect]")).toHaveCount(0);
 
-    // The toggle's accessible name is "show_chart Baseline" (the Material
-    // Symbols ligature span has no aria-hidden, so its literal glyph text
-    // "show_chart" is part of the computed name) — match on the trailing
-    // capitalized "Baseline" word. (The "Lock baseline"/"Reset baseline"
+    // Match on the trailing capitalized "Baseline" word of the toggle's
+    // accessible name (its Material Symbols icon is aria-hidden). (The "Lock baseline"/"Reset baseline"
     // button lives in the Context panel since 2026-08-31, not the toolbar.)
     const baselineToggle = page.getByRole("button", { name: /\bBaseline$/ });
     await baselineToggle.click();

@@ -106,7 +106,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
           aria-label="Close project context"
           className="flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
         >
-          <span className="material-symbols-outlined text-base">close</span>
+          <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
         </button>
       </div>
 
@@ -191,7 +191,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
               role="status"
               className="mt-2 flex items-center gap-1 text-meta font-semibold text-primary"
             >
-              <span className="material-symbols-outlined text-[15px]">check_circle</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-[15px]">check_circle</span>
               {baselineNotice}
             </p>
           )}
@@ -214,7 +214,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                 disabled={exporting !== null}
                 className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <span className="material-symbols-outlined text-[17px]">
+                <span aria-hidden="true" className="material-symbols-outlined text-[17px]">
                   table_view
                 </span>
                 {exporting === "excel" ? "Exporting…" : "Excel"}
@@ -225,7 +225,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                 disabled={exporting !== null}
                 className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <span className="material-symbols-outlined text-[17px]">
+                <span aria-hidden="true" className="material-symbols-outlined text-[17px]">
                   picture_as_pdf
                 </span>
                 {exporting === "pdf" ? "Exporting…" : "PDF"}
@@ -236,7 +236,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                 disabled={exporting !== null}
                 className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <span className="material-symbols-outlined text-[17px]">
+                <span aria-hidden="true" className="material-symbols-outlined text-[17px]">
                   open_in_new
                 </span>
                 {exporting === "pdfTab" ? "Opening…" : "View"}
@@ -263,7 +263,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
               to={`/customers/${project.customer.id}`}
               className="flex items-start gap-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-3 transition-colors hover:border-primary/40"
             >
-              <span
+              <span aria-hidden="true"
                 className="material-symbols-outlined text-primary"
                 style={{ fontVariationSettings: "'FILL' 1" }}
               >
@@ -278,7 +278,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                 </p>
                 <span className="mt-2 inline-flex items-center gap-1 text-meta font-semibold text-primary">
                   Go to customer
-                  <span className="material-symbols-outlined text-[15px]">
+                  <span aria-hidden="true" className="material-symbols-outlined text-[15px]">
                     chevron_right
                   </span>
                 </span>

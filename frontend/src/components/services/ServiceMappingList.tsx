@@ -171,13 +171,14 @@ export function ServiceMappingList({
                   type="button"
                   disabled={!canMutate || saving}
                   onClick={() => toggle(s.id)}
+                  aria-pressed={assigned}
                   className={[
                     "flex w-full items-center justify-between gap-3 text-left text-sm",
                     canMutate ? "" : "cursor-default",
                   ].join(" ")}
                 >
                   <div className="flex min-w-0 items-center gap-2">
-                    <span
+                    <span aria-hidden="true"
                       className={[
                         "material-symbols-outlined text-[19px]",
                         assigned ? "text-primary" : "text-on-surface-variant",
@@ -325,7 +326,7 @@ function ToolsEditor({
                 aria-label={`Remove ${t}`}
                 className="rounded-full text-primary/70 hover:text-primary disabled:opacity-50"
               >
-                <span className="material-symbols-outlined text-[13px]">close</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-[13px]">close</span>
               </button>
             )}
           </span>

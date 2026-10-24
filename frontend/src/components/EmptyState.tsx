@@ -26,7 +26,7 @@ export function EmptyState({
         size="lg"
         className="mb-2"
       >
-        <span className="material-symbols-outlined text-2xl text-on-surface-variant">
+        <span aria-hidden="true" className="material-symbols-outlined text-2xl text-on-surface-variant">
           {icon}
         </span>
       </IconTile>

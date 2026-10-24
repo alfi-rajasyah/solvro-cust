@@ -101,7 +101,7 @@ export function DailyReview() {
             aria-label="Previous week"
             className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
-            <span className="material-symbols-outlined text-lg">chevron_left</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_left</span>
           </button>
           <div className="text-center">
             <div className="text-label-caps uppercase text-on-surface-variant">
@@ -115,7 +115,7 @@ export function DailyReview() {
             aria-label="Next week"
             className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
-            <span className="material-symbols-outlined text-lg">chevron_right</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_right</span>
           </button>
         </div>
       </div>

@@ -337,7 +337,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
         className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container"
         aria-label="Close"
       >
-        <span className="material-symbols-outlined text-base">close</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
       </button>
     </div>
   );
@@ -621,7 +621,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                         aria-label="Move subtask up"
                         className="rounded-sm p-0.5 text-on-surface-variant hover:bg-surface-container disabled:pointer-events-none disabled:opacity-30"
                       >
-                        <span className="material-symbols-outlined text-sm">keyboard_arrow_up</span>
+                        <span aria-hidden="true" className="material-symbols-outlined text-sm">keyboard_arrow_up</span>
                       </button>
                       <button
                         type="button"
@@ -630,7 +630,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                         aria-label="Move subtask down"
                         className="rounded-sm p-0.5 text-on-surface-variant hover:bg-surface-container disabled:pointer-events-none disabled:opacity-30"
                       >
-                        <span className="material-symbols-outlined text-sm">keyboard_arrow_down</span>
+                        <span aria-hidden="true" className="material-symbols-outlined text-sm">keyboard_arrow_down</span>
                       </button>
                     </div>
                   </li>
@@ -697,7 +697,7 @@ function FieldRow({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="material-symbols-outlined w-5 shrink-0 text-sm text-on-surface-variant">
+      <span aria-hidden="true" className="material-symbols-outlined w-5 shrink-0 text-sm text-on-surface-variant">
         {icon}
       </span>
       <span className="w-20 shrink-0 text-xs text-on-surface-variant">{label}</span>

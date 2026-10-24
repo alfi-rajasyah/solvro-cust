@@ -52,7 +52,7 @@ colors:
     inverse-on-surface: '#f0ede8'
     outline: '#9a9a97'
     outline-variant: '#d0d0cc'
-    primary: '#2d9042'
+    primary: '#267937'
     on-primary: '#ffffff'
     primary-container: '#c8e6cf'
     on-primary-container: '#0f2b16'
@@ -81,11 +81,11 @@ chips:
     violet-text: '#ddd6fe'
   light:
     emerald-bg: '#dcfce7'
-    emerald-text: '#16a34a'
+    emerald-text: '#11813b'
     amber-bg: '#fef3c7'
-    amber-text: '#d97706'
+    amber-text: '#a75c05'
     rose-bg: '#fee2e2'
-    rose-text: '#dc2626'
+    rose-text: '#ca2121'
     violet-bg: '#ede9fe'
     violet-text: '#6d28d9'
 fixed:
@@ -161,11 +161,11 @@ Every token is a CSS custom property in `index.css` (`--token-name`, space-separ
 | `inverse-on-surface` | `#232321` | `#f0ede8` | |
 | `outline` | `#4a4a47` | `#9a9a97` | emphasis borders |
 | `outline-variant` | `#3a3a37` | `#d0d0cc` | default 1px borders — the elevation primitive |
-| `primary` | `#3aae51` | `#2d9042` | Elitery Green — the only accent color |
+| `primary` | `#3aae51` | `#267937` | Elitery Green — the only accent color; light value darkened 2026-10-23 (was `#2d9042`) to reach 4.5:1 as small text on white, page and panel surfaces and white-on-primary |
 | `on-primary` | `#0f2b16` | `#ffffff` | |
 | `primary-container` | `#2d9042` | `#c8e6cf` | |
 | `on-primary-container` | `#e8f7eb` | `#0f2b16` | |
-| `inverse-primary` | `#2d9042` | `#3aae51` | |
+| `inverse-primary` | `#2d9042` | `#3aae51` | dark value is the old brand green and no longer equals the light `primary` (`#267937`) — alignment is an open user decision, see `docs/ISSUES.md` |
 | `secondary` | `#888780` | `#5f5e57` | inactive sidebar icons |
 | `on-secondary` | `#1a1a18` | `#ffffff` | |
 | `secondary-container` | `#323230` | `#e0dfd8` | |
@@ -187,10 +187,12 @@ Background + text pair per tone, both flip with theme:
 
 | Tone | Dark bg / text | Light bg / text |
 |---|---|---|
-| `chip-emerald` | `#064e3b` / `#a7f3d0` | `#dcfce7` / `#16a34a` |
-| `chip-amber` | `#78350f` / `#fde68a` | `#fef3c7` / `#d97706` |
-| `chip-rose` | `#7f1d1d` / `#fecaca` | `#fee2e2` / `#dc2626` |
+| `chip-emerald` | `#064e3b` / `#a7f3d0` | `#dcfce7` / `#11813b` |
+| `chip-amber` | `#78350f` / `#fde68a` | `#fef3c7` / `#a75c05` |
+| `chip-rose` | `#7f1d1d` / `#fecaca` | `#fee2e2` / `#ca2121` |
 | `chip-violet` | `#4c1d95` / `#ddd6fe` | `#ede9fe` / `#6d28d9` |
+
+The light text shades (emerald, amber, rose; changed 2026-10-23) are the lightest of each hue that reach 4.5:1 on their own chip background and on white; the `Alert` success and warning tones below inherit them.
 
 > The vendored `Alert` component (`frontend/src/components/reui/alert.tsx`)
 > consumes the chip text tones and the inverse-surface pair through the
@@ -257,6 +259,8 @@ These seven named roles are also registered as `font-size` keys in the `tailwind
 - **No text under 12px.** `text-meta` is the smallest role (chips, links, counts, captions); `text-label-caps` for uppercase micro-labels; `text-xs` for helper and error text. Arbitrary `text-[Npx]` below 12px is a violation.
 - **Buttons, link-buttons and tabs are sentence case** (`font-semibold`, no `uppercase tracking-wider`). `tracking-wider` is never added next to `text-label-caps` — the role already carries its tracking.
 - **Destructive confirmations use `ConfirmModal` with the `danger` tone**, never the browser's `confirm()`. Dialogs move focus inside on open and restore it on close (`hooks/useDialogFocus.ts`).
+- **Non-modal side panels take and return focus, without trapping Tab** (task, epic and iTop ticket panels; `hooks/usePanelFocus.ts(ref, item, shell)`). Focus moves into the panel when it opens or shows a new `item`; after a `shell` swap (loading, error, ready) it comes back only if the swap dropped it to `<body>`, so focus the user moved elsewhere is left alone; on close it returns to the opener. The page behind stays usable, so there is no Tab trap. The panel element is `div role="dialog" aria-label=… tabIndex={-1}` — never `aside role="dialog"` (`aside` does not allow that role) — in its loading and not-found states too.
+- **Cards open from the keyboard through their title button.** On the Kanban, the iTop ticket board and the List, the task/ticket title is a `<button>` (Enter or Space opens the panel). The card wrapper carries no role and no tab stop — the drag library's `role="button"`, `tabindex` and "press space to pick up" attributes are dropped in the Solvro layer, because its key listener sits on the grip, which cannot take focus. Mouse and touch drag are unchanged; a keyboard move goes through the task panel's status field.
 - **Loading states are skeletons from `frontend/src/components/skeletons/`**, shown after a 150 ms delay so fast loads do not flash; no bare grey blocks and no spinners for page content.
 - **Top-bar titles and breadcrumbs come from `frontend/src/lib/routeMeta.ts`**; no page falls back to "Solvro". A new route registers its title there (`routeMeta.test.ts` pins them).
 
@@ -311,7 +315,7 @@ This value is **fixed** — it does not flip between themes (unlike every color 
 
 > Implementation note: `RightSidebar.tsx` is in the whitelist by design intent (it's a floating overlay layer, same as Drawer), but as of this writing it does **not** apply the `shadow-overlay` class — it relies on `border-l border-outline-variant` + `backdrop-blur-md` only. Don't flag this as a violation; flag it as a gap if you're implementing elevation work in that file.
 
-Nothing else gets a shadow. No card shadows, no hover-lift shadows, no focus-ring glows beyond the 2px primary outline. The app-wide focus treatment (reduced form, user decision 2026-08-29) is `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30` — no `focus-visible:border-primary` (adapted to `has-focus:`/`group-data-*` prefixes where the trigger is a wrapper rather than the focusable element itself, e.g. `calendar.tsx`'s dropdown root and day button). This is the one focus treatment for every form control app-wide; there is no separate "Buttons/Inputs conventions" section to consult. `frontend/src/components/gantt-v2/SolvroGantt.tsx` still carries the older, fuller form (with `focus-visible:border-primary`) and may be aligned to the reduced form opportunistically.
+Nothing else gets a shadow. No card shadows, no hover-lift shadows, no focus-ring glows beyond the 2px primary outline. The app-wide focus treatment (reduced form, user decision 2026-08-29) is `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30` — no `focus-visible:border-primary` (adapted to `has-focus:`/`group-data-*` prefixes where the trigger is a wrapper rather than the focusable element itself, e.g. `calendar.tsx`'s dropdown root and day button). `outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30` is an accepted variant of it: `outline-hidden` (unlike `outline-none`) keeps an outline in forced-colours mode, so an indicator survives there. The title buttons in `kanban-v2/cards.tsx`, `itop/board/TicketCard.tsx` and `pages/views/ProjectList.tsx` use it. This is the one focus treatment for every form control app-wide; there is no separate "Buttons/Inputs conventions" section to consult. `frontend/src/components/gantt-v2/SolvroGantt.tsx` still carries the older, fuller form (with `focus-visible:border-primary`) and may be aligned to the reduced form opportunistically.
 
 **AI Breakdown** styling (`.ai-glow`, amber inner-border + glow) was reserved for blueprint-generated task cards; the Secure Ingestion Port that would have produced them is cancelled (see CLAUDE.md's Standing decisions), so this reservation is retired — see §5.
 
@@ -323,10 +327,10 @@ Nothing else gets a shadow. No card shadows, no hover-lift shadows, no focus-rin
 |---|---|
 | **Sidebar is fixed-dark** | `bg-sidebar` (`#232321`) in **both** themes — a literal hex (`--color-sidebar: #232321;`) in the `@theme` block of `index.css`, not a CSS-var-routed token. The rail never flips to light, even in light mode. |
 | **Login always renders dark** | `Login.tsx` hard-pins the `dark` class on its root wrapper regardless of the user's theme preference. Left hero panel uses `bg-background` (`#1a1a18`), right form panel uses `bg-surface` (`#232321`) — both resolved through the forced `.dark` scope, so they land on the dark values above. |
-| **Primary is Elitery Green — never blue** | `#3aae51` dark / `#2d9042` light. This is the only accent color in the app: CTAs, active nav state, focus rings, links. Blue never appears as a primary/CTA color. |
+| **Primary is Elitery Green — never blue** | `#3aae51` dark / `#267937` light. This is the only accent color in the app: CTAs, active nav state, focus rings, links. Blue never appears as a primary/CTA color. |
 | **`IN_PROGRESS` chip tone is misleadingly named "blue"** | `TaskStatusChip`'s `blue` tone renders `bg-primary/10 text-primary dark:bg-primary/20` — it is **green-tinted**, not literal blue. Same for `ProjectStatusChip`'s `PLANNING`/`COMPLETED` tones, which also use the `blue` tone class. Don't "fix" this by pointing it at an actual blue token — it's intentional, per `StatusChip.tsx`. |
 | **`.ai-glow` is retired, not reserved** | Amber (`#f59e0b`) inner-border + outer glow was reserved exclusively for blueprint-generated (AI Breakdown) task cards; that concept is cancelled along with the Secure Ingestion Port. `.ai-glow` does not exist anywhere in `frontend/src/` — do not introduce it for other status highlights without a new design decision. |
-| **Icons are Material Symbols Outlined** | Loaded via Google Fonts in `index.html` (`opsz,wght,FILL,GRAD@24,400,0,0`), rendered with the `.material-symbols-outlined` class (variation settings pinned in `index.css`). Design/mockup tooling that can't render icon-font ligatures (e.g. Paper canvases) must substitute inline SVGs — this does not change the in-app convention. |
+| **Icons are Material Symbols Outlined** | Loaded via Google Fonts in `index.html` (`opsz,wght,FILL,GRAD@24,400,0,0`), rendered with the `.material-symbols-outlined` class (variation settings pinned in `index.css`). Design/mockup tooling that can't render icon-font ligatures (e.g. Paper canvases) must substitute inline SVGs — this does not change the in-app convention. **Accessibility:** a decorative glyph span carries `aria-hidden="true"` (otherwise a screen reader reads the ligature word aloud, e.g. "drag_indicator"); an icon-only control carries an `aria-label`; a toggle's state goes in `aria-pressed` / `aria-expanded` / `aria-current`, never in the glyph alone. |
 | **Compact data-grid mode** | Implemented via the vendored data grid's `tableLayout={{ dense: true }}` (`frontend/src/components/reui/data-grid/`), used on the Admin Users, Tasks, and CustomerDetail Overview grids: reduced cell padding/row height, and dense body/footer cells step down to `text-xs` (13px); the sanctioned 12px sentence-case token is `text-meta` (`text-label-caps` is reserved for uppercase labels). Column headers always render at `text-label-caps` (12px/700/uppercase) regardless of dense/default. Any hand-rolled table still needs this pattern applied by hand — check the specific component before assuming it's wired. |
 | **Drag-drop insert-before indicator** | Corrected 2026-08-03 — the old `GanttListRow.tsx` this row used to cite no longer exists. The indicator is now the vendored engine's own `data-slot="gantt-reorder-indicator"` (`reui/gantt/gantt-view.tsx:2234-2257`): a caret head + 1px hairline pinned to the drop boundary, `border-s-primary`/`bg-primary` when the proposed drop is valid, `border-s-destructive`/`bg-destructive` when not. No `// SOLVRO PATCH` marker on this block — stock upstream engine behavior, not Solvro-authored, and `SolvroGantt.tsx` doesn't override `canReorderResource` to scope which rows can trigger it. |
 

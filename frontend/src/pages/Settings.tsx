@@ -238,7 +238,7 @@ function ItopTokenSection({ canSave }: { canSave: boolean }) {
       ) : (
         token.set && (
           <p className="mb-3 flex items-center gap-1 text-sm text-on-surface">
-            <span className="material-symbols-outlined text-[16px] text-chip-emerald-text">
+            <span aria-hidden="true" className="material-symbols-outlined text-[16px] text-chip-emerald-text">
               check_circle
             </span>
             Valid · {token.personName ?? "—"}
@@ -351,6 +351,7 @@ function ThemeCard() {
               key={opt.key}
               type="button"
               onClick={() => setChoice(opt.key)}
+              aria-pressed={active}
               className={[
                 "flex flex-col gap-2 rounded-sm border p-3 text-left transition-colors",
                 active
@@ -363,9 +364,9 @@ function ThemeCard() {
                   {opt.label}
                 </span>
                 {active ? (
-                  <span className="material-symbols-outlined text-base text-primary">check_circle</span>
+                  <span aria-hidden="true" className="material-symbols-outlined text-base text-primary">check_circle</span>
                 ) : (
-                  <span className={`material-symbols-outlined text-base text-on-surface-variant`}>{opt.icon}</span>
+                  <span aria-hidden="true" className={`material-symbols-outlined text-base text-on-surface-variant`}>{opt.icon}</span>
                 )}
               </div>
               {/* Theme preview tile */}

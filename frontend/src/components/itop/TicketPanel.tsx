@@ -1,7 +1,7 @@
 // Right-anchored ticket detail panel, deep-linked via `?ticket=<id>` on the
 // customer page's Tickets tab (Task 5.4, docs/archive/plans/
 // itop-integration.md). Structural precedent is TaskPanel.tsx's own
-// right-anchored, edge-to-edge-on-phone `<aside>` shell (same
+// right-anchored, edge-to-edge-on-phone panel shell (same
 // `fixed right-0 top-14 bottom-0` positioning, `shadow-overlay` per
 // docs/DESIGN.md's elevation whitelist for that panel type).
 //
@@ -11,7 +11,8 @@
 // on `assign_to_me` opens the team ActionSheet instead of surfacing as a
 // plain error; any other failure shows iTop's message inline and leaves the
 // ticket untouched.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { usePanelFocus } from "@/hooks/usePanelFocus";
 import { Link } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { Chip } from "@/components/StatusChip";
@@ -65,6 +66,9 @@ export function TicketPanel({
   // controls render.
   const canWrite = hasPermission(user, "task:write");
   const { data: ticket, isLoading, isError } = useItopTicket(ticketId);
+  // Focus moves into the panel on open and returns to the opener on close.
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  usePanelFocus(panelRef, ticketId);
   const { data: status } = useItopStatus();
   const { data: myToken } = useMyItopToken();
   const actionMutation = useTicketAction(ticketId, customerId);
@@ -167,10 +171,12 @@ export function TicketPanel({
 
   return (
     <>
-      <aside
+      <div
+        ref={panelRef}
         role="dialog"
         aria-label="Ticket details"
-        className="fixed right-0 top-14 bottom-0 z-40 flex w-full flex-col border-l border-outline-variant bg-surface-container shadow-overlay md:w-[420px]"
+        tabIndex={-1}
+        className="fixed right-0 top-14 bottom-0 z-40 flex w-full flex-col border-l border-outline-variant bg-surface-container shadow-overlay outline-hidden md:w-[420px]"
       >
         <div className="flex items-center gap-2 border-b border-outline-variant px-4 py-3">
           {ticket && (
@@ -189,7 +195,7 @@ export function TicketPanel({
             className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container-high"
             aria-label="Close"
           >
-            <span className="material-symbols-outlined text-base">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
           </button>
         </div>
 
@@ -305,7 +311,7 @@ export function TicketPanel({
             </>
           )}
         </div>
-      </aside>
+      </div>
 
       {actionSheet && (
         <ActionSheet

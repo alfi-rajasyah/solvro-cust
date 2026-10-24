@@ -49,7 +49,7 @@ export function SyncedAgo({
         aria-label="Refresh from iTop"
         className="inline-flex items-center justify-center rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
       >
-        <span className="material-symbols-outlined text-[17px]">refresh</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[17px]">refresh</span>
       </button>
     </div>
   );

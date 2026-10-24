@@ -212,7 +212,7 @@ export function WeeklySync() {
               aria-label="Previous week"
               className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
-              <span className="material-symbols-outlined text-lg">chevron_left</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_left</span>
             </button>
             <div className="text-center">
               <div className="text-label-caps uppercase text-on-surface-variant">
@@ -226,7 +226,7 @@ export function WeeklySync() {
               aria-label="Next week"
               className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
-              <span className="material-symbols-outlined text-lg">chevron_right</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_right</span>
             </button>
           </div>
 
@@ -238,7 +238,7 @@ export function WeeklySync() {
               data-testid="weekly-sync-copy"
               className="inline-flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container disabled:opacity-50"
             >
-              <span className="material-symbols-outlined text-base">content_copy</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-base">content_copy</span>
               Copy as table
             </button>
             <span

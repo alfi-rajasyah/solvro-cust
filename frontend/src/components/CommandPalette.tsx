@@ -290,7 +290,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           keepHighlight
         >
           <div className="flex items-center gap-2 border-b border-outline-variant px-4 py-3">
-            <span className="material-symbols-outlined text-base text-on-surface-variant">
+            <span aria-hidden="true" className="material-symbols-outlined text-base text-on-surface-variant">
               search
             </span>
             <AutocompleteInput
@@ -353,7 +353,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                           </span>
                         ) : (
                           item.icon && (
-                            <span className="material-symbols-outlined text-base text-on-surface-variant">
+                            <span aria-hidden="true" className="material-symbols-outlined text-base text-on-surface-variant">
                               {item.icon}
                             </span>
                           )

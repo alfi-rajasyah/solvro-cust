@@ -127,7 +127,7 @@ export function ProjectRisks() {
             onClick={() => setCreating(true)}
             className="inline-flex items-center gap-2 rounded-sm bg-primary px-3 py-1.5 font-display text-xs font-bold text-on-primary hover:bg-primary-container"
           >
-            <span className="material-symbols-outlined text-base">add</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
             Add risk
           </button>
         )}
@@ -497,7 +497,7 @@ function RisksDataGrid({
                 className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-primary"
                 aria-label="Edit risk"
               >
-                <span className="material-symbols-outlined text-base">edit</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-base">edit</span>
               </button>
               <button
                 type="button"
@@ -505,7 +505,7 @@ function RisksDataGrid({
                 className="rounded-sm p-1 text-on-surface-variant hover:bg-error-container hover:text-error"
                 aria-label="Delete risk"
               >
-                <span className="material-symbols-outlined text-base">delete</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-base">delete</span>
               </button>
             </div>
           );
@@ -620,7 +620,7 @@ function RiskCard({
             className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-primary"
             aria-label="Edit risk"
           >
-            <span className="material-symbols-outlined text-base">edit</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">edit</span>
           </button>
           <button
             type="button"
@@ -628,7 +628,7 @@ function RiskCard({
             className="rounded-sm p-1 text-on-surface-variant hover:bg-error-container hover:text-error"
             aria-label="Delete risk"
           >
-            <span className="material-symbols-outlined text-base">delete</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">delete</span>
           </button>
         </div>
       )}

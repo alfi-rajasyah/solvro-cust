@@ -124,7 +124,7 @@ export function ProjectOverview() {
               onClick={openContext}
               className="inline-flex items-center gap-1.5 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-xs font-semibold text-on-surface hover:border-primary hover:text-primary"
             >
-              <span className="material-symbols-outlined text-base">lock</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-base">lock</span>
               Lock baseline
             </button>
           )}
@@ -226,7 +226,7 @@ function NeedsAttention({ tasks, projectId }: { tasks: Task[]; projectId: number
           className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
         >
           {rows.length - shown.length} more in List
-          <span className="material-symbols-outlined text-[15px]">chevron_right</span>
+          <span aria-hidden="true" className="material-symbols-outlined text-[15px]">chevron_right</span>
         </Link>
       )}
     </section>
@@ -400,7 +400,7 @@ function daysBefore(day: string, n: number): string {
 function PanelEmpty({ icon, text }: { icon: string; text: string }) {
   return (
     <div className="flex items-center gap-2 rounded-sm border border-dashed border-outline-variant px-3 py-4 text-xs text-on-surface-variant">
-      <span className="material-symbols-outlined text-base">{icon}</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-base">{icon}</span>
       {text}
     </div>
   );
@@ -441,7 +441,7 @@ function Kpi({
     <div className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
       <div className="flex items-center justify-between">
         <span className="text-label-caps uppercase text-on-surface-variant">{label}</span>
-        <span className={`material-symbols-outlined text-base ${accent === "primary" ? "text-primary" : accent === "emerald" ? "text-emerald-600" : accent === "error" ? "text-error" : "text-on-surface-variant"}`}>{icon}</span>
+        <span aria-hidden="true" className={`material-symbols-outlined text-base ${accent === "primary" ? "text-primary" : accent === "emerald" ? "text-emerald-600" : accent === "error" ? "text-error" : "text-on-surface-variant"}`}>{icon}</span>
       </div>
       <div className={`mt-2 font-body text-3xl font-bold tabular-nums ${accentClass}`}>{value}</div>
       {progress !== undefined && (
@@ -469,7 +469,7 @@ function Legend2({ swatch, label }: { swatch: string; label: string }) {
 function EmptyChart({ icon, title, body }: { icon: string; title: string; body: string }) {
   return (
     <div className="flex h-72 flex-col items-center justify-center gap-2 rounded-sm border border-dashed border-outline-variant text-center">
-      <span className="material-symbols-outlined text-3xl text-on-surface-variant">{icon}</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-3xl text-on-surface-variant">{icon}</span>
       <p className="text-sm font-semibold text-on-surface">{title}</p>
       <p className="text-xs text-on-surface-variant">{body}</p>
     </div>
