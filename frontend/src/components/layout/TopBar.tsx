@@ -58,7 +58,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
         aria-label="Open navigation"
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface md:hidden"
       >
-        <span className="material-symbols-outlined">menu</span>
+        <span aria-hidden="true" className="material-symbols-outlined">menu</span>
       </button>
 
       <nav aria-label="Breadcrumb" className="min-w-0">
@@ -113,7 +113,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
             title={`Timer running on ${runningTimer.timer.ref}`}
             className="hidden items-center gap-1 rounded-sm border border-outline-variant px-2 py-1 font-mono text-meta text-on-surface-variant hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:flex"
           >
-            <span className="material-symbols-outlined text-[14px]">timer</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-[14px]">timer</span>
             {formatElapsed(runningTimer.elapsedSeconds)}
           </Link>
         )}
@@ -124,7 +124,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
           aria-label="Open search"
           className="hidden min-w-[260px] cursor-text items-center gap-2 rounded-sm bg-surface-container px-3 py-1.5 md:flex"
         >
-          <span className="material-symbols-outlined text-base text-on-surface-variant">
+          <span aria-hidden="true" className="material-symbols-outlined text-base text-on-surface-variant">
             search
           </span>
           <span className="flex-1 text-left text-[13px] text-on-surface-variant">
@@ -141,7 +141,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
           aria-label="Open search"
           className="flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface md:hidden"
         >
-          <span className="material-symbols-outlined text-[20px]">search</span>
+          <span aria-hidden="true" className="material-symbols-outlined text-[20px]">search</span>
         </button>
 
         <Link
@@ -150,7 +150,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
           title="Help"
           className="flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
-          <span className="material-symbols-outlined text-[20px]">help</span>
+          <span aria-hidden="true" className="material-symbols-outlined text-[20px]">help</span>
         </Link>
 
         <NotificationBell />
@@ -162,7 +162,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
           title={resolved === "dark" ? "Light mode" : "Dark mode"}
           className="flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
         >
-          <span className="material-symbols-outlined text-[20px]">
+          <span aria-hidden="true" className="material-symbols-outlined text-[20px]">
             {resolved === "dark" ? "light_mode" : "dark_mode"}
           </span>
         </button>
@@ -184,7 +184,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
                 {user?.role ?? ""}
               </span>
             </div>
-            <span className="material-symbols-outlined text-base text-on-surface-variant">
+            <span aria-hidden="true" className="material-symbols-outlined text-base text-on-surface-variant">
               expand_more
             </span>
           </button>
@@ -211,7 +211,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
                   }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-on-surface hover:bg-surface-container"
                 >
-                  <span className="material-symbols-outlined text-base">settings</span>
+                  <span aria-hidden="true" className="material-symbols-outlined text-base">settings</span>
                   Settings
                 </button>
                 <button
@@ -222,7 +222,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
                   }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-on-surface hover:bg-surface-container"
                 >
-                  <span className="material-symbols-outlined text-base">logout</span>
+                  <span aria-hidden="true" className="material-symbols-outlined text-base">logout</span>
                   Sign out
                 </button>
               </div>

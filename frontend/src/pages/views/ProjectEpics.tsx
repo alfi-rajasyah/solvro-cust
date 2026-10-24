@@ -172,7 +172,7 @@ export function ProjectEpics() {
             onClick={() => setCreating(true)}
             className="inline-flex items-center gap-2 rounded-sm bg-primary px-3 py-1.5 font-display text-xs font-bold text-on-primary hover:bg-primary-container"
           >
-            <span className="material-symbols-outlined text-base">add</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
             Add epic
           </button>
         )}

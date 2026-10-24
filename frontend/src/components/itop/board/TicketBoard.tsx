@@ -295,7 +295,21 @@ export function TicketBoard({
 
                   <KanbanColumnContent value={column} className="flex flex-col gap-2.5">
                     {columnTickets.map((ticket) => (
-                      <KanbanItem key={ticket.id} value={getItemValue(ticket)} disabled={!canAct}>
+                      <KanbanItem
+                        key={ticket.id}
+                        value={getItemValue(ticket)}
+                        disabled={!canAct}
+                        // Keyboard: the card's title button is the entry point.
+                        // The engine's dnd-kit attributes announce a keyboard
+                        // drag the grip cannot start (it takes no focus), so
+                        // they are dropped here, as in kanban-v2/SolvroKanban.tsx.
+                        role={undefined}
+                        tabIndex={undefined}
+                        aria-roledescription={undefined}
+                        aria-describedby={undefined}
+                        aria-pressed={undefined}
+                        aria-disabled={undefined}
+                      >
                         <TicketCard
                           ticket={ticket}
                           canDrag={canAct}

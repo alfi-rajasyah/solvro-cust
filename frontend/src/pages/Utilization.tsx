@@ -122,7 +122,7 @@ export function Utilization() {
             aria-label="Previous week"
             className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
-            <span className="material-symbols-outlined text-lg">chevron_left</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_left</span>
           </button>
           <div className="text-center">
             <div className="text-label-caps uppercase text-on-surface-variant">
@@ -136,7 +136,7 @@ export function Utilization() {
             aria-label="Next week"
             className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
-            <span className="material-symbols-outlined text-lg">chevron_right</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_right</span>
           </button>
         </div>
       </div>
@@ -172,7 +172,7 @@ export function Utilization() {
             aria-label="Refresh from iTop"
             className="inline-flex items-center justify-center rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
-            <span className="material-symbols-outlined text-[17px]">refresh</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-[17px]">refresh</span>
           </button>
         </div>
       </div>

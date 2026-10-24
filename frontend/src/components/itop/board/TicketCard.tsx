@@ -58,10 +58,13 @@ export function TicketCard({
       <div className="mb-1 flex items-center gap-1.5">
         {canDrag && (
           <KanbanItemHandle
+            // Pointer and touch only (it cannot take focus), so it is hidden from
+            // assistive tech; the label stays for tests and hover tooling.
+            aria-hidden="true"
             aria-label="Drag ticket"
             className="inline-flex shrink-0 touch-none items-center text-on-surface-variant/60"
           >
-            <span className="material-symbols-outlined text-[16px]">drag_indicator</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-[16px]">drag_indicator</span>
           </KanbanItemHandle>
         )}
         <span className="font-mono text-[12px] font-semibold text-on-surface">{ticket.ref}</span>
@@ -74,7 +77,22 @@ export function TicketCard({
         )}
       </div>
 
-      <p className="line-clamp-2 text-[13px] font-bold leading-snug text-on-surface">{ticket.title}</p>
+      {/* The title is the card's keyboard entry point: a button with no
+          handler of its own, so Enter/Space click it and the click bubbles to
+          the card's onClick (same pattern as kanban-v2/cards.tsx). The
+          drag-overlay ghost keeps a plain paragraph, so it adds no tab stop. */}
+      {dragging ? (
+        <p className="text-[13px] font-bold leading-snug text-on-surface">
+          <span className="line-clamp-2">{ticket.title}</span>
+        </p>
+      ) : (
+        <button
+          type="button"
+          className="block w-full rounded-sm text-left text-[13px] font-bold leading-snug text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+        >
+          <span className="line-clamp-2">{ticket.title}</span>
+        </button>
+      )}
 
       <div className="mt-1.5 flex items-center justify-between gap-2 text-meta text-on-surface-variant">
         <span className="truncate">

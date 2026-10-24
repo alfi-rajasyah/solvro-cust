@@ -119,7 +119,7 @@ export function ProjectCard({
     <article className="rounded-sm border border-outline-variant bg-surface-container-lowest">
       {unassigned && (
         <div className="flex flex-wrap items-center gap-1.5 border-b border-outline-variant bg-chip-amber-bg px-4 py-2 text-[12px] font-medium text-chip-amber-text">
-          <span className="material-symbols-outlined text-base">warning</span>
+          <span aria-hidden="true" className="material-symbols-outlined text-base">warning</span>
           <span>
             Weekly updates are per customer. Assign a customer to{" "}
             <Link to={`/projects/${project.id}/overview`} className="underline hover:no-underline">
@@ -177,7 +177,7 @@ export function ProjectCard({
               className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <span className="flex items-center gap-1 rounded-full bg-chip-emerald-bg px-2 py-0.5 text-meta font-bold text-chip-emerald-text">
-                <span className="material-symbols-outlined text-sm">check_circle</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-sm">check_circle</span>
                 Reviewed {fmtTime(reviewToday.createdAt)}
               </span>
             </button>

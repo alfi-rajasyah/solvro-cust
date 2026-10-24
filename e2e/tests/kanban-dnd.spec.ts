@@ -511,10 +511,12 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // `KanbanItemHandle` via `ItemContext` (~line 838) and carries no
     // tabIndex/role of its own. Confirmed via direct DOM inspection: the
     // handle (`[aria-label="Drag to reorder"]`) has neither `tabindex` nor
-    // `role`, so it can never become `document.activeElement` — clicking it
-    // moves focus to the outer item wrapper instead, and pressing Space
-    // there never sets `data-dragging` because the wrapper has no onKeyDown
-    // listener. With `attributes` and `listeners` split across two different
+    // `role`, so it can never become `document.activeElement` — and pressing
+    // Space on the outer wrapper never set `data-dragging` because the
+    // wrapper has no onKeyDown listener. (Since 2026-10-23 the Solvro layer
+    // drops those wrapper attributes, so the wrapper takes no focus at all;
+    // a card opens from the keyboard via its title button instead.) With
+    // `attributes` and `listeners` split across two different
     // DOM nodes, no real keyboard interaction (Tab, click-then-Space) can
     // ever reach the sensor's activator — keyboard drag is a dead end here,
     // not a gesture-timing issue. Falling back to the prescribed mouse

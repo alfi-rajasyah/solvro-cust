@@ -100,7 +100,7 @@ export function OutlineConnectCard() {
               aria-hidden="true"
               className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-chip-emerald-bg text-chip-emerald-text"
             >
-              <span className="material-symbols-outlined text-[20px]">link</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-[20px]">link</span>
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -130,7 +130,7 @@ export function OutlineConnectCard() {
               aria-hidden="true"
               className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface-container-high text-on-surface-variant"
             >
-              <span className="material-symbols-outlined text-[20px]">link_off</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-[20px]">link_off</span>
             </div>
             <div>
               <span className="font-display text-sm font-semibold text-on-surface">

@@ -203,7 +203,7 @@ export function ProjectDetail() {
               onClick={() => setEditOpen(true)}
               className="hidden items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container md:inline-flex"
             >
-              <span className="material-symbols-outlined text-base">edit</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-base">edit</span>
               Edit
             </button>
           )}

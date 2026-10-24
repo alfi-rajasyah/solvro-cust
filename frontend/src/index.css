@@ -181,7 +181,9 @@
 
 @layer base {
   /* Light theme — off-white surfaces, Elitery Green primary darkened to
-     #2d9042 for WCAG contrast on white. Values from DESIGN.md frontmatter
+     #267937 for WCAG AA contrast (4.5:1) as small text on white, the page
+     surface, panel surfaces and its own 10% chip tint, and for white text on
+     it (#2d9042 until 2026-10-23 reached only 3.4–4.05). Values from DESIGN.md frontmatter
      light overrides; tokens the spec omits for light (inverse-*, *-container,
      secondary/tertiary, error family) are derived from the same palette —
      see CHANGELOG. */
@@ -200,7 +202,7 @@
     --inverse-on-surface: 240 237 232;
     --outline: 154 154 151;
     --outline-variant: 208 208 204;
-    --primary: 45 144 66;
+    --primary: 38 121 55;
     --on-primary: 255 255 255;
     --primary-container: 200 230 207;
     --on-primary-container: 15 43 22;
@@ -217,13 +219,15 @@
     --on-error-container: 147 0 10;
     --background: 249 249 247;
     --on-background: 26 26 24;
-    /* Chip / status palette — light tone bg + saturated text. */
+    /* Chip / status palette — light tone bg + saturated text. Text shades are
+       the lightest of each hue that reach 4.5:1 on their own chip bg and on
+       white (2026-10-23; before: emerald 3.0, amber 2.86, rose 3.95). */
     --emerald-bg: 220 252 231;
-    --emerald-text: 22 163 74;
+    --emerald-text: 17 129 59;
     --amber-bg: 254 243 199;
-    --amber-text: 217 119 6;
+    --amber-text: 167 92 5;
     --rose-bg: 254 226 226;
-    --rose-text: 220 38 38;
+    --rose-text: 202 33 33;
     --violet-bg: 237 233 254;
     --violet-text: 109 40 217;
   }

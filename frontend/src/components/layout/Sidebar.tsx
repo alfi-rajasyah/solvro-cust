@@ -238,7 +238,7 @@ export function Sidebar() {
             aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
             className="flex h-8 w-8 items-center justify-center rounded-sm text-slate-400 hover:bg-white/5 hover:text-slate-100"
           >
-            <span className="material-symbols-outlined text-lg">
+            <span aria-hidden="true" className="material-symbols-outlined text-lg">
               {expanded ? "menu_open" : "menu"}
             </span>
           </button>

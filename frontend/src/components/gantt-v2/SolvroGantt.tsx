@@ -1091,7 +1091,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                   "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-[11.5px] font-medium text-on-surface outline-hidden transition-colors hover:text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
                 )}
               >
-                <span className="material-symbols-outlined text-[15px]">add</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-[15px]">add</span>
                 Task
               </button>
               <button
@@ -1102,7 +1102,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                   "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-[11.5px] font-medium text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
                 )}
               >
-                <span className="material-symbols-outlined text-[15px]">add</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-[15px]">add</span>
                 Section
               </button>
             </div>
@@ -1138,7 +1138,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                 "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-[11.5px] font-medium text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50",
               )}
             >
-              <span className="material-symbols-outlined text-[15px]">today</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-[15px]">today</span>
               Today
             </button>
             <button
@@ -1151,7 +1151,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                 "inline-flex w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50",
               )}
             >
-              <span className="material-symbols-outlined text-[15px]">chevron_left</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-[15px]">chevron_left</span>
             </button>
             <button
               type="button"
@@ -1163,7 +1163,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                 "inline-flex w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50",
               )}
             >
-              <span className="material-symbols-outlined text-[15px]">chevron_right</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-[15px]">chevron_right</span>
             </button>
           </div>
           {/* resources.length gate: <Gantt> (and the GanttNavTitleSync bridge
@@ -1201,7 +1201,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                   : "text-on-surface-variant hover:text-on-surface",
               )}
             >
-              <span className="material-symbols-outlined text-[15px]">show_chart</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-[15px]">show_chart</span>
               Baseline
             </button>
           </div>

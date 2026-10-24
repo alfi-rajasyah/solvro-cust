@@ -111,7 +111,7 @@ export function PortfolioCalendar({
             aria-label="Previous year"
             className="flex h-6 w-6 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
           >
-            <span className="material-symbols-outlined text-[17px]">
+            <span aria-hidden="true" className="material-symbols-outlined text-[17px]">
               chevron_left
             </span>
           </button>
@@ -124,7 +124,7 @@ export function PortfolioCalendar({
             aria-label="Next year"
             className="flex h-6 w-6 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
           >
-            <span className="material-symbols-outlined text-[17px]">
+            <span aria-hidden="true" className="material-symbols-outlined text-[17px]">
               chevron_right
             </span>
           </button>
