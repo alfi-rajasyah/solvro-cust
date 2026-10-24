@@ -631,14 +631,14 @@ function ProviderChip({ provider }: { provider: "google" | "password" }) {
   if (provider === "google") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 font-display text-meta font-semibold text-primary dark:bg-primary/20">
-        <span className="material-symbols-outlined text-[12px]">mail</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[12px]">mail</span>
         Google
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-surface-container-high px-2 py-0.5 font-display text-meta font-semibold text-on-surface-variant">
-      <span className="material-symbols-outlined text-[12px]">key</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[12px]">key</span>
       Password
     </span>
   );
@@ -672,7 +672,7 @@ function AdminKpi({
     <div className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
       <div className="flex items-center justify-between">
         <span className="text-label-caps uppercase text-on-surface-variant">{label}</span>
-        <span className={`material-symbols-outlined text-base ${iconColor}`}>{icon}</span>
+        <span aria-hidden="true" className={`material-symbols-outlined text-base ${iconColor}`}>{icon}</span>
       </div>
       <div className="mt-2 flex items-baseline gap-2">
         <span className="text-3xl font-bold tabular-nums text-on-surface">{value}</span>
@@ -1172,7 +1172,7 @@ function SignInTab() {
                   : "bg-surface-container-high text-on-surface-variant",
               ].join(" ")}
             >
-              <span className="material-symbols-outlined text-[20px]">
+              <span aria-hidden="true" className="material-symbols-outlined text-[20px]">
                 {connected ? "verified_user" : "lock_open"}
               </span>
             </div>
@@ -1282,7 +1282,7 @@ function ClientIdField({ id }: { id: string }) {
           title="Copy to clipboard"
           className="text-on-surface-variant hover:text-on-surface"
         >
-          <span className="material-symbols-outlined text-[14px]">
+          <span aria-hidden="true" className="material-symbols-outlined text-[14px]">
             content_copy
           </span>
         </button>
@@ -1512,7 +1512,7 @@ function SignInModal({
                   aria-label={`Remove ${d}`}
                   className="rounded-full p-0.5 text-primary/70 hover:bg-primary/20 hover:text-primary"
                 >
-                  <span className="material-symbols-outlined text-[14px]">
+                  <span aria-hidden="true" className="material-symbols-outlined text-[14px]">
                     close
                   </span>
                 </button>

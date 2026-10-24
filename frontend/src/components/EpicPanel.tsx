@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { usePanelFocus } from "@/hooks/usePanelFocus";
 import { useSearchParams } from "react-router-dom";
 import { InlineDateRangeEditor } from "./InlineDateRangeEditor";
 import { TaskStatusChip } from "./StatusChip";
@@ -65,6 +66,9 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
   const [error, setError] = useState<string | null>(null);
 
   const panelRef = useRef<HTMLDivElement | null>(null);
+  // Focus moves into the panel on open (and when one shell replaces another)
+  // and returns to the opener on close.
+  usePanelFocus(panelRef, epicId, isError ? "error" : isLoading || !epic ? "loading" : "ready");
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -147,11 +151,12 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
   // branch and showed "Loading epic…" forever.
   if (isError) {
     return (
-      <aside
+      <div
         ref={panelRef}
         role="dialog"
         aria-label="Epic details"
-        className="fixed right-0 top-14 bottom-0 z-40 flex w-full flex-col border-l border-outline-variant bg-surface-container px-5 py-4 md:w-[380px]"
+        tabIndex={-1}
+        className="fixed right-0 top-14 bottom-0 z-40 flex w-full flex-col border-l border-outline-variant bg-surface-container px-5 py-4 outline-hidden md:w-[380px]"
       >
         <div className="flex items-center justify-between">
           <span className="text-sm text-on-surface-variant">Epic not found</span>
@@ -161,7 +166,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
             className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container-high"
             aria-label="Close"
           >
-            <span className="material-symbols-outlined text-base">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
           </button>
         </div>
         <Alert variant="destructive" className="mt-4">
@@ -169,15 +174,19 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
             Could not load epic: {(epicError as Error).message}
           </AlertDescription>
         </Alert>
-      </aside>
+      </div>
     );
   }
 
   if (isLoading || !epic) {
     return (
-      <aside
+      <div
         ref={panelRef}
-        className="fixed right-0 top-14 bottom-0 z-40 flex w-full flex-col border-l border-outline-variant bg-surface-container px-5 py-4 md:w-[380px]"
+        role="dialog"
+        aria-label="Epic details"
+        aria-busy="true"
+        tabIndex={-1}
+        className="fixed right-0 top-14 bottom-0 z-40 flex w-full flex-col border-l border-outline-variant bg-surface-container px-5 py-4 outline-hidden md:w-[380px]"
       >
         <div className="flex items-center justify-between">
           <span className="text-sm text-on-surface-variant">Loading epic…</span>
@@ -187,19 +196,20 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
             className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container-high"
             aria-label="Close"
           >
-            <span className="material-symbols-outlined text-base">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
           </button>
         </div>
-      </aside>
+      </div>
     );
   }
 
   return (
-    <aside
+    <div
       ref={panelRef}
       role="dialog"
       aria-label="Epic details"
-      className="fixed right-0 top-14 bottom-0 z-40 flex w-full flex-col border-l border-outline-variant bg-surface-container shadow-overlay md:w-[380px]"
+      tabIndex={-1}
+      className="fixed right-0 top-14 bottom-0 z-40 flex w-full flex-col border-l border-outline-variant bg-surface-container shadow-overlay outline-hidden md:w-[380px]"
     >
       <div className="flex items-center gap-2 border-b border-outline-variant px-4 py-3">
         <span
@@ -216,7 +226,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
           className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container-high"
           aria-label="Close"
         >
-          <span className="material-symbols-outlined text-base">close</span>
+          <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
         </button>
       </div>
 
@@ -340,7 +350,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
           )}
           {canEdit && (
             <form onSubmit={(e) => void handleAddStory(e)} className="mt-1.5 flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[13px] text-primary">add</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-[13px] text-primary">add</span>
               <input
                 type="text"
                 value={newStory}
@@ -354,6 +364,6 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
           )}
         </div>
       </div>
-    </aside>
+    </div>
   );
 }

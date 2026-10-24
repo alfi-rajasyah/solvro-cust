@@ -107,7 +107,7 @@ export function Projects() {
             onClick={() => setCreateOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 font-display text-sm text-on-primary transition-colors hover:bg-primary-container font-semibold"
           >
-            <span className="material-symbols-outlined text-base">add</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
             New project
           </button>
         )}
@@ -236,7 +236,7 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
             )}
             {project.baselineLockedAt && (
               <span className="flex items-center gap-1" title="Baseline locked">
-                <span className="material-symbols-outlined text-[14px] text-primary">bookmark</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-[14px] text-primary">bookmark</span>
                 Baseline locked
               </span>
             )}
@@ -255,7 +255,7 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
 function EmptyState({ onCreate }: { onCreate?: () => void }) {
   return (
     <div className="rounded-xl border border-dashed border-outline-variant bg-surface-container-lowest p-12 text-center">
-      <span className="material-symbols-outlined mb-2 text-4xl text-on-surface-variant">
+      <span aria-hidden="true" className="material-symbols-outlined mb-2 text-4xl text-on-surface-variant">
         folder_open
       </span>
       <p className="mb-4 text-sm text-on-surface-variant">No projects yet.</p>
@@ -265,7 +265,7 @@ function EmptyState({ onCreate }: { onCreate?: () => void }) {
           onClick={onCreate}
           className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-display text-xs font-bold text-on-primary hover:bg-primary-container"
         >
-          <span className="material-symbols-outlined text-base">add</span>
+          <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
           Create your first project
         </button>
       )}

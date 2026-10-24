@@ -171,7 +171,7 @@ export function CommentComposer({
           aria-label="Send comment"
           className="flex shrink-0 items-center text-primary disabled:opacity-40"
         >
-          <span className="material-symbols-outlined text-[17px]">send</span>
+          <span aria-hidden="true" className="material-symbols-outlined text-[17px]">send</span>
         </button>
 
         {open && (

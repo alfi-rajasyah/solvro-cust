@@ -171,7 +171,7 @@ export function Login() {
             <span className="text-primary">Ship</span> on time.
           </h1>
           <p
-            className="mt-3 text-on-surface-variant/45"
+            className="mt-3 text-on-surface-variant/75"
             style={{
               fontSize: 12,
               maxWidth: 240,
@@ -185,7 +185,7 @@ export function Login() {
               (label) => (
                 <span
                   key={label}
-                  className="rounded-full border border-primary/30 text-primary/80"
+                  className="rounded-full border border-primary/30 text-primary"
                   style={{
                     fontSize: 10,
                     padding: "3px 10px",
@@ -200,7 +200,7 @@ export function Login() {
 
         {/* Footer version/build */}
         <div
-          className="relative z-10 text-on-surface-variant/20"
+          className="relative z-10 text-on-surface-variant/75"
           style={{ fontSize: 10 }}
         >
           v{__APP_VERSION__}
@@ -283,12 +283,12 @@ export function Login() {
               <details className="group rounded-sm border border-outline-variant bg-surface-container-lowest open:bg-surface-container">
                 <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm font-semibold text-on-surface marker:hidden">
                   <span className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-base text-on-surface-variant">
+                    <span aria-hidden="true" className="material-symbols-outlined text-base text-on-surface-variant">
                       key
                     </span>
                     Admin sign-in (password)
                   </span>
-                  <span className="material-symbols-outlined text-base text-on-surface-variant transition-transform group-open:rotate-180">
+                  <span aria-hidden="true" className="material-symbols-outlined text-base text-on-surface-variant transition-transform group-open:rotate-180">
                     expand_more
                   </span>
                 </summary>
@@ -324,7 +324,7 @@ export function Login() {
 
           {/* Footer */}
           <p
-            className="mt-6 text-center text-on-surface-variant/60"
+            className="mt-6 text-center text-on-surface-variant/75"
             style={{ fontSize: 10 }}
           >
             Internal use only · Elitery © 2026
@@ -363,7 +363,7 @@ function PasswordForm({
           Email
         </span>
         <div className="mt-1 flex items-center gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgba(58,174,81,0.15)]">
-          <span className="material-symbols-outlined text-base text-on-surface-variant">
+          <span aria-hidden="true" className="material-symbols-outlined text-base text-on-surface-variant">
             mail
           </span>
           <input
@@ -383,7 +383,7 @@ function PasswordForm({
           Password
         </span>
         <div className="mt-1 flex items-center gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgba(58,174,81,0.15)]">
-          <span className="material-symbols-outlined text-base text-on-surface-variant">
+          <span aria-hidden="true" className="material-symbols-outlined text-base text-on-surface-variant">
             lock
           </span>
           <input
@@ -401,7 +401,7 @@ function PasswordForm({
             aria-label={showPassword ? "Hide password" : "Show password"}
             className="text-on-surface-variant hover:text-on-surface"
           >
-            <span className="material-symbols-outlined text-base">
+            <span aria-hidden="true" className="material-symbols-outlined text-base">
               {showPassword ? "visibility_off" : "visibility"}
             </span>
           </button>
