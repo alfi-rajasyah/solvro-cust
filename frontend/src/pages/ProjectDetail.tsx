@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import {
   Link,
   NavLink,
@@ -20,7 +20,7 @@ import { EmbedInOutlineDialog } from "@/components/EmbedInOutline";
 import { ProjectShareButton } from "@/components/ProjectShare";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
-import { ProjectPageSkeleton } from "@/components/skeletons";
+import { PageLoading, ProjectPageSkeleton } from "@/components/skeletons";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -344,11 +344,14 @@ export function ProjectDetail() {
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <Outlet
-          context={
-            { project, openContext: () => setContextOpen(true) } satisfies ProjectOutletContext
-          }
-        />
+        {/* Tabs load lazily (App.tsx); the project header stays while one arrives. */}
+        <Suspense fallback={<PageLoading />}>
+          <Outlet
+            context={
+              { project, openContext: () => setContextOpen(true) } satisfies ProjectOutletContext
+            }
+          />
+        </Suspense>
       </div>
 
       <ProjectFormModal

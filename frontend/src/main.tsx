@@ -6,6 +6,7 @@ import { registerSW } from "virtual:pwa-register";
 import { App } from "./App";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { AuthProvider } from "./lib/auth";
+import { installChunkReload } from "./lib/chunkReload";
 import { ThemeProvider } from "./lib/theme";
 import "./index.css";
 
@@ -13,6 +14,8 @@ import "./index.css";
 // new version automatically (no user prompt) — safe here because the app
 // shell is versioned by build hash and API calls are always NetworkOnly.
 registerSW({ immediate: true });
+// A page chunk removed by a deploy reloads the tab once (lib/chunkReload.ts).
+installChunkReload();
 
 const queryClient = new QueryClient({
   defaultOptions: {

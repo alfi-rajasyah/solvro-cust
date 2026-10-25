@@ -92,4 +92,32 @@ test.describe("page error boundary", () => {
     // The project page itself is back: its own tab strip (not in the sidebar).
     await expect(page.getByRole("link", { name: "Kanban", exact: true })).toBeVisible();
   });
+  test("a page chunk that fails to load reloads once, then shows the fallback", async ({ page, seededProject }) => {
+    // A tab left open across a deploy asks for a chunk the deploy removed
+    // (App.tsx loads pages lazily; lib/chunkReload.ts reloads once). In the
+    // built app the failure reloads the tab one time; the reload asks for the
+    // chunk again, and the second failure shows the fallback instead of
+    // looping. The dev server reports no failed preload, so it shows the
+    // fallback without the reload.
+    await loginViaUi(page);
+    await page.goto(`/projects/${seededProject.projectId}/overview`);
+    await expect(page.getByRole("link", { name: "Kanban", exact: true })).toBeVisible();
+
+    await page.route((url) => url.pathname.includes("ProjectKanban"), (route) => route.fulfill({ status: 404 }));
+    let documentLoads = 0;
+    page.on("request", (r) => {
+      if (r.resourceType() === "document") documentLoads += 1;
+    });
+
+    await page.getByRole("link", { name: "Kanban", exact: true }).click();
+    await expect(page.getByTestId("page-error")).toBeVisible();
+    await expect(page).toHaveURL(/\/kanban$/);
+    await page.waitForTimeout(1000);
+    const devServer = await page.evaluate(() => !!document.querySelector('script[src*="/@vite/client"]'));
+    expect(documentLoads).toBe(devServer ? 0 : 1);
+    // The shell is still usable around the fallback.
+    await openFromSidebar(page, /^Overview$/);
+    await expect(page).toHaveURL(/\/overview$/);
+    await expect(page.getByTestId("page-error")).toHaveCount(0);
+  });
 });

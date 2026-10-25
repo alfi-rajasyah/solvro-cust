@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
+import { lazy, Suspense } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { AppErrorBoundary } from "./AppErrorBoundary";
+import { PageLoading } from "./skeletons";
 
 // A child that throws while `state.broken` is true. The flag lives outside the
 // component so a test can "repair" it before pressing Try again.
@@ -30,6 +32,23 @@ afterEach(() => {
 });
 
 describe("AppErrorBoundary", () => {
+  it("a lazily loaded page whose chunk fails to load shows the page fallback", async () => {
+    // What a stale tab sees after a deploy removed the chunk it asks for and
+    // the one-time reload (lib/chunkReload.ts) did not help: React.lazy keeps
+    // the rejection, so only the fallback's Reload recovers.
+    const Missing = lazy(() => Promise.reject(new TypeError("Failed to fetch dynamically imported module")));
+    render(
+      <AppErrorBoundary variant="page">
+        <Suspense fallback={<PageLoading />}>
+          <Missing />
+        </Suspense>
+      </AppErrorBoundary>,
+    );
+    expect(screen.getByTestId("page-loading").textContent).toContain("Loading");
+    expect((await screen.findByTestId("page-error")).textContent).toContain("This page could not be shown");
+    expect(screen.getByRole("button", { name: "Reload" })).toBeTruthy();
+  });
+
   it("renders its children when nothing throws", () => {
     state.broken = false;
     render(

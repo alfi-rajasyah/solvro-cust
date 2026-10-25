@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-10-24 — Pages download on first visit; the first download is a third of its size
+
+- **Route-level code splitting** (`frontend/src/App.tsx`): every page except the sign-in page and the Overview now downloads in its own chunk the first time it is opened, instead of all pages shipping in one file. The entry script went from 2,036 kB (569 kB gzip) to 629 kB (195 kB gzip); the project Overview's charts (`recharts`), the Gantt, Admin, the Executive page and the iTop board no longer download with the sign-in page. The service worker still precaches every chunk, so an installed app still opens every page from its cache.
+- While a page's code arrives, the page area shows a delayed skeleton with a "Loading…" status for screen readers (new `frontend/src/components/skeletons/PageLoading.tsx`); the sidebar, top bar and project header stay in place (`Suspense` around the outlets in `components/layout/Shell.tsx` and `pages/ProjectDetail.tsx`, and around the routes for the guest and embed pages).
+- **A tab left open across a deploy recovers by itself**: when it asks for a page chunk that the deploy removed, it reloads once and gets the current build (new `frontend/src/lib/chunkReload.ts`, wired in `main.tsx`). If the chunk is still missing after that reload, the error screen shows instead of a reload loop. Regression tests in `lib/chunkReload.test.ts`, `components/AppErrorBoundary.test.tsx` and `e2e/tests/error-boundary.spec.ts`.
+
 ### Fixed — 2026-10-23 — Keyboard and screen-reader access on the project views; light-mode contrast
 
 - **Open a task from the keyboard**: in the List and on the Kanban (and on the iTop ticket board) the task or ticket title is now a button, so Tab reaches it and Enter or Space opens the panel; before, rows and cards opened on a mouse click only. The Kanban and ticket-board card wrappers no longer carry the drag library's `role="button"`, tab stop and "press space to pick up" text: their key listener sat on the grip, which cannot take focus, so they announced a keyboard drag that never worked and nested the card's buttons inside a button (`frontend/src/components/kanban-v2/SolvroKanban.tsx`, `cards.tsx`, `itop/board/TicketBoard.tsx`, `TicketCard.tsx`, `pages/views/ProjectList.tsx`). Mouse and touch drag are unchanged; moving a card by keyboard goes through the task panel's status field. The pointer-only drag grips are hidden from assistive tech, and the ticket board's drag ghost adds no tab stop.
