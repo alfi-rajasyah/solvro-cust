@@ -230,6 +230,7 @@ function UsersTab() {
             )}
           >
             <select
+              aria-label={`Role of ${u.username}`}
               value={u.role}
               disabled={isSelf}
               onChange={(e) => handleRoleChange(u, e.target.value as Role)}
@@ -1670,6 +1671,7 @@ function ProjectsTab() {
         const p = row.original;
         return (
           <select
+            aria-label={`TAM of ${p.name}`}
             value={p.tamId}
             onChange={(e) => handleReassign(p, Number(e.target.value))}
             className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1 text-[13px] text-on-surface focus:border-primary focus:outline-hidden"

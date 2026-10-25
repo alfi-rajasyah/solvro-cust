@@ -15,6 +15,15 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-10-25 — Cross-user access tests and an automated accessibility scan
+
+- **Cross-user negative tests** (new `backend/test/crossUserAccess.test.ts`): another TAM gets `404 Project not found` when listing, creating, changing or deleting a project's risks, dependencies and labels, and nothing changes; the owner's own requests succeed as a positive control. `GET /reports/executive` answers 403 without `report:executive` and 200 with it. Before, these entities had no test where another user is refused, so a visibility regression would have passed CI.
+- **Automated accessibility scan** (new `e2e/tests/axe.spec.ts`, new pinned dev dependency `@axe-core/playwright` 4.13.0 in `e2e/package.json`): axe checks WCAG 2.1 A/AA and its best practices on eleven main pages and every Admin tab, in the light and the dark theme, on desktop and mobile, and fails on any violation. Four landmark and heading rules (`region`, `landmark-unique`, `page-has-heading-one`, `heading-order`) and the contrast of the `bg-primary/10` and `bg-primary/15` chips (a pending colour decision) are excluded explicitly; both are listed in `docs/ISSUES.md`. Table rows after the tenth are skipped, so the scan does not depend on how many rows the database holds.
+- **Fixed by the new scan:**
+  - The role select in each Admin user row ("Role of …"), the TAM select in each Admin project row ("TAM of …") and the iTop organisation select in each Admin > iTop customer row ("iTop organisation of …") had no accessible name, so a screen reader announced only "combo box" (`frontend/src/pages/Admin.tsx`, `components/admin/ItopTab.tsx`).
+  - The two Admin > iTop mapping tables scroll sideways on a phone but could not be reached with the keyboard; their wrappers are now focusable, named regions (`components/admin/ItopTab.tsx`).
+  - In the dark theme the project Overview chart tooltip showed light grey text on a white box; it now uses the theme surface and text colours (`frontend/src/pages/views/ProjectOverview.tsx`).
+
 ### Security — 2026-10-25 — Patched dependency advisories
 
 - **Backend** (`backend/package-lock.json`, no range change in `package.json`): `proxy-addr` 2.0.8 (critical: IP spoofing through IPv4-mapped IPv6 addresses in trusted subnets), `body-parser` 1.20.9 and `qs` 6.16.1 (denial of service), `express` 4.22.3, `js-yaml` 4.3.2 (quadratic CPU on merge keys), `moment` 2.31.0 (path traversal through a locale name), and `tsx` 4.23.15 with `esbuild` 0.28.2 (file read through the dev server). The production audit goes from 8 advisories (1 critical, 3 high) to 1.

@@ -518,9 +518,13 @@ function SCurveChart({
             allowDecimals={false}
           />
           <Tooltip
+            // Theme surface, not Recharts' default white: the label colour is a
+            // theme token, which is light grey in dark mode.
             contentStyle={{
               borderRadius: 8,
               border: "1px solid rgb(var(--outline-variant))",
+              backgroundColor: "rgb(var(--surface-container-lowest))",
+              color: "rgb(var(--on-surface))",
               fontSize: 12,
             }}
             labelStyle={{ fontSize: 11, color: "rgb(var(--on-surface-variant))" }}
