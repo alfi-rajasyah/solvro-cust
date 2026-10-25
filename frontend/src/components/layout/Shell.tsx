@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
+import { PageLoading } from "@/components/skeletons";
 import { CommandPalette } from "@/components/CommandPalette";
 import { InstallBanner } from "@/components/InstallBanner";
 import { Sidebar } from "./Sidebar";
@@ -81,7 +82,9 @@ function ShellLayout() {
           resetKey={pathname}
           onReset={() => void queryClient.resetQueries()}
         >
-          <Outlet />
+          <Suspense fallback={<PageLoading />}>
+            <Outlet />
+          </Suspense>
         </AppErrorBoundary>
       </main>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
