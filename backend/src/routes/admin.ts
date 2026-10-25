@@ -403,6 +403,18 @@ adminRouter.patch(
     const existing = await prisma.role.findUnique({ where: { id } });
     if (!existing) throw new HttpError(404, "role_not_found", "Role not found");
 
+    // PENDING is what every first-time Google sign-in gets: it must stay
+    // without permissions until an admin promotes the user. (The seed used to
+    // reset it at each start; since it no longer overwrites roles, this is
+    // where that rule lives.)
+    if (PROTECTED_ROLES.has(existing.roleName) && permissions.length > 0) {
+      throw new HttpError(
+        400,
+        "role_protected",
+        `"${existing.roleName}" is reserved and keeps no permissions`,
+      );
+    }
+
     const renaming = roleName !== undefined && roleName !== existing.roleName;
     if (renaming) {
       if (PROTECTED_ROLES.has(existing.roleName)) {

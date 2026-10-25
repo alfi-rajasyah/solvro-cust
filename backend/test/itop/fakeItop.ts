@@ -139,6 +139,8 @@ export interface FakeItopState {
   nextId: number;
   /** Every request that reached `rest.php`, regardless of operation/outcome — lets a test prove a route's in-process cache (Task 6.2's `GET /itop/services`, 5-minute TTL) didn't re-hit the fake on a second call. */
   requestCount: number;
+  /** Delay before every `rest.php` answer, to simulate a slow iTop (a long sync run). 0 by default. */
+  responseDelayMs: number;
 }
 
 export function createEmptyState(): FakeItopState {
@@ -158,6 +160,7 @@ export function createEmptyState(): FakeItopState {
     writeLog: [],
     nextId: 1,
     requestCount: 0,
+    responseDelayMs: 0,
   };
 }
 
@@ -653,6 +656,10 @@ export function createFakeItop(seed: FakeItopState = createEmptyState()): FakeIt
   app.use(express.urlencoded({ extended: false }));
   app.use(express.json());
 
+  app.post("/webservices/rest.php", (_req, _res, next) => {
+    if (state.responseDelayMs > 0) setTimeout(next, state.responseDelayMs);
+    else next();
+  });
   app.post("/webservices/rest.php", (req, res) => {
     state.requestCount += 1;
     let payload: Record<string, unknown>;

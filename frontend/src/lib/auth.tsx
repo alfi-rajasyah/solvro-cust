@@ -59,7 +59,7 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
  * Permission check used by UI gates. Wildcard "*" grants everything; a
  * specific permission grants just that one. Custom roles created in
  * Admin > Roles can list any permission strings; the built-in roles'
- * exact grants live in backend/prisma/seed.ts.
+ * default grants live in backend/prisma/builtInRoles.ts.
  */
 export function hasPermission(
   user: AuthUser | null | undefined,

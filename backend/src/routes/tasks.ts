@@ -22,6 +22,7 @@ import {
   siblingKeyEquals,
   type SiblingKey,
 } from "../lib/taskOrdering.js";
+import { lockProjectOrder } from "../lib/orderLock.js";
 import { assertEpicNotOnSubtask, assertValidEpic } from "../lib/epics.js";
 import { duplicateTaskTree } from "../lib/duplicate.js";
 import { ensureAssigneeIsMember } from "../lib/projectMembers.js";
@@ -355,6 +356,13 @@ tasksRouter.patch(
     };
 
     const updated = await prisma.$transaction(async (tx) => {
+      // A reorder or re-parent re-packs the project's task order: take that
+      // lock before the row lock below (see lib/orderLock.ts for why the order
+      // matters). The project id is read without a lock; it never changes.
+      if (body.position !== undefined || body.parentTaskId !== undefined) {
+        const [row] = await tx.$queryRaw<{ project_id: number }[]>`SELECT project_id FROM tasks WHERE id = ${id}`;
+        if (row) await lockProjectOrder(tx, "tasks", row.project_id);
+      }
       // Lock the row before reading it, so two concurrent saves serialise and
       // each one sees (and diffs against) the other's result: the optimistic
       // check below, the assignee-change detection and the activity event all
@@ -587,6 +595,10 @@ tasksRouter.post(
         where: { id },
         select: { projectId: true, parentTaskId: true },
       });
+      // Wait for a concurrent reorder now, while the 5 s transaction budget
+      // is still whole, not after the tree copy (insertManyAfter takes the
+      // same lock again, harmlessly).
+      await lockProjectOrder(tx, "tasks", source.projectId);
 
       const idMap = await duplicateTaskTree(tx, [id]);
       const newId = idMap.get(id)!;

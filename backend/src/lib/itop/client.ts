@@ -63,7 +63,8 @@ export interface ItopClient {
     cls: ItopTicketClass | string,
     oql: string,
     outputFields: string,
-    options?: { pageSize?: number },
+    /** `beforePage` runs before each page request; throw from it to stop a long pull. */
+    options?: { pageSize?: number; beforePage?: () => void },
   ): Promise<ItopGetResult<T>>;
   listOperations(): Promise<ItopListOperationsResult>;
   probe(): Promise<ItopProbeResult[]>;
@@ -252,7 +253,7 @@ export function createItopClient(options: ItopClientOptions): ItopClient {
     cls: string,
     oql: string,
     outputFields: string,
-    getAllOptions: { pageSize?: number } = {},
+    getAllOptions: { pageSize?: number; beforePage?: () => void } = {},
   ): Promise<ItopGetResult<T>> {
     const pageSize = getAllOptions.pageSize ?? 100;
     const rows: Array<ItopObjectRow<T>> = [];
@@ -267,6 +268,7 @@ export function createItopClient(options: ItopClientOptions): ItopClient {
         });
       }
 
+      getAllOptions.beforePage?.();
       const result = await get<T>(cls, oql, outputFields, { limit: pageSize, page });
       let newRows = 0;
       for (const row of result.objects) {

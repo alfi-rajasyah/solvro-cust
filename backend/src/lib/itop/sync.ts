@@ -65,6 +65,8 @@ export interface TimeEntrySyncResult {
   /** Rows that failed to upsert (bad field, unexpected type, ...) and were skipped, logged at `warn`, rather than failing the whole pass. */
   skipped: number;
   error?: string;
+  /** The pass hit the run's time budget (from syncTickets) and stopped before its prune. */
+  stopped?: boolean;
 }
 
 const FULL_SYNC_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -72,7 +74,30 @@ const USER_SYNC_MIN_INTERVAL_MS = 60 * 60 * 1000;
 /** `hashtext` input of the Postgres advisory lock that serializes iTop sync runs — also taken by a customer remap (routes/itopAdmin.ts) so it never interleaves with a running sync. */
 export const ADVISORY_LOCK_KEY = "itop_sync";
 /** Interactive-transaction timeout of a sync run (the lock is held that long at most). */
-export const TX_TIMEOUT_MS = 10 * 60_000;
+export const TX_TIMEOUT_MS = 30 * 60_000;
+/**
+ * Longest a sync run may work. Prisma closes the lock-holding transaction at
+ * TX_TIMEOUT_MS but cannot stop the run itself, which used to carry on
+ * writing without the lock, so a second run could start beside it. A run
+ * therefore stops at this budget, with time to spare for the
+ * request in flight, and records the reason.
+ */
+export const RUN_BUDGET_MS = TX_TIMEOUT_MS - 5 * 60_000;
+
+/** Thrown between rows when a run has used up its budget; ends the run as failed. */
+class SyncBudgetExceeded extends Error {}
+
+/** Returns a check that throws once `budgetMs` has passed since the call. */
+function runDeadline(budgetMs: number): () => void {
+  const endsAt = Date.now() + budgetMs;
+  return () => {
+    if (Date.now() > endsAt) {
+      throw new SyncBudgetExceeded(
+        `The sync stopped after ${Math.round(budgetMs / 60_000)} min, before it finished; the next run starts again.`,
+      );
+    }
+  };
+}
 const CHUNK_SIZE = 50;
 /**
  * How far back `syncTimeEntries` pulls `TimeSpent` rows — plan §3/Task 3.1.
@@ -584,8 +609,12 @@ export async function upsertTimeEntryFromItop(row: ItopObjectRow<ItopTimeSpentFi
  * field, which is a clock, not logged effort (plan §3). iTop errors are
  * caught and returned in `error`, never thrown.
  */
-export async function syncTimeEntries(opts: { full?: boolean } = {}): Promise<TimeEntrySyncResult> {
+export async function syncTimeEntries(
+  opts: { full?: boolean; checkDeadline?: () => void } = {},
+): Promise<TimeEntrySyncResult> {
   const full = Boolean(opts.full);
+  // From syncTickets: stops this phase at the run's budget (before the prune).
+  const checkDeadline = opts.checkDeadline ?? (() => {});
   let upserted = 0;
   let removed = 0;
   let skipped = 0;
@@ -625,6 +654,7 @@ export async function syncTimeEntries(opts: { full?: boolean } = {}): Promise<Ti
     if (mappedItopUserIds.length > 0) {
       const client = await getItopAppClient();
       for (const idsChunk of chunk(mappedItopUserIds, CHUNK_SIZE)) {
+        checkDeadline();
         // The cutoff itself must be expressed in the iTop SERVER's own zone
         // (`timezone`) — an OQL string comparison against `start_date`
         // (which iTop stores/reports in that same zone) would otherwise
@@ -632,6 +662,7 @@ export async function syncTimeEntries(opts: { full?: boolean } = {}): Promise<Ti
         const oql = `SELECT TimeSpent WHERE user_id IN (${idsChunk.join(",")}) AND start_date >= '${formatItopDate(cutoff, timezone)}'`;
         const result = await client.getAll<ItopTimeSpentFields>("TimeSpent", oql, ITOP_TIME_SPENT_OUTPUT_FIELDS, {
           pageSize: 100,
+          beforePage: checkDeadline,
         });
 
         // Resolve this chunk's distinct ticket refs with one query instead
@@ -651,6 +682,7 @@ export async function syncTimeEntries(opts: { full?: boolean } = {}): Promise<Ti
         const ticketIdByRef = new Map(tickets.map((t) => [t.ref, t.id]));
 
         for (const row of result.objects) {
+          checkDeadline();
           seenIds.add(row.key);
           const ref = row.fields[ITOP_TIME_SPENT_TICKET_REF_FIELD];
           if (ref) {
@@ -689,6 +721,7 @@ export async function syncTimeEntries(opts: { full?: boolean } = {}): Promise<Ti
       );
     }
 
+    checkDeadline();
     if (full) {
       // Two independent reasons a snapshot row within the pull window no
       // longer belongs: (a) its iTop user is no longer mapped to any active
@@ -720,7 +753,7 @@ export async function syncTimeEntries(opts: { full?: boolean } = {}): Promise<Ti
   } catch (err) {
     const message = errorMessage(err);
     logger.warn({ err: message }, "iTop syncTimeEntries failed");
-    return { ran: true, upserted, removed, skipped, error: message };
+    return { ran: true, upserted, removed, skipped, error: message, stopped: err instanceof SyncBudgetExceeded };
   }
 }
 
@@ -768,8 +801,12 @@ function shouldRunUserSync(full: boolean): boolean {
  * `ItopConfig`, and returned in `SyncSummary.error` — they never throw out
  * of this function.
  */
-export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSummary> {
+export async function syncTickets(
+  // txTimeoutMs and budgetMs exist for tests; callers use the defaults.
+  opts: { full?: boolean; txTimeoutMs?: number; budgetMs?: number } = {},
+): Promise<SyncSummary> {
   const startedAt = new Date();
+  const checkDeadline = runDeadline(opts.budgetMs ?? RUN_BUDGET_MS);
   let ran = false;
   let full = Boolean(opts.full);
   let orgs = 0;
@@ -783,6 +820,7 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
   let timeEntriesError: string | undefined;
   let runError: string | undefined;
 
+  try {
   await prisma.$transaction(
     async (tx) => {
       // This interactive transaction exists SOLELY to hold
@@ -839,6 +877,7 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
         if (orgIds.length > 0) {
           const client = await getItopAppClient();
           for (const cls of config.readClasses) {
+            checkDeadline();
             let oql = `SELECT ${cls} WHERE org_id IN (${orgIds.join(",")})`;
             if (!full && config.lastSyncAt) {
               const cutoff = new Date(config.lastSyncAt.getTime() - 60_000);
@@ -850,8 +889,10 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
 
             const result = await client.getAll<ItopTicketFields>(cls, oql, ITOP_TICKET_OUTPUT_FIELDS, {
               pageSize: 100,
+              beforePage: checkDeadline,
             });
             for (const row of result.objects) {
+              checkDeadline();
               seenIds.add(row.key);
               try {
                 await upsertTicket(cls, row, orgIdToCustomerId, timezone);
@@ -867,6 +908,8 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
           }
         }
 
+        // A run past its budget must not prune: seenIds is incomplete.
+        checkDeadline();
         if (full) {
           // A row is orphaned (and dropped) if its org is no longer mapped
           // to any customer at all, OR it belongs to a still-mapped org but
@@ -887,7 +930,7 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
         // chosen wiring over a separate syncAll(). A time-entry-only failure
         // (e.g. TimeSpent missing on this install) is logged but doesn't
         // fail the ticket sync that already succeeded above.
-        const timeEntryResult = await syncTimeEntries({ full });
+        const timeEntryResult = await syncTimeEntries({ full, checkDeadline });
         timeEntriesUpserted = timeEntryResult.upserted;
         timeEntriesRemoved = timeEntryResult.removed;
         timeEntriesSkipped = timeEntryResult.skipped;
@@ -904,10 +947,16 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
         // schema change (no dedicated column): NOT an error, just the only
         // admin-visible surface this integration has for "some rows didn't
         // make it, check the server log".
-        const nonFatalNote =
+        // Tickets are complete; a time-entry pass cut short by the budget is
+        // re-pulled next run (its window is re-read every time), but the
+        // admin should still see that this run did not finish.
+        const notes = [
           totalSkipped > 0
             ? `Skipped ${totalSkipped} row${totalSkipped === 1 ? "" : "s"} that could not be read (see server log)`
-            : null;
+            : null,
+          timeEntryResult.stopped ? `Time entries: ${timeEntriesError}` : null,
+        ].filter((n): n is string => n !== null);
+        const nonFatalNote = notes.length > 0 ? notes.join(". ") : null;
         await writeConfigResult(startedAt, true, nonFatalNote, full);
         logger.info(
           {
@@ -930,8 +979,19 @@ export async function syncTickets(opts: { full?: boolean } = {}): Promise<SyncSu
         await writeConfigResult(startedAt, false, runError, false);
       }
     },
-    { timeout: TX_TIMEOUT_MS },
+    { timeout: opts.txTimeoutMs ?? TX_TIMEOUT_MS },
   );
+  } catch (err) {
+    // The lock transaction itself failed, e.g. it timed out under a run that
+    // outlived the budget check (one slow request). The run's own result is
+    // already written; keep the contract that this function never throws.
+    // The admin sees a fixed sentence, not Prisma's internal error text.
+    runError = "The sync ran longer than its lock allows and was ended; the next run starts again.";
+    logger.warn({ err: errorMessage(err) }, "iTop sync: the lock transaction failed");
+    if (ran) {
+      await writeConfigResult(startedAt, false, runError, false).catch(() => {});
+    }
+  }
 
   return {
     ran,

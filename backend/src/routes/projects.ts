@@ -46,6 +46,7 @@ import {
 } from "../lib/activity.js";
 import { epicCreatedChanges } from "../lib/epicActivity.js";
 import { notifyForEvent } from "../lib/notifications.js";
+import { lockProjectOrder } from "../lib/orderLock.js";
 
 // Kanban WIP limits — one optional positive-int cap per top-level status
 // column, or null/absent for "no limit". Visual-only on the board (amber
@@ -291,6 +292,10 @@ projectsRouter.post(
     const lockedAt = asOfDate ?? new Date();
 
     const updated = await prisma.$transaction(async (tx) => {
+      // This writes every task row of the project, in table order; a
+      // concurrent reorder writes them in position order. The order lock
+      // keeps the two from deadlocking (lib/orderLock.ts).
+      await lockProjectOrder(tx, "tasks", id);
       if (clear) {
         await tx.$executeRaw`
           UPDATE tasks

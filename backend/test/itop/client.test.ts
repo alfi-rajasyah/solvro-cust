@@ -83,6 +83,29 @@ describe("createItopClient against the fake iTop", () => {
     expect(refs.size).toBe(250);
   });
 
+  it("getAll stops when beforePage throws, without requesting the next page", async () => {
+    const state = createEmptyState();
+    state.tokens.set("token", { valid: true, canWrite: false });
+    for (let i = 1; i <= 250; i++) state.tickets.set(i, makeTicket(i));
+    const started = await startFake(state);
+    server = started.server;
+    const client = createItopClient({ baseUrl: started.baseUrl, token: "token" });
+
+    let calls = 0;
+    const stop = new Error("budget used up");
+    await expect(
+      client.getAll<ItopTicketFields>("UserRequest", "SELECT UserRequest", "ref", {
+        pageSize: 40,
+        beforePage: () => {
+          calls += 1;
+          if (calls === 2) throw stop;
+        },
+      }),
+    ).rejects.toBe(stop);
+    // Only the first page reached the server.
+    expect(state.requestCount).toBe(1);
+  });
+
   it("getAll pages exactly when the row count is a multiple of pageSize (100 rows, pageSize 50)", async () => {
     const state = createEmptyState();
     state.tokens.set("token", { valid: true, canWrite: false });

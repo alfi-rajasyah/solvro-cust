@@ -1122,3 +1122,68 @@ describe("parseItopInt", () => {
     expect(parseItopInt(Number.NaN)).toBeNull();
   });
 });
+
+// A sync holds its advisory lock inside an interactive transaction. When a run
+// outlived that transaction's timeout, Prisma closed the transaction (and the
+// lock with it) while the run went on writing, so a second sync could start
+// beside it, and the first one then threw. A run now stops at its
+// time budget, well before the timeout, and records why.
+describe("syncTickets time budget", () => {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  it("stops at the budget while still holding the lock, and records the reason without advancing the watermark", async () => {
+    const state = seedFakeItop();
+    // Every iTop answer takes 400 ms, so the first request already outlasts
+    // the 300 ms budget; the transaction would close only after 5 s.
+    state.responseDelayMs = 400;
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
+    await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
+    await createMappedCustomer(2, "PT Sinar Logistik");
+    // A stored ticket the fake no longer returns: a finished full sync prunes
+    // it, a stopped one must not.
+    await prisma.itopTicket.create({
+      data: {
+        id: 990_001,
+        class: "UserRequest",
+        ref: "R-990001",
+        title: "Gone upstream",
+        status: "new",
+        orgId: 1,
+        lastUpdate: new Date(),
+        syncedAt: new Date(),
+      },
+    });
+
+    const first = syncTickets({ full: true, txTimeoutMs: 5_000, budgetMs: 300 });
+    await sleep(150);
+    // While the first run is still going, a second one is refused.
+    const second = await syncTickets({ full: true });
+    const summary = await first;
+
+    expect(second.ran).toBe(false);
+    expect(summary.ran).toBe(true);
+    expect(summary.error).toMatch(/stopped after/i);
+    const config = await prisma.itopConfig.findUniqueOrThrow({ where: { id: "default" } });
+    expect(config.lastSyncOk).toBe(false);
+    expect(config.lastSyncError).toMatch(/stopped after/i);
+    // A stopped run neither advances the incremental watermark nor marks a full sync.
+    expect(config.lastSyncAt).toBeNull();
+    expect(config.lastFullSyncAt).toBeNull();
+    // Nothing was pruned on a partial ticket list.
+    expect(await prisma.itopTicket.findUnique({ where: { id: 990_001 } })).not.toBeNull();
+  });
+
+  it("never throws when the lock transaction closes under a run", async () => {
+    const state = seedFakeItop();
+    state.responseDelayMs = 400;
+    const { baseUrl } = await startFake(state);
+    await configureItop(baseUrl, FAKE_ITOP_TOKENS.app);
+    await createMappedCustomer(1, "Northwind Freight Sdn Bhd");
+
+    // A budget longer than the transaction: the transaction closes mid-run.
+    const summary = await syncTickets({ full: true, txTimeoutMs: 300, budgetMs: 60_000 });
+    expect(summary.ran).toBe(true);
+    expect(summary.error).toBeTruthy();
+  });
+});
