@@ -6,6 +6,7 @@ import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { ensureProjectVisible } from "../lib/visibility.js";
 import { recordActivity } from "../lib/activity.js";
+import { lockProjectOrder } from "../lib/orderLock.js";
 
 // Project members (docs/archive/plans/collaboration-and-sharing.md, C1): people
 // added to a project besides its TAM, with the same full access as the TAM
@@ -177,6 +178,9 @@ projectMembersRouter.delete(
       });
       let unassigned = 0;
       if (count > 0 && userId !== project.tamId) {
+        // Several task rows at once: keep clear of a concurrent reorder's
+        // row-by-row re-pack (lib/orderLock.ts).
+        await lockProjectOrder(tx, "tasks", id);
         ({ count: unassigned } = await tx.task.updateMany({
           where: { projectId: id, assignedToId: userId },
           data: { assignedToId: null },

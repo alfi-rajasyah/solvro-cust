@@ -907,7 +907,13 @@ function RolesTab() {
                 <button
                   type="button"
                   onClick={() => startEdit(r)}
-                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-semibold"
+                  disabled={r.builtIn}
+                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 font-semibold"
+                  title={
+                    r.builtIn
+                      ? "Reserved role: new Google sign-ins get no permissions until an admin promotes them"
+                      : undefined
+                  }
                 >
                   Edit
                 </button>

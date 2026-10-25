@@ -252,6 +252,9 @@ COMPOSE_HEAD
       # front or tunnel on this host (loopback) are the proxies whose
       # X-Forwarded-For the API believes; a direct client cannot forge it.
       TRUST_PROXY: "${TRUST_PROXY:-loopback, uniquelocal}"
+      # "true" accepts a personal iTop token Solvro cannot confirm as the
+      # user's own (docs/CONFIGURATION.md); set it in ~/solvro/.env.
+      ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS: "${ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS:-false}"
     ports:
       # Local only, whatever BIND_ADDR is: the website's nginx proxies /api/
       # inside the compose network, and a directly reachable API would bypass
