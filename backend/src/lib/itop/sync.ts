@@ -75,6 +75,8 @@ const USER_SYNC_MIN_INTERVAL_MS = 60 * 60 * 1000;
 export const ADVISORY_LOCK_KEY = "itop_sync";
 /** Interactive-transaction timeout of a sync run (the lock is held that long at most). */
 export const TX_TIMEOUT_MS = 30 * 60_000;
+/** Ids per `updateMany` when touching kept rows; far below Postgres' bind-parameter cap. */
+const KEEP_TOUCH_CHUNK = 10_000;
 /**
  * Longest a sync run may work. Prisma closes the lock-holding transaction at
  * TX_TIMEOUT_MS but cannot stop the run itself, which used to carry on
@@ -613,6 +615,9 @@ export async function syncTimeEntries(
   opts: { full?: boolean; checkDeadline?: () => void } = {},
 ): Promise<TimeEntrySyncResult> {
   const full = Boolean(opts.full);
+  // Rows this run upserts get a newer `syncedAt`, so the full-sync prune can
+  // select "not touched by this run" without binding one parameter per id.
+  const runStartedAt = new Date();
   // From syncTickets: stops this phase at the run's budget (before the prune).
   const checkDeadline = opts.checkDeadline ?? (() => {});
   let upserted = 0;
@@ -644,7 +649,10 @@ export async function syncTimeEntries(
 
     const timezone = resolveConfiguredTimezone(config);
     const cutoff = new Date(Date.now() - TIME_ENTRY_WINDOW_MS);
-    const seenIds = new Set<number>();
+    // Rows iTop returned but we could not store: kept out of the prune.
+    const keepIds: number[] = [];
+    // False once any pull came back partial (server ignoring paging).
+    let pullComplete = true;
     // Tracked across the whole run (not per chunk) so one real "the ref
     // field name is wrong on this install" condition produces one warning,
     // not one per chunk.
@@ -664,6 +672,7 @@ export async function syncTimeEntries(
           pageSize: 100,
           beforePage: checkDeadline,
         });
+        if (!result.complete) pullComplete = false;
 
         // Resolve this chunk's distinct ticket refs with one query instead
         // of one `findUnique` per row (was an N+1 inside the
@@ -683,23 +692,24 @@ export async function syncTimeEntries(
 
         for (const row of result.objects) {
           checkDeadline();
-          seenIds.add(row.key);
           const ref = row.fields[ITOP_TIME_SPENT_TICKET_REF_FIELD];
           if (ref) {
             rowsWithRef += 1;
             if (ticketIdByRef.has(ref)) rowsWithResolvedRef += 1;
           }
           try {
-            // A row skipped for a bad start_date stays in seenIds on purpose: a
-            // transient bad value must not make the full-sync prune delete hours
-            // already stored from an earlier, valid response.
+            // A row skipped for a bad start_date is kept out of the prune on
+            // purpose: a transient bad value must not make the full-sync prune
+            // delete hours already stored from an earlier, valid response.
             if (await upsertTimeEntry(row, itopUserIdToUserId, orgIdToCustomerId, ticketIdByRef, timezone)) {
               upserted += 1;
             } else {
               skipped += 1;
+              keepIds.push(row.key);
             }
           } catch (err) {
             skipped += 1;
+            keepIds.push(row.key);
             logger.warn(
               { err: errorMessage(err), timeEntryId: row.key },
               "iTop syncTimeEntries: skipping a TimeSpent row that failed to upsert",
@@ -738,11 +748,26 @@ export async function syncTimeEntries(
       // likewise never delete history *older* than the pull window, since
       // that history can never be re-fetched to restore it.
       const deleteCutoff = new Date(cutoff.getTime() + MAX_ZONE_OFFSET_MS);
+      // Skipped-but-returned rows are touched (not listed in the delete) so the
+      // prune stays a "not touched by this run" comparison.
+      for (const ids of chunk(keepIds, KEEP_TOUCH_CHUNK)) {
+        await prisma.itopTimeEntry.updateMany({ where: { id: { in: ids } }, data: { syncedAt: new Date() } });
+      }
+      // A partial pull (server ignoring paging) cannot tell "iTop dropped it"
+      // from "never returned", so only the unmapped-user arm may run then.
+      if (!pullComplete) {
+        logger.warn("iTop syncTimeEntries: pull was incomplete; skipping the not-returned prune");
+      }
       const deleted = await prisma.itopTimeEntry.deleteMany({
         where: {
           AND: [
             { startDate: { gte: deleteCutoff } },
-            { OR: [{ itopUserId: { notIn: mappedItopUserIds } }, { id: { notIn: [...seenIds] } }] },
+            {
+              OR: [
+                { itopUserId: { notIn: mappedItopUserIds } },
+                ...(pullComplete ? [{ syncedAt: { lt: runStartedAt } }] : []),
+              ],
+            },
           ],
         },
       });
@@ -868,7 +893,10 @@ export async function syncTickets(
 
         const orgIdToCustomerId = new Map(customers.map((c) => [c.itopOrgId as number, c.id]));
         const orgIds = customers.map((c) => c.itopOrgId as number);
-        const seenIds = new Set<number>();
+        // Tickets iTop returned but we could not store: kept out of the prune.
+        const keepIds: number[] = [];
+        // False once any class pull came back partial (server ignoring paging).
+        let pullComplete = true;
 
         // "Without calling iTop" only applies to the ticket pull itself —
         // orgIds.length === 0 skips straight to the full-sync cleanup below,
@@ -891,14 +919,15 @@ export async function syncTickets(
               pageSize: 100,
               beforePage: checkDeadline,
             });
+            if (!result.complete) pullComplete = false;
             for (const row of result.objects) {
               checkDeadline();
-              seenIds.add(row.key);
               try {
                 await upsertTicket(cls, row, orgIdToCustomerId, timezone);
                 upserted += 1;
               } catch (err) {
                 ticketsSkipped += 1;
+                keepIds.push(row.key);
                 logger.warn(
                   { err: errorMessage(err), ticketId: row.key, cls },
                   "iTop sync: skipping a ticket that failed to upsert",
@@ -908,7 +937,7 @@ export async function syncTickets(
           }
         }
 
-        // A run past its budget must not prune: seenIds is incomplete.
+        // A run past its budget must not prune: the pull is incomplete.
         checkDeadline();
         if (full) {
           // A row is orphaned (and dropped) if its org is no longer mapped
@@ -917,9 +946,19 @@ export async function syncTickets(
           // customer (whose tickets would otherwise keep a stale
           // customerId via ON DELETE SET NULL) as well as a ticket iTop no
           // longer returns for a still-mapped org.
+          // "Returned this run" is a `syncedAt` comparison, not an id list, so
+          // the query binds no parameter per ticket. A partial pull (server
+          // ignoring paging) skips that arm: it cannot tell "iTop dropped it"
+          // from "never returned".
+          for (const ids of chunk(keepIds, KEEP_TOUCH_CHUNK)) {
+            await prisma.itopTicket.updateMany({ where: { id: { in: ids } }, data: { syncedAt: new Date() } });
+          }
+          if (!pullComplete) {
+            logger.warn("iTop sync: pull was incomplete; skipping the not-returned ticket prune");
+          }
           const deleted = await prisma.itopTicket.deleteMany({
             where: {
-              OR: [{ orgId: { notIn: orgIds } }, { id: { notIn: [...seenIds] } }],
+              OR: [{ orgId: { notIn: orgIds } }, ...(pullComplete ? [{ syncedAt: { lt: startedAt } }] : [])],
             },
           });
           removed = deleted.count;

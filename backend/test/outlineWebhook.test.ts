@@ -196,9 +196,9 @@ describe("rate limiting and warn coalescing", () => {
 
   it("caps accepted deliveries per minute", async () => {
     const body = delivery("documents.update", pageModel("doc-accepted", "x"));
-    const sig = sign(body);
     const statuses: number[] = [];
-    for (let i = 0; i < 125; i++) statuses.push((await post(body, sig)).status);
+    // Each delivery carries its own timestamp: a repeated signature is refused as a replay.
+    for (let i = 0; i < 125; i++) statuses.push((await post(body, sign(body, SECRET, Date.now() + i))).status);
     expect(statuses.slice(0, 120).every((s) => s === 200)).toBe(true);
     expect(statuses.slice(120)).toEqual([429, 429, 429, 429, 429]);
   });

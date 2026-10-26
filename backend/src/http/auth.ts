@@ -58,7 +58,7 @@ export function signToken(claims: TokenClaims): string {
 }
 
 export function verifyToken(token: string): TokenClaims {
-  const decoded = jwt.verify(token, env.JWT_SECRET);
+  const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] });
   if (typeof decoded === "string") {
     throw new HttpError(401, "invalid_token", "Invalid token");
   }

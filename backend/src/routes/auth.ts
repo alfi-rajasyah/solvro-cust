@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { permissionsOf, requireAuth, signToken } from "../http/auth.js";
-import { normalizeUsername, USERNAME_MAX } from "../lib/username.js";
+import { isUsernameConflict, normalizeUsername, USERNAME_MAX } from "../lib/username.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { getAuthConfigCached } from "../authConfig.js";
@@ -65,7 +65,8 @@ function recordSignInFailure(req: Request, emailKey?: string): void {
 }
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  // Emails are stored trimmed and lowercase (admin create, Google sign-in).
+  email: z.string().trim().toLowerCase().email(),
   password: z.string().min(1),
 });
 
@@ -77,7 +78,7 @@ export const authRouter = Router();
 
 authRouter.post("/login", validate("body", loginSchema), async (req, res) => {
   const { email, password } = req.body as z.infer<typeof loginSchema>;
-  const emailKey = email.trim().toLowerCase();
+  const emailKey = email;
   assertSignInAllowed(req, res, emailKey);
 
   const user = await prisma.user.findUnique({
@@ -309,9 +310,7 @@ async function createWithUniqueUsername({
     } catch (err) {
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002" &&
-        Array.isArray(err.meta?.target) &&
-        (err.meta?.target as string[]).includes("username")
+        isUsernameConflict(err)
       ) {
         continue;
       }

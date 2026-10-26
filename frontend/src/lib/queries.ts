@@ -3258,7 +3258,7 @@ export function useRequestItopRefresh() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { customerId?: number } = {}) =>
-      apiRequest<{ requested: boolean; reason?: string; lastSyncAt: string | null }>(
+      apiRequest<{ requested: boolean; lastSyncAt: string | null }>(
         "/itop/refresh",
         { method: "POST", body: input },
       ),
@@ -4190,6 +4190,8 @@ export interface OutlineAdminSettings {
   /** False when the server has no APP_URL (production has no default). */
   appUrlConfigured: boolean;
   appUrlWarning: string | null;
+  /** Set when the Outline address is plain http (allowed on a LAN, but unencrypted). */
+  baseUrlWarning: string | null;
   /** Browser-facing URLs to register in Outline; null while APP_URL is unset. */
   redirectUri: string | null;
   webhookUrl: string | null;

@@ -22,7 +22,7 @@ import { requireAuth, requirePermission } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { open, seal, SecretBoxError } from "../lib/secretBox.js";
-import { ItopError, type ItopGetResult } from "../lib/itop/client.js";
+import { ITOP_TRANSPORT_ERROR_CODES, ItopError, type ItopGetResult } from "../lib/itop/client.js";
 import { getItopConfig, isItopConfigured, makeItopClient } from "../lib/itop/config.js";
 import { escapeOqlString, parseItopDate } from "../lib/itop/sync.js";
 import {
@@ -38,7 +38,7 @@ export const itopUserRouter = Router();
 
 itopUserRouter.use(requireAuth);
 
-const TRANSPORT_CODES = new Set<unknown>(["http", "timeout", "network", "parse"]);
+const TRANSPORT_CODES = ITOP_TRANSPORT_ERROR_CODES;
 
 /** Maps a Person-lookup failure to the HTTP shape `PUT /itop/me/token` promises: a rejected/invalid token is a 400 the user can act on, a transport failure is a 502. */
 function mapTokenCheckError(err: unknown): never {

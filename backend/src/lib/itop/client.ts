@@ -8,7 +8,16 @@
 import type { ItopTicketClass } from "./types.js";
 
 /** `code` is iTop's own numeric error code, or one of our transport codes. */
-export type ItopErrorCode = number | "http" | "timeout" | "network" | "parse" | "paging";
+export type ItopErrorCode = number | "http" | "timeout" | "network" | "parse" | "paging" | "too_large";
+
+/** Codes that mean iTop's answer never arrived intact (not a refusal by iTop itself). */
+export const ITOP_TRANSPORT_ERROR_CODES: ReadonlySet<unknown> = new Set<unknown>([
+  "http",
+  "timeout",
+  "network",
+  "parse",
+  "too_large",
+]);
 
 export class ItopError extends Error {
   code: ItopErrorCode;
@@ -28,6 +37,8 @@ export interface ItopClientOptions {
   /** Injectable for tests; defaults to the global `fetch`. */
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  /** Largest response body accepted, in bytes; defaults to 16 MB. */
+  maxResponseBytes?: number;
 }
 
 export interface ItopObjectRow<T> {
@@ -38,6 +49,15 @@ export interface ItopObjectRow<T> {
 
 export interface ItopGetResult<T> {
   objects: Array<ItopObjectRow<T>>;
+}
+
+export interface ItopGetAllResult<T> extends ItopGetResult<T> {
+  /**
+   * False when the pull stopped early because the server answered a full page
+   * with nothing new (it is ignoring `limit`/`page`), so `objects` may be a
+   * partial view of the query — a caller must not treat missing rows as deleted.
+   */
+  complete: boolean;
 }
 
 export interface ItopProbeResult {
@@ -65,7 +85,7 @@ export interface ItopClient {
     outputFields: string,
     /** `beforePage` runs before each page request; throw from it to stop a long pull. */
     options?: { pageSize?: number; beforePage?: () => void },
-  ): Promise<ItopGetResult<T>>;
+  ): Promise<ItopGetAllResult<T>>;
   listOperations(): Promise<ItopListOperationsResult>;
   probe(): Promise<ItopProbeResult[]>;
   create<T>(
@@ -97,6 +117,42 @@ const PROBE_CLASSES = ["Organization", "UserRequest", "Incident", "Person", "Tim
  * unattended scheduler tick indefinitely.
  */
 const MAX_GETALL_PAGES = 500;
+
+/** Default ceiling on one iTop response body. */
+const DEFAULT_MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
+
+function tooLarge(limit: number): ItopError {
+  return new ItopError({ code: "too_large", message: `iTop response exceeded ${limit} bytes` });
+}
+
+/**
+ * Reads a response body as text, refusing more than `limit` bytes: a declared
+ * content-length over the limit is rejected before reading, and the stream is
+ * cancelled as soon as the running total passes it.
+ */
+async function readBodyWithBudget(response: Response, limit: number): Promise<string> {
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > limit) {
+    await response.body?.cancel().catch(() => {});
+    throw tooLarge(limit);
+  }
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let total = 0;
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel().catch(() => {});
+      throw tooLarge(limit);
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
 
 interface ItopObjectEnvelope {
   code: number;
@@ -148,6 +204,7 @@ export function createItopClient(options: ItopClientOptions): ItopClient {
   const token = options.token;
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? 15000;
+  const maxResponseBytes = options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
   const endpoint = `${baseUrl}/webservices/rest.php?version=1.3`;
 
   async function request(payload: Record<string, unknown>): Promise<ItopEnvelope> {
@@ -205,8 +262,16 @@ export function createItopClient(options: ItopClientOptions): ItopClient {
         });
       }
 
+      let text: string;
       try {
-        return (await response.json()) as ItopEnvelope;
+        text = await readBodyWithBudget(response, maxResponseBytes);
+      } catch (err) {
+        if (err instanceof ItopError) throw err;
+        if (err instanceof Error && err.name === "AbortError") throw timeoutError();
+        throw new ItopError({ code: "network", message: toErrorMessage(err) });
+      }
+      try {
+        return JSON.parse(text) as ItopEnvelope;
       } catch {
         throw new ItopError({ code: "parse", message: "iTop response was not valid JSON" });
       }
@@ -254,11 +319,12 @@ export function createItopClient(options: ItopClientOptions): ItopClient {
     oql: string,
     outputFields: string,
     getAllOptions: { pageSize?: number; beforePage?: () => void } = {},
-  ): Promise<ItopGetResult<T>> {
+  ): Promise<ItopGetAllResult<T>> {
     const pageSize = getAllOptions.pageSize ?? 100;
     const rows: Array<ItopObjectRow<T>> = [];
     const seenKeys = new Set<number>();
     let page = 1;
+    let complete = true;
 
     for (;;) {
       if (page > MAX_GETALL_PAGES) {
@@ -283,10 +349,13 @@ export function createItopClient(options: ItopClientOptions): ItopClient {
       // A full page that contributed nothing new means the server isn't
       // advancing with `page` (or is repeating results) — stop instead of
       // looping toward MAX_GETALL_PAGES on data that will never change.
-      if (newRows === 0) break;
+      if (newRows === 0) {
+        complete = false;
+        break;
+      }
       page += 1;
     }
-    return { objects: rows };
+    return { objects: rows, complete };
   }
 
   async function listOperations(): Promise<ItopListOperationsResult> {

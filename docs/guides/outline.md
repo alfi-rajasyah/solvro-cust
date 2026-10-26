@@ -75,10 +75,10 @@ Apply the change with `docker compose up -d` in `~/solvro`.
 
 Sign in to Solvro as an admin and open **Admin > Outline**.
 
-1. **Address.** Set the Outline workspace address. An "Outline" item appears in every user's sidebar.
+1. **Address.** Set the Outline workspace address. It must not contain a user name or password (`https://user:pass@...` is refused). A plain `http://` address is allowed for a LAN install, but Admin > Outline shows a warning for it. An "Outline" item appears in every user's sidebar.
 2. **API access.** In Outline, open **Settings › Applications** and create an application. Use the redirect URL that the **API access** card shows (`<APP_URL>/api/outline/oauth/callback`). Paste the application's **Client ID** and client secret into the card. Solvro asks Outline only for the `read` and `create` scopes: it can read pages and create new ones, never change or delete existing ones.
 3. **Each user connects their own account** at **Settings > Outline**. The connection succeeds only when the Outline account's email equals the user's Solvro email.
-4. **Per customer and project.** Put an Outline collection or page link in the "Outline URL" field of a customer or project. Its **Docs** tab lists the pages under that link, and "New doc" creates pages there.
+4. **Per customer and project.** Put an Outline collection or page link in the "Outline URL" field of a customer or project (a link containing a user name or password is refused). Its **Docs** tab lists the pages under that link, and "New doc" creates pages there.
 
 ## 4. Optional features
 
@@ -105,6 +105,7 @@ Signed-in embeds work only when Solvro and Outline share a parent domain, for ex
 | Symptom | Cause and fix |
 |---|---|
 | The Outline card in Settings or the Docs tab is missing. | No Outline address is set in Admin > Outline. |
+| The sign-in redirect shows a plain "Not found" page. | `APP_URL` is not set. Set it and run `docker compose up -d`. |
 | Connecting fails, and Admin > Outline warns about `APP_URL`. | `APP_URL` is unset or uses `http`. Set an `https` `APP_URL` and run `docker compose up -d`. |
 | Connecting fails with an email message. | The Outline account's email differs from the Solvro email. Sign in to Outline with the matching account, or correct the email. |
 | Outline shows a redirect error before its consent screen. | The redirect URL in the Outline application differs from the one in the API access card. Copy it again. |

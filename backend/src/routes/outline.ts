@@ -84,6 +84,12 @@ outlineRouter.get("/oauth/callback", outlineCallbackRateLimiter.middleware, asyn
     "X-Robots-Tag": "noindex",
     "Referrer-Policy": "no-referrer",
   });
+  // This is a top-level browser navigation: with no APP_URL there is nowhere to send the
+  // user back to, and a JSON error page would be meaningless, so answer a plain 404.
+  if (env.APP_URL === null) {
+    res.status(404).type("text/plain").send("Not found");
+    return;
+  }
   const fail = (reason: CallbackReason) => settingsRedirect(res, { outline: "error", reason });
 
   const parsed = callbackQuerySchema.safeParse(req.query);

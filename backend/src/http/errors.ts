@@ -77,11 +77,12 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
       res.status(400).json({ error: "Invalid reference to a related record", code: "invalid_reference" });
       return;
     }
+    // No `meta` here either: it names the columns, and for a name another
+    // user's hidden record already holds that confirms the record exists.
     if (err.code === "P2002") {
       res.status(409).json({
         error: "Unique constraint violated",
         code: "conflict",
-        details: err.meta,
       });
       return;
     }

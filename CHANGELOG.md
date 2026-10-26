@@ -15,6 +15,28 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Security — 2026-10-26 — Hardened the iTop and Outline connections and user identity
+
+- **iTop** (`backend/src/lib/itop/client.ts`, `sync.ts`, `routes/itop.ts`, `routes/itopAdmin.ts`):
+  - The client refuses a response body over 16 MB before parsing it (`ItopError` `too_large`), so an oversized upstream answer can no longer exhaust memory.
+  - The full sync now removes only tickets and time entries that the run did not touch (`syncedAt` older than the run start), instead of listing every kept id in one delete query, which failed past 65,535 ids. When the server did not page through the full result, that removal is skipped, so stored rows are no longer deleted just because they were never returned.
+  - Manual Refresh is limited to one request per user per 30 seconds and one full pull per minute overall; a refused request answers 429 with `Retry-After`.
+  - Saving an iTop application token in Admin > iTop first checks it against iTop and answers `400 itop_token_rejected` if iTop refuses it; nothing is stored.
+  - "Test connection" with an iTop address in the request now needs the application token in the same request (`400 app_token_required`), so a connection test can no longer send the stored token to an address typed only for that test.
+  - Errors from an oversized iTop answer are now reported as "iTop unreachable", not as iTop refusing the action or the token.
+- **Outline** (`backend/src/lib/outline/client.ts`, `webhookSignature.ts`, `lib/outlineUrl.ts`, `routes/outline.ts`, `routes/outlineAdmin.ts`, `routes/webhook.ts`; `frontend/src/components/admin/OutlineTab.tsx`):
+  - Outline API responses are read with a 16 MB limit; an oversized answer is treated as Outline being unavailable.
+  - Outline links stored on projects and customers, and the Outline address in Admin > Outline, are refused when they contain a user name or password. Plain http addresses stay allowed for LAN installs, but Admin > Outline now shows a warning for them (`baseUrlWarning`).
+  - An accepted webhook delivery is remembered for the five-minute signature window, so a captured delivery can no longer be replayed (401); the timestamp is checked before the signature. A delivery refused by the accepted-call limit (429) is not remembered, so Outline's retry still goes through.
+  - The OAuth callback answers a plain 404 page when `APP_URL` is not set, instead of a JSON error on a browser navigation.
+- **Identity** (`backend/src/routes/admin.ts`, `routes/auth.ts`, `lib/username.ts`, `http/errors.ts`, `http/auth.ts`, `scripts/create-admin.ts`, migration `20261026090000_user_identity_case`):
+  - Emails are matched case-insensitively: the admin create-user form, the password sign-in form and `create-admin.ts` trim and lowercase the email, and the migration lowercases existing emails. A Google sign-in as `foo@x.com` no longer creates a second account next to an admin-created `Foo@X.com`.
+  - Usernames that differ only in case can no longer be created at the same moment: a unique index on `lower(username)` decides, and the loser gets `409 username_in_use`.
+  - **Upgrade note:** if existing users already collide (two emails or two usernames that differ only in case or spaces), the migration stops with a message listing the user ids, and the backend does not start. Nothing is merged or deleted automatically. To recover, rename or merge those accounts by hand, run `npx prisma migrate resolve --rolled-back 20261026090000_user_identity_case`, then start the backend again (or run `npx prisma migrate deploy`). The check runs before any change, so a refused run leaves the data as it was.
+  - Unique-constraint errors no longer include database column details.
+  - Session tokens are verified as HS256 only; tokens signed with another HMAC algorithm are rejected.
+- Regression tests: `backend/test/itop/byteBudget.test.ts`, `syncPrune.test.ts`, `refreshThrottle.test.ts`, `backend/test/outlineHardening.test.ts`, `backend/test/identityCase.test.ts`, and updated cases in `itopAdmin.test.ts`, `itop/tickets.test.ts` and `outlineWebhook.test.ts`.
+
 ### Added — 2026-10-25 — Cross-user access tests and an automated accessibility scan
 
 - **Cross-user negative tests** (new `backend/test/crossUserAccess.test.ts`): another TAM gets `404 Project not found` when listing, creating, changing or deleting a project's risks, dependencies and labels, and nothing changes; the owner's own requests succeed as a positive control. `GET /reports/executive` answers 403 without `report:executive` and 200 with it. Before, these entities had no test where another user is refused, so a visibility regression would have passed CI.
