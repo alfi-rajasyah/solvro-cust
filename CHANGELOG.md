@@ -19,6 +19,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 - A `/help#<topic>` link now stays on its topic (`frontend/src/pages/Help.tsx`). The page scrolled to the topic only once, right after it rendered; if the web fonts swapped in afterwards, or permission-gated topics above it appeared once the server confirmed the user, the page reflowed and the topic could end up out of view. The page now scrolls again after the fonts load and after the user is confirmed. Regression test: `frontend/src/pages/Help.test.tsx`.
 
+## [1.1.0] — 2026-10-26
+
+### Changed — 2026-10-26 — Version 1.1.0
+
+- The release version is `1.1.0` in `VERSION`, `backend/package.json`, `frontend/package.json` and the image tag in `setup.sh` (`SOLVRO_IMAGE_TAG="v1.1.0"`), so the login page and new installs show and pull 1.1.0. **Upgrade notes for this release:** the identity migration stops on emails or usernames that differ only in case or spaces (see `OPERATIONS.md` §10), and the search-index migration needs the `pg_trgm` extension (see `docs/CONFIGURATION.md`).
+
 ### Changed — 2026-10-26 — Task data integrity, session extension and query performance
 
 - **Milestones need a due date** (`backend/src/routes/tasks.ts`): setting `isMilestone` on a task with no due date, or clearing the due date of a milestone, now answers 400 with "A milestone requires a due date". Before, only a single request that did both at once was refused, so a partial update could create a milestone the Gantt and the guest timeline could not place.
