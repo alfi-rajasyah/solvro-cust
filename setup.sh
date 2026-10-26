@@ -60,7 +60,7 @@ VOLUME_NAME="solvro_pgdata"
 # ~/solvro/.env (IMAGE_TAG). Bumped with VERSION on every release
 # (ci/check-version.sh keeps them equal). A newer setup.sh is the upgrade:
 # it rewrites IMAGE_TAG and pulls; a plain `docker compose up -d` never does.
-SOLVRO_IMAGE_TAG="v1.0.0"
+SOLVRO_IMAGE_TAG="v1.1.0"
 
 # ------------------------------------------------------------------ checks
 command -v docker >/dev/null 2>&1 || {
