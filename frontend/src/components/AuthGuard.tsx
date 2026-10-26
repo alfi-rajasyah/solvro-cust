@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { SessionExpiryPrompt } from "@/components/SessionExpiryPrompt";
 
 export function AuthGuard({ children }: { children: ReactNode }) {
   const { status } = useAuth();
@@ -15,7 +16,12 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     return <Navigate to="/login" replace state={{ from }} />;
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <SessionExpiryPrompt />
+    </>
+  );
 }
 
 /** Placeholder while the signed-in user is still being confirmed. */

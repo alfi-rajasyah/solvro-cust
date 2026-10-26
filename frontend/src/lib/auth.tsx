@@ -18,6 +18,7 @@ import {
   TOKEN_STORAGE_KEY,
   UNAUTHENTICATED_EVENT,
 } from "./api";
+import { tokenExpiryMs } from "./sessionExpiry";
 
 // Built-in role names referenced structurally by backend (project visibility,
 // requireAdmin gate). Custom roles created via Admin > Roles tab use other
@@ -95,6 +96,8 @@ interface AuthContextValue {
   logout: () => void;
   /** Swap in a token the server issued mid-session (after a password change). */
   replaceToken: (token: string) => void;
+  /** Ask the server for a fresh token for the current session ("Stay signed in"). */
+  extendSession: () => Promise<void>;
 }
 
 const USER_STORAGE_KEY = "solvro.user";
@@ -258,6 +261,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTokenState(next);
   }, []);
 
+  const extendSession = useCallback(async () => {
+    const before = tokenExpiryMs(getToken());
+    const res = await apiRequest<{ token: string }>("/auth/refresh", { method: "POST" });
+    // A token that does not expire later changes nothing (the session is at its
+    // maximum length): report it like the server's refusal, keep the old one.
+    const after = tokenExpiryMs(res.token);
+    if (before !== null && (after === null || after <= before)) {
+      throw new ApiError(409, "Session is at its maximum length", { code: "session_max_age" });
+    }
+    setToken(res.token);
+    setTokenState(res.token);
+  }, []);
+
   // Any authenticated request answered with 401 (lib/api.ts) ends the
   // session here too — the server revokes tokens (password change, admin
   // reset, deactivation), and a revoked session must not keep showing cached
@@ -315,8 +331,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [logout]);
 
   const value = useMemo(
-    () => ({ user, token, status, userVerified, login, loginWithGoogle, logout, replaceToken }),
-    [user, token, status, userVerified, login, loginWithGoogle, logout, replaceToken],
+    () => ({ user, token, status, userVerified, login, loginWithGoogle, logout, replaceToken, extendSession }),
+    [user, token, status, userVerified, login, loginWithGoogle, logout, replaceToken, extendSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

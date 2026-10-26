@@ -10,7 +10,7 @@ import {
   utcMidnightOfDayString,
 } from "../lib/dateBoundary.js";
 import { parseWeekKey } from "../lib/isoWeek.js";
-import { computeSlipDays, currentPhase } from "../lib/projectHealth.js";
+import { computeSlipDays } from "../lib/projectHealth.js";
 
 // One-request payload for the Daily Review page (spec §5.1). Every
 // sub-collection is fetched with a single batched `findMany` keyed by an
@@ -43,6 +43,19 @@ function groupBy<T, K>(items: T[], keyFn: (item: T) => K): Map<K, T[]> {
 /** "yyyy-MM-dd" of a `@db.Date` column's UTC-midnight instant. */
 function dayOf(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+// Same rule as lib/projectHealth.ts#currentPhase (earliest section by
+// position that still has a non-DONE task; "All phases complete" when every
+// section is done; "—" when the project has no sections), fed from grouped
+// per-section counts instead of task rows.
+function phaseOf(
+  bySection: Map<number, { name: string; pos: number; total: number; done: number }>,
+): string {
+  const ordered = [...bySection.values()].sort((a, b) => a.pos - b.pos);
+  const cur = ordered.find((s) => s.done < s.total);
+  if (cur) return cur.name;
+  return ordered.length > 0 ? "All phases complete" : "—";
 }
 
 export const dailyReviewRouter = Router();
@@ -83,18 +96,32 @@ dailyReviewRouter.get(
     const projectIds = projects.map((p) => p.id);
     const customerIds = customers.map((c) => c.id);
 
-    const [tasks, risks, projectNotes, reviews] = await Promise.all([
-      prisma.task.findMany({
+    const [taskGroups, taskDateMax, overdueTaskRows, sections, risks, projectNotes, reviews] = await Promise.all([
+      // Task facts are aggregated in the database: per-status/section counts
+      // (progress, current phase), the latest due / baseline dates (slip), and
+      // only the overdue rows themselves — never every task of every project.
+      prisma.task.groupBy({
+        by: ["projectId", "sectionId", "status"],
         where: { projectId: { in: projectIds } },
-        select: {
-          id: true,
-          projectId: true,
-          title: true,
-          status: true,
-          dueDate: true,
-          baselineDueDate: true,
-          section: { select: { id: true, name: true, position: true } },
+        _count: { _all: true },
+      }),
+      prisma.task.groupBy({
+        by: ["projectId"],
+        where: { projectId: { in: projectIds } },
+        _max: { dueDate: true, baselineDueDate: true },
+      }),
+      prisma.task.findMany({
+        where: {
+          projectId: { in: projectIds },
+          status: { not: "DONE" },
+          dueDate: { lt: overdueBoundaryDate },
         },
+        orderBy: { id: "asc" },
+        select: { id: true, projectId: true, title: true, status: true, dueDate: true },
+      }),
+      prisma.section.findMany({
+        where: { projectId: { in: projectIds } },
+        select: { id: true, name: true, position: true },
       }),
       prisma.risk.findMany({
         where: { projectId: { in: projectIds }, status: "OPEN" },
@@ -213,18 +240,36 @@ dailyReviewRouter.get(
     // --- Assemble per-project DTOs, then bucket them under their customer
     // (or unassignedProjects) and fold in the week's coverage counts.
 
-    const tasksByProject = groupBy(tasks, (t) => t.projectId);
+    const groupsByProject = groupBy(taskGroups, (g) => g.projectId);
+    const maxByProject = new Map(taskDateMax.map((m) => [m.projectId, m._max]));
+    const overdueByProject = groupBy(overdueTaskRows, (t) => t.projectId);
+    const sectionById = new Map(sections.map((sec) => [sec.id, sec]));
     const risksByProject = groupBy(risks, (r) => r.projectId);
     const notesByProject = groupBy(projectNotes, (n) => n.projectId);
     const reviewsByProject = groupBy(reviews, (r) => r.projectId);
 
     const projectDtos = projects.map((p) => {
-      const projectTasks = tasksByProject.get(p.id) ?? [];
+      const groups = groupsByProject.get(p.id) ?? [];
       const projectRisks = risksByProject.get(p.id) ?? [];
       const projectNotesForProject = notesByProject.get(p.id) ?? [];
       const projectReviews = reviewsByProject.get(p.id) ?? [];
-      const total = projectTasks.length;
-      const done = projectTasks.filter((t) => t.status === "DONE").length;
+      let total = 0;
+      let done = 0;
+      const bySection = new Map<number, { name: string; pos: number; total: number; done: number }>();
+      for (const g of groups) {
+        const n = g._count._all;
+        total += n;
+        if (g.status === "DONE") done += n;
+        const section = g.sectionId === null ? undefined : sectionById.get(g.sectionId);
+        if (!section) continue;
+        const e =
+          bySection.get(section.id) ??
+          { name: section.name, pos: section.position, total: 0, done: 0 };
+        e.total += n;
+        if (g.status === "DONE") e.done += n;
+        bySection.set(section.id, e);
+      }
+      const maxes = maxByProject.get(p.id);
 
       return {
         id: p.id,
@@ -232,16 +277,12 @@ dailyReviewRouter.get(
         status: p.status,
         customerId: p.customerId,
         baselineLockedAt: p.baselineLockedAt,
-        phase: currentPhase(projectTasks),
+        phase: phaseOf(bySection),
         progress: { done, total },
-        slipDays: computeSlipDays(p.baselineLockedAt, projectTasks),
-        overdueTasks: projectTasks
-          .filter(
-            (t) =>
-              t.status !== "DONE" &&
-              t.dueDate !== null &&
-              t.dueDate.getTime() < overdueBoundaryDate.getTime(),
-          )
+        slipDays: computeSlipDays(p.baselineLockedAt, [
+          { dueDate: maxes?.dueDate ?? null, baselineDueDate: maxes?.baselineDueDate ?? null },
+        ]),
+        overdueTasks: (overdueByProject.get(p.id) ?? [])
           .map((t) => ({ id: t.id, title: t.title, dueDate: t.dueDate, status: t.status })),
         openRisks: projectRisks.map((r) => ({
           id: r.id,

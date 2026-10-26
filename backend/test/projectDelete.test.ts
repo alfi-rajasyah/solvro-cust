@@ -1,8 +1,9 @@
 import "./env.js";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
+import { logger } from "../src/logger.js";
 import { createAdminAndToken, createUserWithRole, seedRoles } from "./testAuth.js";
 
 // DELETE /projects/:id — hard delete behind project:write and the
@@ -78,6 +79,54 @@ describe("DELETE /projects/:id", () => {
     expect(await prisma.projectNote.count({ where: { projectId } })).toBe(0);
     // The customer is untouched.
     expect(await prisma.customer.findUnique({ where: { id: customerId } })).not.toBeNull();
+  });
+
+  it("logs the deletion and leaves a customer activity event that outlives the project", async () => {
+    const customerId = await createCustomer();
+    const projectId = await createProject(customerId, admin.userId);
+    const name = (await prisma.project.findUniqueOrThrow({ where: { id: projectId } })).name;
+    const info = vi.spyOn(logger, "info");
+    const before = Date.now();
+    try {
+      expect((await del(admin.token, projectId)).status).toBe(204);
+      const call = info.mock.calls.find(
+        (c) => (c[0] as { event?: string } | undefined)?.event === "project.deleted",
+      );
+      expect(call?.[0]).toMatchObject({ projectId, projectName: name, customerId, actorId: admin.userId });
+    } finally {
+      info.mockRestore();
+    }
+    expect(await prisma.project.findUnique({ where: { id: projectId } })).toBeNull();
+    const events = await prisma.customerActivityEvent.findMany({ where: { customerId } });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ actorId: admin.userId, action: "project_deleted", projectId, projectName: name });
+    expect(events[0].createdAt.getTime()).toBeGreaterThanOrEqual(before - 1000);
+  });
+
+  it("records a customer-less project delete with a null customer, and keeps it when a customer is deleted", async () => {
+    const orphan = await prisma.project.create({
+      data: { name: uniq("Orphan"), tamId: admin.userId, status: "ACTIVE" },
+    });
+    expect((await del(admin.token, orphan.id)).status).toBe(204);
+    const row = await prisma.customerActivityEvent.findFirstOrThrow({ where: { projectId: orphan.id } });
+    expect(row).toMatchObject({ customerId: null, actorId: admin.userId, projectName: orphan.name });
+
+    const customerId = await createCustomer();
+    const projectId = await createProject(customerId, admin.userId);
+    expect((await del(admin.token, projectId)).status).toBe(204);
+    await prisma.customer.delete({ where: { id: customerId } });
+    const kept = await prisma.customerActivityEvent.findFirstOrThrow({ where: { projectId } });
+    expect(kept.customerId).toBeNull();
+    expect(kept.action).toBe("project_deleted");
+  });
+
+  it("records nothing for a refused delete", async () => {
+    const owner = await createUserWithRole("TAM");
+    const other = await createUserWithRole("TAM");
+    const customerId = await createCustomer(owner.userId);
+    const projectId = await createProject(customerId, owner.userId);
+    expect((await del(other.token, projectId)).status).toBe(404);
+    expect(await prisma.customerActivityEvent.count({ where: { projectId } })).toBe(0);
   });
 
   it("404s for an unknown project", async () => {

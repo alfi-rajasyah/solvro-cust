@@ -10,6 +10,7 @@ import {
   TaskStatus,
 } from "@prisma/client";
 import { prisma } from "../prisma.js";
+import { logger } from "../logger.js";
 import { hasPermission, requireAuth, requirePermission } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { dateInput } from "../lib/dateInput.js";
@@ -485,8 +486,39 @@ projectsRouter.delete(
     // Hard delete, no soft-delete or undo — the UI confirms first. The schema
     // cascades to the project's tasks (with their subtasks, comments and
     // dependencies), sections, labels, risks, notes, reviews and service
-    // assignments.
-    await prisma.project.delete({ where: { id } });
+    // assignments, and to the project's own activity log — so the deletion is
+    // recorded on the customer (CustomerActivityEvent, which survives it) in
+    // the same transaction, and in the application log.
+    const actorId = req.user!.sub;
+    const deleted = await prisma.$transaction(async (tx) => {
+      const project = await tx.project.findUnique({
+        where: { id },
+        select: { name: true, customerId: true },
+      });
+      if (!project) throw new HttpError(404, "not_found", "Project not found");
+      await tx.customerActivityEvent.create({
+        data: {
+          customerId: project.customerId,
+          actorId,
+          action: "project_deleted",
+          projectId: id,
+          projectName: project.name,
+        },
+      });
+      await tx.project.delete({ where: { id } });
+      return project;
+    });
+    logger.info(
+      {
+        event: "project.deleted",
+        projectId: id,
+        projectName: deleted.name,
+        customerId: deleted.customerId,
+        actorId,
+        at: new Date().toISOString(),
+      },
+      "project deleted",
+    );
     res.status(204).end();
   },
 );

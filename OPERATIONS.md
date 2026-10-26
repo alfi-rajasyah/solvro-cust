@@ -48,7 +48,7 @@ The compose file sets these on the backend container. They are not meant to be e
 | `DATABASE_URL` | `postgresql://solvro:…@postgres:5432/solvro` | Built from `POSTGRES_PASSWORD`. |
 | `JWT_SECRET` | from `.env` | |
 | `SECRETS_KEY` | from `.env` | AES-256-GCM key for secrets at rest (iTop token). |
-| `JWT_EXPIRES_IN` | `8h` | Session length. |
+| `JWT_EXPIRES_IN` | `8h` | Session length. A signed-in user can extend a session shortly before it ends, up to 24 hours after the original sign-in. |
 | `CORS_ORIGIN` | `APP_URL` (or `*` when unset) | Which other browser origins may call the API. The app itself is same-origin and never needs it. |
 | `TRUST_PROXY` | `loopback, uniquelocal` | Which proxies the API believes for the client address: the bundled nginx and a TLS front or tunnel on this host. `.env` can override it. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
@@ -59,7 +59,7 @@ Google sign-in is **not** configured by environment variables. See section 6.
 
 On every start the backend runs, in order:
 
-1. `prisma migrate deploy` — applies any schema migrations the new version ships. Upgrades need no manual database step, with one exception: the migration `20261026090000_user_identity_case` lowercases user emails and adds a case-insensitive username index, and it refuses to run when two existing users share an email or a username apart from case or spaces. The backend then restarts in a loop (section 10 has the recovery). Nothing is merged or deleted automatically.
+1. `prisma migrate deploy` — applies any schema migrations the new version ships. Upgrades need no manual database step, with one exception: the migration `20261026090000_user_identity_case` lowercases user emails and adds a case-insensitive username index, and it refuses to run when two existing users share an email or a username apart from case or spaces. The backend then restarts in a loop (section 10 has the recovery). Nothing is merged or deleted automatically. A second one: the migration `20261027090000_search_trigram_activity_index` runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds search indexes. The official `postgres` image used by `setup.sh` includes `pg_trgm`. On a managed PostgreSQL the role that runs the migration must be allowed to create the extension (the database owner is enough on PostgreSQL 13 and later, where `pg_trgm` is a trusted extension); otherwise create it once as an administrator with `CREATE EXTENSION pg_trgm;`. The index builds block writes to projects, tasks and customers while they run, which takes seconds at typical sizes; on a large database, upgrade in a quiet window.
 2. `prisma db seed` — makes sure the four built-in roles (`ADMIN`, `TAM`, `STAKEHOLDER`, `PENDING`) and the sign-in settings row exist. The seed creates no users.
 3. The API.
 

@@ -43,39 +43,52 @@ export async function computePortfolioRows(
         orderBy: { position: "asc" },
         select: { id: true, name: true, color: true },
       },
-      tasks: {
-        select: { status: true, startDate: true, dueDate: true },
-      },
     },
   });
+
+  // Task facts come from grouped aggregates in the database, never from
+  // loading every task row of every project.
+  const projectIds = projects.map((p) => p.id);
+  const [statusCounts, dateRanges] =
+    projectIds.length === 0
+      ? [[], []]
+      : await Promise.all([
+          prisma.task.groupBy({
+            by: ["projectId", "status"],
+            where: { projectId: { in: projectIds } },
+            _count: { _all: true },
+          }),
+          prisma.task.groupBy({
+            by: ["projectId"],
+            where: { projectId: { in: projectIds } },
+            _min: { startDate: true },
+            _max: { dueDate: true },
+          }),
+        ]);
+  const totals = new Map<number, { total: number; done: number }>();
+  for (const row of statusCounts) {
+    const t = totals.get(row.projectId) ?? { total: 0, done: 0 };
+    t.total += row._count._all;
+    if (row.status === "DONE") t.done += row._count._all;
+    totals.set(row.projectId, t);
+  }
+  const ranges = new Map(dateRanges.map((r) => [r.projectId, r]));
 
   // See lib/dateBoundary.ts for the full contract this boundary follows
   // (shared with routes/tasks.ts's /tasks?overdue=true).
   const startOfToday = overdueBoundary(today);
 
   const rows: PortfolioProjectRow[] = projects.map((project) => {
-    const { tasks } = project;
-
-    let startMs: number | null = null;
-    let endMs: number | null = null;
-    let doneTasks = 0;
-
-    for (const task of tasks) {
-      if (task.startDate !== null) {
-        const ms = task.startDate.getTime();
-        if (startMs === null || ms < startMs) startMs = ms;
-      }
-      if (task.dueDate !== null) {
-        const ms = task.dueDate.getTime();
-        if (endMs === null || ms > endMs) endMs = ms;
-      }
-      if (task.status === "DONE") doneTasks += 1;
-    }
+    const counts = totals.get(project.id) ?? { total: 0, done: 0 };
+    const range = ranges.get(project.id);
+    const startMs = range?._min.startDate?.getTime() ?? null;
+    const endMs = range?._max.dueDate?.getTime() ?? null;
+    const doneTasks = counts.done;
 
     const start = startMs !== null ? new Date(startMs).toISOString() : null;
     const end = endMs !== null ? new Date(endMs).toISOString() : null;
 
-    const totalTasks = tasks.length;
+    const totalTasks = counts.total;
     const progressPct = totalTasks === 0 ? 0 : Math.round((doneTasks / totalTasks) * 100);
 
     const isOverdue =
