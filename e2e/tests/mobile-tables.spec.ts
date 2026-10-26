@@ -28,6 +28,10 @@ async function expectNoHorizontalScroll(page: Page, containerTestId?: string) {
   }
 }
 
+// The built stack registers a service worker, which would answer requests
+// before page.route sees them (the Utilization test mocks its API response).
+test.use({ serviceWorkers: "block" });
+
 test.describe("Wide tables on a phone", () => {
   test("Weekly Sync shows customer cards without sideways scroll", async ({ page, seededProject }, testInfo) => {
     const base = apiBase(testInfo);
@@ -159,7 +163,10 @@ test.describe("Wide tables on a phone", () => {
 
     await loginViaUi(page);
     await page.goto("/overview", { waitUntil: "networkidle" });
-    const link = page.getByRole("link", { name: project.name }).first();
+    // The project also appears in other Overview lists on a fresh database,
+    // so scope to the portfolio timeline section.
+    const timeline = page.locator("section", { has: page.getByRole("heading", { name: "Portfolio timeline" }) });
+    const link = timeline.getByRole("link", { name: project.name });
     await link.scrollIntoViewIfNeeded();
     await expect(link).toBeVisible();
     await expectNoHorizontalScroll(page);
