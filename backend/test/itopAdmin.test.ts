@@ -4,7 +4,7 @@
 // the in-memory fake iTop, org↔customer mapping, and the user↔iTop-person
 // match report. See docs/archive/plans/itop-integration.md Task 1.5.
 import "./env.js";
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import type { Server } from "node:http";
 import { createApp } from "../src/app.js";
@@ -37,6 +37,14 @@ function call(method: "get" | "patch" | "post" | "delete", path: string, token?:
   const req = request(app)[method](path);
   return token ? req.set("Authorization", `Bearer ${token}`) : req;
 }
+
+function afterEachRestore(spy: { mockRestore: () => void }): void {
+  restoreAfterTest.push(spy);
+}
+const restoreAfterTest: Array<{ mockRestore: () => void }> = [];
+afterEach(() => {
+  for (const spy of restoreAfterTest.splice(0)) spy.mockRestore();
+});
 
 function uniq(label: string): string {
   return `${label} ${Date.now()}-${Math.random()}`;
@@ -188,6 +196,17 @@ describe("access control", () => {
 
 describe("GET/PATCH /admin/itop/settings", () => {
   it("PATCH stores the token sealed; GET never echoes plaintext or ciphertext", async () => {
+    // The new token is probed before it is stored; answer that probe for the
+    // (unreachable) example host the way a working iTop would.
+    const realFetch = globalThis.fetch;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.startsWith("https://itop.example.com/")) {
+        return new Response(JSON.stringify({ code: 0, message: "", version: "1.3", operations: [] }), { status: 200 });
+      }
+      return realFetch(input, init);
+    });
+    afterEachRestore(fetchSpy);
     const patchRes = await call("patch", "/admin/itop/settings", adminToken).send({
       baseUrl: "https://itop.example.com/",
       appToken: "super-secret-token",
@@ -963,5 +982,54 @@ describe("iTop address policy on PATCH /settings and POST /test", () => {
     const res = await call("patch", "/admin/itop/settings", adminToken).send({ baseUrl: "https://alice:pw@itop.example.com" });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("itop_url_invalid");
+  });
+});
+
+describe("app token is verified before it is stored; /test never sends the stored token elsewhere", () => {
+  let server: Server | undefined;
+
+  afterEach(async () => {
+    if (server) {
+      await closeServer(server);
+      server = undefined;
+    }
+  });
+
+  it("PATCH with a token iTop refuses answers 400 and keeps the stored token", async () => {
+    const started = await startFake(seedFakeItop());
+    server = started.server;
+    await configureItop(started.baseUrl);
+    const before = await prisma.itopConfig.findUniqueOrThrow({ where: { id: "default" } });
+
+    const res = await call("patch", "/admin/itop/settings", adminToken).send({ appToken: "not-a-real-token" });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("itop_token_rejected");
+
+    const after = await prisma.itopConfig.findUniqueOrThrow({ where: { id: "default" } });
+    expect(after.appTokenEnc).toBe(before.appTokenEnc);
+  });
+
+  it("PATCH with a working token stores it", async () => {
+    const state = seedFakeItop();
+    state.tokens.set("another-valid-token", { valid: true, canWrite: false });
+    const started = await startFake(state);
+    server = started.server;
+    await configureItop(started.baseUrl);
+
+    const res = await call("patch", "/admin/itop/settings", adminToken).send({ appToken: "another-valid-token" });
+    expect(res.status).toBe(200);
+    const row = await prisma.itopConfig.findUniqueOrThrow({ where: { id: "default" } });
+    expect(open(row.appTokenEnc as string)).toBe("another-valid-token");
+  });
+
+  it("POST /test with a baseUrl but no appToken answers 400 and makes no outbound call", async () => {
+    await configureItop("https://itop.example.com");
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    afterEachRestore(fetchSpy);
+
+    const res = await call("post", "/admin/itop/test", adminToken).send({ baseUrl: "https://elsewhere.example.com" });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("app_token_required");
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

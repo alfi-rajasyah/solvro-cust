@@ -18,12 +18,35 @@ import {
 } from "./errors.js";
 
 export const OUTLINE_API_TIMEOUT_MS = 10_000;
+/** Largest Outline response body read into memory; anything bigger is treated as unavailable. */
+export const OUTLINE_MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
 const METHOD = /^[A-Za-z]+\.[A-Za-z]+$/;
 
 export interface RawOutlineResponse {
   status: number;
   json: Record<string, unknown> | null;
   retryAfter: number | null;
+}
+
+class BodyTooLarge extends Error {}
+
+/** Reads a response body as text, aborting once more than `maxBytes` have arrived. */
+async function readBodyWithBudget(res: Response, maxBytes: number): Promise<string> {
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new BodyTooLarge();
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 /**
@@ -56,8 +79,25 @@ export async function rawOutlineCall(
     throw outlineUnavailable();
   }
   let json: Record<string, unknown> | null = null;
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > OUTLINE_MAX_RESPONSE_BYTES) {
+    await res.body?.cancel().catch(() => undefined);
+    logger.warn({ method }, "outline response over the size budget");
+    throw outlineUnavailable();
+  }
+  let text: string;
   try {
-    const parsed: unknown = await res.json();
+    text = await readBodyWithBudget(res, OUTLINE_MAX_RESPONSE_BYTES);
+  } catch (err) {
+    if (err instanceof BodyTooLarge) {
+      logger.warn({ method }, "outline response over the size budget");
+    } else {
+      logger.warn({ method, reason: err instanceof Error ? err.name : "error" }, "outline response read failed");
+    }
+    throw outlineUnavailable();
+  }
+  try {
+    const parsed: unknown = JSON.parse(text);
     if (typeof parsed === "object" && parsed !== null) json = parsed as Record<string, unknown>;
   } catch {
     json = null;

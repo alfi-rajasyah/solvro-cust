@@ -16,6 +16,31 @@ function hasHttpScheme(value: string): boolean {
   }
 }
 
+function hasUserinfo(value: string): boolean {
+  try {
+    const { username, password } = new URL(value);
+    return username !== "" || password !== "";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A note for the admin when the Outline address is plain http: allowed for LAN
+ * deployments, but sign-in tokens and page text then cross the network unencrypted.
+ */
+export function outlineBaseUrlWarning(baseUrl: string | null): string | null {
+  if (baseUrl === null) return null;
+  try {
+    if (new URL(baseUrl).protocol === "http:") {
+      return "The Outline address uses http, so Outline traffic is not encrypted. Use https unless Outline is only reachable on a trusted network.";
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export const outlineUrlSchema = z.string().nullable().transform((raw, ctx) => {
   if (raw === null) return null;
   const value = raw.trim();
@@ -41,6 +66,14 @@ export const outlineUrlSchema = z.string().nullable().transform((raw, ctx) => {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Outline URL must be an http:// or https:// URL",
+    });
+    return z.NEVER;
+  }
+  // A login in the link would be stored and rendered as an <a href> to every viewer.
+  if (hasUserinfo(value)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Outline URL must not contain a user name or password",
     });
     return z.NEVER;
   }

@@ -560,7 +560,7 @@ describe("POST /itop/refresh", () => {
     expect(res.body.code).toBe("itop_not_configured");
   });
 
-  it("202s requested:true, then 202s requested:false on an immediate second call (cooldown)", async () => {
+  it("202s requested:true, then 429s with Retry-After on an immediate second call (cooldown)", async () => {
     await configureItop();
     const { token } = await createUserWithRole("TAM");
 
@@ -569,8 +569,9 @@ describe("POST /itop/refresh", () => {
     expect(first.body.requested).toBe(true);
 
     const second = await call("post", "/itop/refresh", token).send({});
-    expect(second.status).toBe(202);
-    expect(second.body).toEqual({ requested: false, reason: "cooldown" });
+    expect(second.status).toBe(429);
+    expect(second.body.code).toBe("rate_limited");
+    expect(Number(second.headers["retry-after"])).toBeGreaterThan(0);
   });
 
   it("404s when the given customerId is hidden from the caller, before touching the cooldown", async () => {

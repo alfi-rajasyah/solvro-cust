@@ -18,7 +18,7 @@ import { requestSync } from "../lib/itop/scheduler.js";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { env } from "../env.js";
-import { verifyOutlineSignature } from "../lib/outline/webhookSignature.js";
+import { rememberOutlineSignature, verifyOutlineSignature } from "../lib/outline/webhookSignature.js";
 import { clampTitle, deleteDocMentions, syncDocMentions, toRelativeDocPath } from "../lib/outline/mentions.js";
 
 export const webhookRouter = Router();
@@ -292,6 +292,8 @@ webhookRouter.post(
       throw new HttpError(429, "rate_limited", "Too many webhook calls");
     }
     outlineAcceptedAt.push(acceptedNow);
+    // Accepted: from now on the same signature is a replay (401).
+    rememberOutlineSignature(signature);
 
     // The delivery is authentic: record it for the Admin "last delivery" line.
     // Targeted update - must not move the admin audit stamp (updatedAt / updatedById).

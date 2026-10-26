@@ -59,7 +59,7 @@ Google sign-in is **not** configured by environment variables. See section 6.
 
 On every start the backend runs, in order:
 
-1. `prisma migrate deploy` — applies any schema migrations the new version ships. Upgrades need no manual database step.
+1. `prisma migrate deploy` — applies any schema migrations the new version ships. Upgrades need no manual database step, with one exception: the migration `20261026090000_user_identity_case` lowercases user emails and adds a case-insensitive username index, and it refuses to run when two existing users share an email or a username apart from case or spaces. The backend then restarts in a loop (section 10 has the recovery). Nothing is merged or deleted automatically.
 2. `prisma db seed` — makes sure the four built-in roles (`ADMIN`, `TAM`, `STAKEHOLDER`, `PENDING`) and the sign-in settings row exist. The seed creates no users.
 3. The API.
 
@@ -147,6 +147,15 @@ The backend runs `prisma migrate deploy` before it starts. A migration that fail
 docker compose run --rm backend npx prisma migrate resolve --rolled-back <migration-name>
 docker compose up -d backend
 ```
+
+**User identity migration (`20261026090000_user_identity_case`).** If the log names this migration and lists user ids that collide, no data was changed: the check runs before any change, so it is safe to run again. Rename or merge the listed users by hand (for example in Admin > Users, or with `psql`), then mark the migration rolled back and start again:
+
+```bash
+docker compose run --rm backend npx prisma migrate resolve --rolled-back 20261026090000_user_identity_case
+docker compose up -d backend
+```
+
+`setup.sh` runs `prisma migrate deploy` on every start, so running `bash setup.sh` again works as well.
 
 4. If it fails again, keep the stack stopped, keep the logs, and ask for support with the migration name and the log lines.
 

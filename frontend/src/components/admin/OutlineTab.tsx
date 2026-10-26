@@ -17,6 +17,7 @@ import { ApiError } from "@/lib/api";
 import { fmtDateTime } from "@/lib/formatDate";
 import { parseOutlineBaseUrl, safeOutlineHref } from "@/lib/outlineUrl";
 import { useOutlineAdminSettings, useUpdateOutlineAdminSettings } from "@/lib/queries";
+import { Alert, AlertDescription } from "@/components/reui/alert";
 
 export function OutlineTab() {
   const { data, isLoading, isError } = useOutlineAdminSettings();
@@ -42,6 +43,14 @@ export function OutlineTab() {
         sidebar for every user. To list pages, search and create docs, register an OAuth app in
         Outline and add its client below; each user then connects their own account in Settings.
       </p>
+
+      {data.baseUrlWarning && (
+        <Alert variant="warning" data-testid="outline-base-url-warning">
+          <AlertDescription>
+            <p>{data.baseUrlWarning}</p>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
