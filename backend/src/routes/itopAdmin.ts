@@ -14,7 +14,7 @@ import { requireAuth, requireAdmin } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { open, seal, SecretBoxError } from "../lib/secretBox.js";
-import { ItopError } from "../lib/itop/client.js";
+import { ITOP_TRANSPORT_ERROR_CODES, ItopError } from "../lib/itop/client.js";
 import { assertPublicItopUrl } from "../lib/itop/validateBaseUrl.js";
 import {
   getItopConfig,
@@ -63,8 +63,7 @@ async function callItop<T>(fn: () => Promise<T>): Promise<T> {
       );
     }
     if (err instanceof ItopError) {
-      const transportCodes = new Set<unknown>(["http", "timeout", "network", "parse"]);
-      const code = transportCodes.has(err.code) ? "itop_unreachable" : "itop_error";
+      const code = ITOP_TRANSPORT_ERROR_CODES.has(err.code) ? "itop_unreachable" : "itop_error";
       throw new HttpError(502, code, err.message);
     }
     throw err;
@@ -317,6 +316,26 @@ itopAdminRouter.patch(
     // https without userinfo, and — when ITOP_ALLOW_PRIVATE_HOSTS=false — a
     // public host only (lib/itop/validateBaseUrl.ts).
     if (typeof body.baseUrl === "string") await assertPublicItopUrl(body.baseUrl);
+    if (typeof body.appToken === "string") {
+      // Prove the new token works before sealing it: a typo would otherwise
+      // be stored and break every sync until someone notices. The probe goes
+      // to the address that will be stored (the new one, else the current).
+      const probeUrl = typeof body.baseUrl === "string" ? body.baseUrl : body.baseUrl === null ? undefined : (await getItopConfig()).baseUrl;
+      if (probeUrl) {
+        try {
+          await makeItopClient(probeUrl, body.appToken).listOperations();
+        } catch (err) {
+          const refused =
+            err instanceof ItopError && (typeof err.code === "number" || err.status === 401 || err.status === 403);
+          if (refused) {
+            throw new HttpError(400, "itop_token_rejected", "iTop refused this application token. Check it and try again.");
+          }
+          await callItop(async () => {
+            throw err;
+          });
+        }
+      }
+    }
     if (body.baseUrl !== undefined) data.baseUrl = body.baseUrl;
     if (body.appToken !== undefined) data.appTokenEnc = sealAppToken(body.appToken);
     if (body.refreshMinutes !== undefined) data.refreshMinutes = body.refreshMinutes;
@@ -453,6 +472,15 @@ itopAdminRouter.post(
   validate("body", testConnectionSchema),
   async (req, res) => {
     const body = req.body as z.infer<typeof testConnectionSchema>;
+    // The stored token must never be sent to an address the request names: a
+    // probe of another address needs the token to try against it in the body.
+    if (body.baseUrl !== undefined && body.appToken === undefined) {
+      throw new HttpError(
+        400,
+        "app_token_required",
+        "Provide the application token to test a different iTop address.",
+      );
+    }
     // Same host policy as PATCH /settings — a probe must not reach an
     // internal address just because it goes through /test.
     if (body.baseUrl !== undefined) await assertPublicItopUrl(body.baseUrl);

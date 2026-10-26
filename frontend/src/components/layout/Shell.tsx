@@ -1,5 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { Outlet, useLocation } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
+import { PageLoading } from "@/components/skeletons";
 import { CommandPalette } from "@/components/CommandPalette";
 import { InstallBanner } from "@/components/InstallBanner";
 import { Sidebar } from "./Sidebar";
@@ -8,6 +11,8 @@ import { TopBar } from "./TopBar";
 
 function ShellLayout() {
   const { open } = useSidebar();
+  const { pathname } = useLocation();
+  const queryClient = useQueryClient();
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Mirror of `paletteOpen` for the listener below, which stays mounted once
   // ([] deps) instead of re-attaching on every open/close — a passive
@@ -67,7 +72,20 @@ function ShellLayout() {
       <main
         className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-background p-4 transition-[margin] duration-200 ease-out md:p-6 ${shift}`}
       >
-        <Outlet />
+        {/* A render error in a page keeps the sidebar and top bar usable.
+            Try again and a navigation both reset the query cache first, so
+            the page renders from fresh data: the top bar shares the project
+            and customer queries with their pages, so dropping only unused
+            queries would keep the value that broke the page. */}
+        <AppErrorBoundary
+          variant="page"
+          resetKey={pathname}
+          onReset={() => void queryClient.resetQueries()}
+        >
+          <Suspense fallback={<PageLoading />}>
+            <Outlet />
+          </Suspense>
+        </AppErrorBoundary>
       </main>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>

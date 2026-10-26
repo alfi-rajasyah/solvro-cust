@@ -88,6 +88,17 @@ const schema = z.object({
     .transform((value) => value.trim().toLowerCase())
     .pipe(z.enum(["true", "false", "1", "0", "yes", "no"]))
     .transform((value) => value === "true" || value === "1" || value === "yes"),
+  // A personal iTop token is saved only when Solvro can confirm it is the
+  // user's own (routes/itopUser.ts): the token must read the iTop User of the
+  // Person with the user's email and that user's own PersonalToken. Some iTop
+  // profiles may read neither class; set "true" to accept such a token on the
+  // email match alone (the behaviour before 2026-10-25). Default "false".
+  ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS: z
+    .string()
+    .default("false")
+    .transform((value) => value.trim().toLowerCase())
+    .pipe(z.enum(["true", "false", "1", "0", "yes", "no"]))
+    .transform((value) => value === "true" || value === "1" || value === "yes"),
 });
 
 const parsed = schema.safeParse(process.env);

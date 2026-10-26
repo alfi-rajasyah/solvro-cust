@@ -4,6 +4,7 @@ import { Prisma, Priority, TaskStatus } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { requireAuth, requirePermission, type JwtPayload } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
+import { dateInput, dateString } from "../lib/dateInput.js";
 import { validate } from "../http/validate.js";
 import { ensureTaskVisible, projectVisibilityFilter } from "../lib/visibility.js";
 import {
@@ -21,6 +22,7 @@ import {
   siblingKeyEquals,
   type SiblingKey,
 } from "../lib/taskOrdering.js";
+import { lockProjectOrder } from "../lib/orderLock.js";
 import { assertEpicNotOnSubtask, assertValidEpic } from "../lib/epics.js";
 import { duplicateTaskTree } from "../lib/duplicate.js";
 import { ensureAssigneeIsMember } from "../lib/projectMembers.js";
@@ -37,8 +39,10 @@ const expectedTaskSchema = z.object({
   description: z.string().max(2000).nullable().optional(),
   status: z.nativeEnum(TaskStatus).optional(),
   priority: z.nativeEnum(Priority).optional(),
-  startDate: z.coerce.date().nullable().optional(),
-  dueDate: z.coerce.date().nullable().optional(),
+  // Compared, never written, and echoed back from the stored row — so no year
+  // window (a row may predate it), only the shape check.
+  startDate: dateString.nullable().optional(),
+  dueDate: dateString.nullable().optional(),
   assignedToId: z.number().int().positive().nullable().optional(),
   sectionId: z.number().int().positive().nullable().optional(),
   epicId: z.number().int().positive().nullable().optional(),
@@ -64,8 +68,8 @@ const updateTaskSchema = z
     description: z.string().max(2000).nullable().optional(),
     status: z.nativeEnum(TaskStatus).optional(),
     priority: z.nativeEnum(Priority).optional(),
-    startDate: z.coerce.date().nullable().optional(),
-    dueDate: z.coerce.date().nullable().optional(),
+    startDate: dateInput.nullable().optional(),
+    dueDate: dateInput.nullable().optional(),
     isMilestone: z.boolean().optional(),
     isCriticalPath: z.boolean().optional(),
     // baselineStartDate / baselineDueDate are intentionally NOT accepted here —
@@ -128,6 +132,9 @@ const tasksListQuerySchema = z
     // `position` (default) is board order; `due` is soonest first with
     // undated tasks last.
     sort: z.enum(["position", "due"]).optional(),
+    // Rows to skip, for paging past the 200-row page. The order is total
+    // (ties broken by id), so consecutive pages never overlap or skip.
+    offset: z.coerce.number().int().min(0).max(1_000_000).optional(),
     // Caller's local calendar day ("yyyy-MM-dd"), used only when overdue=true
     // — see lib/dateBoundary.ts for the full contract. Ignored otherwise.
     today: z
@@ -228,6 +235,7 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
     dueFrom,
     dueTo,
     sort,
+    offset,
     today,
   } = req.query as unknown as z.infer<typeof tasksListQuerySchema>;
 
@@ -290,9 +298,10 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
         },
         _count: { select: { subtasks: true, comments: true } },
       },
+      skip: offset ?? 0,
       take: 200,
     }),
-    // Full match count (ignores the take cap) so the UI can say "200 of N".
+    // Full match count (ignores take and offset) so the UI can say "200 of N".
     prisma.task.count({ where }),
   ]);
   res.setHeader("X-Total-Count", String(total));
@@ -352,6 +361,13 @@ tasksRouter.patch(
     };
 
     const updated = await prisma.$transaction(async (tx) => {
+      // A reorder or re-parent re-packs the project's task order: take that
+      // lock before the row lock below (see lib/orderLock.ts for why the order
+      // matters). The project id is read without a lock; it never changes.
+      if (body.position !== undefined || body.parentTaskId !== undefined) {
+        const [row] = await tx.$queryRaw<{ project_id: number }[]>`SELECT project_id FROM tasks WHERE id = ${id}`;
+        if (row) await lockProjectOrder(tx, "tasks", row.project_id);
+      }
       // Lock the row before reading it, so two concurrent saves serialise and
       // each one sees (and diffs against) the other's result: the optimistic
       // check below, the assignee-change detection and the activity event all
@@ -400,6 +416,23 @@ tasksRouter.patch(
         return after;
       };
       const { cur, nextStatus, nextParentTaskId, oldKey, newKey, touchesOrdering } = state;
+
+      // A milestone needs a due date. The body schema only catches
+      // `isMilestone: true` with `dueDate: null` in the same request; the
+      // other two routes in (flagging an undated task, or clearing the date
+      // of a stored milestone) need the locked row. Checked only when this
+      // patch touches one of the two fields, so an unrelated edit of a
+      // legacy undated milestone still saves.
+      if (
+        (body.isMilestone === true || body.dueDate === null) &&
+        (body.isMilestone ?? cur.isMilestone) &&
+        (body.dueDate !== undefined ? body.dueDate : cur.dueDate) === null
+      ) {
+        throw new HttpError(400, "validation_error", "A milestone requires a due date", {
+          formErrors: [],
+          fieldErrors: { dueDate: ["A milestone requires a due date"] },
+        });
+      }
 
       if (nextParentTaskId !== null) {
         await assertValidParent(tx, cur.projectId, id, nextParentTaskId);
@@ -584,6 +617,10 @@ tasksRouter.post(
         where: { id },
         select: { projectId: true, parentTaskId: true },
       });
+      // Wait for a concurrent reorder now, while the 5 s transaction budget
+      // is still whole, not after the tree copy (insertManyAfter takes the
+      // same lock again, harmlessly).
+      await lockProjectOrder(tx, "tasks", source.projectId);
 
       const idMap = await duplicateTaskTree(tx, [id]);
       const newId = idMap.get(id)!;

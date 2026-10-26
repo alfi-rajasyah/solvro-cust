@@ -40,6 +40,7 @@ export function MobileMoveSheet({
                 <button
                   type="button"
                   onClick={() => onMove(col.value)}
+                  aria-current={checked ? "true" : undefined}
                   className={[
                     "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm",
                     checked ? "text-primary" : "text-on-surface",
@@ -51,7 +52,7 @@ export function MobileMoveSheet({
                       checked ? "border-primary bg-primary text-white" : "border-outline-variant",
                     ].join(" ")}
                   >
-                    {checked && <span className="material-symbols-outlined text-meta leading-none">check</span>}
+                    {checked && <span aria-hidden="true" className="material-symbols-outlined text-meta leading-none">check</span>}
                   </span>
                   {col.label}
                 </button>

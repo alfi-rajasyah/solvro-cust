@@ -4,6 +4,7 @@ import {
   sortPortfolioRows,
 } from "@/components/portfolio/PortfolioCalendar";
 import { Alert, AlertDescription } from "@/components/reui/alert";
+import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import { ProjectStatusChip } from "@/components/StatusChip";
 import { dateToDay, dayFromIso } from "@/lib/dateField";
 import { hasPermission, useAuth } from "@/lib/auth";
@@ -40,7 +41,7 @@ export function Overview() {
 }
 
 function OverviewLoaded() {
-  const { data, isLoading, isError, error } = useOverview();
+  const { data, isLoading, isError, error, refetch } = useOverview();
 
   return (
     <div className="space-y-6">
@@ -52,9 +53,7 @@ function OverviewLoaded() {
       {isLoading && <SkeletonGrid />}
 
       {isError && (
-        <Alert variant="destructive">
-          <AlertDescription>Could not load overview: {(error as Error).message}</AlertDescription>
-        </Alert>
+        <QueryErrorAlert title="Could not load overview" error={error} onRetry={refetch} />
       )}
 
       {data && <OverviewBody data={data} />}

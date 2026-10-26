@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ProjectStatusChip } from "@/components/StatusChip";
 import { formatElapsed, useRunningItopTimer } from "@/components/itop/useTicketTimer";
@@ -16,6 +16,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
   // Global "a timer is running somewhere" indicator (Task 7.1,
   // docs/archive/plans/itop-integration.md) — read-only, no gate needed
   // beyond "is one stored at all": a running timer implies whoever started
@@ -58,10 +59,10 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
         aria-label="Open navigation"
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface md:hidden"
       >
-        <span className="material-symbols-outlined">menu</span>
+        <span aria-hidden="true" className="material-symbols-outlined">menu</span>
       </button>
 
-      <nav aria-label="Breadcrumb" className="min-w-0">
+      <nav aria-label="Breadcrumb" className="min-w-0 flex-1 md:flex-none">
         <ol className="flex min-w-0 items-center gap-2">
           {crumbs.map((crumb, i) => {
             const last = i === crumbs.length - 1;
@@ -105,7 +106,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
         </span>
       )}
 
-      <div className="ml-auto flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-1 md:ml-auto md:gap-3">
         {runningTimer && (
           <Link
             to={`/customers/${runningTimer.timer.customerId}?tab=tickets&ticket=${runningTimer.timer.ticketId}`}
@@ -113,7 +114,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
             title={`Timer running on ${runningTimer.timer.ref}`}
             className="hidden items-center gap-1 rounded-sm border border-outline-variant px-2 py-1 font-mono text-meta text-on-surface-variant hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:flex"
           >
-            <span className="material-symbols-outlined text-[14px]">timer</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-[14px]">timer</span>
             {formatElapsed(runningTimer.elapsedSeconds)}
           </Link>
         )}
@@ -124,7 +125,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
           aria-label="Open search"
           className="hidden min-w-[260px] cursor-text items-center gap-2 rounded-sm bg-surface-container px-3 py-1.5 md:flex"
         >
-          <span className="material-symbols-outlined text-base text-on-surface-variant">
+          <span aria-hidden="true" className="material-symbols-outlined text-base text-on-surface-variant">
             search
           </span>
           <span className="flex-1 text-left text-[13px] text-on-surface-variant">
@@ -141,16 +142,16 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
           aria-label="Open search"
           className="flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface md:hidden"
         >
-          <span className="material-symbols-outlined text-[20px]">search</span>
+          <span aria-hidden="true" className="material-symbols-outlined text-[20px]">search</span>
         </button>
 
         <Link
           to="/help"
           aria-label="Help"
           title="Help"
-          className="flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="hidden h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:flex"
         >
-          <span className="material-symbols-outlined text-[20px]">help</span>
+          <span aria-hidden="true" className="material-symbols-outlined text-[20px]">help</span>
         </Link>
 
         <NotificationBell />
@@ -160,18 +161,31 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
           onClick={toggle}
           aria-label={resolved === "dark" ? "Switch to light theme" : "Switch to dark theme"}
           title={resolved === "dark" ? "Light mode" : "Dark mode"}
-          className="flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
+          className="hidden h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface md:flex"
         >
-          <span className="material-symbols-outlined text-[20px]">
+          <span aria-hidden="true" className="material-symbols-outlined text-[20px]">
             {resolved === "dark" ? "light_mode" : "dark_mode"}
           </span>
         </button>
 
-        <div className="relative">
+        <div
+          className="relative"
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && menuOpen) {
+              e.stopPropagation();
+              setMenuOpen(false);
+              menuTriggerRef.current?.focus();
+            }
+          }}
+        >
           <button
+            ref={menuTriggerRef}
             type="button"
+            aria-label="Account menu"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
             onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-2 rounded-sm border-l border-outline-variant pl-3 text-left hover:opacity-90"
+            className="flex items-center gap-2 rounded-sm text-left hover:opacity-90 md:border-l md:border-outline-variant md:pl-3"
           >
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-[12px] font-bold text-white">
               {initials}
@@ -184,7 +198,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
                 {user?.role ?? ""}
               </span>
             </div>
-            <span className="material-symbols-outlined text-base text-on-surface-variant">
+            <span aria-hidden="true" className="material-symbols-outlined text-base text-on-surface-variant">
               expand_more
             </span>
           </button>
@@ -196,33 +210,57 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
                 onClick={() => setMenuOpen(false)}
                 className="fixed inset-0 z-40 cursor-default"
               />
-              <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-sm border border-outline-variant bg-surface-container-lowest py-1 shadow-overlay">
+              <div role="menu" aria-label="Account" className="absolute right-0 top-full z-50 mt-1 w-48 rounded-sm border border-outline-variant bg-surface-container-lowest py-1 shadow-overlay">
                 <div className="border-b border-outline-variant px-3 py-2 text-[12px] text-on-surface-variant">
                   <div className="font-medium text-on-surface">{user?.email}</div>
                   <div className="text-label-caps uppercase">
                     {user?.role}
                   </div>
                 </div>
+                {/* Help and the theme toggle leave the bar below md so the page
+                    title keeps its width; they live here instead. */}
+                <Link
+                  to="/help"
+                  role="menuitem"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-on-surface hover:bg-surface-container md:hidden"
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-base">help</span>
+                  Help
+                </Link>
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
-                    navigate("/settings");
+                    toggle();
                   }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-on-surface hover:bg-surface-container md:hidden"
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-base">
+                    {resolved === "dark" ? "light_mode" : "dark_mode"}
+                  </span>
+                  {resolved === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+                </button>
+                <Link
+                  to="/settings"
+                  role="menuitem"
+                  onClick={() => setMenuOpen(false)}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-on-surface hover:bg-surface-container"
                 >
-                  <span className="material-symbols-outlined text-base">settings</span>
+                  <span aria-hidden="true" className="material-symbols-outlined text-base">settings</span>
                   Settings
-                </button>
+                </Link>
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
                     handleLogout();
                   }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-on-surface hover:bg-surface-container"
                 >
-                  <span className="material-symbols-outlined text-base">logout</span>
+                  <span aria-hidden="true" className="material-symbols-outlined text-base">logout</span>
                   Sign out
                 </button>
               </div>

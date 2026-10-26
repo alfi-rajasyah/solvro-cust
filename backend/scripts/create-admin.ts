@@ -4,7 +4,9 @@ import bcrypt from "bcrypt";
 const prisma = new PrismaClient();
 
 async function main() {
-  const email = process.env.ADMIN_EMAIL;
+  // Stored lowercased, like every other email (routes/admin.ts, routes/auth.ts),
+  // so password login and Google sign-in find this account.
+  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.ADMIN_PASSWORD;
 
   if (!email || !password) {
@@ -25,6 +27,16 @@ async function main() {
   if (!adminRole) {
     throw new Error(
       "ADMIN role missing — `prisma db seed` must run before this script",
+    );
+  }
+  // Admin > Roles can change the ADMIN role, and the seed no longer resets it,
+  // so it may not grant admin access any more. Moving a user onto it then
+  // would quietly take their admin access away.
+  const permissions = Array.isArray(adminRole.permissions) ? adminRole.permissions : [];
+  if (!permissions.includes("*")) {
+    throw new Error(
+      'The ADMIN role no longer grants "*" (admin access), so this script would not create an admin. ' +
+        'Restore "*" on ADMIN in Admin > Roles, or give the user a role that has it.',
     );
   }
 

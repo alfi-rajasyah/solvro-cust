@@ -117,9 +117,9 @@ The PWA layer (vite-plugin-pwa / Workbox) precaches the app shell and serves `/a
 
 ### Authorization model
 
-- A sign-in returns a JWT whose payload is `{ sub, ver }` — the user id and a session version. The server loads the account, role and permission list from the database on every request, so a role change applies at once; a password change, an admin reset or a deactivation bumps the version and ends the account's sessions. `*` is the wildcard that satisfies every check and is what makes a role an admin.
-- **Permissions** — `project:view-all`, `project:read`, `project:write`, `task:read`, `task:write`, `report:executive`.
-- **Built-in roles** — `ADMIN` = `*`. `TAM` = project read/write + task read/write. `STAKEHOLDER` = project read only (the projects it is attached to). `PENDING` = nothing.
+- A sign-in returns a JWT whose payload is `{ sub, ver, auth_time }` — the user id, a session version and the sign-in time. "Stay signed in" (`POST /auth/refresh`) can extend a session up to 24 hours after that sign-in. The server loads the account, role and permission list from the database on every request, so a role change applies at once; a password change, an admin reset or a deactivation bumps the version and ends the account's sessions. `*` is the wildcard that satisfies every check and is what makes a role an admin.
+- **Permissions** — `project:view-all`, `project:read`, `project:write`, `task:read`, `task:write`, `task:comment`, `report:executive`.
+- **Built-in roles** — `ADMIN` = `*`. `TAM` = project read/write + task read/write/comment. `STAKEHOLDER` = project read + task comment (the projects it is attached to; no write access). `PENDING` = nothing.
 - **Project visibility** (`lib/visibility.ts`) — `project:view-all` sees everything. Everyone else sees a project where they are the TAM, or the owning TAM of its customer. A **customer** is visible when the caller owns it, when nobody owns it, or when it has a visible project.
 - **Hidden means 404.** A resource outside the caller's visibility answers `404 not_found`, not `403`, so its existence is not revealed. A `customerId` sent as a body field answers `400 customer_not_found` instead.
 - **Executive is org-wide by design.** `report:executive` is itself the grant, so the visibility filter is not applied to that report.
@@ -212,7 +212,7 @@ cd backend
 cp .env.example .env          # DATABASE_URL; add JWT_SECRET (32+ characters)
 npm ci
 npx prisma migrate dev        # apply migrations and generate the client
-npm run db:seed               # five built-in roles, no users
+npm run db:seed               # four built-in roles, no users
 npm run dev                   # API on http://localhost:3000
 
 # Frontend (second terminal)

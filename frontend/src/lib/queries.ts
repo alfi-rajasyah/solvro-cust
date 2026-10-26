@@ -1,5 +1,6 @@
 import { useCallback, useSyncExternalStore } from "react";
 import {
+  keepPreviousData,
   useInfiniteQuery,
   type InfiniteData,
   useMutation,
@@ -936,7 +937,7 @@ export function useProjects(filter: ProjectsFilter = {}) {
   const params = new URLSearchParams();
   if (filter.customerId) params.set("customerId", String(filter.customerId));
   // `health.overdueCount` is bucketed against the caller's local day, so
-  // `today` rides along in the URL and the key (same reasoning as useTasks):
+  // `today` rides along in the URL and the key (same reasoning as useInfiniteTasks):
   // the key rolls over with the day instead of serving a pre-midnight entry.
   const today = dateToDay(new Date())!;
   params.set("today", today);
@@ -1376,7 +1377,7 @@ function invalidateProjectHealth(qc: QueryClient, projectId: number) {
   ]);
 }
 
-function tasksQueryOptions(filter: TasksFilter) {
+function tasksQueryString(filter: TasksFilter, offset = 0): string {
   const params = new URLSearchParams();
   if (filter.status) params.set("status", filter.status);
   if (filter.priority) params.set("priority", filter.priority);
@@ -1396,43 +1397,38 @@ function tasksQueryOptions(filter: TasksFilter) {
   if (filter.dueFrom) params.set("dueFrom", filter.dueFrom);
   if (filter.dueTo) params.set("dueTo", filter.dueTo);
   if (filter.sort) params.set("sort", filter.sort);
-  const qs = params.toString();
-  return {
-    // `qs` (not just `filter`) is part of the key: `today` lives only in
-    // `qs`, recomputed fresh each render this hook runs, so the key
-    // naturally changes the next time the component re-renders after local
-    // midnight — without it in the key, that re-render would still hit the
-    // pre-midnight cache entry for an unchanged `{overdue:true}` filter
-    // instead of refetching against the new day.
-    queryKey: [...queryKeys.tasks(filter), qs],
-    queryFn: async ({ signal }: { signal: AbortSignal }): Promise<TasksResult> => {
+  if (offset > 0) params.set("offset", String(offset));
+  return params.toString();
+}
+
+/** Server page size of GET /tasks (backend `take`). */
+export const TASKS_PAGE_SIZE = 200;
+
+// The task list a page at a time ("Load more"): pages of TASKS_PAGE_SIZE rows
+// chained by `?offset`. Own key suffix so it never shares a cache entry with
+// the single-page shape above, yet stays under the ["tasks"] prefix that task
+// writes invalidate.
+export function useInfiniteTasks(filter: TasksFilter = {}) {
+  const qs = tasksQueryString(filter);
+  return useInfiniteQuery({
+    queryKey: [...queryKeys.tasks(filter), qs, "pages"],
+    initialPageParam: 0,
+    queryFn: async ({ signal, pageParam }: { signal: AbortSignal; pageParam: number }) => {
+      const q = tasksQueryString(filter, pageParam);
       const { data, headers } = await apiRequestWithHeaders<TaskWithProject[]>(
-        `/tasks${qs ? `?${qs}` : ""}`,
+        `/tasks${q ? `?${q}` : ""}`,
         { signal },
       );
-      // Header missing (older server, stripped by a proxy): fall back to the
-      // length of what we received rather than NaN.
       const header = Number(headers.get("X-Total-Count"));
       const total = headers.has("X-Total-Count") && Number.isFinite(header) ? header : data.length;
-      return { tasks: data, total };
+      return { tasks: data, total, offset: pageParam };
     },
-    // See useOverview()'s comment: avoids a skeleton flash on the render
-    // where the day-boundary key change lands.
-    placeholderData: (prev: TasksResult | undefined) => prev,
-  };
-}
-
-const selectTasks = (r: TasksResult) => r.tasks;
-
-// The task list alone (`data` is the array). Shares its cache entry with
-// useTasksWithTotal — same key, same stored `{ tasks, total }` shape.
-export function useTasks(filter: TasksFilter = {}) {
-  return useQuery({ ...tasksQueryOptions(filter), select: selectTasks });
-}
-
-// The task list plus the uncapped match count, for "showing 200 of N".
-export function useTasksWithTotal(filter: TasksFilter = {}) {
-  return useQuery(tasksQueryOptions(filter));
+    getNextPageParam: (last: TasksResult & { offset: number }) => {
+      const next = last.offset + last.tasks.length;
+      return last.tasks.length > 0 && next < last.total ? next : undefined;
+    },
+    placeholderData: keepPreviousData,
+  });
 }
 
 export interface CreateProjectInput {
@@ -3258,7 +3254,7 @@ export function useRequestItopRefresh() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { customerId?: number } = {}) =>
-      apiRequest<{ requested: boolean; reason?: string; lastSyncAt: string | null }>(
+      apiRequest<{ requested: boolean; lastSyncAt: string | null }>(
         "/itop/refresh",
         { method: "POST", body: input },
       ),
@@ -4190,6 +4186,8 @@ export interface OutlineAdminSettings {
   /** False when the server has no APP_URL (production has no default). */
   appUrlConfigured: boolean;
   appUrlWarning: string | null;
+  /** Set when the Outline address is plain http (allowed on a LAN, but unencrypted). */
+  baseUrlWarning: string | null;
   /** Browser-facing URLs to register in Outline; null while APP_URL is unset. */
   redirectUri: string | null;
   webhookUrl: string | null;

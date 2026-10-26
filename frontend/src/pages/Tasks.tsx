@@ -10,7 +10,7 @@ import {
 import { AssigneeAvatar } from "@/components/AssigneeAvatar";
 import { LabelChip } from "@/components/LabelChip";
 import { PriorityBadge } from "@/components/PriorityBadge";
-import { Alert, AlertDescription } from "@/components/reui/alert";
+import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import { Tabs } from "@/components/Tabs";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { TaskStatusChip } from "@/components/StatusChip";
@@ -28,6 +28,7 @@ import { DataGrid, DataGridContainer } from "@/components/reui/data-grid/data-gr
 import { DataGridColumnHeader } from "@/components/reui/data-grid/data-grid-column-header";
 import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll-area";
 import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   type Priority,
@@ -36,14 +37,14 @@ import {
   type TaskWithProject,
   type TasksFilter,
   useCustomers,
-  useTasksWithTotal,
+  useInfiniteTasks,
   useUsers,
 } from "@/lib/queries";
 
 const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 const PRIORITY_ORDER: Record<Priority, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
-// Stable empty-array reference for `data:` while `useTasks` is loading —
+// Stable empty-array reference for `data:` while `useInfiniteTasks` is loading —
 // avoids a fresh `[]` literal (and therefore a new TanStack row model) on
 // every render that a `tasks ?? []` inline fallback would produce.
 const EMPTY_TASKS: TaskWithProject[] = [];
@@ -52,7 +53,7 @@ const EMPTY_TASKS: TaskWithProject[] = [];
 // the derivation in Tasks() reads just `.values[0]` per field, so a
 // select-type field's other vendored-default operators ("is not", "is
 // empty", "is not empty") would render a chip whose label lies about what's
-// actually being sent to useTasks (e.g. a "Status is not DONE" chip would
+// actually being sent to useInfiniteTasks (e.g. a "Status is not DONE" chip would
 // still filter as "Status is DONE"). Same fix as Projects.tsx's customer field.
 const ONLY_IS_OPERATOR = [{ value: "is", label: "is" }];
 
@@ -94,7 +95,7 @@ function viewFilter(view: ViewKey, todayDay: string, userId: number | undefined)
 
 export function Tasks() {
   // Filters chip state is UI-only (Filter[]); it is derived down into the
-  // TasksFilter shape useTasks/queries.ts already expects — see `filter` below.
+  // TasksFilter shape useInfiniteTasks/queries.ts already expects — see `filter` below.
   const [activeFilters, setActiveFilters] = useState<Filter<string>[]>([]);
   const [topLevel, setTopLevel] = useState(true);
   // TanStack owns header sorting (DataGridColumnHeader). It starts empty: the
@@ -145,7 +146,7 @@ export function Tasks() {
     [users, customers],
   );
 
-  // Derive the TasksFilter useTasks/queries.ts expects from the active Filter
+  // Derive the TasksFilter useInfiniteTasks/queries.ts expects from the active Filter
   // chips: first value per field, absent field -> undefined (never ""/null —
   // a different shape would splinter the react-query cache key).
   // Hoisted once per render of the list rather than once per cell — the
@@ -175,9 +176,10 @@ export function Tasks() {
     };
   }, [activeFilters, topLevel, view, todayDay, userId]);
 
-  const { data, isLoading, isError, error } = useTasksWithTotal(filter);
-  const tasks = data?.tasks;
-  const total = data?.total ?? 0;
+  const { data, isLoading, isError, error, refetch, hasNextPage, isFetchingNextPage, fetchNextPage } =
+    useInfiniteTasks(filter);
+  const tasks = useMemo(() => data?.pages.flatMap((p) => p.tasks), [data]);
+  const total = data?.pages[data.pages.length - 1]?.total ?? 0;
 
   const setView = (next: ViewKey) => {
     setSearchParams(
@@ -365,12 +367,10 @@ export function Tasks() {
       </div>
 
       {isError && (
-        <Alert variant="destructive">
-          <AlertDescription>Could not load tasks: {(error as Error).message}</AlertDescription>
-        </Alert>
+        <QueryErrorAlert title="Could not load tasks" error={error} onRetry={refetch} />
       )}
 
-      {!isError && (
+      {(!isError || tasks) && (
         <DataGrid
           table={table}
           recordCount={tasks?.length ?? 0}
@@ -422,9 +422,22 @@ export function Tasks() {
       )}
 
       {!isError && !isLoading && total > (tasks?.length ?? 0) && (
-        <p className="mt-2 text-xs text-on-surface-variant">
-          Showing {tasks?.length ?? 0} of {total}
-        </p>
+        <div className="mt-2 flex items-center gap-3">
+          <p className="text-xs text-on-surface-variant">
+            Showing {tasks?.length ?? 0} of {total}
+          </p>
+          {hasNextPage && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isFetchingNextPage}
+              onClick={() => void fetchNextPage()}
+            >
+              {isFetchingNextPage ? "Loading…" : "Load more"}
+            </Button>
+          )}
+        </div>
       )}
 
       {editTask && (

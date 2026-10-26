@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import {
   getCoreRowModel,
   getSortedRowModel,
@@ -99,7 +100,7 @@ export function Admin() {
 
 function UsersTab() {
   const { user: currentUser } = useAuth();
-  const { data: users, isLoading, isError } = useAdminUsers();
+  const { data: users, isLoading, isError, error: loadError, refetch } = useAdminUsers();
   // Loading-safe fallback (fix round S2): the grid's own `loadingMode`
   // skeleton is now the loading UI (see `isLoading` on <DataGrid> below), so
   // this component no longer blocks its whole render on `isLoading` — every
@@ -230,6 +231,7 @@ function UsersTab() {
             )}
           >
             <select
+              aria-label={`Role of ${u.username}`}
               value={u.role}
               disabled={isSelf}
               onChange={(e) => handleRoleChange(u, e.target.value as Role)}
@@ -381,7 +383,7 @@ function UsersTab() {
   // there's nothing else on this tab worth rendering (the KPI strip and
   // create-user form are meaningless without a user list to reconcile
   // against), so this keeps the original full-block behavior for that case.
-  if (isError) return <p className="text-error">Failed to load users.</p>;
+  if (isError) return <QueryErrorAlert title="Failed to load users" error={loadError} onRetry={refetch} />;
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -631,14 +633,14 @@ function ProviderChip({ provider }: { provider: "google" | "password" }) {
   if (provider === "google") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 font-display text-meta font-semibold text-primary dark:bg-primary/20">
-        <span className="material-symbols-outlined text-[12px]">mail</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-[12px]">mail</span>
         Google
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-surface-container-high px-2 py-0.5 font-display text-meta font-semibold text-on-surface-variant">
-      <span className="material-symbols-outlined text-[12px]">key</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-[12px]">key</span>
       Password
     </span>
   );
@@ -672,7 +674,7 @@ function AdminKpi({
     <div className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
       <div className="flex items-center justify-between">
         <span className="text-label-caps uppercase text-on-surface-variant">{label}</span>
-        <span className={`material-symbols-outlined text-base ${iconColor}`}>{icon}</span>
+        <span aria-hidden="true" className={`material-symbols-outlined text-base ${iconColor}`}>{icon}</span>
       </div>
       <div className="mt-2 flex items-baseline gap-2">
         <span className="text-3xl font-bold tabular-nums text-on-surface">{value}</span>
@@ -742,7 +744,7 @@ function PermissionPicker({
 }
 
 function RolesTab() {
-  const { data: roles, isLoading, isError } = useAdminRoles();
+  const { data: roles, isLoading, isError, error: loadError, refetch } = useAdminRoles();
   // Loading-safe fallback (T1 DataGrid migration — same rationale as
   // UsersTab's own `rows`, "fix round S2"): `useReactTable` below is a hook
   // and must run on every render, so it can no longer sit after a blocking
@@ -840,7 +842,7 @@ function RolesTab() {
         return isEditing ? (
           <PermissionPicker value={editPerms} onChange={setEditPerms} />
         ) : r.permissions.length === 0 ? (
-          <span className="text-on-surface-variant/60">—</span>
+          <span className="text-on-surface-variant/80">—</span>
         ) : (
           <div className="flex flex-wrap gap-1">
             {r.permissions.map((p) => (
@@ -907,7 +909,13 @@ function RolesTab() {
                 <button
                   type="button"
                   onClick={() => startEdit(r)}
-                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-semibold"
+                  disabled={r.builtIn}
+                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 font-semibold"
+                  title={
+                    r.builtIn
+                      ? "Reserved role: new Google sign-ins get no permissions until an admin promotes them"
+                      : undefined
+                  }
                 >
                   Edit
                 </button>
@@ -954,7 +962,7 @@ function RolesTab() {
 
   // Same isError-only short-circuit as UsersTab: a fetch failure means
   // there's nothing else on this tab worth rendering.
-  if (isError) return <p className="text-error">Failed to load roles.</p>;
+  if (isError) return <QueryErrorAlert title="Failed to load roles" error={loadError} onRetry={refetch} />;
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -1140,11 +1148,11 @@ function maskClientId(id: string): string {
 }
 
 function SignInTab() {
-  const { data, isLoading, isError } = useAuthSettings();
+  const { data, isLoading, isError, error, refetch } = useAuthSettings();
   const [modalOpen, setModalOpen] = useState(false);
 
   if (isLoading) return <p className="text-on-surface-variant">Loading sign-in policy…</p>;
-  if (isError || !data) return <p className="text-error">Failed to load sign-in policy.</p>;
+  if (isError || !data) return <QueryErrorAlert title="Failed to load sign-in policy" error={error} onRetry={refetch} />;
 
   const connected =
     data.googleClientId !== null && data.googleAllowedDomains.length > 0;
@@ -1172,7 +1180,7 @@ function SignInTab() {
                   : "bg-surface-container-high text-on-surface-variant",
               ].join(" ")}
             >
-              <span className="material-symbols-outlined text-[20px]">
+              <span aria-hidden="true" className="material-symbols-outlined text-[20px]">
                 {connected ? "verified_user" : "lock_open"}
               </span>
             </div>
@@ -1282,7 +1290,7 @@ function ClientIdField({ id }: { id: string }) {
           title="Copy to clipboard"
           className="text-on-surface-variant hover:text-on-surface"
         >
-          <span className="material-symbols-outlined text-[14px]">
+          <span aria-hidden="true" className="material-symbols-outlined text-[14px]">
             content_copy
           </span>
         </button>
@@ -1512,7 +1520,7 @@ function SignInModal({
                   aria-label={`Remove ${d}`}
                   className="rounded-full p-0.5 text-primary/70 hover:bg-primary/20 hover:text-primary"
                 >
-                  <span className="material-symbols-outlined text-[14px]">
+                  <span aria-hidden="true" className="material-symbols-outlined text-[14px]">
                     close
                   </span>
                 </button>
@@ -1664,6 +1672,7 @@ function ProjectsTab() {
         const p = row.original;
         return (
           <select
+            aria-label={`TAM of ${p.name}`}
             value={p.tamId}
             onChange={(e) => handleReassign(p, Number(e.target.value))}
             className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1 text-[13px] text-on-surface focus:border-primary focus:outline-hidden"

@@ -23,7 +23,7 @@
 // list) the same way every other customer-nested route does. Mounted at
 // /itop in src/app.ts. See docs/archive/plans/itop-integration.md Tasks 1.7,
 // 2.1, 5.3, 6.2, 7.1.
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
@@ -35,7 +35,7 @@ import { ensureCustomerVisible, customerVisibilityFilter, isCustomerVisible } fr
 import { getItopAppClient, getItopConfig, isItopConfigured, makeItopClient } from "../lib/itop/config.js";
 import { requestSync } from "../lib/itop/scheduler.js";
 import { open, SecretBoxError } from "../lib/secretBox.js";
-import { ItopError, type ItopGetResult, type ItopObjectRow } from "../lib/itop/client.js";
+import { ITOP_TRANSPORT_ERROR_CODES, ItopError, type ItopGetResult, type ItopObjectRow } from "../lib/itop/client.js";
 import { TIME_ENTRY_WINDOW_MS, formatItopDate, upsertTicketFromItop, upsertTimeEntryFromItop } from "../lib/itop/sync.js";
 import {
   ITOP_LNK_PERSON_TO_TEAM_OUTPUT_FIELDS,
@@ -390,13 +390,27 @@ itopRouter.get(
 
 const refreshBodySchema = z.object({ customerId: z.number().int().positive().optional() });
 
-// Module-level, per-process: at most one accepted (non-cooldown) /refresh per
-// 10s, matching the scheduler's own debounce window (lib/itop/scheduler.ts).
-// Deliberately simple (no per-user tracking) — Task 1.7's rate limit is
-// "one accepted request per 10s per process", mirroring requestSync's own
-// trailing debounce so a mashed Refresh button collapses the same way.
+// Module-level, per-process throttle for the manual full pull. Every accepted
+// Refresh requests a full sync (many iTop pages), so it is limited twice: one
+// per user per REFRESH_USER_COOLDOWN_MS, and one per REFRESH_GLOBAL_FLOOR_MS
+// across all users. A refused call answers 429 with Retry-After. Only an
+// accepted request records its time, so a refused one never extends a window.
+const REFRESH_USER_COOLDOWN_MS = 30_000;
+const REFRESH_GLOBAL_FLOOR_MS = 60_000;
+const REFRESH_MAX_TRACKED_USERS = 1_000;
 let lastAcceptedRefreshAt = 0;
-const REFRESH_COOLDOWN_MS = 10_000;
+const lastRefreshByUser = new Map<number, number>();
+
+/** Forget every recorded refresh (tests). */
+export function resetRefreshThrottle(): void {
+  lastAcceptedRefreshAt = 0;
+  lastRefreshByUser.clear();
+}
+
+function refuseRefresh(res: Response, waitMs: number): never {
+  res.setHeader("Retry-After", String(Math.max(1, Math.ceil(waitMs / 1000))));
+  throw new HttpError(429, "rate_limited", "iTop was refreshed very recently. Try again shortly.");
+}
 
 itopRouter.post(
   "/refresh",
@@ -413,15 +427,23 @@ itopRouter.post(
     }
 
     const now = Date.now();
-    if (now - lastAcceptedRefreshAt < REFRESH_COOLDOWN_MS) {
-      res.status(202).json({ requested: false, reason: "cooldown" });
-      return;
-    }
+    const userId = req.user!.sub;
+    const userWait = (lastRefreshByUser.get(userId) ?? 0) + REFRESH_USER_COOLDOWN_MS - now;
+    const globalWait = lastAcceptedRefreshAt + REFRESH_GLOBAL_FLOOR_MS - now;
+    // Retry-After names the later of the two windows, so a retry at that time succeeds.
+    const wait = Math.max(userWait, globalWait);
+    if (wait > 0) refuseRefresh(res, wait);
     lastAcceptedRefreshAt = now;
+    if (lastRefreshByUser.size >= REFRESH_MAX_TRACKED_USERS) {
+      for (const [id, at] of lastRefreshByUser) {
+        if (at + REFRESH_USER_COOLDOWN_MS <= now) lastRefreshByUser.delete(id);
+      }
+    }
+    lastRefreshByUser.set(userId, now);
 
     // Manual Refresh is always a full pull (plan §2 deviation 8 / §5) — it
     // also drops tickets iTop no longer returns, which an incremental tick
-    // never does. The 10s cooldown above bounds how often this can fire.
+    // never does. The per-user cooldown and global floor above bound how often this can fire.
     requestSync({ full: true });
     res.status(202).json({ requested: true, lastSyncAt: config.lastSyncAt });
   },
@@ -616,7 +638,7 @@ itopRouter.get(
 // client-side guess of the new status. See
 // docs/archive/plans/itop-integration.md Task 5.3.
 
-const TRANSPORT_ITOP_ERROR_CODES = new Set<unknown>(["http", "timeout", "network", "parse"]);
+const TRANSPORT_ITOP_ERROR_CODES = ITOP_TRANSPORT_ERROR_CODES;
 
 /**
  * Maps an iTop write failure to the HTTP shape Task 5.3 promises: a

@@ -789,7 +789,8 @@ function CustomersCard() {
       )}
       {orgsError && <p className="mt-2 text-sm text-error">{orgsError}</p>}
 
-      <div className="mt-3 overflow-x-auto">
+      {/* Scrolls sideways on a phone: focusable so a keyboard can scroll it. */}
+      <div className="mt-3 overflow-x-auto" tabIndex={0} role="region" aria-label="Customers and iTop organisations">
         <table className="w-full min-w-[480px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-outline-variant text-left">
@@ -810,6 +811,7 @@ function CustomersCard() {
                 <td className="py-1.5 pr-3 text-on-surface">{row.name}</td>
                 <td className="py-1.5 pr-3">
                   <select
+                    aria-label={`iTop organisation of ${row.name}`}
                     value={row.itopOrgId ?? ""}
                     onChange={(e) => void handleOrgChange(row, e.target.value)}
                     disabled={orgsQuery.isError || pendingRowId === row.id}
@@ -902,7 +904,7 @@ function PersonsCard() {
       </div>
       {matchError && <p className="mt-2 text-sm text-error">{matchError}</p>}
 
-      <div className="mt-3 overflow-x-auto">
+      <div className="mt-3 overflow-x-auto" tabIndex={0} role="region" aria-label="Users and iTop persons">
         <table className="w-full min-w-[480px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-outline-variant text-left">

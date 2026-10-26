@@ -337,7 +337,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
         className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container"
         aria-label="Close"
       >
-        <span className="material-symbols-outlined text-base">close</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
       </button>
     </div>
   );
@@ -401,7 +401,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
             maxLength={200}
             autoFocus
             placeholder="Task title"
-            className="flex-1 border-none bg-transparent text-lg font-bold text-on-surface outline-hidden placeholder:text-on-surface-variant/40 focus:outline-hidden"
+            className="flex-1 border-none bg-transparent text-lg font-bold text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden"
           />
         </div>
 
@@ -581,7 +581,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
             maxLength={2000}
             placeholder="Add a description…"
             disabled={!canEdit}
-            className="w-full resize-y rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:cursor-default"
+            className="w-full resize-y rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/80 focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:cursor-default"
           />
         </div>
 
@@ -621,7 +621,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                         aria-label="Move subtask up"
                         className="rounded-sm p-0.5 text-on-surface-variant hover:bg-surface-container disabled:pointer-events-none disabled:opacity-30"
                       >
-                        <span className="material-symbols-outlined text-sm">keyboard_arrow_up</span>
+                        <span aria-hidden="true" className="material-symbols-outlined text-sm">keyboard_arrow_up</span>
                       </button>
                       <button
                         type="button"
@@ -630,7 +630,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                         aria-label="Move subtask down"
                         className="rounded-sm p-0.5 text-on-surface-variant hover:bg-surface-container disabled:pointer-events-none disabled:opacity-30"
                       >
-                        <span className="material-symbols-outlined text-sm">keyboard_arrow_down</span>
+                        <span aria-hidden="true" className="material-symbols-outlined text-sm">keyboard_arrow_down</span>
                       </button>
                     </div>
                   </li>
@@ -697,7 +697,7 @@ function FieldRow({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="material-symbols-outlined w-5 shrink-0 text-sm text-on-surface-variant">
+      <span aria-hidden="true" className="material-symbols-outlined w-5 shrink-0 text-sm text-on-surface-variant">
         {icon}
       </span>
       <span className="w-20 shrink-0 text-xs text-on-surface-variant">{label}</span>

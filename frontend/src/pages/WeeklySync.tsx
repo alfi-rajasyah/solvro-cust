@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { MidweekSyncModal } from "@/components/daily-review/MidweekSyncModal";
 import { ReflectionSyncModal } from "@/components/daily-review/ReflectionSyncModal";
 import { HEALTH_CLASS, WEEKLY_STATUS_BADGE } from "@/components/daily-review/SyncField";
-import { Alert, AlertDescription } from "@/components/reui/alert";
+import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import { Badge } from "@/components/reui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { hasPermission, useAuth } from "@/lib/auth";
@@ -28,10 +28,12 @@ import {
   type WeeklySyncTab,
 } from "@/lib/weeklySyncTable";
 
+// Below md each row is a single-column card (the header row is hidden and
+// each cell names itself); the column template only applies from md up.
 const MIDWEEK_GRID_COLS =
-  "grid-cols-[180px_88px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_140px]";
+  "grid-cols-[minmax(0,1fr)] md:grid-cols-[180px_88px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_140px]";
 const REFLECTION_GRID_COLS =
-  "grid-cols-[180px_88px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_110px]";
+  "grid-cols-[minmax(0,1fr)] md:grid-cols-[180px_88px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_110px]";
 
 const MIDWEEK_HEADER = ["Customer", "Health", "Highlight", "Risk", "Action", "Status"];
 const REFLECTION_HEADER = [
@@ -115,7 +117,7 @@ export function WeeklySync() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [week, tab, weekParam, tabParam]);
 
-  const { data, isLoading, isError, error } = useDailyReview(week);
+  const { data, isLoading, isError, error, refetch } = useDailyReview(week);
 
   const [openRow, setOpenRow] = useState<{ customerId: number; tab: WeeklySyncTab } | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -212,7 +214,7 @@ export function WeeklySync() {
               aria-label="Previous week"
               className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
-              <span className="material-symbols-outlined text-lg">chevron_left</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_left</span>
             </button>
             <div className="text-center">
               <div className="text-label-caps uppercase text-on-surface-variant">
@@ -226,7 +228,7 @@ export function WeeklySync() {
               aria-label="Next week"
               className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
-              <span className="material-symbols-outlined text-lg">chevron_right</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_right</span>
             </button>
           </div>
 
@@ -238,7 +240,7 @@ export function WeeklySync() {
               data-testid="weekly-sync-copy"
               className="inline-flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container disabled:opacity-50"
             >
-              <span className="material-symbols-outlined text-base">content_copy</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-base">content_copy</span>
               Copy as table
             </button>
             <span
@@ -290,9 +292,7 @@ export function WeeklySync() {
       )}
 
       {isError && (
-        <Alert variant="destructive">
-          <AlertDescription>Could not load the weekly sync: {(error as Error).message}</AlertDescription>
-        </Alert>
+        <QueryErrorAlert title="Could not load the weekly sync" error={error} onRetry={refetch} />
       )}
 
       {data && isEmpty && (
@@ -305,7 +305,7 @@ export function WeeklySync() {
         <>
           {shown.length > 0 ? (
             <div className="overflow-x-auto rounded-sm border border-outline-variant bg-surface-container-lowest">
-              <div className="min-w-[960px]">
+              <div className="md:min-w-[960px]">
                 <HeaderRow tab={tab} gridColsClass={gridColsClass} />
                 {tab === "midweek"
                   ? shown.map((c) => (
@@ -396,7 +396,7 @@ function HeaderCell({ children }: { children: ReactNode }) {
 function HeaderRow({ tab, gridColsClass }: { tab: WeeklySyncTab; gridColsClass: string }) {
   const labels = tab === "midweek" ? MIDWEEK_HEADER : REFLECTION_HEADER;
   return (
-    <div className={`grid ${gridColsClass}`}>
+    <div className={`grid ${gridColsClass} max-md:hidden`}>
       {labels.map((label) => (
         <HeaderCell key={label}>{label}</HeaderCell>
       ))}
@@ -430,27 +430,61 @@ const CELL_BORDER_CLASS: Record<CellBorder, string> = {
   none: "border-t-0",
 };
 
-function Cell({ children, border = "outline" }: { children: ReactNode; border?: CellBorder }) {
+function Cell({
+  children,
+  border = "outline",
+  label,
+}: {
+  children: ReactNode;
+  border?: CellBorder;
+  /** Column name shown above the value below md, where the header row is hidden (a CSS ::before, so it is announced only below md, where the header row is hidden). */
+  label?: string;
+}) {
   return (
     <div
-      className={`whitespace-pre-wrap wrap-break-word ${CELL_BORDER_CLASS[border]} px-3 py-2.5 text-sm text-on-surface`}
+      data-label={label}
+      className={`whitespace-pre-wrap wrap-break-word ${CELL_BORDER_CLASS[border]} px-3 py-2.5 text-sm text-on-surface max-md:border-t-0 max-md:py-1.5 max-md:empty:hidden ${
+        label
+          ? "before:block before:font-display before:text-label-caps before:uppercase before:text-on-surface-variant before:content-[attr(data-label)] md:before:hidden"
+          : ""
+      }`}
     >
       {children}
     </div>
   );
 }
 
-function TextCell({ value, border }: { value: string | null | undefined; border?: CellBorder }) {
+// Below md every row of a block is its own card; the divider moves from the
+// cells to the row (the first row of a customer solid, later ones faint).
+function rowCardClass(isFirst: boolean): string {
+  return `max-md:border-t max-md:py-1.5 ${
+    isFirst ? "max-md:border-outline-variant" : "max-md:border-surface-container"
+  }`;
+}
+
+function TextCell({
+  value,
+  border,
+  label,
+}: {
+  value: string | null | undefined;
+  border?: CellBorder;
+  label?: string;
+}) {
   const trimmed = value?.trim();
-  return <Cell border={border}>{trimmed ? value : <span className="text-on-surface-variant">—</span>}</Cell>;
+  return (
+    <Cell border={border} label={label}>
+      {trimmed ? value : <span className="text-on-surface-variant">—</span>}
+    </Cell>
+  );
 }
 
 /** The Highlight cell: the title, plus a small "has detail" note glyph (native title tooltip) when `detail` is non-empty (plan D3/§4). No highlight → the same "—" fallback as any other text cell. */
 function HighlightCell({ highlight, border }: { highlight: WeeklyHighlight | null; border: CellBorder }) {
-  if (!highlight) return <TextCell value={undefined} border={border} />;
+  if (!highlight) return <TextCell value={undefined} border={border} label="Highlight" />;
   const hasDetail = Boolean(highlight.detail?.trim());
   return (
-    <Cell border={border}>
+    <Cell border={border} label="Highlight">
       {highlight.title}
       {hasDetail && (
         <span
@@ -540,7 +574,7 @@ function MidweekBlock({ customer, gridColsClass, clickable, onOpen }: MidweekBlo
         const isFirst = index === 0;
         const rowBorder: CellBorder = isFirst ? "outline" : "faint";
         return (
-          <div key={highlight?.id ?? `dash-${index}`} className={`grid ${gridColsClass}`}>
+          <div key={highlight?.id ?? `dash-${index}`} className={`grid ${gridColsClass} ${rowCardClass(isFirst)}`}>
             <Cell border={isFirst ? "outline" : "none"}>
               {isFirst && (
                 <>
@@ -549,7 +583,7 @@ function MidweekBlock({ customer, gridColsClass, clickable, onOpen }: MidweekBlo
                 </>
               )}
             </Cell>
-            <Cell border={isFirst ? "outline" : "none"}>
+            <Cell border={isFirst ? "outline" : "none"} label={isFirst ? "Health" : undefined}>
               {isFirst &&
                 (health ? (
                   <span className={`rounded-full px-2 py-0.5 text-meta font-semibold ${HEALTH_CLASS[health]}`}>
@@ -560,9 +594,9 @@ function MidweekBlock({ customer, gridColsClass, clickable, onOpen }: MidweekBlo
                 ))}
             </Cell>
             <HighlightCell highlight={highlight} border={rowBorder} />
-            <TextCell value={highlight?.risk} border={rowBorder} />
-            <TextCell value={highlight?.action} border={rowBorder} />
-            <Cell border={isFirst ? "outline" : "none"}>
+            <TextCell value={highlight?.risk} border={rowBorder} label="Risk" />
+            <TextCell value={highlight?.action} border={rowBorder} label="Action" />
+            <Cell border={isFirst ? "outline" : "none"} label={isFirst ? "Status" : undefined}>
               {isFirst &&
                 (update?.midweekSavedAt ? (
                   `Saved ${fmtDateTime(update.midweekSavedAt)}`
@@ -585,10 +619,10 @@ function AchievementTitleCell({
   achievement: WeeklyAchievement | null;
   border: CellBorder;
 }) {
-  if (!achievement) return <TextCell value={undefined} border={border} />;
+  if (!achievement) return <TextCell value={undefined} border={border} label="Weekly achievement" />;
   const hasDetail = Boolean(achievement.detail?.trim());
   return (
-    <Cell border={border}>
+    <Cell border={border} label="Weekly achievement">
       {achievement.title}
       {hasDetail && (
         <span
@@ -634,7 +668,7 @@ function ReflectionBlock({ customer, gridColsClass, clickable, onOpen }: Reflect
         const isFirst = index === 0;
         const rowBorder: CellBorder = isFirst ? "outline" : "faint";
         return (
-          <div key={achievement?.id ?? `dash-${index}`} className={`grid ${gridColsClass}`}>
+          <div key={achievement?.id ?? `dash-${index}`} className={`grid ${gridColsClass} ${rowCardClass(isFirst)}`}>
             <Cell border={isFirst ? "outline" : "none"}>
               {isFirst && (
                 <>
@@ -643,7 +677,7 @@ function ReflectionBlock({ customer, gridColsClass, clickable, onOpen }: Reflect
                 </>
               )}
             </Cell>
-            <Cell border={isFirst ? "outline" : "none"}>
+            <Cell border={isFirst ? "outline" : "none"} label={isFirst ? "Health" : undefined}>
               {isFirst &&
                 (health ? (
                   <span className={`rounded-full px-2 py-0.5 text-meta font-semibold ${HEALTH_CLASS[health]}`}>
@@ -654,11 +688,11 @@ function ReflectionBlock({ customer, gridColsClass, clickable, onOpen }: Reflect
                 ))}
             </Cell>
             <AchievementTitleCell achievement={achievement} border={rowBorder} />
-            <TextCell value={achievement?.outstandingIssue} border={rowBorder} />
-            <TextCell value={achievement?.lessonLearned} border={rowBorder} />
-            <TextCell value={achievement?.nextWeekFocus} border={rowBorder} />
-            <TextCell value={achievement?.managerDecision} border={rowBorder} />
-            <Cell border={isFirst ? "outline" : "none"}>
+            <TextCell value={achievement?.outstandingIssue} border={rowBorder} label="Outstanding issue" />
+            <TextCell value={achievement?.lessonLearned} border={rowBorder} label="Lesson learned" />
+            <TextCell value={achievement?.nextWeekFocus} border={rowBorder} label="Next week focus" />
+            <TextCell value={achievement?.managerDecision} border={rowBorder} label="Need manager decision" />
+            <Cell border={isFirst ? "outline" : "none"} label={isFirst ? "Status" : undefined}>
               {isFirst &&
                 (() => {
                   const badge = WEEKLY_STATUS_BADGE[update?.status ?? "NOT_STARTED"];

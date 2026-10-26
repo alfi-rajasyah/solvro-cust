@@ -2,7 +2,7 @@ import "./env.js";
 import { prisma } from "../src/prisma.js";
 import { signToken } from "../src/http/auth.js";
 
-// Mirrors prisma/seed.ts's ROLE_PERMISSIONS so tests exercise the same
+// Mirrors prisma/builtInRoles.ts's ROLE_PERMISSIONS so tests exercise the same
 // permission set the app ships with, without importing the seed script
 // itself (which calls process.exit on completion).
 const ROLE_PERMISSIONS: Record<string, string[]> = {

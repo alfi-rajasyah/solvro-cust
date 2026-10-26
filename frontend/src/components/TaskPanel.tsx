@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { usePanelFocus } from "@/hooks/usePanelFocus";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { ConfirmModal } from "./ConfirmModal";
 import { CopyLinkButton } from "./CopyLinkButton";
@@ -108,6 +109,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const assigneeAddsMember = useAssigneeMembership(projectId);
   const updateTask = useUpdateTask(projectId);
   const createTask = useCreateTask(projectId);
+  const addingSubtaskRef = useRef(false);
   const deleteTask = useDeleteTask(projectId);
   const duplicateTask = useDuplicateTask(projectId);
 
@@ -164,6 +166,9 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   } | null>(null);
 
   const panelRef = useRef<HTMLDivElement | null>(null);
+  // Focus moves into the panel on open (and when the loading shell is
+  // replaced by the loaded panel) and returns to the opener on close.
+  usePanelFocus(panelRef, taskId, task ? "ready" : "loading");
   // One rename edit settles exactly once. Enter, blur, and Escape can each end
   // the same edit — and whether closing the input ALSO re-fires onBlur (the
   // focused element is being unmounted) differs by engine; Chromium/React 18.3
@@ -214,9 +219,13 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     // deleted (or is not visible to this user) — say so instead of spinning.
     const notFound = tasks !== undefined;
     return (
-      <aside
+      <div
         ref={panelRef}
-        className="fixed right-0 top-14 bottom-0 z-40 flex w-full flex-col border-l border-outline-variant bg-surface-container px-5 py-4 md:w-[380px]"
+        role="dialog"
+        aria-label="Task details"
+        aria-busy={!notFound}
+        tabIndex={-1}
+        className="fixed right-0 top-14 bottom-0 z-40 flex w-full flex-col border-l border-outline-variant bg-surface-container px-5 py-4 outline-hidden md:w-[380px]"
       >
         <div className="flex items-center justify-between">
           <span className="text-sm text-on-surface-variant">
@@ -228,10 +237,10 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
             className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container-high"
             aria-label="Close"
           >
-            <span className="material-symbols-outlined text-base">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
           </button>
         </div>
-      </aside>
+      </div>
     );
   }
 
@@ -294,7 +303,10 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   async function handleAddSubtask(e: FormEvent) {
     e.preventDefault();
     const title = newSubtask.trim();
-    if (!title || !task) return;
+    if (!title || !task || addingSubtaskRef.current) return;
+    // The ref closes the window before React re-renders with `isPending`:
+    // a second Enter in the same tick must not queue a second create.
+    addingSubtaskRef.current = true;
     setError(null);
     try {
       await createTask.mutateAsync({
@@ -306,6 +318,8 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
       setNewSubtask("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not add subtask.");
+    } finally {
+      addingSubtaskRef.current = false;
     }
   }
 
@@ -384,11 +398,12 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
 
   return (
     <>
-      <aside
+      <div
         ref={panelRef}
         role="dialog"
         aria-label="Task details"
-        className="fixed right-0 top-14 bottom-0 z-40 flex w-full flex-col border-l border-outline-variant bg-surface-container shadow-overlay md:w-[380px]"
+        tabIndex={-1}
+        className="fixed right-0 top-14 bottom-0 z-40 flex w-full flex-col border-l border-outline-variant bg-surface-container shadow-overlay outline-hidden md:w-[380px]"
       >
         {/* Header */}
         <div className="flex items-center gap-2 border-b border-outline-variant px-4 py-3">
@@ -405,7 +420,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
             >
               {TASK_STATUS_LABEL[task.status]}
               {canEdit && (
-                <span className="material-symbols-outlined text-[13px]">expand_more</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-[13px]">expand_more</span>
               )}
             </button>
             {statusMenuOpen && canEdit && (
@@ -474,7 +489,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     }}
                     className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-error hover:bg-error-container disabled:cursor-default disabled:opacity-50"
                   >
-                    <span className="material-symbols-outlined text-sm">delete</span>
+                    <span aria-hidden="true" className="material-symbols-outlined text-sm">delete</span>
                     Delete task
                   </button>
                 </div>
@@ -487,7 +502,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
             className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container-high"
             aria-label="Close"
           >
-            <span className="material-symbols-outlined text-base">close</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
           </button>
         </div>
 
@@ -634,7 +649,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
               title={canEdit ? "Click to cycle priority" : undefined}
             >
-              <span
+              <span aria-hidden="true"
                 className={`material-symbols-outlined text-[15px] ${PRIORITY_ICON_CLASS[task.priority]}`}
               >
                 flag
@@ -652,7 +667,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
               title={canEdit ? "Toggle between task bar and milestone diamond" : undefined}
             >
-              <span
+              <span aria-hidden="true"
                 className={`material-symbols-outlined text-[15px] ${task.isMilestone ? "text-primary" : "text-on-surface-variant"}`}
               >
                 {task.isMilestone ? "diamond" : "check_box_outline_blank"}
@@ -673,7 +688,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               title={canEdit ? CRITICAL_PATH_HELPER_TEXT : undefined}
               aria-label={`${CRITICAL_PATH_LABEL}: ${task.isCriticalPath ? "Yes" : "No"}`}
             >
-              <span
+              <span aria-hidden="true"
                 className={`material-symbols-outlined text-[15px] ${task.isCriticalPath ? "text-chip-violet-text" : "text-on-surface-variant"}`}
               >
                 {task.isCriticalPath ? CRITICAL_PATH_GLYPH : "check_box_outline_blank"}
@@ -856,7 +871,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                       ].join(" ")}
                     >
                       {s.status === "DONE" && (
-                        <span className="material-symbols-outlined text-meta leading-none">
+                        <span aria-hidden="true" className="material-symbols-outlined text-meta leading-none">
                           check
                         </span>
                       )}
@@ -908,7 +923,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         type="button"
                         onClick={() => startSubtaskRename(s)}
                         aria-label={`Rename ${s.title}`}
-                        className="material-symbols-outlined -m-1 shrink-0 rounded-sm p-1 text-sm text-on-surface-variant/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100"
+                        className="material-symbols-outlined -m-2 shrink-0 rounded-sm p-2 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100"
                       >
                         edit
                       </button>
@@ -919,7 +934,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         disabled={duplicateTask.isPending && duplicateTask.variables === s.id}
                         onClick={() => void handleSubtaskDuplicate(s)}
                         aria-label={`Duplicate ${s.title}`}
-                        className="material-symbols-outlined -m-1 shrink-0 rounded-sm p-1 text-sm text-on-surface-variant/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100 disabled:cursor-default disabled:opacity-50"
+                        className="material-symbols-outlined -m-2 shrink-0 rounded-sm p-2 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100 disabled:cursor-default disabled:opacity-50"
                       >
                         content_copy
                       </button>
@@ -936,7 +951,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                           <button
                             type="button"
                             aria-label="Reorder subtask"
-                            className="material-symbols-outlined shrink-0 touch-none rounded-sm text-sm text-on-surface-variant/60 cursor-grab active:cursor-grabbing outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
+                            className="material-symbols-outlined shrink-0 touch-none rounded-sm text-sm text-on-surface-variant/80 cursor-grab active:cursor-grabbing outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
                           />
                         }
                       >
@@ -948,14 +963,15 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               </Sortable>
               {canEdit && (
                 <form onSubmit={handleAddSubtask} className="mt-1.5 flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[13px] text-primary">add</span>
+                  <span aria-hidden="true" className="material-symbols-outlined text-[13px] text-primary">add</span>
                   <input
                     type="text"
                     value={newSubtask}
                     onChange={(e) => setNewSubtask(e.target.value)}
                     placeholder="Add subtask"
                     maxLength={200}
-                    className="flex-1 border-none bg-transparent text-[13px] text-on-surface outline-hidden placeholder:text-on-surface-variant/60 focus:outline-hidden"
+                    readOnly={createTask.isPending}
+                    className="flex-1 border-none bg-transparent text-[13px] text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden"
                   />
                 </form>
               )}
@@ -976,7 +992,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
             <PanelComments taskId={task.id} projectId={projectId} />
           </div>
         </div>
-      </aside>
+      </div>
 
       <TaskConflictDialog
         open={conflict !== null}

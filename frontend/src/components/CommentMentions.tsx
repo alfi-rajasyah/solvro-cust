@@ -163,7 +163,7 @@ export function CommentComposer({
           onKeyDown={handleKeyDown}
           maxLength={5000}
           placeholder="Write a comment…"
-          className="min-w-0 flex-1 border-none bg-transparent text-xs text-on-surface outline-hidden placeholder:text-on-surface-variant/60 focus:outline-hidden"
+          className="min-w-0 flex-1 border-none bg-transparent text-xs text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden"
         />
         <button
           type="submit"
@@ -171,7 +171,7 @@ export function CommentComposer({
           aria-label="Send comment"
           className="flex shrink-0 items-center text-primary disabled:opacity-40"
         >
-          <span className="material-symbols-outlined text-[17px]">send</span>
+          <span aria-hidden="true" className="material-symbols-outlined text-[17px]">send</span>
         </button>
 
         {open && (

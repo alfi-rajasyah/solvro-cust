@@ -8,7 +8,7 @@ import { requireAuth, requireAdmin } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { bustAuthConfigCache } from "../authConfig.js";
-import { normalizeUsername, USERNAME_MAX } from "../lib/username.js";
+import { isUsernameConflict, normalizeUsername, USERNAME_MAX } from "../lib/username.js";
 import { recordActivity, shortLabel, type ActivityChanges } from "../lib/activity.js";
 import { notifyForEvent } from "../lib/notifications.js";
 
@@ -78,7 +78,8 @@ adminRouter.get("/users", async (_req, res) => {
 });
 
 const createUserSchema = z.object({
-  email: z.string().email(),
+  // Stored trimmed and lowercase, like Google sign-in and password login.
+  email: z.string().trim().toLowerCase().email(),
   // Length only here; the character rule and the case-insensitive clash
   // check run in the handler (lib/username.ts).
   username: z.string().min(1).max(USERNAME_MAX * 2),
@@ -126,17 +127,30 @@ adminRouter.post(
     }
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const created = await prisma.user.create({
-      data: { email, username, passwordHash, roleId: targetRole.id },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        active: true,
-        createdAt: true,
-        role: { select: { roleName: true } },
-      },
-    });
+    // The pre-checks above are a fast path; the unique indexes (email, and
+    // lower(username)) decide a concurrent race.
+    let created;
+    try {
+      created = await prisma.user.create({
+        data: { email, username, passwordHash, roleId: targetRole.id },
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          active: true,
+          createdAt: true,
+          role: { select: { roleName: true } },
+        },
+      });
+    } catch (err) {
+      if (isUsernameConflict(err)) {
+        throw new HttpError(409, "username_in_use", "A user with that username already exists");
+      }
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        throw new HttpError(409, "email_in_use", "A user with that email already exists");
+      }
+      throw err;
+    }
 
     res.status(201).json({
       id: created.id,
@@ -402,6 +416,18 @@ adminRouter.patch(
 
     const existing = await prisma.role.findUnique({ where: { id } });
     if (!existing) throw new HttpError(404, "role_not_found", "Role not found");
+
+    // PENDING is what every first-time Google sign-in gets: it must stay
+    // without permissions until an admin promotes the user. (The seed used to
+    // reset it at each start; since it no longer overwrites roles, this is
+    // where that rule lives.)
+    if (PROTECTED_ROLES.has(existing.roleName) && permissions.length > 0) {
+      throw new HttpError(
+        400,
+        "role_protected",
+        `"${existing.roleName}" is reserved and keeps no permissions`,
+      );
+    }
 
     const renaming = roleName !== undefined && roleName !== existing.roleName;
     if (renaming) {

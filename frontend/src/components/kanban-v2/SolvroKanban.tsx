@@ -134,7 +134,7 @@ function ColumnMenu({ onAdd }: { onAdd: () => void }) {
               }}
               className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-on-surface hover:bg-surface-container"
             >
-              <span className="material-symbols-outlined text-sm">add</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-sm">add</span>
               Add task here
             </button>
           </div>
@@ -482,7 +482,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                 : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container",
             ].join(" ")}
           >
-            <span className="material-symbols-outlined text-base">filter_alt</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">filter_alt</span>
             Filter
             {filterActive && (
               <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-meta leading-none font-bold text-on-primary">
@@ -576,7 +576,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
             onClick={() => setCreateStatus("TODO")}
             className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 font-display text-xs font-bold text-on-primary hover:bg-primary/90"
           >
-            <span className="material-symbols-outlined text-base">add</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
             Add task
           </button>
         )}
@@ -721,6 +721,22 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                           // vendor's own opacity-50 for the same utility group.
                           // No vendor file touched.
                           className={dragEnabled ? undefined : "opacity-100"}
+                          // Keyboard: the card's title button is the entry point
+                          // (cards.tsx). The engine spreads dnd-kit's attributes
+                          // (role="button", tabIndex 0, "press space to pick
+                          // up") onto this wrapper, but its key listener sits on
+                          // the grip, which cannot take focus — so the wrapper
+                          // announced a keyboard drag that never worked and
+                          // nested the card's buttons inside a button. These
+                          // overrides win in the engine's mergeProps; no vendor
+                          // file touched. Moving a card by keyboard goes
+                          // through the task panel's status field.
+                          role={undefined}
+                          tabIndex={undefined}
+                          aria-roledescription={undefined}
+                          aria-describedby={undefined}
+                          aria-pressed={undefined}
+                          aria-disabled={undefined}
                         >
                           <TaskCard
                             task={task}

@@ -5,10 +5,12 @@ import { TaskStatus } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { requireAuth, requirePermission, type JwtPayload } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
+import { dateInput } from "../lib/dateInput.js";
 import { validate } from "../http/validate.js";
 import { ensureProjectVisible } from "../lib/visibility.js";
 import { recordActivity, shortLabel } from "../lib/activity.js";
 import { diffEpicChanges, epicSnapshotSelect } from "../lib/epicActivity.js";
+import { lockProjectOrder } from "../lib/orderLock.js";
 
 // Resolve the epic's owning project and 404 if the caller can't see it.
 // Mirrors ensureSectionVisible (backend/src/routes/sections.ts) — 404, never
@@ -34,8 +36,8 @@ const updateEpicSchema = z.object({
   status: z.nativeEnum(TaskStatus).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   ownerId: z.number().int().positive().nullable().optional(),
-  startDate: z.coerce.date().nullable().optional(),
-  dueDate: z.coerce.date().nullable().optional(),
+  startDate: dateInput.nullable().optional(),
+  dueDate: dateInput.nullable().optional(),
   position: z.number().int().min(0).optional(),
 });
 
@@ -60,6 +62,7 @@ async function insertEpicAt(
   epicId: number,
   requestedPosition: number,
 ): Promise<number> {
+  await lockProjectOrder(tx, "epics", projectId);
   const siblings = await tx.epic.findMany({
     where: { projectId, id: { not: epicId } },
     orderBy: [{ position: "asc" }, { id: "asc" }],
@@ -150,6 +153,9 @@ epicsRouter.patch(
     // position-only write diffs to `{}` and records nothing
     // (docs/archive/plans/internal-sync.md).
     const updated = await prisma.$transaction(async (tx) => {
+      // A reorder re-packs the project's epic list: take that lock before the
+      // row lock below (lib/orderLock.ts explains the order).
+      if (body.position !== undefined) await lockProjectOrder(tx, "epics", projectId);
       // Lock first so overlapping identical saves serialise and record one event.
       await tx.$queryRaw`SELECT id FROM epics WHERE id = ${id} FOR NO KEY UPDATE`;
       const before = await tx.epic.findUniqueOrThrow({

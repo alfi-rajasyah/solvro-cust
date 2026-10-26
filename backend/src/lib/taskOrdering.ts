@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { HttpError } from "../http/errors.js";
+import { lockProjectOrder } from "./orderLock.js";
 
 // A sibling list is the ordered set of tasks a `position` value is relative
 // to. For top-level tasks (parentTaskId null) that's EVERY top-level task in
@@ -111,6 +112,7 @@ export async function insertManyAfter(
   newIds: number[],
 ): Promise<void> {
   if (newIds.length === 0) return;
+  await lockProjectOrder(tx, "tasks", key.projectId);
 
   const memberCount = await tx.task.count({
     where: { ...siblingWhere(key), id: { in: newIds } },
@@ -150,6 +152,8 @@ export async function moveTaskWithinSiblings(
   newKey: SiblingKey,
   requestedPosition: number | undefined,
 ): Promise<number> {
+  // Both keys share the task's project (a task never changes project).
+  await lockProjectOrder(tx, "tasks", newKey.projectId);
   if (siblingKeyEquals(oldKey, newKey)) {
     // Same list: reorder in place. Exclude self, then re-insert at the
     // clamped target index — this both moves and re-packs in one pass.

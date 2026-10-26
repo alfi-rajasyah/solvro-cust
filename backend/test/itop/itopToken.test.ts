@@ -9,6 +9,7 @@ import type { Server } from "node:http";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../../src/app.js";
+import { env } from "../../src/env.js";
 import { prisma } from "../../src/prisma.js";
 import { signToken } from "../../src/http/auth.js";
 import { bustItopConfigCache } from "../../src/lib/itop/config.js";
@@ -245,15 +246,72 @@ describe("PUT /itop/me/token", () => {
     expect(user.itopTokenEnc).toBeNull();
   });
 
-  it("still accepts the token when the PersonalToken class isn't readable at all", async () => {
-    fakeState.disabledClasses.add("PersonalToken");
-    const { token } = await createUserWithEmail("rina.s@example.co.id");
+  // The Person lookup matches on email only, so it does not prove whose token
+  // this is; the iTop User and its PersonalToken do. When the token cannot
+  // read either, ownership is unproven: refused by default, accepted only
+  // with ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS.
+  describe("a token whose ownership cannot be proven", () => {
+    async function withUnverifiedAllowed<T>(allow: boolean, fn: () => Promise<T>): Promise<T> {
+      const previous = env.ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS;
+      env.ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS = allow;
+      try {
+        return await fn();
+      } finally {
+        env.ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS = previous;
+      }
+    }
 
-    const res = await call("put", "/itop/me/token", token, { token: FAKE_ITOP_TOKENS.rina });
+    for (const cls of ["PersonalToken", "User"]) {
+      it(`is refused by default when the ${cls} class isn't readable`, async () => {
+        fakeState.disabledClasses.add(cls);
+        const { userId, token } = await createUserWithEmail("rina.s@example.co.id");
 
-    expect(res.status).toBe(200);
-    expect(res.body.set).toBe(true);
-    expect(res.body.expiresAt).toBeNull();
+        const res = await call("put", "/itop/me/token", token, { token: FAKE_ITOP_TOKENS.rina });
+
+        expect(res.status).toBe(400);
+        expect(res.body.code).toBe("itop_token_unverified");
+        const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+        expect(user.itopTokenEnc).toBeNull();
+      });
+
+      it(`is accepted when the deployment allows it and the ${cls} class isn't readable`, async () => {
+        fakeState.disabledClasses.add(cls);
+        const { token } = await createUserWithEmail("rina.s@example.co.id");
+
+        const res = await withUnverifiedAllowed(true, () =>
+          call("put", "/itop/me/token", token, { token: FAKE_ITOP_TOKENS.rina }),
+        );
+
+        expect(res.status).toBe(200);
+        expect(res.body.set).toBe(true);
+        expect(res.body.expiresAt).toBeNull();
+      });
+    }
+
+    it("treats a readable User class with no row for this Person as unverified", async () => {
+      // Real iTop can answer a class the profile may not see with an empty set.
+      fakeState.users.delete(1);
+      const { token } = await createUserWithEmail("rina.s@example.co.id");
+
+      const refused = await call("put", "/itop/me/token", token, { token: FAKE_ITOP_TOKENS.rina });
+      expect(refused.status).toBe(400);
+      expect(refused.body.code).toBe("itop_token_unverified");
+
+      const accepted = await withUnverifiedAllowed(true, () =>
+        call("put", "/itop/me/token", token, { token: FAKE_ITOP_TOKENS.rina }),
+      );
+      expect(accepted.status).toBe(200);
+    });
+
+    it("is still refused when the PersonalToken read shows the token is someone else's, even if allowed", async () => {
+      // The allowance covers an unreadable class only, never a disproof.
+      const { token } = await createUserWithEmail("rina.s@example.co.id");
+      const res = await withUnverifiedAllowed(true, () =>
+        call("put", "/itop/me/token", token, { token: FAKE_ITOP_TOKENS.app }),
+      );
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe("itop_token_not_yours");
+    });
   });
 
   it("rate-limits repeated PUT calls to 10 per 10 minutes for the same user", async () => {

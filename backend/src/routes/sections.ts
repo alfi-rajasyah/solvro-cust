@@ -7,6 +7,7 @@ import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { ensureProjectVisible } from "../lib/visibility.js";
 import { insertManyAfter, type SiblingKey } from "../lib/taskOrdering.js";
+import { lockProjectOrder } from "../lib/orderLock.js";
 import { duplicateTaskTree } from "../lib/duplicate.js";
 import { recordActivity } from "../lib/activity.js";
 
@@ -49,6 +50,7 @@ async function insertSectionAt(
   sectionId: number,
   requestedPosition: number,
 ): Promise<number> {
+  await lockProjectOrder(tx, "sections", projectId);
   const siblings = await tx.section.findMany({
     where: { projectId, id: { not: sectionId } },
     orderBy: [{ position: "asc" }, { id: "asc" }],
@@ -94,6 +96,7 @@ async function insertSectionAfter(
   newSectionId: number,
   afterSectionId: number,
 ): Promise<void> {
+  await lockProjectOrder(tx, "sections", projectId);
   const others = await tx.section.findMany({
     where: { projectId, id: { not: newSectionId } },
     orderBy: [{ position: "asc" }, { id: "asc" }],
@@ -139,6 +142,9 @@ sectionsRouter.patch(
     // the list is never observed half-moved.
     const { position, ...rest } = body;
     const updated = await prisma.$transaction(async (tx) => {
+      // Before the name/color write below takes this row's lock
+      // (lib/orderLock.ts explains the order).
+      await lockProjectOrder(tx, "sections", projectId);
       if (Object.keys(rest).length > 0) {
         await tx.section.update({ where: { id }, data: rest });
       }

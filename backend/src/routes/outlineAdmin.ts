@@ -14,7 +14,7 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireAdmin } from "../http/auth.js";
 import { validate } from "../http/validate.js";
 import { env } from "../env.js";
-import { outlineUrlSchema } from "../lib/outlineUrl.js";
+import { outlineBaseUrlWarning, outlineUrlSchema } from "../lib/outlineUrl.js";
 import { appUrlWarning, outlineRedirectUri, outlineWebhookUrl } from "../lib/outline/appUrl.js";
 import { seal } from "../lib/secretBox.js";
 import { notifyOutlineAuthChanged } from "../lib/outline/cacheHooks.js";
@@ -48,6 +48,7 @@ async function loadConfig() {
 function serialize(row: Awaited<ReturnType<typeof loadConfig>>) {
   return {
     baseUrl: row.baseUrl,
+    baseUrlWarning: outlineBaseUrlWarning(row.baseUrl),
     oauthClientId: row.oauthClientId,
     // The secrets themselves never leave the server — only whether they are set.
     oauthClientSecretSet: row.oauthClientSecretEnc !== null,

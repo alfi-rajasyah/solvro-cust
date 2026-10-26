@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import {
   Link,
   NavLink,
@@ -20,7 +20,8 @@ import { EmbedInOutlineDialog } from "@/components/EmbedInOutline";
 import { ProjectShareButton } from "@/components/ProjectShare";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
-import { ProjectPageSkeleton } from "@/components/skeletons";
+import { QueryErrorAlert } from "@/components/QueryErrorAlert";
+import { PageLoading, ProjectPageSkeleton } from "@/components/skeletons";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -83,7 +84,7 @@ export function ProjectDetail() {
   const navigate = useNavigate();
   const deleteProject = useDeleteProject();
 
-  const { data: project, isLoading, isError, error } = useProject(projectId);
+  const { data: project, isLoading, isError, error, refetch } = useProject(projectId);
 
   // Task side panel is deep-linked via ?task=<id> so it works the same way
   // from the Kanban and List views (and survives a page refresh / share).
@@ -140,18 +141,21 @@ export function ProjectDetail() {
 
   if (isError || !project) {
     return (
-      <Alert variant="destructive">
-        <AlertDescription>
-          {error instanceof ApiError && error.status === 404
+      <QueryErrorAlert
+        title={
+          error instanceof ApiError && error.status === 404
             ? PROJECT_BLOCKED_MESSAGE
             : error instanceof Error
               ? error.message
-              : PROJECT_BLOCKED_MESSAGE}{" "}
-          <Link to="/projects" className="ml-2 font-bold underline">
-            Back to Projects
-          </Link>
-        </AlertDescription>
-      </Alert>
+              : PROJECT_BLOCKED_MESSAGE
+        }
+        // A 404 is a permanent answer (gone or no access) — retrying cannot change it.
+        onRetry={error instanceof ApiError && error.status === 404 ? undefined : refetch}
+      >
+        <Link to="/projects" className="font-bold underline">
+          Back to Projects
+        </Link>
+      </QueryErrorAlert>
     );
   }
 
@@ -180,6 +184,7 @@ export function ProjectDetail() {
           (RightSidebar.tsx). This row keeps the project's facts and its
           actions next to the tabs. */}
       <div className="mb-3 flex items-start justify-between gap-3 md:gap-4">
+        <h1 className="sr-only">{project.name}</h1>
         <ProjectHeaderFacts project={project} />
 
         {/* Copy link shows at every width. Below md the other actions live in
@@ -203,7 +208,7 @@ export function ProjectDetail() {
               onClick={() => setEditOpen(true)}
               className="hidden items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container md:inline-flex"
             >
-              <span className="material-symbols-outlined text-base">edit</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-base">edit</span>
               Edit
             </button>
           )}
@@ -344,11 +349,14 @@ export function ProjectDetail() {
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <Outlet
-          context={
-            { project, openContext: () => setContextOpen(true) } satisfies ProjectOutletContext
-          }
-        />
+        {/* Tabs load lazily (App.tsx); the project header stays while one arrives. */}
+        <Suspense fallback={<PageLoading />}>
+          <Outlet
+            context={
+              { project, openContext: () => setContextOpen(true) } satisfies ProjectOutletContext
+            }
+          />
+        </Suspense>
       </div>
 
       <ProjectFormModal

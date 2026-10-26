@@ -32,7 +32,7 @@ import { hasPermission, useAuth } from "@/lib/auth";
 import { commitDraft, dayFromIso } from "@/lib/dateField";
 import { useDragActivityGuard } from "@/lib/dragActivity";
 import { fmtDay, fmtDue } from "@/lib/formatDate";
-import { TASK_STATUS_LABEL } from "@/lib/labels";
+import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
 import { ASSIGN_ADDS_MEMBER_NOTICE } from "@/lib/projectMembers";
 import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
 import {
@@ -431,7 +431,7 @@ export function ProjectList() {
                 : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container",
             ].join(" ")}
           >
-            <span className="material-symbols-outlined text-base">filter_alt</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">filter_alt</span>
             Filter
             {filterActive && (
               <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-meta leading-none font-bold text-on-primary">
@@ -483,7 +483,7 @@ export function ProjectList() {
             onClick={() => setReorderingSections(true)}
             className="inline-flex items-center gap-1.5 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-semibold text-on-surface-variant hover:border-primary hover:text-primary"
           >
-            <span className="material-symbols-outlined text-base">reorder</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">reorder</span>
             Reorder sections
           </button>
         )}
@@ -493,7 +493,7 @@ export function ProjectList() {
             onClick={() => setAddingSection(true)}
             className="inline-flex items-center gap-1.5 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-semibold text-on-surface-variant hover:border-primary hover:text-primary"
           >
-            <span className="material-symbols-outlined text-base">add</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
             Add section
           </button>
         )}
@@ -503,7 +503,7 @@ export function ProjectList() {
             onClick={() => setCreateTaskCtx({ sectionId: null, parentTaskId: null })}
             className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 font-display text-xs font-bold text-on-primary hover:bg-primary/90"
           >
-            <span className="material-symbols-outlined text-base">add</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
             Add task
           </button>
         )}
@@ -712,7 +712,7 @@ function SectionGroup({
           className="text-on-surface-variant hover:text-on-surface"
           aria-label={collapsed ? "Expand section" : "Collapse section"}
         >
-          <span className="material-symbols-outlined text-base">
+          <span aria-hidden="true" className="material-symbols-outlined text-base">
             {collapsed ? "chevron_right" : "expand_more"}
           </span>
         </button>
@@ -759,7 +759,7 @@ function SectionGroup({
               className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               title={section ? "Rename section" : "Promote into a real section"}
             >
-              <span className="material-symbols-outlined text-[17px]">edit</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-[17px]">edit</span>
             </button>
             {section && (
               <button
@@ -770,7 +770,7 @@ function SectionGroup({
                 title="Duplicate section"
                 aria-label="Duplicate section"
               >
-                <span className="material-symbols-outlined text-[17px]">content_copy</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-[17px]">content_copy</span>
               </button>
             )}
             {section && (
@@ -780,7 +780,7 @@ function SectionGroup({
                 className="rounded-sm p-1 text-on-surface-variant hover:bg-error-container hover:text-on-error-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 title="Delete section"
               >
-                <span className="material-symbols-outlined text-[17px]">delete</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-[17px]">delete</span>
               </button>
             )}
           </div>
@@ -816,7 +816,7 @@ function SectionGroup({
               onClick={onAddTask}
               className="flex w-full items-center gap-2 px-10 py-1 text-left text-[12px] text-on-surface-variant hover:bg-surface-container-low hover:text-primary"
             >
-              <span className="material-symbols-outlined text-[15px]">add</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-[15px]">add</span>
               Add task…
             </button>
           )}
@@ -876,7 +876,7 @@ function TaskRow({
           {...listeners}
           onClick={(e) => e.stopPropagation()}
           className={[
-            "material-symbols-outlined text-[16px] text-on-surface-variant/50",
+            "material-symbols-outlined text-[16px] text-on-surface-variant/80",
             canEdit ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-default",
           ].join(" ")}
           aria-label="Drag to reorder"
@@ -892,21 +892,28 @@ function TaskRow({
                 e.stopPropagation();
                 setExpanded((v) => !v);
               }}
+              aria-label={expanded ? "Collapse subtasks" : "Expand subtasks"}
+              aria-expanded={expanded}
               className="text-on-surface-variant hover:text-on-surface"
             >
-              <span className="material-symbols-outlined text-[15px]">
+              <span aria-hidden="true" className="material-symbols-outlined text-[15px]">
                 {expanded ? "expand_more" : "chevron_right"}
               </span>
             </button>
           )}
-          <span
+          {/* The title is the row's keyboard entry point: a button with no
+              handler of its own, so Enter/Space click it and the click
+              bubbles to the row's onOpenTask. (The grip is the drag
+              handle, where Enter starts a keyboard drag.) */}
+          <button
+            type="button"
             className={[
-              "truncate text-sm",
+              "min-w-0 truncate text-sm rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30",
               task.status === "DONE" ? "text-on-surface-variant line-through" : "text-on-surface",
             ].join(" ")}
           >
             {task.title}
-          </span>
+          </button>
           {epic && <EpicChip epic={epic} compact className="shrink-0" />}
         </span>
 
@@ -939,9 +946,10 @@ function TaskRow({
               onCyclePriority(task);
             }}
             className="flex grow items-center justify-start disabled:cursor-default"
+            aria-label={`Priority: ${PRIORITY_LABEL[task.priority]}`}
             title={canEdit ? "Click to cycle priority" : undefined}
           >
-            <span className={`material-symbols-outlined text-[15px] ${PRIORITY_ICON_CLASS[task.priority]}`}>
+            <span aria-hidden="true" className={`material-symbols-outlined text-[15px] ${PRIORITY_ICON_CLASS[task.priority]}`}>
               flag
             </span>
           </button>
@@ -966,24 +974,28 @@ function TaskRow({
                 e.stopPropagation();
                 setExpanded((v) => !v);
               }}
+              aria-label={expanded ? "Collapse subtasks" : "Expand subtasks"}
+              aria-expanded={expanded}
               className="shrink-0 text-on-surface-variant"
             >
-              <span className="material-symbols-outlined text-[17px]">
+              <span aria-hidden="true" className="material-symbols-outlined text-[17px]">
                 {expanded ? "expand_more" : "chevron_right"}
               </span>
             </button>
           )}
-          <span
+          <button
+            type="button"
             className={[
-              "min-w-0 flex-1 truncate text-sm",
+              "min-w-0 flex-1 truncate text-sm rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30",
               task.status === "DONE" ? "text-on-surface-variant line-through" : "text-on-surface",
             ].join(" ")}
           >
             {task.title}
-          </span>
-          <span className={`material-symbols-outlined text-[15px] ${PRIORITY_ICON_CLASS[task.priority]}`}>
+          </button>
+          <span aria-hidden="true" className={`material-symbols-outlined text-[15px] ${PRIORITY_ICON_CLASS[task.priority]}`}>
             flag
           </span>
+          <span className="sr-only">Priority: {PRIORITY_LABEL[task.priority]}</span>
           {task.isCriticalPath && <CriticalPathMark variant="glyph" />}
         </div>
         {epic && (
@@ -1029,7 +1041,7 @@ function TaskRow({
           onClick={() => onAddSubtask(task.id)}
           className="flex w-full items-center gap-1.5 border-t border-outline-variant py-1 pl-[52px] text-left text-[12px] text-on-surface-variant hover:bg-surface-container-low hover:text-primary"
         >
-          <span className="material-symbols-outlined text-[14px]">add</span>
+          <span aria-hidden="true" className="material-symbols-outlined text-[14px]">add</span>
           Add subtask…
         </button>
       )}
@@ -1068,7 +1080,7 @@ function SubtaskRow({
         {...listeners}
         onClick={(e) => e.stopPropagation()}
         className={[
-          "material-symbols-outlined text-[14px] text-on-surface-variant/40",
+          "material-symbols-outlined text-[14px] text-on-surface-variant/80",
           canEdit ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-default",
         ].join(" ")}
         aria-label="Drag to reorder subtask"
@@ -1089,12 +1101,18 @@ function SubtaskRow({
           canEdit ? "cursor-pointer" : "cursor-default",
         ].join(" ")}
       >
-        {done && <span className="material-symbols-outlined text-meta leading-none">check</span>}
+        {done && <span aria-hidden="true" className="material-symbols-outlined text-meta leading-none">check</span>}
       </button>
       <span className="flex min-w-0 items-center gap-1">
-        <span className={["truncate", done ? "text-on-surface-variant line-through" : "text-on-surface"].join(" ")}>
+        <button
+          type="button"
+          className={[
+            "min-w-0 truncate rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30",
+            done ? "text-on-surface-variant line-through" : "text-on-surface",
+          ].join(" ")}
+        >
           {task.title}
-        </span>
+        </button>
         {task.isCriticalPath && <CriticalPathMark variant="glyph" className="shrink-0" />}
       </span>
     </div>
@@ -1242,7 +1260,7 @@ function StatusSelect({
       ].join(" ")}
     >
       {TASK_STATUS_LABEL[value]}
-      {canEdit && <span className="material-symbols-outlined text-meta">expand_more</span>}
+      {canEdit && <span aria-hidden="true" className="material-symbols-outlined text-meta">expand_more</span>}
     </span>
   );
 

@@ -1,15 +1,16 @@
 import { Router, type Request, type Response } from "express";
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 import { type TokenPayload } from "google-auth-library";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { permissionsOf, requireAuth, signToken } from "../http/auth.js";
-import { normalizeUsername, USERNAME_MAX } from "../lib/username.js";
+import { permissionsOf, requireAuth, SESSION_MAX_AGE_SECONDS, signToken } from "../http/auth.js";
+import { isUsernameConflict, normalizeUsername, USERNAME_MAX } from "../lib/username.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { getAuthConfigCached } from "../authConfig.js";
-import { rateLimitKey } from "../http/rateLimit.js";
+import { createRateLimiter, rateLimitKey } from "../http/rateLimit.js";
 import { createFailureThrottle } from "../http/loginThrottle.js";
 
 // Online password guessing is throttled on FAILURES only (http/loginThrottle.ts):
@@ -65,7 +66,8 @@ function recordSignInFailure(req: Request, emailKey?: string): void {
 }
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  // Emails are stored trimmed and lowercase (admin create, Google sign-in).
+  email: z.string().trim().toLowerCase().email(),
   password: z.string().min(1),
 });
 
@@ -77,7 +79,7 @@ export const authRouter = Router();
 
 authRouter.post("/login", validate("body", loginSchema), async (req, res) => {
   const { email, password } = req.body as z.infer<typeof loginSchema>;
-  const emailKey = email.trim().toLowerCase();
+  const emailKey = email;
   assertSignInAllowed(req, res, emailKey);
 
   const user = await prisma.user.findUnique({
@@ -309,9 +311,7 @@ async function createWithUniqueUsername({
     } catch (err) {
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002" &&
-        Array.isArray(err.meta?.target) &&
-        (err.meta?.target as string[]).includes("username")
+        isUsernameConflict(err)
       ) {
         continue;
       }
@@ -387,5 +387,62 @@ authRouter.post(
       select: { tokenVersion: true },
     });
     res.json({ token: signToken({ sub: user.id, ver: updated.tokenVersion }) });
+  },
+);
+
+// Session extension. The token is `{ sub, ver }` with a fixed lifetime and no
+// sliding window, so a long working session would otherwise end mid-edit. The
+// client asks for a fresh token shortly before the current one expires.
+// `requireAuth` has already verified the presented token (HS256 only, not
+// expired), loaded the account (must exist and be active) and matched its
+// token version, so a revoked, expired or forged token never reaches here. The
+// new token carries the same claims and the same lifetime a fresh sign-in
+// grants (`JWT_EXPIRES_IN`), keeps the original `auth_time`, and never expires
+// later than SESSION_MAX_AGE_SECONDS after it (when that leaves nothing to add: 409 session_max_age).
+// Throttled per client address
+// because it is the one authenticated route that mints credentials.
+export const refreshRateLimiter = createRateLimiter({ limit: 60, windowMs: 15 * 60_000 });
+
+authRouter.post(
+  "/refresh",
+  refreshRateLimiter.middleware,
+  requireAuth,
+  async (req, res) => {
+    // requireAuth verified this token (HS256, unexpired), so decoding is safe.
+    // A token issued before `auth_time` existed is treated as signed in at its
+    // `iat`: its current session keeps working and can be extended, but only
+    // up to the cap measured from that issue time.
+    const raw = jwt.decode(req.headers.authorization!.slice("Bearer ".length).trim()) as {
+      auth_time?: unknown;
+      iat?: unknown;
+      exp?: unknown;
+    };
+    const authTime =
+      typeof raw.auth_time === "number"
+        ? raw.auth_time
+        : typeof raw.iat === "number"
+          ? raw.iat
+          : null;
+    const cap = authTime === null ? 0 : authTime + SESSION_MAX_AGE_SECONDS;
+    // Refused (409, not 401: the session itself is still valid) when the cap
+    // would not move the expiry later than the presented token's own.
+    const currentExp = typeof raw.exp === "number" ? raw.exp : 0;
+    if (authTime === null || cap <= currentExp || Math.floor(Date.now() / 1000) >= cap) {
+      throw new HttpError(
+        409,
+        "session_max_age",
+        "This session has reached its maximum length. Please sign in again.",
+      );
+    }
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: req.user!.sub },
+      select: { id: true, tokenVersion: true },
+    });
+    res.json({
+      token: signToken(
+        { sub: user.id, ver: user.tokenVersion },
+        { authTime, maxExp: cap },
+      ),
+    });
   },
 );

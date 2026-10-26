@@ -15,13 +15,14 @@
 import { Router } from "express";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
+import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 import { logger } from "../logger.js";
 import { requireAuth, requirePermission } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { open, seal, SecretBoxError } from "../lib/secretBox.js";
-import { ItopError, type ItopGetResult } from "../lib/itop/client.js";
+import { ITOP_TRANSPORT_ERROR_CODES, ItopError, type ItopGetResult } from "../lib/itop/client.js";
 import { getItopConfig, isItopConfigured, makeItopClient } from "../lib/itop/config.js";
 import { escapeOqlString, parseItopDate } from "../lib/itop/sync.js";
 import {
@@ -37,7 +38,7 @@ export const itopUserRouter = Router();
 
 itopUserRouter.use(requireAuth);
 
-const TRANSPORT_CODES = new Set<unknown>(["http", "timeout", "network", "parse"]);
+const TRANSPORT_CODES = ITOP_TRANSPORT_ERROR_CODES;
 
 /** Maps a Person-lookup failure to the HTTP shape `PUT /itop/me/token` promises: a rejected/invalid token is a 400 the user can act on, a transport failure is a 502. */
 function mapTokenCheckError(err: unknown): never {
@@ -178,8 +179,24 @@ itopUserRouter.put(
       logger.debug({ err: errorMessage(err) }, "iTop list_operations probe failed while saving a personal token; skipping");
     }
 
-    // Best-effort itopUserId + expiry — resolved with the user's OWN token,
-    // never the application token. Neither failure rejects the token itself.
+    // Ownership proof — resolved with the user's OWN token, never the
+    // application token. The Person lookup above matches on email, which any
+    // token that can read Person passes, so it does not prove whose token
+    // this is. The proof is the iTop User of that Person and that user's own
+    // PersonalToken (below). When either cannot be read the token is
+    // unverified: refused, unless the deployment opts in with
+    // ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS (src/env.ts) for iTop profiles
+    // that cannot read those classes.
+    const unverifiedMessage =
+      "Solvro could not confirm this token is yours: it cannot read your iTop user account or its personal tokens. " +
+      "Ask your iTop administrator to allow that, or ask your Solvro admin to allow tokens Solvro cannot verify.";
+    const unverified = (reason: string): void => {
+      if (!env.ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS) {
+        throw new HttpError(400, "itop_token_unverified", unverifiedMessage);
+      }
+      logger.info({ email: user.email, reason }, "Accepting an unverified personal iTop token (ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS)");
+    };
+
     let resolvedItopUserId: number | null = null;
     try {
       const userResult = await client.get<ItopUserFields>(
@@ -189,8 +206,9 @@ itopUserRouter.put(
       );
       if (userResult.objects[0]) resolvedItopUserId = userResult.objects[0].key;
     } catch (err) {
-      logger.debug({ err: errorMessage(err) }, "iTop User lookup failed while saving a personal token; itopUserId left as-is");
+      logger.debug({ err: errorMessage(err) }, "iTop User lookup failed while saving a personal token");
     }
+    if (resolvedItopUserId === null) unverified("the iTop User of this Person could not be read");
 
     // Ownership corroboration + best-effort expiry, from the SAME
     // PersonalToken query. Real iTop scopes a personal token's visibility
@@ -200,8 +218,8 @@ itopUserRouter.put(
     // own token comes back with ZERO rows here — a signal
     // list_operations can't give us, since it reports every operation the
     // server supports regardless of profile. A class that isn't readable at
-    // all (rights, missing extension, ...) is inconclusive, not disproof —
-    // that's still accepted as before, with expiresAt left null.
+    // all (rights, missing extension, ...) is inconclusive, not disproof: the
+    // token is unverified (see above), and if accepted, expiresAt stays null.
     let expiresAt: Date | null = null;
     if (resolvedItopUserId !== null) {
       try {
@@ -219,10 +237,8 @@ itopUserRouter.put(
         expiresAt = raw ? parseItopDate(raw, config.timezone) : null;
       } catch (err) {
         if (err instanceof HttpError) throw err;
-        logger.debug(
-          { err: errorMessage(err) },
-          "iTop PersonalToken read failed while saving a personal token; accepting the token, expiresAt left null",
-        );
+        logger.debug({ err: errorMessage(err) }, "iTop PersonalToken read failed while saving a personal token");
+        unverified("the PersonalToken class could not be read");
       }
     }
 

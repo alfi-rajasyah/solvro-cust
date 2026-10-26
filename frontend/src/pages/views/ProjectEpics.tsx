@@ -172,7 +172,7 @@ export function ProjectEpics() {
             onClick={() => setCreating(true)}
             className="inline-flex items-center gap-2 rounded-sm bg-primary px-3 py-1.5 font-display text-xs font-bold text-on-primary hover:bg-primary-container"
           >
-            <span className="material-symbols-outlined text-base">add</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
             Add epic
           </button>
         )}
@@ -483,7 +483,7 @@ function TitleCell({
             onStartRename();
           }}
           aria-label={`Rename ${epic.title}`}
-          className="material-symbols-outlined shrink-0 rounded-sm p-1 text-[15px] text-on-surface-variant/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="material-symbols-outlined shrink-0 rounded-sm p-1 text-[15px] text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           edit
         </button>
@@ -520,7 +520,7 @@ function EpicRow(props: RowProps) {
             type="button"
             onClick={onDelete}
             aria-label={`Delete ${epic.title}`}
-            className="material-symbols-outlined rounded-sm p-1 text-[17px] text-on-surface-variant/60 hover:bg-error-container hover:text-error"
+            className="material-symbols-outlined rounded-sm p-1 text-[17px] text-on-surface-variant/80 hover:bg-error-container hover:text-error"
           >
             delete
           </button>
@@ -543,7 +543,7 @@ function EpicCard(props: RowProps) {
             type="button"
             onClick={onDelete}
             aria-label={`Delete ${epic.title}`}
-            className="material-symbols-outlined shrink-0 rounded-sm p-1 text-[17px] text-on-surface-variant/60 hover:bg-error-container hover:text-error"
+            className="material-symbols-outlined shrink-0 rounded-sm p-1 text-[17px] text-on-surface-variant/80 hover:bg-error-container hover:text-error"
           >
             delete
           </button>

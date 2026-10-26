@@ -4,9 +4,15 @@ import { test, expect, loginViaUi } from "../fixtures/test";
 // ⌘K entry). The seeded QA user is an admin, so every topic — including the
 // permission-gated Executive and Admin ones — renders.
 
-test("the TopBar help button opens the Help page", async ({ page }) => {
+test("the TopBar help button opens the Help page", async ({ page }, testInfo) => {
   await loginViaUi(page);
-  await page.getByRole("link", { name: "Help" }).click();
+  if (testInfo.project.name === "mobile") {
+    // Below md the Help link lives in the account menu.
+    await page.getByRole("button", { name: "Account menu" }).click();
+    await page.getByRole("menuitem", { name: "Help" }).click();
+  } else {
+    await page.getByRole("link", { name: "Help" }).click();
+  }
   await expect(page).toHaveURL(/\/help$/);
   await expect(page.getByRole("heading", { level: 1, name: "Help" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "Getting started" })).toBeVisible();

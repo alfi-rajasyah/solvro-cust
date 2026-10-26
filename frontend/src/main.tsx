@@ -4,7 +4,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { registerSW } from "virtual:pwa-register";
 import { App } from "./App";
+import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { AuthProvider } from "./lib/auth";
+import { installChunkReload } from "./lib/chunkReload";
 import { ThemeProvider } from "./lib/theme";
 import "./index.css";
 
@@ -12,6 +14,8 @@ import "./index.css";
 // new version automatically (no user prompt) — safe here because the app
 // shell is versioned by build hash and API calls are always NetworkOnly.
 registerSW({ immediate: true });
+// A page chunk removed by a deploy reloads the tab once (lib/chunkReload.ts).
+installChunkReload();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,14 +28,18 @@ if (!rootElement) throw new Error("Root element #root not found");
 
 createRoot(rootElement).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <ThemeProvider>
-          <AuthProvider>
-            <App />
-          </AuthProvider>
-        </ThemeProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+    {/* Last resort for a render error outside the app shell (sign-in, guest
+        and embed pages, the providers). Pages inside the shell have their own. */}
+    <AppErrorBoundary variant="app">
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <ThemeProvider>
+            <AuthProvider>
+              <App />
+            </AuthProvider>
+          </ThemeProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </AppErrorBoundary>
   </StrictMode>,
 );

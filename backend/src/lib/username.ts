@@ -1,3 +1,5 @@
+import { Prisma } from "@prisma/client";
+
 // Username rule (2026-10 security hardening,
 // docs/archive/plans/internal-sync.md): a username is
 // NFKC-normalised and must consist of basic Latin letters, Latin-1 and
@@ -23,4 +25,16 @@ export function normalizeUsername(raw: string): string | null {
   if (name.length === 0 || name.length > USERNAME_MAX) return null;
   if (!USERNAME_RE.test(name)) return null;
   return name;
+}
+
+/**
+ * True for the unique-violation a username clash raises: the case-sensitive
+ * `username` column or the `lower(username)` index (whose error carries the
+ * index name, not a column list).
+ */
+export function isUsernameConflict(err: unknown): boolean {
+  if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") return false;
+  const meta = err.meta as { target?: unknown; constraint?: unknown } | undefined;
+  const parts = [meta?.target, meta?.constraint].flat().filter((v): v is string => typeof v === "string");
+  return parts.some((v) => v.includes("username"));
 }

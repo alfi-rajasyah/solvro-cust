@@ -44,13 +44,13 @@ Note the `timezone` value in iTop's configuration file (Admin tools > Configurat
 
 Sign in to Solvro as an admin and open **Admin > iTop**.
 
-1. **Connection.** Enter the **iTop URL** (`https://...`) and the **Application token**. Click **Test connection**. Every check must pass.
+1. **Connection.** Enter the **iTop URL** (`https://...`) and the **Application token**. Click **Test connection**. Every check must pass. When you type a new address, Test connection needs the application token in the same request, so enter the token again. Saving a new application token checks it against iTop first; if iTop refuses it, nothing is saved.
 2. **Sync.** Set **Refresh every** (minutes between syncs, default 5) and **Capacity per TAM** (hours per week, default 40, used for utilisation percentages).
 3. **Timezone.** Set **iTop server timezone** to the same value as iTop's `timezone`. Save.
 4. **Customers → iTop organisations.** Choose the iTop organisation for each customer.
 5. **Users → iTop persons.** Run the email match. Check that every TAM is matched.
 
-Each mapped customer now has a **Tickets** tab. The first sync runs within the refresh interval; **Sync now** starts one at once.
+Each mapped customer now has a **Tickets** tab. The first sync runs within the refresh interval; **Sync now** starts one at once. Manual Refresh is limited to one request per user every 30 seconds and one full pull per minute overall; a refused request waits and can be repeated shortly after.
 
 ## 4. Optional features
 
@@ -70,7 +70,7 @@ TAMs can assign, set pending, resolve, close, and reopen tickets, add log entrie
 3. **In Solvro, turn on Actions from Solvro** in Admin > iTop.
 4. **Each TAM creates a personal token** in iTop (**My Account → Personal tokens**, scope `REST/JSON`) and saves it in Solvro at **Settings > iTop**.
 
-Solvro accepts a personal token only when it belongs to the iTop Person with the TAM's own email. It never falls back to another token for a write.
+Solvro accepts a personal token only when it can confirm the token is the TAM's own: used with that token, Solvro reads the iTop User of the Person with the TAM's email and that user's own PersonalToken. If the token's profile cannot read those two classes, Solvro refuses it unless you opt in (see the troubleshooting table below and [CONFIGURATION.md](../CONFIGURATION.md)). Solvro never falls back to another token for a write.
 
 iTop's own lifecycle rules apply. Solvro sends iTop's default fields (assigning needs a team and an agent; resolving needs a solution). When your iTop has extra rules, the ticket panel shows iTop's refusal text as iTop wrote it.
 
@@ -97,9 +97,12 @@ To stop the background sync, for example during iTop maintenance, set `ITOP_SYNC
 | Symptom | Cause and fix |
 |---|---|
 | Saving the settings fails with "baseUrl must be an https:// URL". | Solvro accepts only `https://`. Put iTop behind TLS and use that address. |
+| Saving the application token fails with `itop_token_rejected`, or Test connection with a new address fails with `app_token_required`. | iTop refused the token, or the request carried an address but no token. Check the token in iTop and enter it again together with the address. |
+| Refresh answers "too many requests" (429). | Refresh is limited per user and overall. Wait a minute and try again. |
 | **Test connection** fails a check. | The application token cannot read that class. Add read rights on `Organization`, `UserRequest`, `Incident`, `Person`, and `Service`, and check the `REST Services User` profile. |
 | A TAM is not matched. | The iTop Person email differs from the Solvro email. Correct the email in iTop, then run the match again. |
 | A TAM's personal token is refused. | The token belongs to another iTop Person, or that Person's email differs from the TAM's Solvro email. Create the token while signed in to iTop as the TAM. |
+| Saving a personal token fails with "Solvro could not confirm this token is yours: it cannot read your iTop user account or its personal tokens. Ask your iTop administrator to allow that, or ask your Solvro admin to allow tokens Solvro cannot verify." (`itop_token_unverified`). | The token's iTop profile cannot read `User` or `PersonalToken` (a Support Agent profile cannot by default), so Solvro cannot prove the token is the TAM's own. Either grant that read right in iTop, or set `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS=true` in `~/solvro/.env` and run `docker compose up -d` in `~/solvro`; Solvro then accepts the token on the email match alone. Tokens saved before this check existed are not re-checked. Details: [CONFIGURATION.md](../CONFIGURATION.md). |
 | The TAM cannot create a personal token in iTop. | The TAM's profile is not in `personal_tokens_allowed_profiles`. |
 | An action fails with a message from iTop. | iTop refused the change under its own rules. Fix the ticket in iTop, or adjust the rule there. |
 | Ticket times are off by some hours. | The **iTop server timezone** in Solvro differs from iTop's `timezone`. Make them equal; times are corrected at the next sync. |

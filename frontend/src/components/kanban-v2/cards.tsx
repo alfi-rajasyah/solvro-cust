@@ -26,6 +26,25 @@ import { dateToDay } from "@/lib/dateField";
 import { fmtDay, fmtDue, isTaskOverdue } from "@/lib/formatDate";
 import { type Epic, type Task } from "@/lib/queries";
 
+function CardTitle({ task }: { task: Task }) {
+  return (
+    <>
+      {task.status === "DONE" && (
+        <>
+          <span
+            className="material-symbols-outlined mr-1 align-text-bottom text-[14px] text-primary"
+            aria-hidden="true"
+          >
+            check_circle
+          </span>
+          <span className="sr-only">Done: </span>
+        </>
+      )}
+      {task.title}
+    </>
+  );
+}
+
 export function TaskCard({
   task,
   subtaskMap,
@@ -80,9 +99,8 @@ export function TaskCard({
           : "border-outline-variant hover:border-primary",
       ].join(" ")}
     >
-      {/* Title + drag handle. The grip appears on hover / keyboard focus from
-          `md:` up (it stays in the layout and in the tab order, so it is
-          reachable by keyboard); below `md` it is always visible. */}
+      {/* Title + drag handle. The grip appears on hover, or while focus is in
+          the card, from `md:` up; below `md` it is always visible. */}
       <div className="mb-1.5 flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-start gap-1.5">
           {/* Real drag activator (T7): KanbanItemHandle attaches dnd-kit's
@@ -92,20 +110,31 @@ export function TaskCard({
               grab/grabbing cursor swap itself via isDragging context. */}
           {canDrag && (
             <KanbanItemHandle
+              // Pointer and touch only (it cannot take focus), so it is hidden
+              // from assistive tech; the label stays for tests and hover tooling.
+              aria-hidden="true"
               aria-label="Drag to reorder"
-              className="mt-0.5 inline-flex shrink-0 touch-none items-center text-on-surface-variant/60 transition-opacity md:pointer-fine:opacity-0 md:pointer-fine:group-focus-within/card:opacity-100 md:pointer-fine:group-hover/card:opacity-100 md:pointer-fine:[[data-slot=kanban-item]:focus-visible_&]:opacity-100"
+              className="mt-0.5 inline-flex shrink-0 touch-none items-center text-on-surface-variant/80 transition-opacity md:pointer-fine:opacity-0 md:pointer-fine:group-focus-within/card:opacity-100 md:pointer-fine:group-hover/card:opacity-100"
             >
-              <span className="material-symbols-outlined text-[16px]">drag_indicator</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-[16px]">drag_indicator</span>
             </KanbanItemHandle>
           )}
-          <p className="min-w-0 text-[15px] font-bold leading-tight text-on-surface">
-            {task.status === "DONE" && (
-              <span className="material-symbols-outlined mr-1 align-text-bottom text-[14px] text-primary">
-                check_circle
-              </span>
-            )}
-            {task.title}
-          </p>
+          {/* The title is the card's keyboard entry point: a real button, so
+              Tab reaches it and Enter/Space opens the task. It has no handler
+              of its own — its click bubbles to the card's onClick above. The
+              drag-overlay ghost (no onClick) keeps a plain paragraph. */}
+          {onClick ? (
+            <button
+              type="button"
+              className="min-w-0 rounded-sm text-left text-[15px] font-bold leading-tight text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+            >
+              <CardTitle task={task} />
+            </button>
+          ) : (
+            <p className="min-w-0 text-[15px] font-bold leading-tight text-on-surface">
+              <CardTitle task={task} />
+            </p>
+          )}
         </div>
         {/* Card options (opens MobileMoveSheet): touch-only, so it is always
             visible below `md` and absent from `md:` up, where the grip and the
@@ -152,7 +181,7 @@ export function TaskCard({
       {subtasks.length > 0 && (
         <div className="mb-2">
           <div className="mb-1 flex items-center gap-1 font-display text-label-caps uppercase text-on-surface-variant">
-            <span className="material-symbols-outlined text-[12px]">check_circle</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-[12px]">check_circle</span>
             Subtasks {subtasksDone}/{subtasks.length}
           </div>
           <ul className="space-y-0.5 border-l border-outline-variant/60 pl-2">
@@ -185,8 +214,9 @@ export function TaskCard({
           )}
           {task._count.comments > 0 && (
             <span className="flex items-center gap-0.5">
-              <span className="material-symbols-outlined text-[14px]">chat_bubble</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-[14px]">chat_bubble</span>
               {task._count.comments}
+              <span className="sr-only">{task._count.comments === 1 ? "comment" : "comments"}</span>
             </span>
           )}
         </div>
@@ -242,7 +272,7 @@ export function SubtaskRow({
           canToggle ? "cursor-pointer" : "cursor-default",
         ].join(" ")}
       >
-        {done && <span className="material-symbols-outlined text-meta leading-none">check</span>}
+        {done && <span aria-hidden="true" className="material-symbols-outlined text-meta leading-none">check</span>}
       </button>
       <span
         onPointerDown={(e) => e.stopPropagation()}
