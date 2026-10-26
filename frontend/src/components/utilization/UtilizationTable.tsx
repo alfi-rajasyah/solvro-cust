@@ -4,11 +4,16 @@
 // row" structure as WeeklySync.tsx's own table (no shared component exists
 // for it; both are small enough to stay self-contained). No cell here is
 // ever editable — see the footer note in Utilization.tsx.
+//
+// Below md the same markup reflows into one card per row: name and Total on
+// the first line, the seven days as a labelled strip, tickets underneath
+// (the header row is hidden and each day cell carries its own short label).
 import type { ReactNode } from "react";
 import type { UtilizationResponse, UtilizationRow, UtilizationScope } from "@/lib/queries";
 import { dayHeaders, formatHours, isOutsideSyncWindow } from "./utilizationPresentation";
 
-const MATRIX_GRID_COLS = "grid-cols-[180px_repeat(7,60px)_72px_minmax(160px,1fr)]";
+const MATRIX_GRID_COLS =
+  "grid-cols-7 md:grid-cols-[180px_repeat(7,60px)_72px_minmax(160px,1fr)]";
 
 // The mockup's row ("R-004512 · R-004530 · +2") shows 2 refs before folding
 // the rest into a "+N" overflow — the backend already caps `ticketRefs` at
@@ -32,23 +37,41 @@ function Cell({
   children,
   align = "left",
   bold = false,
+  label,
+  className = "",
 }: {
   children: ReactNode;
   align?: "left" | "right";
   bold?: boolean;
+  /** Short column name shown above the value below md, where the header row is hidden. */
+  label?: string;
+  className?: string;
 }) {
   return (
     <div
       className={[
-        "border-t border-outline-variant px-3 py-2.5 text-sm text-on-surface",
-        align === "right" ? "text-right font-mono tabular-nums" : "",
+        "border-outline-variant px-1 py-1.5 text-sm text-on-surface md:border-t md:px-3 md:py-2.5",
+        align === "right" ? "text-center font-mono tabular-nums md:text-right" : "",
         bold ? "font-bold" : "",
+        className,
       ].join(" ")}
     >
+      {label && (
+        <span className="block font-display text-label-caps font-normal uppercase text-on-surface-variant md:hidden">
+          {label}
+        </span>
+      )}
       {children}
     </div>
   );
 }
+
+// Phone card layout: the first cell (name) and Total share the top line, the
+// tickets cell spans the bottom; md and up ignore all of it.
+const NAME_CELL = "max-md:order-1 max-md:col-span-5 max-md:px-3 max-md:pt-3 max-md:text-left";
+const TOTAL_CELL = "max-md:order-2 max-md:col-span-2 max-md:pt-3 max-md:pr-3";
+const TICKETS_CELL = "max-md:order-4 max-md:col-span-7 max-md:px-3 max-md:pb-3";
+const ROW_CARD = "max-md:border-t max-md:border-outline-variant";
 
 function TicketRefs({ refs }: { refs: string[] }) {
   if (refs.length === 0) {
@@ -64,25 +87,33 @@ function TicketRefs({ refs }: { refs: string[] }) {
   );
 }
 
-function DataRow({ row, gridCols }: { row: UtilizationRow; gridCols: string }) {
+function DataRow({
+  row,
+  gridCols,
+  headers,
+}: {
+  row: UtilizationRow;
+  gridCols: string;
+  headers: string[];
+}) {
   return (
     <div
-      className={`grid ${gridCols}`}
+      className={`grid ${gridCols} ${ROW_CARD}`}
       data-testid="utilization-row"
       data-row-kind={row.kind}
     >
-      <Cell>
+      <Cell className={NAME_CELL}>
         <span className={row.kind === "none" ? "text-on-surface-variant" : "font-medium"}>{row.label}</span>
       </Cell>
       {row.hours.map((h, i) => (
-        <Cell key={i} align="right">
+        <Cell key={i} align="right" label={headers[i]} className="max-md:order-3">
           {formatHours(h)}
         </Cell>
       ))}
-      <Cell align="right" bold>
+      <Cell align="right" bold label="Total" className={TOTAL_CELL}>
         {formatHours(row.total)}
       </Cell>
-      <Cell>
+      <Cell className={TICKETS_CELL}>
         <TicketRefs refs={row.ticketRefs} />
       </Cell>
     </div>
@@ -106,8 +137,8 @@ export function UtilizationTable({
   return (
     <div>
       <div className="overflow-x-auto rounded-sm border border-outline-variant bg-surface-container-lowest">
-        <div className="min-w-[820px]">
-          <div className={`grid ${MATRIX_GRID_COLS}`}>
+        <div className="md:min-w-[820px]">
+          <div className={`grid ${MATRIX_GRID_COLS} max-md:hidden`}>
             <HeaderCell>{labelHeader}</HeaderCell>
             {headers.map((h) => (
               <HeaderCell key={h} align="right">
@@ -130,19 +161,21 @@ export function UtilizationTable({
           ) : (
             <>
               {data.rows.map((row) => (
-                <DataRow key={row.key} row={row} gridCols={MATRIX_GRID_COLS} />
+                <DataRow key={row.key} row={row} gridCols={MATRIX_GRID_COLS} headers={headers} />
               ))}
-              <div className={`grid ${MATRIX_GRID_COLS}`} data-testid="utilization-total-row">
-                <Cell bold>Total</Cell>
+              <div className={`grid ${MATRIX_GRID_COLS} ${ROW_CARD}`} data-testid="utilization-total-row">
+                <Cell bold className={NAME_CELL}>
+                  Total
+                </Cell>
                 {data.totals.hours.map((h, i) => (
-                  <Cell key={i} align="right" bold>
+                  <Cell key={i} align="right" bold label={headers[i]} className="max-md:order-3">
                     {formatHours(h)}
                   </Cell>
                 ))}
-                <Cell align="right" bold>
+                <Cell align="right" bold label="Total" className={TOTAL_CELL}>
                   {formatHours(data.totals.total)}
                 </Cell>
-                <Cell> </Cell>
+                <Cell className="max-md:hidden"> </Cell>
               </div>
             </>
           )}

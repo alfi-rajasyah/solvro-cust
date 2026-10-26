@@ -6,7 +6,7 @@ import { expect, loginViaUi, test } from "../fixtures/test";
 // best practices), in the light and the dark theme, on desktop and mobile. It
 // guards what is fixed today; known gaps are excluded explicitly and are
 // listed in docs/ISSUES.md:
-// - region, landmark-unique, page-has-heading-one, heading-order: the page
+// - region, landmark-unique, heading-order: the page
 //   landmark and heading structure is not done yet.
 // - contrast of `bg-primary/10` and `bg-primary/15` chips with `text-primary`
 //   text (4.2–4.5:1 over tinted surfaces), waiting on the brand colour
@@ -18,7 +18,7 @@ import { expect, loginViaUi, test } from "../fixtures/test";
 // on a long-lived dev database), which would make the scan slow and
 // dependent on earlier specs.
 
-const KNOWN_GAP_RULES = ["region", "landmark-unique", "page-has-heading-one", "heading-order"];
+const KNOWN_GAP_RULES = ["region", "landmark-unique", "heading-order"];
 const CONTRAST_GAP = ":is(.bg-primary\\/10, .bg-primary\\/15).text-primary";
 const REPEATED_ROWS = "tbody tr:nth-child(n+11)";
 

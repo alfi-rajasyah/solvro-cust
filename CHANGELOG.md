@@ -15,6 +15,16 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-10-26 — Frontend usability and accessibility
+
+- A failed page load on Overview, Projects, Customers, Tasks, Daily Review, Weekly Sync, the project page and the Admin Users, Roles and Sign-in tabs now shows a Retry button next to the error, so a network blip no longer needs a full page reload (new shared **`frontend/src/components/QueryErrorAlert.tsx`**). On the project page the button is hidden for a project that does not exist, since retrying cannot change that.
+- Every project page now has a level-1 heading (the project name, visible to screen readers only) in **`frontend/src/pages/ProjectDetail.tsx`**, and the automated accessibility scan (`e2e/tests/axe.spec.ts`) now checks that each scanned page has one.
+- Pressing Enter twice in the "Add story" (**`EpicPanel.tsx`**) and "Add subtask" (**`TaskPanel.tsx`**) inputs no longer creates two rows: the input ignores new input while the create request is in flight.
+- On phones the top bar (**`frontend/src/components/layout/TopBar.tsx`**) keeps room for the page title instead of cutting it to one letter. Below the `md` breakpoint, Help and the theme toggle move into the account menu. The account menu button now has an accessible name ("Account menu") and announces whether it is open, the menu closes on Escape and returns focus to the button, and its Help and Settings entries are real links.
+- Secondary text, placeholders and small icon buttons that used 40–60% opacity now use 80%, which meets the 4.5:1 contrast minimum in both themes (Kanban and ticket cards, task and epic panels, the task form, section reorder, comment mentions, the Login inputs, project list drag handles, epic actions and the Admin roles table). The modal close button (**`Modal.tsx`**) grew from 28 px to 36 px, and the subtask rename and duplicate buttons have a larger tap area.
+- Weekly Sync, Utilization and the portfolio timeline no longer scroll sideways on a phone (**`frontend/src/pages/WeeklySync.tsx`**, **`components/utilization/UtilizationTable.tsx`**, **`components/portfolio/PortfolioCalendar.tsx`**). Below 768 px the Weekly Sync and Utilization tables stack into per-row cards with labelled fields, and the portfolio timeline stacks each project's label above a full-width year bar with its date range (the dashed "Today" line shows from 768 px up only, so it no longer crosses the stacked labels). Layouts at 768 px and wider are unchanged.
+- Regression tests: `e2e/tests/double-submit.spec.ts` (a delayed create plus two Enters gives one row), new checks in `e2e/tests/project-header.spec.ts` (title not cut on phones; close button at least 36 px), and new frontend tests for the route guards, the API client's session handling (bearer token, sign-out on 401, permission refresh on 403, other errors left alone), the auth provider's reaction to those events, the rollback of an optimistic task edit when the save fails, and the Retry button.
+
 ### Security — 2026-10-26 — Hardened the iTop and Outline connections and user identity
 
 - **iTop** (`backend/src/lib/itop/client.ts`, `sync.ts`, `routes/itop.ts`, `routes/itopAdmin.ts`):

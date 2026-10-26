@@ -4,7 +4,7 @@ import { CustomerGroup } from "@/components/daily-review/CustomerGroup";
 import { StatsBar } from "@/components/daily-review/StatsBar";
 import { UnassignedGroup } from "@/components/daily-review/UnassignedGroup";
 import { WeekStrip } from "@/components/daily-review/WeekStrip";
-import { Alert, AlertDescription } from "@/components/reui/alert";
+import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { computeDailyReviewStats, firstProjectId as firstProjectIdOf, weekNumberLabel } from "@/lib/dailyReviewStats";
@@ -45,7 +45,7 @@ export function DailyReview() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [week, weekParam]);
 
-  const { data, isLoading, isError, error } = useDailyReview(week);
+  const { data, isLoading, isError, error, refetch } = useDailyReview(week);
 
   // Daily Review's iTop strip (Task 2.2): one fetch for the whole page, keyed
   // by the resolved "today" (not the viewed week — the strip always shows
@@ -134,9 +134,7 @@ export function DailyReview() {
       {isLoading && <DailyReviewSkeleton />}
 
       {isError && (
-        <Alert variant="destructive">
-          <AlertDescription>Could not load the daily review: {(error as Error).message}</AlertDescription>
-        </Alert>
+        <QueryErrorAlert title="Could not load the daily review" error={error} onRetry={refetch} />
       )}
 
       {data && isEmpty && (

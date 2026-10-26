@@ -10,7 +10,7 @@ import {
 import { AssigneeAvatar } from "@/components/AssigneeAvatar";
 import { LabelChip } from "@/components/LabelChip";
 import { PriorityBadge } from "@/components/PriorityBadge";
-import { Alert, AlertDescription } from "@/components/reui/alert";
+import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import { Tabs } from "@/components/Tabs";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { TaskStatusChip } from "@/components/StatusChip";
@@ -175,7 +175,7 @@ export function Tasks() {
     };
   }, [activeFilters, topLevel, view, todayDay, userId]);
 
-  const { data, isLoading, isError, error } = useTasksWithTotal(filter);
+  const { data, isLoading, isError, error, refetch } = useTasksWithTotal(filter);
   const tasks = data?.tasks;
   const total = data?.total ?? 0;
 
@@ -365,9 +365,7 @@ export function Tasks() {
       </div>
 
       {isError && (
-        <Alert variant="destructive">
-          <AlertDescription>Could not load tasks: {(error as Error).message}</AlertDescription>
-        </Alert>
+        <QueryErrorAlert title="Could not load tasks" error={error} onRetry={refetch} />
       )}
 
       {!isError && (

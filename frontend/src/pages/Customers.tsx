@@ -11,6 +11,7 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 import { CustomerFormModal } from "@/components/CustomerFormModal";
 import { EmptyState } from "@/components/EmptyState";
 import { Alert, AlertDescription } from "@/components/reui/alert";
+import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import { DataGrid, DataGridContainer } from "@/components/reui/data-grid/data-grid";
 import { DataGridColumnHeader } from "@/components/reui/data-grid/data-grid-column-header";
 import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll-area";
@@ -37,7 +38,7 @@ import {
 
 export function Customers() {
   const { user } = useAuth();
-  const { data: customers, isLoading, isError, error } = useCustomers();
+  const { data: customers, isLoading, isError, error, refetch } = useCustomers();
   const deleteCustomer = useDeleteCustomer();
   // TAM ids of the visible projects per customer — the "TAM of one of its
   // projects" arm of customer ownership (the list rows only carry a count).
@@ -113,9 +114,7 @@ export function Customers() {
       )}
 
       {isError && (
-        <Alert variant="destructive">
-          <AlertDescription>Could not load customers: {(error as Error).message}</AlertDescription>
-        </Alert>
+        <QueryErrorAlert title="Could not load customers" error={error} onRetry={refetch} />
       )}
 
       {customers && customers.length === 0 && (

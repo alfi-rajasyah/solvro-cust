@@ -109,6 +109,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const assigneeAddsMember = useAssigneeMembership(projectId);
   const updateTask = useUpdateTask(projectId);
   const createTask = useCreateTask(projectId);
+  const addingSubtaskRef = useRef(false);
   const deleteTask = useDeleteTask(projectId);
   const duplicateTask = useDuplicateTask(projectId);
 
@@ -302,7 +303,10 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   async function handleAddSubtask(e: FormEvent) {
     e.preventDefault();
     const title = newSubtask.trim();
-    if (!title || !task) return;
+    if (!title || !task || addingSubtaskRef.current) return;
+    // The ref closes the window before React re-renders with `isPending`:
+    // a second Enter in the same tick must not queue a second create.
+    addingSubtaskRef.current = true;
     setError(null);
     try {
       await createTask.mutateAsync({
@@ -314,6 +318,8 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
       setNewSubtask("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not add subtask.");
+    } finally {
+      addingSubtaskRef.current = false;
     }
   }
 
@@ -917,7 +923,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         type="button"
                         onClick={() => startSubtaskRename(s)}
                         aria-label={`Rename ${s.title}`}
-                        className="material-symbols-outlined -m-1 shrink-0 rounded-sm p-1 text-sm text-on-surface-variant/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100"
+                        className="material-symbols-outlined -m-2 shrink-0 rounded-sm p-2 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100"
                       >
                         edit
                       </button>
@@ -928,7 +934,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         disabled={duplicateTask.isPending && duplicateTask.variables === s.id}
                         onClick={() => void handleSubtaskDuplicate(s)}
                         aria-label={`Duplicate ${s.title}`}
-                        className="material-symbols-outlined -m-1 shrink-0 rounded-sm p-1 text-sm text-on-surface-variant/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100 disabled:cursor-default disabled:opacity-50"
+                        className="material-symbols-outlined -m-2 shrink-0 rounded-sm p-2 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100 disabled:cursor-default disabled:opacity-50"
                       >
                         content_copy
                       </button>
@@ -945,7 +951,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                           <button
                             type="button"
                             aria-label="Reorder subtask"
-                            className="material-symbols-outlined shrink-0 touch-none rounded-sm text-sm text-on-surface-variant/60 cursor-grab active:cursor-grabbing outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
+                            className="material-symbols-outlined shrink-0 touch-none rounded-sm text-sm text-on-surface-variant/80 cursor-grab active:cursor-grabbing outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
                           />
                         }
                       >
@@ -964,7 +970,8 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     onChange={(e) => setNewSubtask(e.target.value)}
                     placeholder="Add subtask"
                     maxLength={200}
-                    className="flex-1 border-none bg-transparent text-[13px] text-on-surface outline-hidden placeholder:text-on-surface-variant/60 focus:outline-hidden"
+                    readOnly={createTask.isPending}
+                    className="flex-1 border-none bg-transparent text-[13px] text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden"
                   />
                 </form>
               )}

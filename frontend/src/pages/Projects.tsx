@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ProjectFormModal } from "@/components/ProjectFormModal";
-import { Alert, AlertDescription } from "@/components/reui/alert";
+import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import { Chip, ProjectStatusChip } from "@/components/StatusChip";
 import {
   createFilter,
@@ -24,7 +24,7 @@ export function Projects() {
 
   // GET /customers needs project:read; without it the filter just stays empty.
   const { data: customers } = useCustomers(hasPermission(user, "project:read"));
-  const { data: projects, isLoading, isError, error } = useProjects(
+  const { data: projects, isLoading, isError, error, refetch } = useProjects(
     customerFilter ? { customerId: customerFilter } : {},
   );
   const [createOpen, setCreateOpen] = useState(false);
@@ -132,9 +132,7 @@ export function Projects() {
       {isLoading && <SkeletonGrid />}
 
       {isError && (
-        <Alert variant="destructive">
-          <AlertDescription>Could not load projects: {(error as Error).message}</AlertDescription>
-        </Alert>
+        <QueryErrorAlert title="Could not load projects" error={error} onRetry={refetch} />
       )}
 
       {projects && projects.length === 0 && (

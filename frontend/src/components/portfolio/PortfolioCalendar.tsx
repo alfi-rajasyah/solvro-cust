@@ -143,19 +143,25 @@ export function PortfolioCalendar({
         </div>
       </div>
 
+      {/* Below md the label stacks above its bar and the year track takes the
+          full width (no sideways scroll); from md up it is the wide
+          label-plus-track roadmap. */}
       <div className="overflow-x-auto rounded-sm border border-outline-variant bg-surface-container-lowest">
-        <div className="min-w-[784px]">
-          <div className="flex items-center gap-3 border-b border-outline-variant bg-surface-container-low px-3">
-            <div className={`${LABEL_COL_CLASS} shrink-0`} />
+        <div className="md:min-w-[784px]">
+          <div className="flex items-center border-b border-outline-variant bg-surface-container-low px-3 md:gap-3">
+            <div className={`${LABEL_COL_CLASS} shrink-0 max-md:hidden`} />
             <div className="grid flex-1 grid-cols-12">
               {MONTH_ABBR.map((label, i) => (
                 <div
                   key={label}
-                  className={`px-1.5 py-1.5 text-center font-display text-label-caps uppercase text-on-surface-variant ${
+                  className={`py-1.5 text-center font-display text-label-caps uppercase text-on-surface-variant md:px-1.5 ${
                     i > 0 ? "border-l border-outline-variant" : ""
                   }`}
                 >
-                  {label}
+                  <span className="sr-only md:not-sr-only">{label}</span>
+                  <span aria-hidden="true" className="md:hidden">
+                    {label.charAt(0)}
+                  </span>
                 </div>
               ))}
             </div>
@@ -168,8 +174,8 @@ export function PortfolioCalendar({
           ) : (
             <div className="relative">
               {showTodayLine && (
-                <div className="pointer-events-none absolute inset-0 z-10 flex gap-3 px-3">
-                  <div className={`${LABEL_COL_CLASS} shrink-0`} />
+                <div className="pointer-events-none absolute inset-0 z-10 flex px-3 max-md:hidden md:gap-3">
+                  <div className={`${LABEL_COL_CLASS} shrink-0 max-md:hidden`} />
                   <div className="relative flex-1">
                     <div
                       className="absolute top-0 h-full border-l border-dashed border-primary"
@@ -207,10 +213,10 @@ export function PortfolioCalendar({
                 return (
                   <div
                     key={p.id}
-                    className="flex h-8 items-center gap-3 border-t border-outline-variant px-3 first:border-t-0"
+                    className="flex flex-col gap-1 border-t border-outline-variant px-3 py-2 first:border-t-0 md:h-8 md:flex-row md:items-center md:gap-3 md:py-0"
                   >
                     <div
-                      className={`flex ${LABEL_COL_CLASS} shrink-0 items-center gap-2`}
+                      className={`flex ${LABEL_COL_CLASS} shrink-0 items-center gap-2 max-md:w-full`}
                     >
                       {/* One truncating line (32px row): the project name, then the
                           customer. The customer is what gets cut on a long
@@ -247,7 +253,10 @@ export function PortfolioCalendar({
                         <ProjectStatusChip status={p.status} />
                       </span>
                     </div>
-                    <div className="relative h-5 flex-1">
+                    <span className="text-meta tabular-nums text-on-surface-variant md:hidden">
+                      {fmtRange(p.start, p.end)} · {p.progressPct}%
+                    </span>
+                    <div className="relative h-5 max-md:w-full md:flex-1">
                       <div className="pointer-events-none absolute inset-0 grid grid-cols-12">
                         {MONTH_ABBR.map((label, i) => (
                           <div
