@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-10-26 — Help deep links
+
+- A `/help#<topic>` link now stays on its topic (`frontend/src/pages/Help.tsx`). The page scrolled to the topic only once, right after it rendered; if the web fonts swapped in afterwards, or permission-gated topics above it appeared once the server confirmed the user, the page reflowed and the topic could end up out of view. The page now scrolls again after the fonts load and after the user is confirmed. Regression test: `frontend/src/pages/Help.test.tsx`.
+
 ## [1.1.0] — 2026-10-26
 
 ### Changed — 2026-10-26 — Version 1.1.0
