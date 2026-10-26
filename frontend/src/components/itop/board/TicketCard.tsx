@@ -62,7 +62,7 @@ export function TicketCard({
             // assistive tech; the label stays for tests and hover tooling.
             aria-hidden="true"
             aria-label="Drag ticket"
-            className="inline-flex shrink-0 touch-none items-center text-on-surface-variant/60"
+            className="inline-flex shrink-0 touch-none items-center text-on-surface-variant/80"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-[16px]">drag_indicator</span>
           </KanbanItemHandle>

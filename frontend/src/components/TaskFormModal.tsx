@@ -401,7 +401,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
             maxLength={200}
             autoFocus
             placeholder="Task title"
-            className="flex-1 border-none bg-transparent text-lg font-bold text-on-surface outline-hidden placeholder:text-on-surface-variant/40 focus:outline-hidden"
+            className="flex-1 border-none bg-transparent text-lg font-bold text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden"
           />
         </div>
 
@@ -581,7 +581,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
             maxLength={2000}
             placeholder="Add a description…"
             disabled={!canEdit}
-            className="w-full resize-y rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:cursor-default"
+            className="w-full resize-y rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/80 focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:cursor-default"
           />
         </div>
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import {
   getCoreRowModel,
   getSortedRowModel,
@@ -99,7 +100,7 @@ export function Admin() {
 
 function UsersTab() {
   const { user: currentUser } = useAuth();
-  const { data: users, isLoading, isError } = useAdminUsers();
+  const { data: users, isLoading, isError, error: loadError, refetch } = useAdminUsers();
   // Loading-safe fallback (fix round S2): the grid's own `loadingMode`
   // skeleton is now the loading UI (see `isLoading` on <DataGrid> below), so
   // this component no longer blocks its whole render on `isLoading` — every
@@ -382,7 +383,7 @@ function UsersTab() {
   // there's nothing else on this tab worth rendering (the KPI strip and
   // create-user form are meaningless without a user list to reconcile
   // against), so this keeps the original full-block behavior for that case.
-  if (isError) return <p className="text-error">Failed to load users.</p>;
+  if (isError) return <QueryErrorAlert title="Failed to load users" error={loadError} onRetry={refetch} />;
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -743,7 +744,7 @@ function PermissionPicker({
 }
 
 function RolesTab() {
-  const { data: roles, isLoading, isError } = useAdminRoles();
+  const { data: roles, isLoading, isError, error: loadError, refetch } = useAdminRoles();
   // Loading-safe fallback (T1 DataGrid migration — same rationale as
   // UsersTab's own `rows`, "fix round S2"): `useReactTable` below is a hook
   // and must run on every render, so it can no longer sit after a blocking
@@ -841,7 +842,7 @@ function RolesTab() {
         return isEditing ? (
           <PermissionPicker value={editPerms} onChange={setEditPerms} />
         ) : r.permissions.length === 0 ? (
-          <span className="text-on-surface-variant/60">—</span>
+          <span className="text-on-surface-variant/80">—</span>
         ) : (
           <div className="flex flex-wrap gap-1">
             {r.permissions.map((p) => (
@@ -961,7 +962,7 @@ function RolesTab() {
 
   // Same isError-only short-circuit as UsersTab: a fetch failure means
   // there's nothing else on this tab worth rendering.
-  if (isError) return <p className="text-error">Failed to load roles.</p>;
+  if (isError) return <QueryErrorAlert title="Failed to load roles" error={loadError} onRetry={refetch} />;
 
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -1147,11 +1148,11 @@ function maskClientId(id: string): string {
 }
 
 function SignInTab() {
-  const { data, isLoading, isError } = useAuthSettings();
+  const { data, isLoading, isError, error, refetch } = useAuthSettings();
   const [modalOpen, setModalOpen] = useState(false);
 
   if (isLoading) return <p className="text-on-surface-variant">Loading sign-in policy…</p>;
-  if (isError || !data) return <p className="text-error">Failed to load sign-in policy.</p>;
+  if (isError || !data) return <QueryErrorAlert title="Failed to load sign-in policy" error={error} onRetry={refetch} />;
 
   const connected =
     data.googleClientId !== null && data.googleAllowedDomains.length > 0;

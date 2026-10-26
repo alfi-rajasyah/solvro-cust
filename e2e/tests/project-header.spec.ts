@@ -31,6 +31,12 @@ test.describe("Project header", () => {
 
     const dialog = page.getByRole("dialog", { name: "Delete project" });
     await expect(dialog).toBeVisible();
+    // The modal's close button is a primary touch target: at least 36px square.
+    const closeBox = await dialog.getByRole("button", { name: "Close" }).boundingBox();
+    expect(closeBox).not.toBeNull();
+    expect(closeBox!.width).toBeGreaterThanOrEqual(36);
+    expect(closeBox!.height).toBeGreaterThanOrEqual(36);
+
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toBeHidden();
   });
@@ -71,5 +77,29 @@ test.describe("Project header", () => {
     await expect(page.getByRole("button", { name: /project context/i })).toHaveCount(0);
     await page.getByRole("button", { name: "More project actions" }).click();
     await expect(page.getByRole("menuitem", { name: "Show project context" })).toBeVisible();
+  });
+
+  // The icon cluster must not squeeze the page title: at 375px every page
+  // keeps at least 12 characters (or the whole title when it is shorter).
+  test("mobile: top-bar title is not truncated on main pages", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile", "375px layout check is mobile-only");
+    await loginViaUi(page);
+    for (const path of ["/overview", "/projects", "/customers", "/tasks"]) {
+      await page.goto(path, { waitUntil: "networkidle" });
+      const title = page.getByRole("banner").locator('[aria-current="page"]');
+      await expect(title).toBeVisible();
+      const text = ((await title.textContent()) ?? "").trim();
+      const shown = await title.evaluate((el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const full = range.getBoundingClientRect().width;
+        const clipped = el.scrollWidth > el.clientWidth + 1;
+        return { full, visible: el.clientWidth, clipped };
+      });
+      if (shown.clipped) {
+        const visibleChars = Math.floor((shown.visible / shown.full) * text.length);
+        expect(visibleChars, `${path} title "${text}" is cut to ~${visibleChars} chars`).toBeGreaterThanOrEqual(12);
+      }
+    }
   });
 });

@@ -876,7 +876,7 @@ function TaskRow({
           {...listeners}
           onClick={(e) => e.stopPropagation()}
           className={[
-            "material-symbols-outlined text-[16px] text-on-surface-variant/50",
+            "material-symbols-outlined text-[16px] text-on-surface-variant/80",
             canEdit ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-default",
           ].join(" ")}
           aria-label="Drag to reorder"
@@ -1080,7 +1080,7 @@ function SubtaskRow({
         {...listeners}
         onClick={(e) => e.stopPropagation()}
         className={[
-          "material-symbols-outlined text-[14px] text-on-surface-variant/40",
+          "material-symbols-outlined text-[14px] text-on-surface-variant/80",
           canEdit ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-default",
         ].join(" ")}
         aria-label="Drag to reorder subtask"

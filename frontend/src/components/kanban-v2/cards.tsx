@@ -114,7 +114,7 @@ export function TaskCard({
               // from assistive tech; the label stays for tests and hover tooling.
               aria-hidden="true"
               aria-label="Drag to reorder"
-              className="mt-0.5 inline-flex shrink-0 touch-none items-center text-on-surface-variant/60 transition-opacity md:pointer-fine:opacity-0 md:pointer-fine:group-focus-within/card:opacity-100 md:pointer-fine:group-hover/card:opacity-100"
+              className="mt-0.5 inline-flex shrink-0 touch-none items-center text-on-surface-variant/80 transition-opacity md:pointer-fine:opacity-0 md:pointer-fine:group-focus-within/card:opacity-100 md:pointer-fine:group-hover/card:opacity-100"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[16px]">drag_indicator</span>
             </KanbanItemHandle>

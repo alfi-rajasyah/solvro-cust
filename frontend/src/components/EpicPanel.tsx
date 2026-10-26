@@ -63,6 +63,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
   const [descDraft, setDescDraft] = useState("");
   const [editingDates, setEditingDates] = useState(false);
   const [newStory, setNewStory] = useState("");
+  const addingStoryRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -134,13 +135,18 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
   async function handleAddStory(e: FormEvent) {
     e.preventDefault();
     const title = newStory.trim();
-    if (!title) return;
+    if (!title || addingStoryRef.current) return;
+    // The ref closes the window before React re-renders with `isPending`:
+    // a second Enter in the same tick must not queue a second create.
+    addingStoryRef.current = true;
     setError(null);
     try {
       await createTask.mutateAsync({ title, epicId });
       setNewStory("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not add story.");
+    } finally {
+      addingStoryRef.current = false;
     }
   }
 
@@ -312,7 +318,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
             rows={4}
             maxLength={2000}
             placeholder="What does this epic cover?"
-            className="w-full resize-none rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant/60 focus:border-primary focus:outline-hidden disabled:cursor-default"
+            className="w-full resize-none rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant/80 focus:border-primary focus:outline-hidden disabled:cursor-default"
           />
         </div>
 
@@ -355,10 +361,11 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
                 type="text"
                 value={newStory}
                 onChange={(e) => setNewStory(e.target.value)}
+                readOnly={createTask.isPending}
                 placeholder="Add story…"
                 maxLength={200}
                 aria-label="Add story"
-                className="flex-1 border-none bg-transparent text-[13px] text-on-surface outline-hidden placeholder:text-on-surface-variant/60 focus:outline-hidden"
+                className="flex-1 border-none bg-transparent text-[13px] text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden"
               />
             </form>
           )}
