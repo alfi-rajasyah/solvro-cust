@@ -48,13 +48,34 @@ declare module "express-serve-static-core" {
 }
 
 /**
- * Issues a session token: the user id and the user's current
- * `tokenVersion`. Nothing else is embedded — role and permissions are read
- * from the database on every request.
+ * Hard ceiling on a session: refreshing (POST /auth/refresh) can extend it,
+ * but never past this long after the original sign-in. A fixed constant, not
+ * an env var — env.ts has no per-feature lifetime knobs to extend.
  */
-export function signToken(claims: TokenClaims): string {
-  const opts: SignOptions = { expiresIn: env.JWT_EXPIRES_IN as SignOptions["expiresIn"] };
-  return jwt.sign(claims, env.JWT_SECRET, opts);
+export const SESSION_MAX_AGE_SECONDS = 24 * 60 * 60;
+
+/**
+ * Issues a session token: the user id, the user's current `tokenVersion` and
+ * `auth_time` (epoch seconds of the ORIGINAL sign-in; a refresh passes the
+ * old value through). Nothing else is embedded — role and permissions are
+ * read from the database on every request. `maxExp` (epoch seconds) caps the
+ * expiry below the usual lifetime.
+ */
+export function signToken(
+  claims: TokenClaims,
+  opts: { authTime?: number; maxExp?: number } = {},
+): string {
+  const authTime = opts.authTime ?? Math.floor(Date.now() / 1000);
+  const payload = { ...claims, auth_time: authTime };
+  const signOpts: SignOptions = {
+    expiresIn: env.JWT_EXPIRES_IN as SignOptions["expiresIn"],
+    algorithm: "HS256",
+  };
+  const token = jwt.sign(payload, env.JWT_SECRET, signOpts);
+  if (opts.maxExp === undefined) return token;
+  const exp = (jwt.decode(token) as { exp: number }).exp;
+  if (exp <= opts.maxExp) return token;
+  return jwt.sign({ ...payload, exp: opts.maxExp }, env.JWT_SECRET, { algorithm: "HS256" });
 }
 
 export function verifyToken(token: string): TokenClaims {

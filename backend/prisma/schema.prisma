@@ -83,61 +83,62 @@ model Role {
 }
 
 model User {
-  id                     Int                 @id @default(autoincrement())
-  username               String              @unique
-  email                  String              @unique
+  id                     Int                     @id @default(autoincrement())
+  username               String                  @unique
+  email                  String                  @unique
   // Nullable since Google-provisioned users have no password.
   // POST /auth/login rejects users with a null hash (HTTP 401 "google_only").
-  passwordHash           String?             @map("password_hash")
+  passwordHash           String?                 @map("password_hash")
   // Google `sub` claim. Unique per Google identity; null for password-only users.
-  googleSub              String?             @unique @map("google_sub")
-  avatarUrl              String?             @map("avatar_url")
-  roleId                 Int                 @map("role_id")
-  role                   Role                @relation(fields: [roleId], references: [id])
-  active                 Boolean             @default(true)
+  googleSub              String?                 @unique @map("google_sub")
+  avatarUrl              String?                 @map("avatar_url")
+  roleId                 Int                     @map("role_id")
+  role                   Role                    @relation(fields: [roleId], references: [id])
+  active                 Boolean                 @default(true)
   // Session version (2026-10 security hardening). Embedded in every JWT as
   // `ver` and compared on every request (http/auth.ts); bumped by a password
   // change, an admin reset or a deactivation so older tokens stop verifying.
-  tokenVersion           Int                 @default(0) @map("token_version")
-  createdAt              DateTime            @default(now()) @map("created_at")
-  projectsAsTAM          Project[]           @relation("ProjectTAM")
-  projectBaselinesLocked Project[]           @relation("ProjectBaselineLockedBy")
+  tokenVersion           Int                     @default(0) @map("token_version")
+  createdAt              DateTime                @default(now()) @map("created_at")
+  projectsAsTAM          Project[]               @relation("ProjectTAM")
+  projectBaselinesLocked Project[]               @relation("ProjectBaselineLockedBy")
   assignedTasks          Task[]
   epicsOwned             Epic[]
   comments               Comment[]
   projectNotes           ProjectNote[]
-  authConfigUpdates      AuthConfig[]        @relation("AuthConfigUpdatedBy")
-  tamCustomers           Customer[]          @relation("CustomerTam")
+  authConfigUpdates      AuthConfig[]            @relation("AuthConfigUpdatedBy")
+  tamCustomers           Customer[]              @relation("CustomerTam")
   customerNotes          CustomerNote[]
   weeklyUpdates          WeeklyUpdate[]
   projectReviews         ProjectReview[]
-  itopConfigUpdates      ItopConfig[]        @relation("ItopConfigUpdatedBy")
-  outlineConfigUpdates   OutlineConfig[]     @relation("OutlineConfigUpdatedBy")
+  itopConfigUpdates      ItopConfig[]            @relation("ItopConfigUpdatedBy")
+  outlineConfigUpdates   OutlineConfig[]         @relation("OutlineConfigUpdatedBy")
   // iTop Person/User object keys this account is matched to (by email).
-  itopPersonId           Int?                @unique @map("itop_person_id")
-  itopUserId             Int?                @unique @map("itop_user_id")
+  itopPersonId           Int?                    @unique @map("itop_person_id")
+  itopUserId             Int?                    @unique @map("itop_user_id")
   itopTimeEntries        ItopTimeEntry[]
   // Personal iTop token (Phase 5 write path, backend/src/routes/itopUser.ts).
   // Sealed at rest (lib/secretBox.ts) — never the plaintext token. Writes to
   // iTop always use this token for the acting user; the application token
   // (ItopConfig.appTokenEnc) is read-only and never used for a write.
-  itopTokenEnc           String?             @map("itop_token_enc")
-  itopTokenCheckedAt     DateTime?           @map("itop_token_checked_at")
-  itopTokenPersonName    String?             @map("itop_token_person_name")
-  itopTokenExpiresAt     DateTime?           @map("itop_token_expires_at")
+  itopTokenEnc           String?                 @map("itop_token_enc")
+  itopTokenCheckedAt     DateTime?               @map("itop_token_checked_at")
+  itopTokenPersonName    String?                 @map("itop_token_person_name")
+  itopTokenExpiresAt     DateTime?               @map("itop_token_expires_at")
   // Personal Outline OAuth tokens (docs/archive/plans/outline-integration.md, D2).
   // Both sealed at rest (lib/secretBox.ts). An Outline call always runs under the
   // acting user's own token, accepted only when `auth.info` returned this
   // account's Solvro email; Solvro holds no Outline application/admin token.
-  outlineAccessTokenEnc  String?             @map("outline_access_token_enc")
-  outlineRefreshTokenEnc String?             @map("outline_refresh_token_enc")
-  outlineTokenExpiresAt  DateTime?           @map("outline_token_expires_at")
-  outlineUserId          String?             @unique @map("outline_user_id")
-  outlineEmail           String?             @map("outline_email")
+  outlineAccessTokenEnc  String?                 @map("outline_access_token_enc")
+  outlineRefreshTokenEnc String?                 @map("outline_refresh_token_enc")
+  outlineTokenExpiresAt  DateTime?               @map("outline_token_expires_at")
+  outlineUserId          String?                 @unique @map("outline_user_id")
+  outlineEmail           String?                 @map("outline_email")
   outlineOAuthStates     OutlineOAuthState[]
-  projectMemberships     ProjectMember[]     @relation("ProjectMemberUser")
-  projectMembersAdded    ProjectMember[]     @relation("ProjectMemberAddedBy")
+  projectMemberships     ProjectMember[]         @relation("ProjectMemberUser")
+  projectMembersAdded    ProjectMember[]         @relation("ProjectMemberAddedBy")
   activityEvents         ActivityEvent[]
+  customerActivityEvents CustomerActivityEvent[]
   shareLinksCreated      ShareLink[]
   notifications          Notification[]
 
@@ -307,6 +308,7 @@ model Project {
   @@index([tamId])
   @@index([customerId])
   @@index([status])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "projects_name_trgm_idx")
   @@map("projects")
 }
 
@@ -351,6 +353,7 @@ model ActivityEvent {
   notifications Notification[]
 
   @@index([projectId, createdAt(sort: Desc)])
+  @@index([projectId, id(sort: Desc)])
   @@index([createdAt])
   @@map("activity_events")
 }
@@ -375,30 +378,53 @@ model Notification {
   @@map("notifications")
 }
 
+// Customer-scoped audit trail. ActivityEvent is project-scoped and cascades with
+// its project, so a project deletion would erase its own record; this table
+// outlives the project and, via SetNull, its customer (`customerId` is null for a
+// project that had none, or once its customer is deleted). `projectId` is a plain number (no relation) because the
+// project it names is gone. Not shown in the UI. Written in the same
+// transaction as the change by routes/projects.ts (project deletion).
+model CustomerActivityEvent {
+  id          Int       @id @default(autoincrement())
+  customerId  Int?      @map("customer_id")
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  actorId     Int?      @map("actor_id")
+  actor       User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action      String
+  projectId   Int       @map("project_id")
+  projectName String    @map("project_name")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([customerId, createdAt(sort: Desc)])
+  @@map("customer_activity_events")
+}
+
 model Customer {
-  id                Int               @id @default(autoincrement())
-  name              String            @unique
-  accountManager    String?           @map("account_manager")
-  solutionArchitect String?           @map("solution_architect")
-  description       String            @db.Text
+  id                Int                     @id @default(autoincrement())
+  name              String                  @unique
+  accountManager    String?                 @map("account_manager")
+  solutionArchitect String?                 @map("solution_architect")
+  description       String                  @db.Text
   // Optional link to this customer's Outline page or collection (http/https,
   // validated by lib/outlineUrl.ts). Never part of the guest payload or any export.
-  outlineUrl        String?           @map("outline_url")
-  createdAt         DateTime          @default(now()) @map("created_at")
+  outlineUrl        String?                 @map("outline_url")
+  createdAt         DateTime                @default(now()) @map("created_at")
   projects          Project[]
   services          CustomerService[]
-  tamId             Int?              @map("tam_id")
-  tam               User?             @relation("CustomerTam", fields: [tamId], references: [id], onDelete: SetNull)
+  tamId             Int?                    @map("tam_id")
+  tam               User?                   @relation("CustomerTam", fields: [tamId], references: [id], onDelete: SetNull)
   notes             CustomerNote[]
   weeklyUpdates     WeeklyUpdate[]
   // iTop Organization this customer is mapped to (admin-mapped or exact
   // name auto-match). One customer per org.
-  itopOrgId         Int?              @unique @map("itop_org_id")
-  itopOrgName       String?           @map("itop_org_name")
+  itopOrgId         Int?                    @unique @map("itop_org_id")
+  itopOrgName       String?                 @map("itop_org_name")
   itopTickets       ItopTicket[]
   itopTimeEntries   ItopTimeEntry[]
+  activityEvents    CustomerActivityEvent[]
 
   @@index([tamId])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "customers_name_trgm_idx")
   @@map("customers")
 }
 
@@ -517,6 +543,7 @@ model Task {
   // Backs the reverse lookup itopTicketRef documents above (ticket ref -> task).
   @@index([itopTicketRef])
   @@index([epicId])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "tasks_title_trgm_idx")
   @@map("tasks")
 }
 

@@ -132,6 +132,9 @@ const tasksListQuerySchema = z
     // `position` (default) is board order; `due` is soonest first with
     // undated tasks last.
     sort: z.enum(["position", "due"]).optional(),
+    // Rows to skip, for paging past the 200-row page. The order is total
+    // (ties broken by id), so consecutive pages never overlap or skip.
+    offset: z.coerce.number().int().min(0).max(1_000_000).optional(),
     // Caller's local calendar day ("yyyy-MM-dd"), used only when overdue=true
     // — see lib/dateBoundary.ts for the full contract. Ignored otherwise.
     today: z
@@ -232,6 +235,7 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
     dueFrom,
     dueTo,
     sort,
+    offset,
     today,
   } = req.query as unknown as z.infer<typeof tasksListQuerySchema>;
 
@@ -294,9 +298,10 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
         },
         _count: { select: { subtasks: true, comments: true } },
       },
+      skip: offset ?? 0,
       take: 200,
     }),
-    // Full match count (ignores the take cap) so the UI can say "200 of N".
+    // Full match count (ignores take and offset) so the UI can say "200 of N".
     prisma.task.count({ where }),
   ]);
   res.setHeader("X-Total-Count", String(total));
@@ -411,6 +416,23 @@ tasksRouter.patch(
         return after;
       };
       const { cur, nextStatus, nextParentTaskId, oldKey, newKey, touchesOrdering } = state;
+
+      // A milestone needs a due date. The body schema only catches
+      // `isMilestone: true` with `dueDate: null` in the same request; the
+      // other two routes in (flagging an undated task, or clearing the date
+      // of a stored milestone) need the locked row. Checked only when this
+      // patch touches one of the two fields, so an unrelated edit of a
+      // legacy undated milestone still saves.
+      if (
+        (body.isMilestone === true || body.dueDate === null) &&
+        (body.isMilestone ?? cur.isMilestone) &&
+        (body.dueDate !== undefined ? body.dueDate : cur.dueDate) === null
+      ) {
+        throw new HttpError(400, "validation_error", "A milestone requires a due date", {
+          formErrors: [],
+          fieldErrors: { dueDate: ["A milestone requires a due date"] },
+        });
+      }
 
       if (nextParentTaskId !== null) {
         await assertValidParent(tx, cur.projectId, id, nextParentTaskId);

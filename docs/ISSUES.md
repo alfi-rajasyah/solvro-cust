@@ -649,7 +649,7 @@ that same fix wave (as N-a/N-c) and are omitted below as already resolved.
    Fix: add the three missing assertions plus a `_`-literal case (or rename
    the test to drop the `_` claim). Cheap; nothing wrong with the escaping
    itself today.
-2. **`pg_trgm` GIN index follow-up for `/search`** (`backend/src/routes/search.ts`):
+2. **`pg_trgm` GIN index follow-up for `/search`** (`backend/src/routes/search.ts`) — *Resolved 2026-10-26: migration `20261027090000_search_trigram_activity_index` adds the trigram indexes on project names, task titles and customer names.*
    the projects/tasks `ILIKE` queries run as sequential scans today —
    measured baseline (final review, 2026-07-27): 901 projects / 4,181 tasks
    / 221 customers, `EXPLAIN ANALYZE` 0.58ms (projects) / 2.61ms (tasks),
@@ -2412,3 +2412,10 @@ Left after the lockfile patch recorded in `CHANGELOG.md` ("Patched dependency ad
 - **The Utilization page Refresh shows no error to the user** (2026-10-26): when the request fails (for example the new 429 from the Refresh limits), `frontend/src/pages/Utilization.tsx` shows nothing.
 - **A full sync requested by Refresh is dropped silently while a scheduled sync holds the lock** (2026-10-26): `backend/src/lib/itop/sync.ts`, `backend/src/routes/itop.ts`. The 60 s global window is still used up, so a second Refresh is refused for a minute without the full sync having run.
 - **A customer name clash still answers 409 vs 201** (2026-10-26): creating a customer whose name is taken by a customer the caller cannot see answers 409 instead of 201 (`backend/src/routes/customers.ts`), so a TAM can learn that the name exists. Deferred.
+
+## Data integrity, session and query performance — deferred findings (2026-10-26)
+
+- **Project-deletion records are not shown and are never cleaned up** (2026-10-26): the `customer_activity_events` rows written when a project is deleted (`backend/src/routes/projects.ts`) appear nowhere in the UI, and the 180-day activity cleanup does not cover them. Customer owner changes are still only a log line (`backend/src/routes/customers.ts`) and could be recorded in the same table.
+- **The `/auth/refresh` rate limit is per process and in memory** (2026-10-26): `refreshRateLimiter` in `backend/src/routes/auth.ts`. A restart resets it, and with several backend processes each keeps its own count.
+- **Tasks page offset paging can shift rows between pages** (2026-10-26): `GET /tasks` (`backend/src/routes/tasks.ts`) pages by `offset`, so a concurrent insert or delete can repeat or skip a row across "Load more" pages. The normal offset trade-off; the order itself is stable.
+- **The trigram index test forces the plan** (2026-10-26): `backend/test/indexUsage.test.ts` sets `enable_seqscan = off` to show the new indexes can serve the search queries. At current table sizes the planner still prefers a sequential scan on its own.
