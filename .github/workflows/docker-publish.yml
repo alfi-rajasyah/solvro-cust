@@ -23,7 +23,7 @@ env:
 
 jobs:
   build:
-    runs-on: [self-hosted, solvro-ci]
+    runs-on: ubuntu-latest
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: read
@@ -97,7 +97,7 @@ jobs:
     if: >-
       (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'staging') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/staging')
-    runs-on: [self-hosted, solvro-ci]
+    runs-on: ubuntu-latest
     steps:
       - name: Trigger the staging deploy webhook
         env:

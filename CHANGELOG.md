@@ -15,10 +15,6 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
-### Changed — 2026-11-02 — CI runs on a self-hosted runner
-
-- Every job in `.github/workflows/ci.yml` and `docker-publish.yml` now runs on the self-hosted runner VM (`runs-on: [self-hosted, solvro-ci]`) instead of GitHub-hosted runners, so CI uses no GitHub Actions minutes. The VM is shared with the other Solvro repository, and a runner job hook lets only one job run on it at a time, because both repositories' e2e stacks use the same host ports. Each CI job's timeout grows by 45 minutes to cover waiting for the VM.
-
 ### Changed — 2026-11-02 — CI uses fewer GitHub Actions minutes
 
 - `.github/workflows/ci.yml` no longer runs on pushes to `develop`: every change reaches it through a PR that already ran CI, and nothing publishes from `develop`. Draft PRs wait until they are marked ready, and changes that touch only Markdown, `docs/`, `.claude/`, `notes/` or the licence don't run CI at all. Feature PRs into `develop` run desktop e2e only; PRs into `staging` or `main` run typecheck and backend tests; pushes to `staging` and `main`, which gate image publishing, still run the full suite with desktop and mobile e2e. A `workflow_dispatch` trigger allows a full run on demand.
