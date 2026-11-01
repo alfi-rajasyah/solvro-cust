@@ -1,10 +1,33 @@
 name: CI
 
+# What runs where (kept lean to save GitHub Actions minutes):
+# - PR into develop: typecheck, backend tests, desktop e2e. This is the merge gate.
+# - PR into staging or main (a promotion of already-tested code): typecheck and
+#   backend tests only.
+# - Push to staging or main: the full suite, desktop and mobile e2e. A green run
+#   here is what lets docker-publish.yml ship images.
+# - Push to develop does not run: every change reached it through a tested PR,
+#   and nothing publishes from develop.
+# - Draft PRs wait until they are marked ready; docs-only changes never run.
 on:
   pull_request:
     branches: [develop, staging, main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - ".claude/**"
+      - "notes/**"
+      - "LICENSE*"
   push:
-    branches: [develop, staging, main]
+    branches: [staging, main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - ".claude/**"
+      - "notes/**"
+      - "LICENSE*"
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -32,6 +55,7 @@ jobs:
   # them inside the e2e job's Docker image builds. Covers all three packages,
   # including the e2e suite whose typecheck is not exercised anywhere else.
   typecheck:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -102,6 +126,7 @@ jobs:
         run: ci/check-version.sh
 
   backend-tests:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 25
     services:
@@ -170,15 +195,19 @@ jobs:
   # `npm ci` layers inside the Dockerfiles are rebuilt only when a lock file
   # changes — on every other run the build is seconds, not minutes, and a
   # slow registry cannot stall the gate.
+  # e2e runs on PRs into develop (desktop only) and on pushes to staging/main
+  # or a manual run (desktop and mobile). Mobile regressions on a feature PR
+  # therefore surface at the staging push, which blocks publishing.
   e2e:
     name: e2e (${{ matrix.project }})
+    if: github.event_name != 'pull_request' || (github.base_ref == 'develop' && !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     # The desktop half alone runs about 20 minutes (Outline specs added 2026-10-12).
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        project: [desktop, mobile]
+        project: ${{ github.event_name == 'pull_request' && fromJSON('["desktop"]') || fromJSON('["desktop","mobile"]') }}
     env:
       ADMIN_EMAIL: qa@solvro.test
     steps:
