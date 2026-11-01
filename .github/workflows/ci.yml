@@ -9,6 +9,11 @@ name: CI
 # - Push to develop does not run: every change reached it through a tested PR,
 #   and nothing publishes from develop.
 # - Draft PRs wait until they are marked ready; docs-only changes never run.
+#
+# Every job runs on the self-hosted runner VM (label `solvro-ci`), shared with
+# the other Solvro repository. A runner job hook lets only one job run on that
+# VM at a time, because both repos' e2e stacks use the same host ports. Each
+# timeout below therefore includes up to 45 minutes of waiting for the VM.
 on:
   pull_request:
     branches: [develop, staging, main]
@@ -56,8 +61,8 @@ jobs:
   # including the e2e suite whose typecheck is not exercised anywhere else.
   typecheck:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: [self-hosted, solvro-ci]
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -127,8 +132,8 @@ jobs:
 
   backend-tests:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    runs-on: [self-hosted, solvro-ci]
+    timeout-minutes: 70
     services:
       postgres:
         image: postgres:15-alpine
@@ -201,9 +206,9 @@ jobs:
   e2e:
     name: e2e (${{ matrix.project }})
     if: github.event_name != 'pull_request' || (github.base_ref == 'develop' && !github.event.pull_request.draft)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, solvro-ci]
     # The desktop half alone runs about 20 minutes (Outline specs added 2026-10-12).
-    timeout-minutes: 30
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
