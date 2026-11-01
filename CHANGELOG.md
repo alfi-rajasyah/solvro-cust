@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-02 — e2e runs in four parallel shards
+
+- The e2e job in `.github/workflows/ci.yml` splits each Playwright project into four shards (`--shard=N/4`), each on its own stack and database, so a run waits about 9 minutes instead of about 21. Only the first desktop shard writes the Docker layer cache; the other shards read it. The e2e timeout drops to 20 minutes per shard.
+
 ### Changed — 2026-11-02 — CI uses fewer GitHub Actions minutes
 
 - `.github/workflows/ci.yml` no longer runs on pushes to `develop`: every change reaches it through a PR that already ran CI, and nothing publishes from `develop`. Draft PRs wait until they are marked ready, and changes that touch only Markdown, `docs/`, `.claude/`, `notes/` or the licence don't run CI at all. Feature PRs into `develop` run desktop e2e only; PRs into `staging` or `main` run typecheck and backend tests; pushes to `staging` and `main`, which gate image publishing, still run the full suite with desktop and mobile e2e. A `workflow_dispatch` trigger allows a full run on demand.

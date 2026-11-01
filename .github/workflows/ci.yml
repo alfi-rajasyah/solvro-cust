@@ -1,10 +1,12 @@
 name: CI
 
 # What runs where (kept lean to save GitHub Actions minutes):
-# - PR into develop: typecheck, backend tests, desktop e2e. This is the merge gate.
+# - PR into develop: typecheck, backend tests, desktop e2e in 4 parallel shards.
+#   This is the merge gate.
 # - PR into staging or main (a promotion of already-tested code): typecheck and
 #   backend tests only.
-# - Push to staging or main: the full suite, desktop and mobile e2e. A green run
+# - Push to staging or main: the full suite, desktop and mobile e2e (4 shards
+#   each). A green run
 #   here is what lets docker-publish.yml ship images.
 # - Push to develop does not run: every change reached it through a tested PR,
 #   and nothing publishes from develop.
@@ -198,16 +200,21 @@ jobs:
   # e2e runs on PRs into develop (desktop only) and on pushes to staging/main
   # or a manual run (desktop and mobile). Mobile regressions on a feature PR
   # therefore surface at the staging push, which blocks publishing.
+  # Each project is split into 4 shards (`--shard=N/4`), each on its own stack
+  # and database, so no check runs much past 10 minutes. Playwright splits the
+  # suite by spec file (fullyParallel is off). Only the first desktop shard
+  # writes the image layer cache; the others read it.
   e2e:
-    name: e2e (${{ matrix.project }})
+    name: e2e (${{ matrix.project }} ${{ matrix.shard }}/4)
     if: github.event_name != 'pull_request' || (github.base_ref == 'develop' && !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     # The desktop half alone runs about 20 minutes (Outline specs added 2026-10-12).
-    timeout-minutes: 30
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         project: ${{ github.event_name == 'pull_request' && fromJSON('["desktop"]') || fromJSON('["desktop","mobile"]') }}
+        shard: [1, 2, 3, 4]
     env:
       ADMIN_EMAIL: qa@solvro.test
     steps:
@@ -249,7 +256,7 @@ jobs:
           tags: solvro-ci-backend:latest
           load: true
           cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
+          cache-to: ${{ matrix.project == 'desktop' && matrix.shard == 1 && 'type=gha,mode=max,scope=backend' || '' }}
 
       - name: Build frontend image (cached)
         uses: docker/build-push-action@v6
@@ -259,7 +266,7 @@ jobs:
           tags: solvro-ci-frontend:latest
           load: true
           cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
+          cache-to: ${{ matrix.project == 'desktop' && matrix.shard == 1 && 'type=gha,mode=max,scope=frontend' || '' }}
 
       # The widened /embed/ + /share/ framing header must collapse to 'self' for
       # any unsafe or missing EMBED_FRAME_ANCESTORS (header-injection guard).
@@ -324,12 +331,12 @@ jobs:
         working-directory: e2e
         run: npx playwright install-deps chromium
 
-      - name: Run Playwright tests (${{ matrix.project }})
+      - name: Run Playwright tests (${{ matrix.project }} ${{ matrix.shard }}/4)
         working-directory: e2e
         env:
           BASE_URL: http://localhost:8080
           CI: "true"
-        run: npx playwright test --project=${{ matrix.project }}
+        run: npx playwright test --project=${{ matrix.project }} --shard=${{ matrix.shard }}/4
 
       - name: Dump container logs on failure
         if: failure()
@@ -339,7 +346,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-traces-${{ matrix.project }}
+          name: playwright-traces-${{ matrix.project }}-${{ matrix.shard }}
           path: |
             e2e/test-results/
             e2e/playwright-report/
