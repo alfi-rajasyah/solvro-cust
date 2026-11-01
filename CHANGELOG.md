@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-02 — Staging branch and automatic staging deploys
+
+- CI (`.github/workflows/ci.yml`) now also runs on the new `staging` branch, the release-candidate branch between `develop` and `main`. A green `staging` build publishes `:staging` and `:sha-<commit>` images (`.github/workflows/docker-publish.yml`). A new `deploy-staging` job then calls the staging server's Openship deploy webhook, and Openship restarts only the services whose image changed. The webhook address and its token come from the repository secrets `OPENSHIP_STAGING_HOOK_URL` and `OPENSHIP_STAGING_HOOK_TOKEN`; without them the job skips. `main` and release tags publish exactly as before and never deploy to staging.
+
 ### Fixed — 2026-10-26 — Help deep links
 
 - A `/help#<topic>` link now stays on its topic (`frontend/src/pages/Help.tsx`). The page scrolled to the topic only once, right after it rendered; if the web fonts swapped in afterwards, or permission-gated topics above it appeared once the server confirmed the user, the page reflowed and the topic could end up out of view. The page now scrolls again after the fonts load and after the user is confirmed. Regression test: `frontend/src/pages/Help.test.tsx`.
