@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-02 — Flaky frame-ancestors check in CI
+
+- `ci/check-frame-ancestors.sh` starts the frontend image once per case. When a `docker run` failed transiently, its output was empty and the case reported a wrong framing header: on the first `staging` run, "path in origin" failed on 2 of 8 e2e shards while the same image passed on the other 6. An empty result is now retried once before it is judged, and a case that still comes back empty prints the raw `nginx -T` output so the real cause shows in the log. The check verifies the image, not the test suite, so `.github/workflows/ci.yml` now runs it only in the first desktop e2e shard instead of in every shard.
+
 ### Changed — 2026-11-02 — e2e runs in four parallel shards
 
 - The e2e job in `.github/workflows/ci.yml` splits each Playwright project into four shards (`--shard=N/4`), each on its own stack and database, so a run waits about 9 minutes instead of about 21. Only the first desktop shard writes the Docker layer cache; the other shards read it. The e2e timeout drops to 20 minutes per shard.

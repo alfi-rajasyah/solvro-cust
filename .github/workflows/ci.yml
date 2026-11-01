@@ -270,7 +270,9 @@ jobs:
 
       # The widened /embed/ + /share/ framing header must collapse to 'self' for
       # any unsafe or missing EMBED_FRAME_ANCESTORS (header-injection guard).
+      # It checks the frontend image, not the test suite, so one shard is enough.
       - name: Check frame-ancestors rendering (fail-closed)
+        if: matrix.project == 'desktop' && matrix.shard == 1
         run: ci/check-frame-ancestors.sh solvro-ci-frontend:latest
 
       - name: Start stack
