@@ -9,16 +9,29 @@ import { filterHelpTopics, type HelpTopic } from "@/lib/helpContent";
 // Admin) are hidden with the same rule the sidebar uses. Reached from the
 // TopBar's help button only (no sidebar or ⌘K entry, by user decision).
 export function Help() {
-  const { user } = useAuth();
+  const { user, userVerified } = useAuth();
   const { hash } = useLocation();
   const [query, setQuery] = useState("");
   const topics = filterHelpTopics((p) => hasPermission(user, p), query);
 
   // /help#<topic> deep link: the sections render after the route mounts, so
   // the browser's own hash scroll finds nothing — scroll once they exist.
+  // Scroll again when anything above the target can still move it: the web
+  // fonts swap in after first paint (display=swap) and reflow the whole page,
+  // and permission-gated topics can appear only once the server confirms the
+  // user.
   useEffect(() => {
-    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView();
-  }, [hash]);
+    if (!hash) return;
+    const scroll = () => document.getElementById(hash.slice(1))?.scrollIntoView();
+    scroll();
+    let cancelled = false;
+    void document.fonts?.ready.then(() => {
+      if (!cancelled) scroll();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [hash, userVerified]);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">

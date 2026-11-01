@@ -8,7 +8,7 @@ on:
   workflow_run:
     workflows: [CI]
     types: [completed]
-    branches: [main]
+    branches: [staging, main]
   # Tags don't run CI (they're cut from an already-green main), so they
   # publish directly, as before.
   push:
@@ -87,3 +87,27 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
+
+  deploy-staging:
+    # After the images for `staging` are pushed, ask Openship to redeploy the
+    # staging project. Openship pulls each image, compares digests and restarts
+    # only the services whose image changed. main and release tags never deploy
+    # here. Skipped when the two repository secrets are not set (e.g. forks).
+    needs: build
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'staging') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/staging')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the staging deploy webhook
+        env:
+          HOOK_URL: ${{ secrets.OPENSHIP_STAGING_HOOK_URL }}
+          HOOK_TOKEN: ${{ secrets.OPENSHIP_STAGING_HOOK_TOKEN }}
+        run: |
+          if [ -z "$HOOK_URL" ] || [ -z "$HOOK_TOKEN" ]; then
+            echo "Staging deploy webhook is not configured; skipping."
+            exit 0
+          fi
+          curl -fsS --retry 3 --retry-all-errors --max-time 30 -X POST "$HOOK_URL" \
+            -H "Authorization: Bearer $HOOK_TOKEN" \
+            -H "Content-Type: application/json" -d '{}'
