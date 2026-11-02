@@ -326,7 +326,7 @@ export function Tasks() {
   return (
     <div>
       <div className="mb-4">
-        <h1 className="font-display text-2xl font-bold text-on-surface">Tasks</h1>
+        <h1 className="font-display text-h1 text-on-surface">Tasks</h1>
         <p className="text-sm text-on-surface-variant">
           Cross-project task list. Pick a view, apply filters, click any row to open the editor.
         </p>

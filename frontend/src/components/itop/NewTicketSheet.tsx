@@ -15,7 +15,7 @@ import {
   type ItopTicketClass,
 } from "@/lib/queries";
 
-const LABEL_CLASS = "mb-1 block text-[12px] font-bold uppercase tracking-wider text-on-surface-variant";
+const LABEL_CLASS = "mb-1.5 block text-label-caps uppercase text-on-surface-variant";
 const FIELD_CLASS =
   "w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden";
 

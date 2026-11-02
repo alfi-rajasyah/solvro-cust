@@ -58,7 +58,7 @@ export function Settings() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <header>
-        <h1 className="font-display text-2xl font-bold text-on-surface">Settings</h1>
+        <h1 className="font-display text-h1 text-on-surface">Settings</h1>
         <p className="text-sm text-on-surface-variant">
           Manage your account profile and password.
         </p>
@@ -67,7 +67,7 @@ export function Settings() {
       <ThemeCard />
 
       <section className="rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
-        <h2 className="mb-3 font-display text-[13px] font-bold uppercase tracking-wider text-on-surface">
+        <h2 className="mb-3 font-display text-sm font-bold text-on-surface">
           Profile
         </h2>
         <dl className="grid grid-cols-1 gap-y-2 text-sm md:grid-cols-[140px_1fr]">
@@ -102,7 +102,7 @@ export function Settings() {
 
       {hasPermission(user, "project:write") && (
         <section className="rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
-          <h2 className="mb-3 font-display text-[13px] font-bold uppercase tracking-wider text-on-surface">
+          <h2 className="mb-3 font-display text-sm font-bold text-on-surface">
             Service Catalogue
           </h2>
           <ServiceCatalogueManager />
@@ -110,12 +110,12 @@ export function Settings() {
       )}
 
       <section className="rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
-        <h2 className="mb-3 font-display text-[13px] font-bold uppercase tracking-wider text-on-surface">
+        <h2 className="mb-3 font-display text-sm font-bold text-on-surface">
           Change password
         </h2>
 
         {success && (
-          <div className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          <div className="mb-3 rounded-lg border border-chip-emerald-text/40 bg-chip-emerald-bg px-3 py-2 text-sm text-chip-emerald-text">
             Password updated.
           </div>
         )}
@@ -225,7 +225,7 @@ function ItopTokenSection({ canSave }: { canSave: boolean }) {
 
   return (
     <section className="rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
-      <h2 className="mb-3 font-display text-[13px] font-bold uppercase tracking-wider text-on-surface">
+      <h2 className="mb-3 font-display text-sm font-bold text-on-surface">
         iTop
       </h2>
 
@@ -337,7 +337,7 @@ function ThemeCard() {
   ];
   return (
     <section className="rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
-      <h2 className="mb-1 font-display text-[13px] font-bold uppercase tracking-wider text-on-surface">
+      <h2 className="mb-1 font-display text-sm font-bold text-on-surface">
         Appearance
       </h2>
       <p className="mb-3 text-[12px] text-on-surface-variant">
@@ -353,14 +353,14 @@ function ThemeCard() {
               onClick={() => setChoice(opt.key)}
               aria-pressed={active}
               className={[
-                "flex flex-col gap-2 rounded-sm border p-3 text-left transition-colors",
+                "flex flex-col gap-2 rounded-sm border p-3 text-left transition-colors outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
                 active
                   ? "border-primary bg-primary/5"
                   : "border-outline-variant bg-surface-container-lowest hover:border-primary/40",
               ].join(" ")}
             >
               <div className="flex items-center justify-between">
-                <span className="font-display text-[12px] font-bold uppercase tracking-wider text-on-surface">
+                <span className="font-display text-sm font-semibold text-on-surface">
                   {opt.label}
                 </span>
                 {active ? (
@@ -407,7 +407,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[12px] font-bold uppercase tracking-wider text-on-surface-variant">
+      <span className="mb-1.5 block text-label-caps uppercase text-on-surface-variant">
         {label}
         {required && <span className="ml-1 text-error">*</span>}
       </span>

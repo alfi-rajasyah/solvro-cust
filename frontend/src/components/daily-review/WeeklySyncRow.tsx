@@ -58,7 +58,7 @@ export function WeeklySyncRow({ customer, week }: WeeklySyncRowProps) {
           <button
             type="button"
             onClick={() => setActiveModal("midweek")}
-            className="rounded-sm border border-outline-variant px-3 py-1.5 font-display text-[12px] font-semibold text-on-surface-variant hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="rounded-sm border border-outline-variant px-3 py-1.5 font-display text-[12px] font-semibold text-on-surface-variant hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
           >
             Mid-week sync
           </button>

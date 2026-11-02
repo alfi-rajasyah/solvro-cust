@@ -101,7 +101,7 @@ export function AccountHeader({
     <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
-          <h1 className="truncate font-display text-xl font-bold text-on-surface">
+          <h1 className="truncate font-display text-h1 text-on-surface">
             {customer.name}
           </h1>
           {complete && (
@@ -174,7 +174,7 @@ export function AccountHeader({
                   type="button"
                   aria-label="More customer actions"
                   title="More customer actions"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <span className="material-symbols-outlined text-base" aria-hidden="true">
                     more_horiz

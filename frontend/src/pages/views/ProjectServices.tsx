@@ -56,7 +56,7 @@ export function ProjectServices() {
     <div className="flex flex-col gap-4 md:min-h-0 md:flex-1">
       {showAddAll && (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="font-display text-[12px] font-bold uppercase tracking-wider text-on-surface-variant">
+          <p className="text-label-caps uppercase text-on-surface-variant">
             Bulk actions
           </p>
           <button

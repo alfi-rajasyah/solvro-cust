@@ -37,7 +37,7 @@ export function Help() {
     <div className="mx-auto max-w-5xl space-y-6">
       <header className="space-y-3">
         <div>
-          <h1 className="font-display text-2xl font-bold text-on-surface">Help</h1>
+          <h1 className="font-display text-h1 text-on-surface">Help</h1>
           <p className="text-sm text-on-surface-variant">
             How to use Solvro — every page and feature available to you.
           </p>
@@ -48,7 +48,7 @@ export function Help() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search help…"
           aria-label="Search help"
-          className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-sm text-on-surface placeholder:text-on-surface-variant focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 sm:w-80"
+          className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-sm text-on-surface placeholder:text-on-surface-variant focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 sm:w-80"
         />
       </header>
 

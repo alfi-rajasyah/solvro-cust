@@ -93,8 +93,8 @@ export function Projects() {
   return (
     <div>
       <div className="mb-4 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-on-surface">Projects</h1>
+        <div className="min-w-0">
+          <h1 className="font-display text-h1 text-on-surface">Projects</h1>
           <p className="text-sm text-on-surface-variant">
             {activeCustomer
               ? `Filtered by customer: ${activeCustomer.name}`
@@ -105,7 +105,7 @@ export function Projects() {
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 font-display text-sm text-on-primary transition-colors hover:bg-primary-container font-semibold"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 font-display text-sm text-on-primary transition-colors hover:bg-primary-container font-semibold"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
             New project

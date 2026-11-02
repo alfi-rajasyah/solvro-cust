@@ -186,7 +186,7 @@ export function ProjectCard({
               type="button"
               onClick={() => markReviewed.mutate({ reviewDate: today })}
               disabled={markReviewed.isPending}
-              className="rounded-sm border border-outline-variant px-2.5 py-1 text-meta font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="rounded-sm border border-outline-variant px-2.5 py-1 text-meta font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
             >
               Mark reviewed
             </button>
@@ -262,7 +262,7 @@ export function ProjectCard({
                               >
                                 <SelectTrigger
                                   size="sm"
-                                  className="w-auto shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                                  className="w-auto shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
                                   aria-label="Task status"
                                 >
                                   <SelectValue />
@@ -306,7 +306,7 @@ export function ProjectCard({
                               >
                                 <SelectTrigger
                                   size="sm"
-                                  className="w-auto shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                                  className="w-auto shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
                                   aria-label="Risk status"
                                 >
                                   <SelectValue />

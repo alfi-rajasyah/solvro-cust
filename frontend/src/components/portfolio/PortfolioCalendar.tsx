@@ -43,7 +43,7 @@ function clamp01(x: number): number {
 const CALENDAR_TONE = {
   overdue: "bg-error",
   active: "bg-primary",
-  planning: "bg-chip-amber-bg",
+  planning: "bg-chip-amber-text/60 dark:bg-chip-amber-bg",
   muted: "bg-on-surface-variant/40",
 };
 

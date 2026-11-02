@@ -74,7 +74,7 @@ export function Admin() {
   return (
     <div className="flex h-full flex-col">
       <header className="border-b border-outline-variant px-4 py-4 md:px-6">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-on-surface">
+        <h1 className="font-display text-h1 text-on-surface">
           Admin
         </h1>
         <p className="mt-1 text-sm text-on-surface-variant">
@@ -475,7 +475,7 @@ function UsersTab() {
       )}
       {resetResult && (
         <div className="rounded-sm border border-tertiary/40 bg-tertiary/10 px-3 py-3 text-sm text-on-surface">
-          <p className="font-display text-[12px] font-bold uppercase tracking-wider text-tertiary">
+          <p className="font-display text-label-caps uppercase text-tertiary">
             Temporary password generated
           </p>
           <p className="mt-1">
@@ -544,7 +544,7 @@ function UsersTab() {
           <select
             value={newRole}
             onChange={(e) => setNewRole(e.target.value as Role)}
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-display text-sm text-on-surface focus:border-primary focus:outline-hidden"
           >
             {assignableRoles.map((r) => (
               <option key={r} value={r}>
@@ -666,9 +666,9 @@ function AdminKpi({
     tone === "primary"
       ? "text-primary"
       : tone === "emerald"
-        ? "text-emerald-600"
+        ? "text-chip-emerald-text"
         : tone === "amber"
-          ? "text-amber-600"
+          ? "text-chip-amber-text"
           : "text-on-surface-variant";
   return (
     <div className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
@@ -1435,7 +1435,7 @@ function SignInModal({
     >
       <div className="space-y-5">
         <details className="rounded-sm border border-outline-variant bg-surface-container text-sm">
-          <summary className="cursor-pointer px-3 py-2 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface-variant">
+          <summary className="cursor-pointer px-3 py-2 font-display text-sm font-semibold text-on-surface-variant">
             How to get a Client ID
           </summary>
           <ol className="list-decimal space-y-1 border-t border-outline-variant px-6 py-3 text-on-surface-variant">

@@ -222,7 +222,7 @@ export function TicketPanel({
                       type="button"
                       disabled={actionMutation.isPending}
                       onClick={() => handleAction(action)}
-                      className="rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                      className="rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:opacity-50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
                     >
                       {actionLabel(action)}
                     </button>

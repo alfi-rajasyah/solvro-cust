@@ -90,7 +90,7 @@ function Section({
         <span className="material-symbols-outlined text-[19px] text-primary" aria-hidden="true">
           {icon}
         </span>
-        <h2 className="font-display text-sm font-bold uppercase tracking-wider text-on-surface">
+        <h2 className="font-display text-sm font-bold text-on-surface">
           {title}
         </h2>
       </div>
@@ -363,7 +363,7 @@ function ProfileSection({
         <span className="material-symbols-outlined text-[19px] text-primary" aria-hidden="true">
           {open ? "expand_more" : "chevron_right"}
         </span>
-        <h2 className="font-display text-sm font-bold uppercase tracking-wider text-on-surface">
+        <h2 className="font-display text-sm font-bold text-on-surface">
           Profile
         </h2>
         <span className="text-meta text-on-surface-variant">
@@ -519,7 +519,7 @@ function WeeklyUpdateRow({ update }: { update: WeeklyUpdate }) {
     <li className="py-3 first:pt-0 last:pb-0">
       <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-display text-meta font-bold uppercase tracking-wider text-on-surface">
+          <span className="text-label-caps uppercase text-on-surface">
             {weekKey}
           </span>
           <span className="text-meta text-on-surface-variant">
