@@ -173,7 +173,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
               type="button"
               onClick={() => setConfirmingBaseline(true)}
               disabled={lockBaseline.isPending}
-              className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="material-symbols-outlined text-[17px]" aria-hidden="true">
                 {project.baselineLockedAt ? "bookmark" : "bookmark_add"}

@@ -51,7 +51,7 @@ export function HealthButtonGroup({ value, onChange }: HealthButtonGroupProps) {
             aria-checked={selected}
             onClick={() => onChange(h.value)}
             className={[
-              "rounded-sm border border-outline-variant px-2.5 py-1 text-[12px] font-semibold transition-colors focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+              "rounded-sm border border-outline-variant px-2.5 py-1 text-[12px] font-semibold transition-colors focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30",
               selected ? h.className : "bg-surface-container-lowest text-on-surface-variant hover:text-on-surface",
             ].join(" ")}
           >

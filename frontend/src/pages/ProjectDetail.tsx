@@ -220,7 +220,7 @@ export function ProjectDetail() {
                   aria-label="More project actions"
                   title="More project actions"
                   className={[
-                    "h-8 w-8 items-center justify-center rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30",
+                    "h-8 w-8 items-center justify-center rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
                     // On desktop the menu only holds Delete and "Embed in Outline";
                     // with neither on offer, the trigger stays a phone-only control.
                     canDelete || embedAvailable ? "inline-flex" : "inline-flex md:hidden",
