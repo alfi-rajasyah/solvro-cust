@@ -118,7 +118,7 @@ export function SectionColorCell({ sectionId, color, canEdit, onPick }: SectionC
             }}
             aria-label="Close color picker"
           />
-          {/* Floating popover — sanctioned overlay shadow-sm token (DESIGN.md exception) */}
+          {/* Floating popover — uses the sanctioned `shadow-overlay` token (DESIGN.md exception) */}
           <div className="absolute left-0 top-4 z-50 flex gap-1 rounded-sm border border-outline-variant bg-surface-container-lowest p-1.5 shadow-overlay">
             {SECTION_COLOR_PRESETS.map((hex) => (
               <button
