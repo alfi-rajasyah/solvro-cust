@@ -336,7 +336,7 @@ export function ProjectFormModal({
             className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
           />
           <span className="min-w-0">
-            <span className="block text-[12px] font-bold uppercase tracking-wider text-on-surface-variant">
+            <span className="block text-label-caps uppercase text-on-surface-variant">
               Administrative project
             </span>
             <span className="block text-xs text-on-surface-variant">
@@ -367,7 +367,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[12px] font-bold uppercase tracking-wider text-on-surface-variant">
+      <span className="mb-1.5 block text-label-caps uppercase text-on-surface-variant">
         {label}
         {required && <span className="ml-1 text-error">*</span>}
       </span>
