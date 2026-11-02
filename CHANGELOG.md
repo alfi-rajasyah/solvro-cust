@@ -15,6 +15,47 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-02 — Keyboard focus is visible on every bordered control
+
+- Bordered buttons, inputs, selects and the switch that showed only a faint 30% green ring on keyboard focus now also turn their border green, like the app's form fields already did. The faint ring alone falls below the 3:1 contrast a focus indicator needs; the green border meets it. Applies across the daily review and weekly sync screens, Utilization, the admin iTop and Outline settings, the Outline docs tab and dialog, the Embed-in-Outline dialog, iTop ticket panels, cards and filter pills, the customer header, the project actions, members and share controls, project activity, the notifications popover, the top bar, the right sidebar, Help, public share and embed buttons, and the error screen. The Settings theme options, which had no keyboard focus indicator at all, now get the same border and ring (`frontend/src/components/**`, `frontend/src/pages/**`, `frontend/src/components/ui/switch.tsx`).
+
+### Changed — 2026-11-02 — Page titles use the H1 type role
+
+- Page titles on Overview, Projects, Customers, Daily Review, Weekly Sync, Tasks, Utilization, Executive, Help, Settings and Admin, and the customer name on the customer detail page, now use the design system's `text-h1` role (32px, semibold) instead of an ad-hoc 25px bold size (`frontend/src/pages/*.tsx`, `frontend/src/components/customer/AccountHeader.tsx`). The Projects and Customers headers keep their create button on one line on narrow screens.
+
+### Fixed — 2026-11-02 — Settings and Admin follow the design system's type and colour styles
+
+- On Settings (`frontend/src/pages/Settings.tsx`) the card headings and the theme options are now sentence case instead of wide-tracked capitals, the field label uses the caps-label style, and the "password updated" message uses the theme's emerald colours instead of fixed Tailwind shades.
+- On Admin (`frontend/src/pages/Admin.tsx`) the pending-users and custom-roles icons use the theme's amber and emerald colours, the add-user role select and the "How to get a Client ID" disclosure are sentence case, and the temporary-password note uses the caps-label style.
+
+### Fixed — 2026-11-02 — Labels and headings use the design system's type styles
+
+- Field labels on the project and customer forms and the iTop action and new-ticket sheets (`frontend/src/components/ProjectFormModal.tsx`, `CustomerFormModal.tsx`, `itop/ActionSheet.tsx`, `itop/NewTicketSheet.tsx`) now use the shared caps-label style instead of hand-rolled bold, wide-tracked capitals, with a slightly larger gap above the input.
+- Card and section headings on the customer account overview, the Outline connection card and the service mapping list (`frontend/src/components/customer/AccountOverview.tsx`, `outline/OutlineConnectCard.tsx`, `services/ServiceMappingList.tsx`) are now sentence case, like the other panel headings in the app. The week label on the account overview and the "Bulk actions" label on a project's Services tab (`frontend/src/pages/views/ProjectServices.tsx`) use the caps-label style.
+
+### Changed — 2026-11-02 — Subtask done check uses the brand green
+
+- The done checkbox on subtasks in the project List, on Kanban cards and in the task panel (`frontend/src/pages/views/ProjectList.tsx`, `components/kanban-v2/cards.tsx`, `components/TaskPanel.tsx`) used a fixed Tailwind emerald; it now uses the app's primary green, which also adapts to the light theme.
+
+### Fixed — 2026-11-02 — Portfolio planning bars are visible in light mode
+
+- The "Planning · On-hold" bars and legend dot in the portfolio calendar on Overview and Executive (`frontend/src/components/portfolio/PortfolioCalendar.tsx`) used the pale amber chip background, which nearly disappeared on the light panel. Light mode now draws them in amber text colour at 60%; dark mode is unchanged.
+
+### Fixed — 2026-11-02 — Project Risks colours follow the theme
+
+- The Mitigated and Closed risk statuses and the Medium and Low risk counters on the project Risks tab (`frontend/src/pages/views/ProjectRisks.tsx`) used fixed Tailwind amber and emerald shades that rendered as pale pastel boxes in dark mode. They now use the theme's amber and emerald chip colours, and the counters follow the same pattern as the High counter. The editable status dropdown no longer carries a competing background, so its status colour always shows.
+- The Mitigation, Contingency and filter labels and the counter labels on the same tab now use the shared caps-label style instead of hand-rolled bold, wide-tracked capitals; the status dropdown, a control, now reads in sentence case.
+
+### Fixed — 2026-11-02 — Project Overview chart and accents
+
+- The S-curve on the project Overview tab (`frontend/src/pages/views/ProjectOverview.tsx`) drew its axis labels, tooltip title and "Today" marker in 11px text; they are now 12px, the design system's minimum.
+- The S-curve legend swatch, the on-track slip text and the green KPI accent on the same tab now use the theme's emerald colour instead of fixed Tailwind emerald shades, so they follow light and dark mode.
+
+### Fixed — 2026-11-02 — No text below 12px on the sign-in page and Gantt toolbar
+
+- The sign-in page (`frontend/src/pages/Login.tsx`) set its eyebrow, feature pills, version tag and footer in 10px text; they are now 12px. The page stays dark in both themes.
+- The Gantt toolbar (`frontend/src/components/gantt-v2/SolvroGantt.tsx`) used an off-scale 11.5px size for its buttons, title and menus; it now uses the 12px `text-meta` role, keeping each control's own weight. Two stale code comments in the Gantt were corrected, one of which wrongly described the section colour picker's shadow.
+
 ### Fixed — 2026-11-02 — Flaky frame-ancestors check in CI
 
 - `ci/check-frame-ancestors.sh` starts the frontend image once per case. When a `docker run` failed transiently, its output was empty and the case reported a wrong framing header: on the first `staging` run, "path in origin" failed on 2 of 8 e2e shards while the same image passed on the other 6. An empty result is now retried once before it is judged, and a case that still comes back empty prints the raw `nginx -T` output so the real cause shows in the log. The check verifies the image, not the test suite, so `.github/workflows/ci.yml` now runs it only in the first desktop e2e shard instead of in every shard.
