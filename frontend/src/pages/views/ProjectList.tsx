@@ -1097,7 +1097,7 @@ function SubtaskRow({
         aria-label={done ? "Mark not done" : "Mark done"}
         className={[
           "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border transition-colors",
-          done ? "border-emerald-500 bg-emerald-500 text-white" : "border-outline-variant hover:border-primary",
+          done ? "border-primary bg-primary text-on-primary" : "border-outline-variant hover:border-primary",
           canEdit ? "cursor-pointer" : "cursor-default",
         ].join(" ")}
       >
