@@ -138,7 +138,7 @@ function NotificationList({
                   type="button"
                   onClick={() => void fetchNextPage()}
                   disabled={isFetchingNextPage}
-                  className={`rounded-lg border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 ${FOCUS_RING}`}
+                  className={`rounded-lg border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 focus-visible:border-primary ${FOCUS_RING}`}
                 >
                   {isFetchingNextPage ? "Loading…" : "Load more"}
                 </button>

@@ -144,8 +144,8 @@ const SCALES: Array<{ mode: GanttScale; label: string }> = [
 // dropped everywhere in favor of it + `items-center`. The mismatch wasn't
 // container padding (that was already identical — `p-0.5` everywhere) but
 // CONTENT-driven sizing: text-label-caps carries line-height 1 while the
-// toolbar's other text (then an arbitrary 11.5px size, now text-meta at 1.35)
-// used a taller line box, the
+// toolbar's other text (text-meta, line-height 1.35) uses a taller line box;
+// the
 // "add" icon was text-base (17px) against every other icon's 15px, and a
 // native <select>'s UA chrome renders taller than a <button> at matching
 // padding. An explicit height makes the box immune to all three.

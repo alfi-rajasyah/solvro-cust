@@ -353,14 +353,14 @@ function ThemeCard() {
               onClick={() => setChoice(opt.key)}
               aria-pressed={active}
               className={[
-                "flex flex-col gap-2 rounded-sm border p-3 text-left transition-colors",
+                "flex flex-col gap-2 rounded-sm border p-3 text-left transition-colors outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
                 active
                   ? "border-primary bg-primary/5"
                   : "border-outline-variant bg-surface-container-lowest hover:border-primary/40",
               ].join(" ")}
             >
               <div className="flex items-center justify-between">
-                <span className="font-display text-sm font-bold text-on-surface">
+                <span className="font-display text-sm font-semibold text-on-surface">
                   {opt.label}
                 </span>
                 {active ? (
@@ -407,7 +407,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-label-caps uppercase text-on-surface-variant">
+      <span className="mb-1.5 block text-label-caps uppercase text-on-surface-variant">
         {label}
         {required && <span className="ml-1 text-error">*</span>}
       </span>

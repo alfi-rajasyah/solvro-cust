@@ -51,7 +51,7 @@ export function ProjectShareButton({ project }: { project: ProjectDetail }) {
         aria-label="Share with a guest"
         title="Share with a guest"
         data-testid="share-button"
-        className={`inline-flex h-8 items-center gap-1.5 rounded-lg border border-outline-variant bg-surface-container-lowest px-2 font-display text-xs font-bold text-on-surface transition-colors hover:bg-surface-container ${FOCUS_RING}`}
+        className={`inline-flex h-8 items-center gap-1.5 rounded-lg border border-outline-variant bg-surface-container-lowest px-2 font-display text-xs font-bold text-on-surface transition-colors hover:bg-surface-container focus-visible:border-primary ${FOCUS_RING}`}
       >
         <span className="material-symbols-outlined text-base" aria-hidden="true">
           ios_share
@@ -166,7 +166,7 @@ function ProjectShareDialog({
                 maxLength={SHARE_LABEL_MAX}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="e.g. For Nusantara IT"
-                className={`rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant ${FOCUS_RING}`}
+                className={`rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant focus-visible:border-primary ${FOCUS_RING}`}
               />
             </label>
             <label className="flex flex-col gap-1 sm:w-36">
@@ -174,7 +174,7 @@ function ProjectShareDialog({
               <select
                 value={days}
                 onChange={(e) => setDays(Number(e.target.value))}
-                className={`rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface ${FOCUS_RING}`}
+                className={`rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING}`}
               >
                 {SHARE_EXPIRY_OPTIONS.map((o) => (
                   <option key={o.days} value={o.days}>
@@ -280,7 +280,7 @@ function NewLinkPanel({ link }: { link: CreatedShareLink }) {
           aria-label="Guest link"
           data-testid="share-new-link-url"
           onFocus={(e) => e.currentTarget.select()}
-          className={`min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 font-mono text-xs text-on-surface ${FOCUS_RING}`}
+          className={`min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 font-mono text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING}`}
         />
         <button
           type="button"
@@ -367,7 +367,7 @@ function ShareLinkRow({
             type="button"
             onClick={onAskRevoke}
             aria-label={`Revoke ${title}`}
-            className={`shrink-0 rounded-lg border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container hover:text-error ${FOCUS_RING}`}
+            className={`shrink-0 rounded-lg border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container hover:text-error focus-visible:border-primary ${FOCUS_RING}`}
           >
             Revoke
           </button>
@@ -389,7 +389,7 @@ function ShareLinkRow({
               onCancel();
             }}
             disabled={busy}
-            className={`rounded-lg border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container ${FOCUS_RING}`}
+            className={`rounded-lg border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container focus-visible:border-primary ${FOCUS_RING}`}
           >
             Cancel
           </button>

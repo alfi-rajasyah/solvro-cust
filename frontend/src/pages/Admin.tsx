@@ -1435,7 +1435,7 @@ function SignInModal({
     >
       <div className="space-y-5">
         <details className="rounded-sm border border-outline-variant bg-surface-container text-sm">
-          <summary className="cursor-pointer px-3 py-2 font-display text-sm font-bold text-on-surface-variant">
+          <summary className="cursor-pointer px-3 py-2 font-display text-sm font-semibold text-on-surface-variant">
             How to get a Client ID
           </summary>
           <ol className="list-decimal space-y-1 border-t border-outline-variant px-6 py-3 text-on-surface-variant">
