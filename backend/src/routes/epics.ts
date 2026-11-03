@@ -11,6 +11,7 @@ import { ensureProjectVisible } from "../lib/visibility.js";
 import { recordActivity, shortLabel } from "../lib/activity.js";
 import { diffEpicChanges, epicSnapshotSelect } from "../lib/epicActivity.js";
 import { lockProjectOrder } from "../lib/orderLock.js";
+import { statusDefInclude } from "../lib/taskStatuses.js";
 
 // Resolve the epic's owning project and 404 if the caller can't see it.
 // Mirrors ensureSectionVisible (backend/src/routes/sections.ts) — 404, never
@@ -46,6 +47,7 @@ const TASK_ROW_INCLUDE = {
   labels: true,
   section: { select: { id: true, name: true, position: true, color: true } },
   _count: { select: { subtasks: true, comments: true } },
+  ...statusDefInclude,
 } satisfies Prisma.TaskInclude;
 
 /**

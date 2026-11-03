@@ -12,6 +12,7 @@ import { projectVisibilityFilter } from "../src/lib/visibility.js";
 import { PrismaClient } from "@prisma/client";
 import { deleteExpiredActivityEvents } from "../src/lib/activityCleanup.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 
@@ -37,7 +38,7 @@ async function fixture() {
 
 async function makeTask(projectId: number, extra: Record<string, unknown> = {}) {
   return prisma.task.create({
-    data: { projectId, title: uniq("Task"), status: "TODO", priority: "MEDIUM", position: 0, ...extra },
+    data: { statusId: SID.TODO, projectId, title: uniq("Task"), status: "TODO", priority: "MEDIUM", position: 0, ...extra },
   });
 }
 

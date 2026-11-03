@@ -158,12 +158,39 @@ export interface CustomerDetail extends CustomerSummary {
   services: CustomerServiceAssignment[];
 }
 
-// Per-status-column WIP cap. null (or an absent key) means "no limit".
-// Visual only — see ProjectKanban's amber count-pill logic.
-export interface WipLimits {
-  TODO?: number | null;
-  IN_PROGRESS?: number | null;
-  DONE?: number | null;
+// Per-status WIP cap, keyed by TaskStatusDef id (as a string). null (or an
+// absent key) means "no limit". Visual only — see SolvroKanban's amber
+// count-pill logic. Until the board has a column per status, the three
+// category columns read the limit of their category's default status
+// (`defaultStatusIds`).
+export type WipLimits = Record<string, number | null>;
+
+export type StatusTone = "gray" | "primary" | "emerald" | "amber" | "violet";
+
+// A workspace task status (docs/archive/plans/custom-task-statuses.md §1):
+// one of the three fixed categories plus a name and colour. `GET /task-statuses`.
+export interface TaskStatusDef {
+  id: number;
+  name: string;
+  category: TaskStatus;
+  /**
+   * Tone key (not a hex), so the chip keeps its theme-aware bg/text pair:
+   * gray | primary | emerald | amber | violet. "primary" is the tint
+   * StatusChip calls its "blue" tone. Never a red (a status must not read as an error).
+   */
+  color: StatusTone;
+  position: number;
+  isDefault: boolean;
+}
+
+/** The slice of a status every task payload carries (display only). */
+export type TaskStatusRef = Pick<TaskStatusDef, "id" | "name" | "color" | "category" | "position">;
+
+/** category -> the id of that category's default status (WIP limits key on it). */
+export function defaultStatusIds(defs: readonly TaskStatusDef[] | undefined): Partial<Record<TaskStatus, number>> {
+  const out: Partial<Record<TaskStatus, number>> = {};
+  for (const d of defs ?? []) if (d.isDefault) out[d.category] = d.id;
+  return out;
 }
 
 // Server-computed health block on GET /projects, GET /projects/:id and the
@@ -311,7 +338,10 @@ export interface Task {
   projectId: number;
   title: string;
   description: string | null;
+  /** The status CATEGORY — always equals `statusDef.category`. */
   status: TaskStatus;
+  statusId: number;
+  statusDef: TaskStatusRef;
   priority: Priority;
   startDate: string | null;
   dueDate: string | null;
@@ -361,6 +391,7 @@ export interface SearchTaskHit {
   id: number;
   title: string;
   status: TaskStatus;
+  statusDef: TaskStatusRef;
   projectId: number;
   projectName: string;
 }
@@ -673,7 +704,13 @@ export interface DailyReviewProject {
   // The backend filters to `dueDate !== null` before building this list
   // (routes/dailyReview.ts) — always present here, unlike Task.dueDate
   // elsewhere in this file.
-  overdueTasks: { id: number; title: string; dueDate: string; status: TaskStatus }[];
+  overdueTasks: {
+    id: number;
+    title: string;
+    dueDate: string;
+    status: TaskStatus;
+    statusDef: TaskStatusRef;
+  }[];
   openRisks: {
     id: number;
     description: string;
@@ -724,6 +761,7 @@ export interface ProjectNotesWindow {
 }
 
 export const queryKeys = {
+  taskStatuses: ["task-statuses"] as const,
   // Outline base URL for every signed-in user (sidebar link); the admin
   // settings live under adminQueryKeys.outlineSettings.
   outlineConfig: ["outline", "config"] as const,
@@ -955,6 +993,16 @@ export function useUsers(enabled = true) {
     queryFn: ({ signal }) => apiRequest<UserSummary[]>("/users", { signal }),
     staleTime: 60_000,
     enabled,
+  });
+}
+
+// The workspace-wide status list. Changes only through an admin save, so a long
+// stale time is fine.
+export function useTaskStatuses() {
+  return useQuery({
+    queryKey: queryKeys.taskStatuses,
+    queryFn: ({ signal }) => apiRequest<TaskStatusDef[]>("/task-statuses", { signal }),
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -1695,7 +1743,10 @@ export function useUpdateProjectServices(projectId: number) {
 export interface UpdateTaskInput {
   title?: string;
   description?: string | null;
+  /** A bare category: maps to that category's default status (or no change if it is the current one). */
   status?: TaskStatus;
+  /** A workspace status; the server derives `status` from it. */
+  statusId?: number;
   priority?: Priority;
   startDate?: string | null;
   dueDate?: string | null;
@@ -1937,7 +1988,34 @@ export function useUpdateTask(projectId: number) {
                     }
                   : t,
               );
-        qc.setQueryData<Task[]>(queryKeys.projectTasks(projectId), withLabels);
+        // Keep `statusId` / `statusDef` consistent with the status the patch
+        // names, like the server does: `statusId` wins; a bare category that is
+        // not the current one maps to that category's default status.
+        const defs = qc.getQueryData<TaskStatusDef[]>(queryKeys.taskStatuses);
+        const withStatusDef = withLabels.map((t) => {
+          if (t.id !== id || !defs) return t;
+          const def =
+            patch.statusId !== undefined
+              ? defs.find((d) => d.id === patch.statusId)
+              : patch.status !== undefined && patch.status !== current?.status
+                ? defs.find((d) => d.isDefault && d.category === patch.status)
+                : undefined;
+          return def
+            ? {
+                ...t,
+                status: def.category,
+                statusId: def.id,
+                statusDef: {
+                  id: def.id,
+                  name: def.name,
+                  color: def.color,
+                  category: def.category,
+                  position: def.position,
+                },
+              }
+            : t;
+        });
+        qc.setQueryData<Task[]>(queryKeys.projectTasks(projectId), withStatusDef);
       }
       return { prev, prevEpicId: current?.epicId ?? null };
     },

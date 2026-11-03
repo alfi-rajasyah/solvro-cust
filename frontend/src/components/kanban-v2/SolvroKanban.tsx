@@ -49,8 +49,10 @@ import {
   type ProjectDetail,
   type Task,
   type TaskStatus,
+  defaultStatusIds,
   useProjectEpics,
   useProjectTasks,
+  useTaskStatuses,
   useUpdateTask,
   useUsers,
 } from "@/lib/queries";
@@ -158,6 +160,10 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   const { data: tasks, isLoading, isError, error } = useProjectTasks(project.id);
   const { data: users } = useUsers();
   const { data: epics } = useProjectEpics(project.id);
+  // WIP limits are keyed by status id; the three category columns read their
+  // category's default status.
+  const { data: statusDefs } = useTaskStatuses();
+  const defaultIds = useMemo(() => defaultStatusIds(statusDefs), [statusDefs]);
   const updateTask = useUpdateTask(project.id);
   const [, setSearchParams] = useSearchParams();
   const [createStatus, setCreateStatus] = useState<TaskStatus | null>(null);
@@ -651,7 +657,8 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
           <KanbanBoard className="contents">
             {KANBAN_STATUSES.map((status, idx) => {
               const columnTasks = columns[status];
-              const wipLimit = project.wipLimits?.[status] ?? null;
+              const defId = defaultIds[status];
+              const wipLimit = (defId !== undefined ? project.wipLimits?.[String(defId)] : null) ?? null;
               const overLimit = wipLimit !== null && columnTasks.length > wipLimit;
 
               return (

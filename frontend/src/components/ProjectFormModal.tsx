@@ -11,8 +11,10 @@ import {
   type ProjectStatus,
   type TaskStatus,
   type WipLimits,
+  defaultStatusIds,
   useCreateProject,
   useCustomers,
+  useTaskStatuses,
   useUpdateProject,
   useUsers,
 } from "@/lib/queries";
@@ -32,20 +34,40 @@ const WIP_COLUMNS = taskStatusOptions;
 // fighting number coercion on every keystroke.
 type WipLimitsForm = Record<TaskStatus, string>;
 
-function wipLimitsToForm(limits: WipLimits | null | undefined): WipLimitsForm {
-  return {
-    TODO: limits?.TODO != null ? String(limits.TODO) : "",
-    IN_PROGRESS: limits?.IN_PROGRESS != null ? String(limits.IN_PROGRESS) : "",
-    DONE: limits?.DONE != null ? String(limits.DONE) : "",
+// Limits are stored per status id; the three category fields here edit the
+// limit of each category's default status (one column per category for now).
+type DefaultIds = Partial<Record<TaskStatus, number>>;
+
+function wipLimitsToForm(limits: WipLimits | null | undefined, ids: DefaultIds): WipLimitsForm {
+  const field = (category: TaskStatus): string => {
+    const id = ids[category];
+    const v = id === undefined ? null : limits?.[String(id)];
+    return v != null ? String(v) : "";
   };
+  return { TODO: field("TODO"), IN_PROGRESS: field("IN_PROGRESS"), DONE: field("DONE") };
 }
 
-function formToWipLimits(form: WipLimitsForm): WipLimits {
+function formToWipLimits(
+  form: WipLimitsForm,
+  ids: DefaultIds,
+  existing: WipLimits | null | undefined,
+  knownIds: ReadonlySet<string>,
+): WipLimits {
   const toLimit = (v: string): number | null => {
     const n = Number(v);
     return v.trim() !== "" && Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
   };
-  return { TODO: toLimit(form.TODO), IN_PROGRESS: toLimit(form.IN_PROGRESS), DONE: toLimit(form.DONE) };
+  // Keep limits set on non-default statuses; only the default ones are edited here.
+  // Only statuses that still exist: the server rejects an unknown id.
+  const out: WipLimits = {};
+  for (const [key, limit] of Object.entries(existing ?? {})) {
+    if (knownIds.has(key)) out[key] = limit;
+  }
+  for (const category of ["TODO", "IN_PROGRESS", "DONE"] as const) {
+    const id = ids[category];
+    if (id !== undefined) out[String(id)] = toLimit(form[category]);
+  }
+  return out;
 }
 
 interface Props {
@@ -78,6 +100,9 @@ export function ProjectFormModal({
 
   const create = useCreateProject();
   const update = useUpdateProject(project?.id ?? 0);
+  const { data: statusDefs } = useTaskStatuses();
+  const defaultIds = defaultStatusIds(statusDefs);
+  const knownIds = new Set((statusDefs ?? []).map((d) => String(d.id)));
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -87,7 +112,7 @@ export function ProjectFormModal({
   const [tamId, setTamId] = useState<number | "">("");
   const [customerId, setCustomerId] = useState<number | "">("");
   const [status, setStatus] = useState<ProjectStatus>("PLANNING");
-  const [wipLimits, setWipLimits] = useState<WipLimitsForm>(wipLimitsToForm(null));
+  const [wipLimits, setWipLimits] = useState<WipLimitsForm>(wipLimitsToForm(null, {}));
   const [excludeFromPortfolio, setExcludeFromPortfolio] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,7 +127,7 @@ export function ProjectFormModal({
       setTamId(project.tamId);
       setCustomerId(project.customerId ?? "");
       setStatus(project.status);
-      setWipLimits(wipLimitsToForm(project.wipLimits));
+      setWipLimits(wipLimitsToForm(project.wipLimits, defaultIds));
       setExcludeFromPortfolio(project.excludeFromPortfolio);
     } else {
       setName("");
@@ -111,7 +136,7 @@ export function ProjectFormModal({
       setTamId("");
       setCustomerId("");
       setStatus("PLANNING");
-      setWipLimits(wipLimitsToForm(null));
+      setWipLimits(wipLimitsToForm(null, defaultIds));
       setExcludeFromPortfolio(false);
     }
     // Seed on open / project switch only — `project` gets a fresh identity on
@@ -119,6 +144,16 @@ export function ProjectFormModal({
     // this reset wipes in-progress input (docs/archive/plans/collaboration-and-sharing.md).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, project?.id]);
+
+  // The WIP fields map onto status ids, so they can only be filled once the
+  // status list has arrived (usually already cached by the board).
+  const defsLoaded = statusDefs !== undefined;
+  useEffect(() => {
+    if (!open || !defsLoaded) return;
+    setWipLimits(wipLimitsToForm(project?.wipLimits, defaultIds));
+    // Seed when the list arrives; edits made afterwards are not overwritten.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defsLoaded]);
 
   // TAM dropdown lists all users — role names no longer gate who's eligible
   // to be assigned (admin's choice). Anti-self-clutter not done here because
@@ -159,7 +194,9 @@ export function ProjectFormModal({
               }
             : {}),
           status,
-          wipLimits: formToWipLimits(wipLimits),
+          // Left out while the status list is unknown, so a save can never
+          // wipe the stored limits.
+          wipLimits: defsLoaded ? formToWipLimits(wipLimits, defaultIds, project.wipLimits, knownIds) : undefined,
           excludeFromPortfolio,
         });
         onSaved?.(project.id);
@@ -171,7 +208,7 @@ export function ProjectFormModal({
           tamId: tamId === "" ? undefined : Number(tamId),
           customerId: Number(customerId),
           status,
-          wipLimits: formToWipLimits(wipLimits),
+          wipLimits: defsLoaded ? formToWipLimits(wipLimits, defaultIds, null, knownIds) : undefined,
           excludeFromPortfolio,
         });
         onSaved?.(created.id);
@@ -324,6 +361,7 @@ export function ProjectFormModal({
                   step={1}
                   inputMode="numeric"
                   value={wipLimits[col.value]}
+                  disabled={!defsLoaded}
                   onChange={(e) =>
                     setWipLimits((prev) => ({ ...prev, [col.value]: e.target.value }))
                   }

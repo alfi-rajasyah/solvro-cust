@@ -10,6 +10,7 @@ import {
   utcMidnightOfDayString,
 } from "../lib/dateBoundary.js";
 import { parseWeekKey } from "../lib/isoWeek.js";
+import { STATUS_DEF_SELECT } from "../lib/taskStatuses.js";
 import { computeSlipDays } from "../lib/projectHealth.js";
 
 // One-request payload for the Daily Review page (spec §5.1). Every
@@ -117,7 +118,15 @@ dailyReviewRouter.get(
           dueDate: { lt: overdueBoundaryDate },
         },
         orderBy: { id: "asc" },
-        select: { id: true, projectId: true, title: true, status: true, dueDate: true },
+        select: {
+          id: true,
+          projectId: true,
+          title: true,
+          status: true,
+          dueDate: true,
+          // Display only: the overdue row names its workspace status.
+          statusDef: { select: STATUS_DEF_SELECT },
+        },
       }),
       prisma.section.findMany({
         where: { projectId: { in: projectIds } },
@@ -285,7 +294,13 @@ dailyReviewRouter.get(
           { dueDate: maxes?.dueDate ?? null, baselineDueDate: maxes?.baselineDueDate ?? null },
         ]),
         overdueTasks: (overdueByProject.get(p.id) ?? [])
-          .map((t) => ({ id: t.id, title: t.title, dueDate: t.dueDate, status: t.status })),
+          .map((t) => ({
+            id: t.id,
+            title: t.title,
+            dueDate: t.dueDate,
+            status: t.status,
+            statusDef: t.statusDef,
+          })),
         openRisks: projectRisks.map((r) => ({
           id: r.id,
           description: r.description,

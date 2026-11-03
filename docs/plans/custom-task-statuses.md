@@ -22,7 +22,7 @@ model TaskStatusDef {
   id        Int        @id @default(autoincrement())
   name      String     @unique            // "Backlog", "QA / UAT"
   category  TaskStatus                    // TODO | IN_PROGRESS | DONE — the existing enum
-  color     String                        // hex, validated against a fixed palette
+  color     String                        // tone key: gray | primary | emerald | amber | violet (2026-11-03, see below)
   position  Int                           // order across the whole list
   isDefault Boolean    @default(false)    // exactly one per category
   tasks     Task[]
@@ -30,6 +30,12 @@ model TaskStatusDef {
 }
 // Task gains: statusId Int @map("status_id") → TaskStatusDef (onDelete: Restrict)
 ```
+
+**Colour is a tone key, not a hex** (orchestrator decision, 2026-11-03, after the Phase A review). `DESIGN.md` is binding:
+- In progress is primary-tinted green, not blue.
+- Chips use the contrast-verified bg/text tint pairs and follow the theme.
+
+So `color` is one of `gray | primary | emerald | amber | violet`, which map to `StatusChip`'s existing tone classes. There's no rose, because a status must not read as an error. The seeds are To do = gray, In progress = primary, Done = emerald, which is pixel-identical to today. More hues need new `chip-*` tint pairs in `index.css`, which is a `DESIGN.md` decision.
 
 **The enum stays, as the category.** `Task.status` remains, and every write keeps it equal to
 `statusDef.category`. That one rule is why most of the code needs no change: overdue, progress, health,

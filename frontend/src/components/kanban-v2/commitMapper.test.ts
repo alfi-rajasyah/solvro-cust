@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Task, TaskStatus } from "@/lib/queries";
 import { mapCommitToPatch, type KanbanCommitMetaLike } from "./commitMapper";
+import { withStatus } from "@/lib/taskStatusFixture";
 
 // Every test in this file is a named row from
 // docs/plans/kanban-reui-swap/scenarios.md sections SC/CC/FA/NO/MS (the
@@ -10,7 +11,7 @@ import { mapCommitToPatch, type KanbanCommitMetaLike } from "./commitMapper";
 function makeTask(
   overrides: Partial<Task> & Pick<Task, "id" | "title" | "status" | "position">,
 ): Task {
-  return {
+  return withStatus({
     projectId: 1,
     description: null,
     priority: "MEDIUM",
@@ -30,7 +31,7 @@ function makeTask(
     itopTicketRef: null,
     epicId: null,
     ...overrides,
-  };
+  });
 }
 
 interface ReferenceFixture {

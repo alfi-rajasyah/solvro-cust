@@ -4,6 +4,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { seedRoles, createUserWithRole } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 // GET /overview -> workCounts { overdue, dueThisWeek, openRisks }. `today` is
 // pinned to Tuesday 2026-09-29, so the ISO week ends on Sunday 2026-10-04.
@@ -25,7 +26,7 @@ async function task(
   dueDate: Date | null,
   pid = projectId,
 ) {
-  return prisma.task.create({ data: { projectId: pid, title: "T", status, dueDate } });
+  return prisma.task.create({ data: { statusId: SID.TODO, projectId: pid, title: "T", status, dueDate } });
 }
 
 async function workCounts(qs = `?today=${TODAY}`) {
@@ -66,7 +67,7 @@ describe("GET /overview workCounts", () => {
     const parent = await task("TODO", null);
     for (const dueDate of ["2026-09-20T00:00:00.000Z", "2026-09-30T00:00:00.000Z"]) {
       await prisma.task.create({
-        data: {
+        data: { statusId: SID.TODO,
           projectId,
           title: "Sub",
           status: "TODO",
@@ -226,7 +227,7 @@ describe("GET /overview person filters", () => {
     await prisma.risk.create({ data: { projectId: quiet.id, description: "r", status: "OPEN" } });
 
     const parent = await prisma.task.create({
-      data: {
+      data: { statusId: SID.TODO,
         projectId,
         title: "P",
         status: "TODO",
@@ -235,7 +236,7 @@ describe("GET /overview person filters", () => {
       },
     });
     await prisma.task.create({
-      data: {
+      data: { statusId: SID.TODO,
         projectId,
         title: "Sub",
         status: "TODO",
@@ -247,7 +248,7 @@ describe("GET /overview person filters", () => {
     // Someone else's task and a DONE one do not count.
     await task("TODO", overdueDate);
     await prisma.task.create({
-      data: {
+      data: { statusId: SID.DONE,
         projectId,
         title: "Done",
         status: "DONE",
@@ -278,7 +279,7 @@ describe("GET /overview person filters", () => {
     });
     for (const pid of [projectId, shared.id]) {
       await prisma.task.create({
-        data: {
+        data: { statusId: SID.TODO,
           projectId: pid,
           title: "W",
           status: "TODO",
@@ -315,10 +316,10 @@ describe("GET /overview person filters", () => {
       data: { name: `Hidden ${Date.now()}-${Math.random()}`, tamId: stranger.userId, status: "ACTIVE" },
     });
     await prisma.task.create({
-      data: { projectId, title: "W", status: "TODO", assignedToId: worker.userId },
+      data: { statusId: SID.TODO, projectId, title: "W", status: "TODO", assignedToId: worker.userId },
     });
     await prisma.task.create({
-      data: { projectId: hidden.id, title: "H", status: "TODO", assignedToId: stranger.userId },
+      data: { statusId: SID.TODO, projectId: hidden.id, title: "H", status: "TODO", assignedToId: stranger.userId },
     });
     const { people } = await overview("");
     expect(people.tams.map((t) => t.id)).toEqual([userId]);

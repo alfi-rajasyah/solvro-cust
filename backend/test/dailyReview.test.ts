@@ -9,6 +9,7 @@ import type { ProjectStatus } from "@prisma/client";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { createAdminAndToken, createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 
@@ -435,13 +436,13 @@ describe("GET /daily-review — overdue boundary", () => {
     const tam = await createUserWithRole("TAM");
     const project = await createProject({ tamId: tam.userId, status: "ACTIVE", name: "Overdue Proj" });
     const yesterdayTask = await prisma.task.create({
-      data: { projectId: project.id, title: "Yesterday", status: "TODO", dueDate: new Date("2026-08-27T00:00:00.000Z") },
+      data: { statusId: SID.TODO, projectId: project.id, title: "Yesterday", status: "TODO", dueDate: new Date("2026-08-27T00:00:00.000Z") },
     });
     const todayTask = await prisma.task.create({
-      data: { projectId: project.id, title: "Today", status: "TODO", dueDate: new Date("2026-08-28T00:00:00.000Z") },
+      data: { statusId: SID.TODO, projectId: project.id, title: "Today", status: "TODO", dueDate: new Date("2026-08-28T00:00:00.000Z") },
     });
     const doneYesterdayTask = await prisma.task.create({
-      data: { projectId: project.id, title: "DoneYesterday", status: "DONE", dueDate: new Date("2026-08-27T00:00:00.000Z") },
+      data: { statusId: SID.DONE, projectId: project.id, title: "DoneYesterday", status: "DONE", dueDate: new Date("2026-08-27T00:00:00.000Z") },
     });
 
     const res = await get(tam.token, { week: WEEK, today: TODAY });
@@ -451,6 +452,12 @@ describe("GET /daily-review — overdue boundary", () => {
     expect(overdueIds).toContain(yesterdayTask.id);
     expect(overdueIds).not.toContain(todayTask.id);
     expect(overdueIds).not.toContain(doneYesterdayTask.id);
+    // Display-only workspace status on the overdue row.
+    expect(dto.overdueTasks.find((t: any) => t.id === yesterdayTask.id).statusDef).toMatchObject({
+      id: SID.TODO,
+      name: "To do",
+      category: "TODO",
+    });
   });
 });
 
@@ -460,9 +467,9 @@ describe("GET /daily-review — phase, progress, slipDays", () => {
     const project = await createProject({ tamId: tam.userId, status: "ACTIVE", name: "Phase Proj" });
     const design = await prisma.section.create({ data: { projectId: project.id, name: "Design", position: 0 } });
     const build = await prisma.section.create({ data: { projectId: project.id, name: "Build", position: 1 } });
-    await prisma.task.create({ data: { projectId: project.id, sectionId: design.id, title: "t1", status: "DONE" } });
-    const t2 = await prisma.task.create({ data: { projectId: project.id, sectionId: build.id, title: "t2", status: "TODO" } });
-    await prisma.task.create({ data: { projectId: project.id, sectionId: build.id, title: "t3", status: "DONE" } });
+    await prisma.task.create({ data: { statusId: SID.DONE, projectId: project.id, sectionId: design.id, title: "t1", status: "DONE" } });
+    const t2 = await prisma.task.create({ data: { statusId: SID.TODO, projectId: project.id, sectionId: build.id, title: "t2", status: "TODO" } });
+    await prisma.task.create({ data: { statusId: SID.DONE, projectId: project.id, sectionId: build.id, title: "t3", status: "DONE" } });
 
     let res = await get(tam.token, { week: WEEK, today: TODAY });
     let dto = res.body.unassignedProjects.find((p: any) => p.id === project.id);
@@ -487,11 +494,11 @@ describe("GET /daily-review — phase, progress, slipDays", () => {
   it("phase is 'All phases complete' when every section is done, and '—' when there are no sections", async () => {
     const tam = await createUserWithRole("TAM");
     const noSections = await createProject({ tamId: tam.userId, status: "ACTIVE", name: "No Sections" });
-    await prisma.task.create({ data: { projectId: noSections.id, title: "loose", status: "TODO" } });
+    await prisma.task.create({ data: { statusId: SID.TODO, projectId: noSections.id, title: "loose", status: "TODO" } });
 
     const allDone = await createProject({ tamId: tam.userId, status: "ACTIVE", name: "All Done" });
     const onlySection = await prisma.section.create({ data: { projectId: allDone.id, name: "Only", position: 0 } });
-    await prisma.task.create({ data: { projectId: allDone.id, sectionId: onlySection.id, title: "t", status: "DONE" } });
+    await prisma.task.create({ data: { statusId: SID.DONE, projectId: allDone.id, sectionId: onlySection.id, title: "t", status: "DONE" } });
 
     const res = await get(tam.token, { week: WEEK, today: TODAY });
     const noSectionsDto = res.body.unassignedProjects.find((p: any) => p.id === noSections.id);

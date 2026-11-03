@@ -226,10 +226,20 @@ export async function setWipLimits(
   projectId: number,
   wipLimits: Record<string, number | null>,
 ): Promise<void> {
+  // WIP limits are keyed by workspace status id. Callers may pass a category
+  // (TODO / IN_PROGRESS / DONE); it maps to that category's default status.
+  const defs = await json<Array<{ id: number; category: string; isDefault: boolean }>>(
+    await fetch(`${base}/api/task-statuses`, { headers: { Authorization: `Bearer ${token}` } }),
+  );
+  const keyed: Record<string, number | null> = {};
+  for (const [key, limit] of Object.entries(wipLimits)) {
+    const def = defs.find((d) => d.isDefault && d.category === key);
+    keyed[def ? String(def.id) : key] = limit;
+  }
   await fetch(`${base}/api/projects/${projectId}`, {
     method: "PATCH",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ wipLimits }),
+    body: JSON.stringify({ wipLimits: keyed }),
   });
 }
 

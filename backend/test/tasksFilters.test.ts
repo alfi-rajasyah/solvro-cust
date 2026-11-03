@@ -4,6 +4,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { seedRoles, createUserWithRole, createAdminAndToken } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 // GET /tasks filters added for the work views: open, dueFrom/dueTo (inclusive
 // day range), sort=due and the X-Total-Count header. A TAM token scopes the
@@ -21,7 +22,7 @@ async function createTask(overrides: {
   dueDate?: Date | null;
 }): Promise<number> {
   const task = await prisma.task.create({
-    data: {
+    data: { statusId: SID[overrides.status ?? "TODO"],
       projectId,
       title: overrides.title ?? "Task",
       status: overrides.status ?? "TODO",
@@ -171,10 +172,11 @@ describe("GET /tasks — X-Total-Count", () => {
         projectId,
         title: `Bulk ${i}`,
         status: "TODO" as const,
+        statusId: SID.TODO,
         position: i,
       })),
     });
-    await prisma.task.create({ data: { projectId, title: "Done one", status: "DONE" } });
+    await prisma.task.create({ data: { statusId: SID.DONE, projectId, title: "Done one", status: "DONE" } });
 
     const all = await get("");
     expect(all.status).toBe(200);
@@ -201,7 +203,7 @@ describe("GET /tasks?tamId", () => {
       data: { name: `Foreign ${Date.now()}-${Math.random()}`, tamId: other.userId, status: "ACTIVE" },
     });
     const foreignTask = await prisma.task.create({
-      data: { projectId: foreign.id, title: "Foreign", status: "TODO" },
+      data: { statusId: SID.TODO, projectId: foreign.id, title: "Foreign", status: "TODO" },
     });
 
     const { token: adminToken } = await createAdminAndToken();
@@ -218,10 +220,10 @@ describe("GET /tasks?tamId", () => {
   it("assignedToId without topLevel includes subtasks", async () => {
     const worker = await createUserWithRole("TAM");
     const parent = await prisma.task.create({
-      data: { projectId, title: "P", status: "TODO", assignedToId: worker.userId },
+      data: { statusId: SID.TODO, projectId, title: "P", status: "TODO", assignedToId: worker.userId },
     });
     const sub = await prisma.task.create({
-      data: {
+      data: { statusId: SID.TODO,
         projectId,
         title: "S",
         status: "TODO",

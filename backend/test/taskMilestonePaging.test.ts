@@ -4,6 +4,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 // PATCH /tasks/:id must never leave a milestone without a due date, and
 // GET /tasks must be pageable past its 200-row page via ?offset.
@@ -27,7 +28,7 @@ async function fixture() {
 describe("PATCH /tasks/:id milestone needs a due date", () => {
   it("rejects flagging an undated task as a milestone", async () => {
     const { token, projectId } = await fixture();
-    const t = await prisma.task.create({ data: { projectId, title: "Undated" } });
+    const t = await prisma.task.create({ data: { statusId: SID.TODO, projectId, title: "Undated" } });
     const res = await request(app)
       .patch(`/tasks/${t.id}`)
       .set(auth(token))
@@ -42,7 +43,7 @@ describe("PATCH /tasks/:id milestone needs a due date", () => {
     const { token, projectId } = await fixture();
     const due = new Date("2026-11-05T00:00:00.000Z");
     const t = await prisma.task.create({
-      data: { projectId, title: "MS", isMilestone: true, dueDate: due, startDate: due },
+      data: { statusId: SID.TODO, projectId, title: "MS", isMilestone: true, dueDate: due, startDate: due },
     });
     const res = await request(app)
       .patch(`/tasks/${t.id}`)
@@ -57,13 +58,13 @@ describe("PATCH /tasks/:id milestone needs a due date", () => {
   it("still allows valid milestone changes", async () => {
     const { token, projectId } = await fixture();
     const dated = await prisma.task.create({
-      data: { projectId, title: "Dated", dueDate: new Date("2026-11-05T00:00:00.000Z") },
+      data: { statusId: SID.TODO, projectId, title: "Dated", dueDate: new Date("2026-11-05T00:00:00.000Z") },
     });
     expect(
       (await request(app).patch(`/tasks/${dated.id}`).set(auth(token)).send({ isMilestone: true }))
         .status,
     ).toBe(200);
-    const undated = await prisma.task.create({ data: { projectId, title: "U2" } });
+    const undated = await prisma.task.create({ data: { statusId: SID.TODO, projectId, title: "U2" } });
     expect(
       (
         await request(app)
@@ -82,7 +83,7 @@ describe("PATCH /tasks/:id milestone needs a due date", () => {
       ).status,
     ).toBe(200);
     // Unrelated edit of a legacy undated milestone is not blocked.
-    const legacy = await prisma.task.create({ data: { projectId, title: "Legacy", isMilestone: true } });
+    const legacy = await prisma.task.create({ data: { statusId: SID.TODO, projectId, title: "Legacy", isMilestone: true } });
     expect(
       (await request(app).patch(`/tasks/${legacy.id}`).set(auth(token)).send({ title: "Renamed" }))
         .status,
@@ -97,6 +98,7 @@ describe("GET /tasks ?offset", () => {
       data: Array.from({ length: 205 }, (_, i) => ({
         projectId,
         title: `T${i}`,
+        statusId: SID.TODO,
         position: i % 7, // ties force the id tiebreak
       })),
     });

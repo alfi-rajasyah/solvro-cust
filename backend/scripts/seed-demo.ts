@@ -546,7 +546,7 @@ const PROJECTS: ProjectSpec[] = [
       { title: "Teams & SharePoint", status: "IN_PROGRESS", color: "#7c3aed", owner: "dewi", start: -25, due: 2 },
     ],
     labels: [
-      ["training", "#10b981"],
+      ["training", "emerald"],
       ["customer-action", "#ef4444"],
     ],
     tasks: [
@@ -889,6 +889,23 @@ async function main() {
 
   await wipe();
 
+  // The wipe emptied the workspace status list; restore the three defaults
+  // (the same rows the task_status_defs migration seeds) and remember each
+  // category's id for the task inserts below.
+  const defaultStatusIds = {} as Record<TaskStatus, number>;
+  for (const [position, [name, category, color]] of (
+    [
+      ["To do", "TODO", "gray"],
+      ["In progress", "IN_PROGRESS", "primary"],
+      ["Done", "DONE", "emerald"],
+    ] as const
+  ).entries()) {
+    const def = await prisma.taskStatusDef.create({
+      data: { name, category, color, position, isDefault: true },
+    });
+    defaultStatusIds[category] = def.id;
+  }
+
   // Users. The e2e smoke pre-flight logs in as the QA fixture admin, so it
   // is recreated alongside the demo accounts.
   const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
@@ -988,6 +1005,7 @@ async function main() {
           title: t.title,
           description: t.description,
           status: t.status,
+          statusId: defaultStatusIds[t.status],
           priority: t.priority ?? "MEDIUM",
           startDate,
           dueDate,
@@ -1013,6 +1031,7 @@ async function main() {
             parentTaskId: task.id,
             title: s.title,
             status: s.status,
+            statusId: defaultStatusIds[s.status],
             startDate: s.start !== undefined ? day(s.start) : null,
             dueDate: s.due !== undefined ? day(s.due) : null,
             assignedToId: s.assignee ? users[s.assignee] : null,

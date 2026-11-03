@@ -13,9 +13,10 @@ import {
   type TaskFormValues,
 } from "./taskConflict";
 import type { Task } from "./queries";
+import { withStatus } from "./taskStatusFixture";
 
 function makeTask(over: Partial<Task> = {}): Task {
-  return {
+  return withStatus({
     id: 7,
     projectId: 1,
     title: "Ship it",
@@ -42,7 +43,7 @@ function makeTask(over: Partial<Task> = {}): Task {
     _count: { subtasks: 0, comments: 0 },
     itopTicketRef: null,
     ...over,
-  };
+  });
 }
 
 function formFrom(t: Task, over: Partial<TaskFormValues> = {}): TaskFormValues {

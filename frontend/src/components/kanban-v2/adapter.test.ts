@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Task } from "@/lib/queries";
 import { compareTasksByPosition, projectToColumns, sortTasksCanonical } from "./adapter";
+import { withStatus } from "@/lib/taskStatusFixture";
 
 function makeTask(
   overrides: Partial<Task> & Pick<Task, "id" | "title" | "status" | "position">,
 ): Task {
-  return {
+  return withStatus({
     projectId: 1,
     description: null,
     priority: "MEDIUM",
@@ -25,7 +26,7 @@ function makeTask(
     itopTicketRef: null,
     epicId: null,
     ...overrides,
-  };
+  });
 }
 
 /** scenarios.md "Reference fixture". */

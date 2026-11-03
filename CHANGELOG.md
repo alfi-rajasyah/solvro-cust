@@ -15,6 +15,18 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-03 — Task statuses are workspace-defined
+
+- Task statuses are now stored as workspace-defined statuses. Each belongs to To do, In progress or Done, which keep deciding overdue, progress and "done".
+- The existing three statuses are migrated as-is, so nothing looks different yet. Existing Kanban WIP limits are migrated to the new per-status format.
+- Task responses include a `statusDef` (id, name, colour, category, position). Tasks can be filtered with `?statusId=` alongside the existing `?status=`, which still filters by category.
+- Each status has a colour tone (gray, primary, emerald, amber or violet) that follows the light and dark themes. The three migrated statuses keep today's look.
+- The activity log now records the status name, including moves between two statuses of the same category (`backend/prisma/migrations/20261103120000_task_status_defs/`, `backend/src/lib/taskStatuses.ts`, `backend/src/routes/tasks.ts`, `backend/src/routes/projects.ts`).
+
+### Added — 2026-11-03 — Task status list API
+
+- `GET /task-statuses` lists the workspace's task statuses, and admins can replace the whole list with `PUT /admin/task-statuses`. The list must keep at least one status per category, exactly one default per category, and unique names. Removing a status that still has tasks requires choosing a status to move them to (`backend/src/routes/taskStatuses.ts`, `backend/src/routes/admin.ts`).
+
 ### Added — 2026-11-03 — Subtask assignee on subtask rows
 
 - Subtask rows in the project List and in the task panel now show the subtask's assignee and let you change it. The panel's "Add subtask" field also takes an optional assignee, so a subtask can be assigned as it is created. Assigning someone who isn't on the project adds them to it, as for tasks (`frontend/src/pages/views/ProjectList.tsx`, `frontend/src/components/TaskPanel.tsx`, `e2e/tests/subtask-assignee.spec.ts`).

@@ -5,6 +5,7 @@ import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { computePortfolioRows } from "../src/lib/portfolio.js";
 import { seedRoles, createAdminAndToken } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 // Pins the exact output of the roll-ups that aggregate task rows in the
 // database (portfolio rows, Daily Review progress/overdue/phase/slip), so a
@@ -31,10 +32,10 @@ describe("task roll-ups", () => {
     });
     await prisma.task.createMany({
       data: [
-        { projectId: project.id, title: "a", status: "DONE", startDate: d("2026-01-10"), dueDate: d("2026-01-20") },
-        { projectId: project.id, title: "b", status: "TODO", startDate: d("2026-01-05"), dueDate: d("2026-03-01") },
-        { projectId: project.id, title: "c", status: "IN_PROGRESS", startDate: null, dueDate: null },
-        { projectId: project.id, title: "d", status: "DONE", startDate: d("2026-02-01"), dueDate: d("2026-02-02") },
+        { projectId: project.id, title: "a", status: "DONE", statusId: SID.DONE, startDate: d("2026-01-10"), dueDate: d("2026-01-20") },
+        { projectId: project.id, title: "b", status: "TODO", statusId: SID.TODO, startDate: d("2026-01-05"), dueDate: d("2026-03-01") },
+        { projectId: project.id, title: "c", status: "IN_PROGRESS", statusId: SID.IN_PROGRESS, startDate: null, dueDate: null },
+        { projectId: project.id, title: "d", status: "DONE", statusId: SID.DONE, startDate: d("2026-02-01"), dueDate: d("2026-02-02") },
       ],
     });
 
@@ -80,10 +81,10 @@ describe("task roll-ups", () => {
     const s2 = await prisma.section.create({ data: { projectId: project.id, name: "Launch", position: 2 } });
     await prisma.task.createMany({
       data: [
-        { projectId: project.id, sectionId: s1.id, title: "t1", status: "DONE", dueDate: d("2026-03-01"), baselineDueDate: d("2026-03-01") },
-        { projectId: project.id, sectionId: s1.id, title: "t2", status: "TODO", dueDate: d("2026-03-05"), baselineDueDate: d("2026-03-01") },
-        { projectId: project.id, sectionId: s2.id, title: "t3", status: "TODO", dueDate: d("2026-04-10"), baselineDueDate: d("2026-04-01") },
-        { projectId: project.id, title: "t4", status: "IN_PROGRESS", dueDate: null },
+        { projectId: project.id, sectionId: s1.id, title: "t1", status: "DONE", statusId: SID.DONE, dueDate: d("2026-03-01"), baselineDueDate: d("2026-03-01") },
+        { projectId: project.id, sectionId: s1.id, title: "t2", status: "TODO", statusId: SID.TODO, dueDate: d("2026-03-05"), baselineDueDate: d("2026-03-01") },
+        { projectId: project.id, sectionId: s2.id, title: "t3", status: "TODO", statusId: SID.TODO, dueDate: d("2026-04-10"), baselineDueDate: d("2026-04-01") },
+        { projectId: project.id, title: "t4", status: "IN_PROGRESS", statusId: SID.IN_PROGRESS, dueDate: null },
       ],
     });
 

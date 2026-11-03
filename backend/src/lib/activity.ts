@@ -80,7 +80,10 @@ export function dayString(d: Date | null): string | null {
 export interface TaskSnapshot {
   title: string;
   description: string | null;
+  /** The status category; kept for callers, not diffed (see statusId). */
   status: string;
+  statusId: number;
+  statusDef: { name: string };
   priority: string;
   startDate: Date | null;
   dueDate: Date | null;
@@ -106,7 +109,6 @@ export function diffTaskChanges(before: TaskSnapshot, after: TaskSnapshot): Acti
   const changes: ActivityChanges = {};
   const scalars = [
     "title",
-    "status",
     "priority",
     "isMilestone",
     "isCriticalPath",
@@ -117,6 +119,12 @@ export function diffTaskChanges(before: TaskSnapshot, after: TaskSnapshot): Acti
   ] as const;
   for (const field of scalars) {
     if (before[field] !== after[field]) changes[field] = fromTo(before[field], after[field]);
+  }
+  // Diffed on the status id, logged as the status NAMES, so a move between two
+  // statuses of the same category is recorded too
+  // (docs/archive/plans/custom-task-statuses.md §2). The key stays "status".
+  if (before.statusId !== after.statusId) {
+    changes.status = fromTo(before.statusDef.name, after.statusDef.name);
   }
   for (const field of ["startDate", "dueDate"] as const) {
     const from = dayString(before[field]);
