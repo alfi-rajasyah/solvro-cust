@@ -27,6 +27,8 @@ import { Alert, AlertDescription } from "@/components/reui/alert";
 import { SectionReorderModal } from "@/components/SectionReorderModal";
 import { TASK_STATUS_TONE_CLASS } from "@/components/StatusChip";
 import { TaskFormModal } from "@/components/TaskFormModal";
+import { RowTicketCell, type RowTicketContext } from "@/components/itop/RowTicketCell";
+import { useCanCreateItopTicket } from "@/components/itop/useCanCreateItopTicket";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { commitDraft, dayFromIso } from "@/lib/dateField";
@@ -44,6 +46,8 @@ import {
   useCreateSection,
   useDeleteSection,
   useDuplicateSection,
+  useItopStatus,
+  useItopTicketsByRefs,
   useProjectEpics,
   useProjectSections,
   useProjectTasks,
@@ -65,6 +69,14 @@ function nextPriority(p: Priority): Priority {
   if (idx === -1) return "LOW";
   return PRIORITY_ORDER[(idx + 1) % PRIORITY_ORDER.length];
 }
+
+// List grid templates. The Ticket column exists only when iTop is configured;
+// without it the grid is exactly the pre-iTop one (no layout shift). Full
+// literals so Tailwind sees them.
+const GRID_BASE = "grid-cols-[28px_minmax(200px,1fr)_60px_70px_50px_100px]";
+const GRID_TICKET = "grid-cols-[28px_minmax(200px,1fr)_120px_60px_70px_50px_100px]";
+const MD_GRID_BASE = "md:grid-cols-[28px_minmax(200px,1fr)_60px_70px_50px_100px]";
+const MD_GRID_TICKET = "md:grid-cols-[28px_minmax(200px,1fr)_120px_60px_70px_50px_100px]";
 
 const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 
@@ -119,6 +131,33 @@ export function ProjectList() {
   const { data: users } = useUsers();
   const { data: epics } = useProjectEpics(project.id);
   const updateTask = useUpdateTask(project.id);
+
+  // Ticket column: one batched by-refs request per render covers every pinned
+  // ref (tasks and subtasks); the column exists only when iTop is configured.
+  const { data: itopStatus } = useItopStatus();
+  const itopOn = itopStatus?.configured ?? false;
+  const createGate = useCanCreateItopTicket(project.customerId, project.customer?.name ?? null);
+  const pinnedRefs = useMemo(
+    () => (tasks ?? []).flatMap((t) => (t.itopTicketRef ? [t.itopTicketRef] : [])),
+    [tasks],
+  );
+  const { data: ticketsByRef } = useItopTicketsByRefs(pinnedRefs, {
+    enabled: itopOn && hasPermission(user, "customer:read"),
+  });
+  const ticketCtx = useMemo<RowTicketContext | null>(
+    () =>
+      itopOn
+        ? {
+            projectId: project.id,
+            projectName: project.name,
+            customerId: project.customerId,
+            baseUrl: itopStatus?.baseUrl ?? null,
+            gate: createGate,
+            byRef: ticketsByRef,
+          }
+        : null,
+    [itopOn, project.id, project.name, project.customerId, itopStatus?.baseUrl, createGate, ticketsByRef],
+  );
   const createSection = useCreateSection(project.id);
   const updateSection = useUpdateSection(project.id);
   const deleteSection = useDeleteSection(project.id);
@@ -517,9 +556,10 @@ export function ProjectList() {
 
       <div className="overflow-x-auto rounded-sm border border-outline-variant bg-surface-container-lowest md:min-h-0 md:flex-1 md:overflow-y-auto">
         {/* Column headers */}
-        <div className="hidden grid-cols-[28px_minmax(200px,1fr)_60px_70px_50px_100px] items-center gap-2 border-b border-outline-variant px-3 py-2 font-display text-label-caps uppercase text-on-surface-variant md:grid">
+        <div className={`hidden ${ticketCtx ? GRID_TICKET : GRID_BASE} items-center gap-2 border-b border-outline-variant px-3 py-2 font-display text-label-caps uppercase text-on-surface-variant md:grid`}>
           <span></span>
           <span>Name</span>
+          {ticketCtx && <span>Ticket</span>}
           <span>Owner</span>
           <span>Due</span>
           <span>Prio</span>
@@ -542,6 +582,7 @@ export function ProjectList() {
               canEdit={canEdit}
               users={users ?? []}
               epicMap={epicMap}
+              ticketCtx={ticketCtx}
               onToggle={() => toggleGroup(groupKeyOf(g.section?.id ?? null))}
               onAddTask={() =>
                 setCreateTaskCtx({ sectionId: g.section?.id ?? null, parentTaskId: null })
@@ -646,6 +687,7 @@ interface SectionGroupProps {
   canEdit: boolean;
   users: { id: number; username: string }[];
   epicMap: Map<number, Epic>;
+  ticketCtx: RowTicketContext | null;
   onToggle: () => void;
   onAddTask: () => void;
   onAddSubtask: (parentId: number) => void;
@@ -673,6 +715,7 @@ function SectionGroup({
   canEdit,
   users,
   epicMap,
+  ticketCtx,
   onToggle,
   onAddTask,
   onAddSubtask,
@@ -796,6 +839,7 @@ function SectionGroup({
               canEdit={canEdit}
               users={users}
               epicMap={epicMap}
+              ticketCtx={ticketCtx}
               onAddSubtask={onAddSubtask}
               onOpenTask={onOpenTask}
               onToggleDone={onToggleDone}
@@ -831,6 +875,7 @@ function TaskRow({
   canEdit,
   users,
   epicMap,
+  ticketCtx,
   onAddSubtask,
   onOpenTask,
   onToggleDone,
@@ -843,6 +888,7 @@ function TaskRow({
   canEdit: boolean;
   users: { id: number; username: string }[];
   epicMap: Map<number, Epic>;
+  ticketCtx: RowTicketContext | null;
   onAddSubtask: (parentId: number) => void;
   onOpenTask: (id: number) => void;
   onToggleDone: (t: Task) => void;
@@ -866,7 +912,7 @@ function TaskRow({
         style={style}
         onClick={() => onOpenTask(task.id)}
         className={[
-          "hidden cursor-pointer grid-cols-[28px_minmax(200px,1fr)_60px_70px_50px_100px] items-center gap-2 border-t border-outline-variant px-3 py-1.5 hover:bg-surface-container-low md:grid",
+          `hidden cursor-pointer ${ticketCtx ? GRID_TICKET : GRID_BASE} items-center gap-2 border-t border-outline-variant px-3 py-1.5 hover:bg-surface-container-low md:grid`,
           isDragging ? "opacity-40" : "",
         ].join(" ")}
       >
@@ -916,6 +962,12 @@ function TaskRow({
           </button>
           {epic && <EpicChip epic={epic} compact className="shrink-0" />}
         </span>
+
+        {ticketCtx && (
+          <span className="min-w-0" onClick={(e) => e.stopPropagation()}>
+            <RowTicketCell task={task} canEdit={canEdit} ctx={ticketCtx} />
+          </span>
+        )}
 
         <span onClick={(e) => e.stopPropagation()}>
           <AssigneeSelect
@@ -1003,6 +1055,11 @@ function TaskRow({
             <EpicChip epic={epic} compact />
           </div>
         )}
+        {ticketCtx && (canEdit || task.itopTicketRef) && (
+          <div className="flex items-center pl-0">
+            <RowTicketCell task={task} canEdit={canEdit} ctx={ticketCtx} />
+          </div>
+        )}
         <div className="flex items-center justify-between gap-2 pl-0">
           <span className="flex items-center gap-1.5">
             <AssigneeAvatar user={task.assignedTo} size="xs" />
@@ -1028,9 +1085,13 @@ function TaskRow({
             <SubtaskRow
               key={s.id}
               task={s}
+              parentTitle={task.title}
               canEdit={canEdit}
+              users={users}
+              ticketCtx={ticketCtx}
               onOpenTask={onOpenTask}
               onToggleDone={onToggleDone}
+              onSetAssignee={onSetAssignee}
             />
           ))}
         </SortableContext>
@@ -1051,14 +1112,22 @@ function TaskRow({
 
 function SubtaskRow({
   task,
+  parentTitle,
   canEdit,
+  users,
+  ticketCtx,
   onOpenTask,
   onToggleDone,
+  onSetAssignee,
 }: {
   task: Task;
+  parentTitle: string;
   canEdit: boolean;
+  users: { id: number; username: string }[];
+  ticketCtx: RowTicketContext | null;
   onOpenTask: (id: number) => void;
   onToggleDone: (t: Task) => void;
+  onSetAssignee: (t: Task, assignedToId: number | null) => void;
 }) {
   const done = task.status === "DONE";
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
@@ -1070,10 +1139,11 @@ function SubtaskRow({
       style={style}
       onClick={() => onOpenTask(task.id)}
       className={[
-        "flex cursor-pointer items-center gap-2 border-t border-outline-variant bg-surface-container-low/40 py-1 pl-[34px] pr-3 text-[12.5px] hover:bg-surface-container-low",
+        `flex cursor-pointer items-center gap-2 border-t border-outline-variant bg-surface-container-low/40 px-3 py-1 text-[12.5px] hover:bg-surface-container-low md:grid ${ticketCtx ? MD_GRID_TICKET : MD_GRID_BASE}`,
         isDragging ? "opacity-40" : "",
       ].join(" ")}
     >
+      <span className="flex min-w-0 flex-1 items-center gap-2 pl-[22px] md:col-span-2">
       <span
         ref={setActivatorNodeRef}
         {...attributes}
@@ -1114,6 +1184,24 @@ function SubtaskRow({
           {task.title}
         </button>
         {task.isCriticalPath && <CriticalPathMark variant="glyph" className="shrink-0" />}
+      </span>
+      </span>
+      {ticketCtx && (
+        <span
+          className={`min-w-0 shrink-0 md:block md:shrink ${canEdit || task.itopTicketRef ? "" : "hidden"}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <RowTicketCell task={task} parentTitle={parentTitle} canEdit={canEdit} ctx={ticketCtx} />
+        </span>
+      )}
+      <span className="shrink-0 md:shrink" onClick={(e) => e.stopPropagation()}>
+        <AssigneeSelect
+          canEdit={canEdit}
+          users={users}
+          projectId={task.projectId}
+          value={task.assignedToId}
+          onChange={(id) => onSetAssignee(task, id)}
+        />
       </span>
     </div>
   );

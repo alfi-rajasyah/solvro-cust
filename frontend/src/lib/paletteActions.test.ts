@@ -24,18 +24,16 @@ describe("buildPaletteActions", () => {
     expect(labels(none, "/projects/1/list")).toEqual([]);
   });
 
-  it("gates New project / New customer on project:write", () => {
-    expect(labels(only("project:write"), "/overview")).toEqual(["New project", "New customer"]);
+  it("gates New project on project:write and New customer on customer:write", () => {
+    expect(labels(only("project:write"), "/overview")).toEqual(["New project"]);
+    expect(labels(only("customer:write"), "/overview")).toEqual(["New customer"]);
     expect(labels(only("task:write"), "/overview")).toEqual([]);
   });
 
   it("offers Add task only on a project page with task:write", () => {
     expect(labels(only("task:write"), "/projects/7/kanban")).toEqual(["Add task"]);
     expect(labels(only("task:write"), "/projects")).toEqual([]);
-    expect(labels(only("project:write"), "/projects/7/kanban")).toEqual([
-      "New project",
-      "New customer",
-    ]);
+    expect(labels(only("project:write"), "/projects/7/kanban")).toEqual(["New project"]);
   });
 
   it("keeps the current tab for Add task", () => {

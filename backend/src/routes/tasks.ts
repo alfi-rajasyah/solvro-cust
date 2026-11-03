@@ -113,6 +113,8 @@ const tasksListQuerySchema = z
     assignedToId: z.coerce.number().int().positive().optional(),
     labelId: z.coerce.number().int().positive().optional(),
     customerId: z.coerce.number().int().positive().optional(),
+    // Tasks on projects whose TAM is this user (Overview TAM filter).
+    tamId: z.coerce.number().int().positive().optional(),
     overdue: z
       .union([z.literal("true"), z.literal("false")])
       .transform((v) => v === "true")
@@ -229,6 +231,7 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
     assignedToId,
     labelId,
     customerId,
+    tamId,
     overdue,
     open,
     topLevel,
@@ -251,6 +254,9 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
   if (labelId) where.labels = { some: { id: labelId } };
   if (customerId) {
     where.project = { ...(where.project as object | undefined), customerId };
+  }
+  if (tamId) {
+    where.project = { ...(where.project as object | undefined), tamId };
   }
   if (topLevel) where.parentTaskId = null;
   if (status) and.push({ status });

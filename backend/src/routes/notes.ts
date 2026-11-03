@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth, requirePermission } from "../http/auth.js";
+import { hasPermission, requireAuth, requirePermission } from "../http/auth.js";
 import { validate } from "../http/validate.js";
 import { customerVisibilityFilter, projectVisibilityFilter } from "../lib/visibility.js";
 import { isValidDayString, utcMidnightOfDayString, utcStartOfToday } from "../lib/dateBoundary.js";
@@ -81,7 +81,8 @@ notesRouter.get(
           },
         },
       }),
-      prisma.customerNote.findMany({
+      // Operations notes follow `customer:read`, not `project:read`.
+      !hasPermission(user, "customer:read") ? Promise.resolve([]) : prisma.customerNote.findMany({
         where: { noteDate, customer: customerVisibilityFilter(user) },
         orderBy: [{ noteDate: "desc" }, { updatedAt: "desc" }, { id: "desc" }],
         take: RECENT_NOTES_LIMIT,

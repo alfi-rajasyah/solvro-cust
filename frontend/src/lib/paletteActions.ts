@@ -34,6 +34,8 @@ export function buildPaletteActions(
       icon: "add",
       to: `/projects?${NEW_PARAM}=1`,
     });
+  }
+  if (has("customer:write")) {
     actions.push({
       id: "new-customer",
       label: "New customer",

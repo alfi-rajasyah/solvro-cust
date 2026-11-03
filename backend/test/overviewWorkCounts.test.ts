@@ -170,3 +170,172 @@ describe("GET /overview workCounts", () => {
     expect(res.status).toBe(400);
   });
 });
+
+// Person filters: ?tamId / ?assigneeId, AND-composed with visibility.
+describe("GET /overview person filters", () => {
+  async function overview(qs: string) {
+    const res = await request(app)
+      .get(`/overview?today=${TODAY}${qs}`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    return res.body as {
+      workCounts: { overdue: number; dueThisWeek: number; openRisks: number };
+      portfolio: Array<{ id: number }>;
+      people: {
+        tams: Array<{ id: number; username: string }>;
+        assignees: Array<{ id: number; username: string }>;
+      };
+    };
+  }
+  const overdueDate = d("2026-09-20T00:00:00.000Z");
+
+  it("tamId narrows tiles, portfolio and risks to that TAM's projects", async () => {
+    // The caller is a member of a second project owned by another TAM.
+    const other = await createUserWithRole("TAM");
+    const shared = await prisma.project.create({
+      data: {
+        name: `Shared ${Date.now()}-${Math.random()}`,
+        tamId: other.userId,
+        status: "ACTIVE",
+        members: { create: { userId } },
+      },
+    });
+    await task("TODO", overdueDate);
+    await task("TODO", overdueDate, shared.id);
+    await prisma.risk.create({ data: { projectId, description: "r", status: "OPEN" } });
+    await prisma.risk.create({ data: { projectId: shared.id, description: "r", status: "OPEN" } });
+
+    const all = await overview("");
+    expect(all.workCounts).toEqual({ overdue: 2, dueThisWeek: 0, openRisks: 2 });
+
+    const mine = await overview(`&tamId=${userId}`);
+    expect(mine.workCounts).toEqual({ overdue: 1, dueThisWeek: 0, openRisks: 1 });
+    expect(mine.portfolio.map((p) => p.id)).toEqual([projectId]);
+
+    const theirs = await overview(`&tamId=${other.userId}`);
+    expect(theirs.workCounts).toEqual({ overdue: 1, dueThisWeek: 0, openRisks: 1 });
+    expect(theirs.portfolio.map((p) => p.id)).toEqual([shared.id]);
+  });
+
+  it("assigneeId counts that person's tasks and subtasks, narrows projects and risks", async () => {
+    const worker = await createUserWithRole("TAM");
+    const quiet = await prisma.project.create({
+      data: { name: `Quiet ${Date.now()}-${Math.random()}`, tamId: userId, status: "ACTIVE" },
+    });
+    await prisma.risk.create({ data: { projectId, description: "r", status: "OPEN" } });
+    await prisma.risk.create({ data: { projectId: quiet.id, description: "r", status: "OPEN" } });
+
+    const parent = await prisma.task.create({
+      data: {
+        projectId,
+        title: "P",
+        status: "TODO",
+        dueDate: overdueDate,
+        assignedToId: worker.userId,
+      },
+    });
+    await prisma.task.create({
+      data: {
+        projectId,
+        title: "Sub",
+        status: "TODO",
+        dueDate: overdueDate,
+        parentTaskId: parent.id,
+        assignedToId: worker.userId,
+      },
+    });
+    // Someone else's task and a DONE one do not count.
+    await task("TODO", overdueDate);
+    await prisma.task.create({
+      data: {
+        projectId,
+        title: "Done",
+        status: "DONE",
+        dueDate: overdueDate,
+        assignedToId: worker.userId,
+      },
+    });
+
+    // Unfiltered stays top-level only: parent + the unassigned one.
+    expect((await overview("")).workCounts.overdue).toBe(2);
+
+    const f = await overview(`&assigneeId=${worker.userId}`);
+    expect(f.workCounts).toEqual({ overdue: 2, dueThisWeek: 0, openRisks: 1 });
+    expect(f.portfolio.map((p) => p.id)).toEqual([projectId]);
+    expect(f.people.assignees.map((a) => a.id)).toContain(worker.userId);
+  });
+
+  it("tamId and assigneeId together intersect", async () => {
+    const worker = await createUserWithRole("TAM");
+    const other = await createUserWithRole("TAM");
+    const shared = await prisma.project.create({
+      data: {
+        name: `Shared ${Date.now()}-${Math.random()}`,
+        tamId: other.userId,
+        status: "ACTIVE",
+        members: { create: { userId } },
+      },
+    });
+    for (const pid of [projectId, shared.id]) {
+      await prisma.task.create({
+        data: {
+          projectId: pid,
+          title: "W",
+          status: "TODO",
+          dueDate: overdueDate,
+          assignedToId: worker.userId,
+        },
+      });
+    }
+    const both = await overview(`&tamId=${userId}&assigneeId=${worker.userId}`);
+    expect(both.workCounts.overdue).toBe(1);
+    expect(both.portfolio.map((p) => p.id)).toEqual([projectId]);
+    const none = await overview(`&tamId=${userId}&assigneeId=${other.userId}`);
+    expect(none.workCounts).toEqual({ overdue: 0, dueThisWeek: 0, openRisks: 0 });
+    expect(none.portfolio).toEqual([]);
+  });
+
+  it("never widens visibility: another TAM's id yields nothing outside the caller's scope", async () => {
+    const other = await createUserWithRole("TAM");
+    const hidden = await prisma.project.create({
+      data: { name: `Hidden ${Date.now()}-${Math.random()}`, tamId: other.userId, status: "ACTIVE" },
+    });
+    await task("TODO", overdueDate, hidden.id);
+    await prisma.risk.create({ data: { projectId: hidden.id, description: "r", status: "OPEN" } });
+    const res = await overview(`&tamId=${other.userId}`);
+    expect(res.workCounts).toEqual({ overdue: 0, dueThisWeek: 0, openRisks: 0 });
+    expect(res.portfolio).toEqual([]);
+    expect(res.people.tams.map((t) => t.id)).not.toContain(other.userId);
+  });
+
+  it("people lists only TAMs and open-task assignees inside the caller's scope", async () => {
+    const worker = await createUserWithRole("TAM");
+    const stranger = await createUserWithRole("TAM");
+    const hidden = await prisma.project.create({
+      data: { name: `Hidden ${Date.now()}-${Math.random()}`, tamId: stranger.userId, status: "ACTIVE" },
+    });
+    await prisma.task.create({
+      data: { projectId, title: "W", status: "TODO", assignedToId: worker.userId },
+    });
+    await prisma.task.create({
+      data: { projectId: hidden.id, title: "H", status: "TODO", assignedToId: stranger.userId },
+    });
+    const { people } = await overview("");
+    expect(people.tams.map((t) => t.id)).toEqual([userId]);
+    expect(people.assignees.map((a) => a.id)).toEqual([worker.userId]);
+  });
+
+  it("rejects an id beyond the integer column range", async () => {
+    for (const qs of ["tamId=99999999999", "assigneeId=99999999999"]) {
+      const res = await request(app).get(`/overview?${qs}`).set("Authorization", `Bearer ${token}`);
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("rejects a non-numeric tamId", async () => {
+    const res = await request(app)
+      .get("/overview?tamId=abc")
+      .set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(400);
+  });
+});

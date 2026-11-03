@@ -48,6 +48,9 @@ export interface PermissionDef {
 export const PERMISSION_CATALOG: PermissionDef[] = [
   { value: "*", label: "Full access (admin)", hint: "Every permission, including the Admin area. Grant sparingly." },
   { value: "project:view-all", label: "See all projects", hint: "Visibility: see every project, not just the ones where you're the assigned TAM or that belong to a customer you own." },
+  { value: "customer:view-all", label: "See all customers", hint: "See every customer and its notes and weekly updates. Projects stay limited to the ones you can already see." },
+  { value: "customer:read", label: "View customers", hint: "See customers, their notes, weekly updates and services." },
+  { value: "customer:write", label: "Manage customers", hint: "Create and edit customers, notes, weekly updates and services." },
   { value: "project:read", label: "View projects", hint: "See projects, risks, sections, notes." },
   { value: "project:write", label: "Manage projects", hint: "Create/edit projects, risks, sections, baselines." },
   { value: "task:read", label: "View tasks", hint: "See tasks and subtasks." },

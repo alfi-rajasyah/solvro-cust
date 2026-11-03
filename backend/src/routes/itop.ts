@@ -28,6 +28,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { logger } from "../logger.js";
+import { resolveDailyReviewScope } from "../lib/dailyReviewScope.js";
 import { hasPermission, requireAuth, requirePermission, type JwtPayload } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
@@ -238,6 +239,7 @@ const ticketsQuerySchema = z.object({
 
 itopRouter.get(
   "/customers/:id/tickets",
+  requirePermission("customer:read"),
   validate("params", customerIdParamSchema),
   validate("query", ticketsQuerySchema),
   async (req, res) => {
@@ -320,6 +322,42 @@ itopRouter.get(
   },
 );
 
+// ---- GET /tickets/by-refs ----------------------------------------------------
+
+// Batch twin of GET /tickets/by-ref/:ref for the project List's Ticket
+// column: one request resolves every pinned ref on screen instead of one per
+// row. Snapshot-only (never calls iTop), max 200 refs. Visibility is the
+// by-ref rule applied per ticket in one query — a ticket with no customer
+// link or a customer the caller cannot see answers `null`, exactly like an
+// unknown ref, so the batch never reveals that a hidden ticket exists.
+// Declared before /tickets/:id so "by-refs" is not parsed as an id.
+const BY_REFS_MAX = 200;
+const ticketRefsQuerySchema = z.object({
+  refs: z
+    .string()
+    .transform((v) => [...new Set(v.split(",").map((r) => r.trim()).filter(Boolean))])
+    .pipe(z.array(z.string().min(1).max(64)).max(BY_REFS_MAX)),
+});
+
+itopRouter.get("/tickets/by-refs", requirePermission("customer:read"), validate("query", ticketRefsQuerySchema), async (req, res) => {
+  const { refs } = req.query as unknown as z.infer<typeof ticketRefsQuerySchema>;
+  const out: Record<string, ReturnType<typeof toTicketRow> | null> = {};
+  for (const ref of refs) out[ref] = null;
+  if (refs.length === 0) {
+    res.json(out);
+    return;
+  }
+
+  const tickets = await prisma.itopTicket.findMany({
+    where: { ref: { in: refs }, customer: { is: customerVisibilityFilter(req.user!) } },
+    select: TICKET_ROW_SELECT,
+  });
+
+  const myItopPersonId = await getMyItopPersonId(req.user!.sub);
+  for (const t of tickets) out[t.ref] = toTicketRow(t, myItopPersonId);
+  res.json(out);
+});
+
 // ---- GET /tickets/:id ---------------------------------------------------------
 
 const ticketIdParamSchema = z.object({ id: z.coerce.number().int().positive() });
@@ -334,6 +372,7 @@ const ticketDetailQuerySchema = z.object({
 
 itopRouter.get(
   "/tickets/:id",
+  requirePermission("customer:read"),
   validate("params", ticketIdParamSchema),
   validate("query", ticketDetailQuerySchema),
   async (req, res) => {
@@ -370,6 +409,7 @@ const ticketRefParamSchema = z.object({ ref: z.string().min(1) });
 
 itopRouter.get(
   "/tickets/by-ref/:ref",
+  requirePermission("customer:read"),
   validate("params", ticketRefParamSchema),
   async (req, res) => {
     const { ref } = req.params as unknown as z.infer<typeof ticketRefParamSchema>;
@@ -480,15 +520,30 @@ itopRouter.get(
     const user = req.user!;
 
     const config = await getItopConfig();
-    if (!isItopConfigured(config)) {
-      res.json({ configured: false, date, utcOffsetMinutes, customers: [] });
+    // The strip is customer data: without `customer:read` answer an empty list
+    // (200, so the Daily Review page still renders) rather than an error.
+    if (!isItopConfigured(config) || !hasPermission(user, "customer:read")) {
+      res.json({ configured: isItopConfigured(config), date, utcOffsetMinutes, customers: [] });
       return;
     }
 
     // Visible AND mapped (itopOrgId set) — an unmapped customer has no
     // tickets to show and would otherwise render an empty, confusing row.
+    // A `customer:view-all` holder (without `project:view-all`) sees every
+    // customer, but the Daily Review shows only its own scope: intersect, so
+    // the strip is computed only for customers the page can render.
+    const scopeIds =
+      hasPermission(user, "customer:view-all") && !hasPermission(user, "project:view-all")
+        ? (await resolveDailyReviewScope(user)).customers.map((c) => c.id)
+        : null;
     const customers = await prisma.customer.findMany({
-      where: { AND: [customerVisibilityFilter(user), { itopOrgId: { not: null } }] },
+      where: {
+        AND: [
+          customerVisibilityFilter(user),
+          ...(scopeIds ? [{ id: { in: scopeIds } }] : []),
+          { itopOrgId: { not: null } },
+        ],
+      },
       orderBy: { name: "asc" },
       select: { id: true, name: true, itopOrgName: true },
     });
@@ -1016,6 +1071,7 @@ itopRouter.get("/services", async (_req, res) => {
 
 itopRouter.get(
   "/customers/:id/contacts",
+  requirePermission("customer:read"),
   validate("params", customerIdParamSchema),
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof customerIdParamSchema>;
@@ -1155,6 +1211,7 @@ const createTicketBodySchema = z.object({
 itopRouter.post(
   "/tickets",
   requirePermission("task:write"),
+  requirePermission("customer:write"),
   validate("body", createTicketBodySchema),
   async (req, res) => {
     const body = req.body as z.infer<typeof createTicketBodySchema>;

@@ -19,7 +19,7 @@ Goals
 - The Daily Review page becomes customer-first: a TAM reviews the customers assigned to them and every active project under those customers.
 
 Non-goals
-- No new permission string. No schema change. No migration.
+- No new permission string. No schema change. No migration. *(Superseded 2026-11-03, user decision: `customer:read`, `customer:write` and `customer:view-all` were added — see `docs/archive/plans/request-triage-plan.md` § Phase 8. Kept as originally settled.)*
 - No ownership gate on weekly updates or operations notes (today's `project:write` gate stays).
 - No "Mine / All" toggle for `project:view-all` users (follow-up).
 
@@ -29,7 +29,7 @@ Non-goals
 |---|---|---|
 | 1 | Visibility rule | `project:view-all` or `*` → everything. Otherwise: `Customer.tamId = me` **OR** `tamId = null` **OR** the customer has ≥1 project visible to me (`projects: { some: projectVisibilityFilter(user) } }`). The second arm keeps the project page's customer link working for SAs and for project TAMs on another TAM's customer. Owning a customer also grants project visibility — see Decision 14. |
 | 2 | Unowned customers (`tamId = null`) | Visible to everyone, as today (user, 2026-08-31). Hidden = a customer owned by another TAM that has no project of yours. |
-| 3 | Permission | Reuse `project:view-all`. Mirrors v2 Decision 8 (no `customer:write` either). |
+| 3 | Permission | Reuse `project:view-all`. Mirrors v2 Decision 8 (no `customer:write` either). *(Superseded 2026-11-03, user decision: customers now have `customer:read` / `customer:write` / `customer:view-all`; `project:view-all` no longer widens customer visibility. See `docs/archive/plans/request-triage-plan.md` § Phase 8.)* |
 | 4 | Create default | `POST /customers` with `tamId` omitted → `tamId = creator`. Explicit `tamId: null` → allowed only with `project:view-all`; otherwise 400 `tam_required`. A TAM can never create a customer they cannot see. |
 | 5 | Reassign | `PATCH /customers/:id { tamId }` to another user is allowed (handover). The form shows a confirm when the caller will lose the customer. |
 | 6 | Id-keyed routes | `ensureCustomerVisible(user, id)` replaces `assertCustomerExists`. 404 `customer_not_found`, not 403 — same reasoning as `ensureProjectVisible`. |

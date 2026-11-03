@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth, requirePermission } from "../http/auth.js";
+import { hasPermission, requireAuth, requirePermission } from "../http/auth.js";
 import { validate } from "../http/validate.js";
 import { resolveDailyReviewScope } from "../lib/dailyReviewScope.js";
 import {
@@ -159,10 +159,12 @@ dailyReviewRouter.get(
       }),
     ]);
 
+    // Operations notes and weekly updates follow `customer:read`.
+    const noteCustomerIds = hasPermission(user, "customer:read") ? customerIds : [];
     const [customerNotes, weeklyUpdates, previousWeeklyUpdates] = await Promise.all([
       prisma.customerNote.findMany({
         where: {
-          customerId: { in: customerIds },
+          customerId: { in: noteCustomerIds },
           noteDate: { gte: weekStartDate, lte: weekEndDate },
         },
         orderBy: [{ noteDate: "asc" }, { id: "asc" }],
@@ -181,7 +183,7 @@ dailyReviewRouter.get(
       // second `SELECT ... WHERE weekly_update_id IN (...)`), not one per
       // row — the per-request call count stays fixed regardless of page size.
       prisma.weeklyUpdate.findMany({
-        where: { customerId: { in: customerIds }, weekStart: weekStartDate },
+        where: { customerId: { in: noteCustomerIds }, weekStart: weekStartDate },
         select: {
           id: true,
           customerId: true,
@@ -220,7 +222,7 @@ dailyReviewRouter.get(
       // the same customerIds, keeping the per-request query count fixed
       // regardless of page size.
       prisma.weeklyUpdate.findMany({
-        where: { customerId: { in: customerIds }, weekStart: previousWeekStartDate },
+        where: { customerId: { in: noteCustomerIds }, weekStart: previousWeekStartDate },
         select: {
           customerId: true,
           weekStart: true,

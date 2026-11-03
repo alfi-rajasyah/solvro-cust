@@ -16,13 +16,11 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Chip } from "@/components/StatusChip";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
-import {
-  useItopCustomerMapped,
-  useItopStatus,
-  useItopTicketByRef,
-  useMyItopToken,
-} from "@/lib/queries";
+import { useItopStatus, useItopTicketByRef } from "@/lib/queries";
+import { GateReason } from "./GateReason";
 import { NewTicketSheet } from "./NewTicketSheet";
+import { buildTicketPrefill } from "./ticketPrefill";
+import { useCanCreateItopTicket } from "./useCanCreateItopTicket";
 import { isItopRef, itopTicketUrl, statusLabel, statusTone } from "./ticketPresentation";
 
 const INPUT_CLASS =
@@ -38,6 +36,9 @@ export function TaskTicketField({
   itopTicketRef,
   canEdit,
   customerId,
+  customerName = null,
+  projectName = null,
+  parentTitle = null,
   taskTitle,
   taskDescription,
   onSave,
@@ -49,16 +50,21 @@ export function TaskTicketField({
    * gates "Create in iTop" (Task 7.2): no customer, no organisation to
    * create the ticket under. */
   customerId: number | null;
+  /** Names the customer in the "map it to iTop" hint. */
+  customerName?: string | null;
+  /** With `parentTitle`, feeds the same context line the row menus add (buildTicketPrefill). */
+  projectName?: string | null;
+  parentTitle?: string | null;
   taskTitle: string;
   taskDescription: string | null;
   onSave: (ref: string | null) => void;
   /** Reports whether the nested New-ticket sheet is open, so the parent panel can leave Escape to the sheet instead of closing itself mid-create. */
   onCreateSheetOpenChange?: (open: boolean) => void;
 }) {
-  const { user } = useAuth();
   const { data: status } = useItopStatus();
-  const { data: myToken } = useMyItopToken();
-  const ticketQuery = useItopTicketByRef(itopTicketRef);
+  const { user } = useAuth();
+  // The ticket read routes need customer:read; without it skip the lookup (no 403s) and show the bare ref.
+  const ticketQuery = useItopTicketByRef(itopTicketRef, { enabled: hasPermission(user, "customer:read") });
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -75,21 +81,14 @@ export function TaskTicketField({
     return () => reportSheetOpen.current?.(false);
   }, [createOpen]);
 
-  // Cheap booleans first (no extra request) before the one that actually
-  // costs a fetch (`useItopCustomerMapped` hits `GET
-  // /itop/customers/:id/tickets` under the hood) — `enabled` below skips
-  // that fetch entirely once the task already has a ref, or nothing else
-  // about this row would show the button anyway.
-  // Creating a ticket is a write (POST /itop/tickets) — task:write only.
-  const wantsCreateAffordance =
-    hasPermission(user, "task:write") &&
-    canEdit &&
-    !itopTicketRef &&
-    customerId !== null &&
-    (status?.actionsEnabled ?? false) &&
-    (myToken?.set ?? false);
-  const customerMapped = useItopCustomerMapped(customerId, { enabled: wantsCreateAffordance });
-  const canCreate = wantsCreateAffordance && customerMapped;
+  // Creating a ticket is a write (POST /itop/tickets) — the shared gate also
+  // says why it is unavailable, so the row never goes silently bare.
+  const createGate = useCanCreateItopTicket(customerId, customerName);
+  const canCreate = canEdit && !itopTicketRef && createGate.canCreate;
+  const prefill = projectName
+    ? buildTicketPrefill({ title: taskTitle, description: taskDescription, projectName, parentTitle })
+    : { title: taskTitle, description: taskDescription ?? "" };
+  const createHint = canEdit && !itopTicketRef && createGate.reason !== null;
 
   // One edit settles exactly once — same rationale and same risk as
   // TaskPanel.tsx's own `renameSettledRef` (Enter and the blur that follows
@@ -191,6 +190,7 @@ export function TaskTicketField({
             </button>
           )}
         </div>
+        {createHint && <GateReason gate={createGate} className="mt-1 block text-meta text-on-surface-variant" />}
         {error && (
           <p id={errorId} className="mt-1 text-xs text-error">
             {error}
@@ -201,8 +201,9 @@ export function TaskTicketField({
             open
             onClose={() => setCreateOpen(false)}
             customerId={customerId}
-            initialTitle={taskTitle}
-            initialDescription={taskDescription ?? ""}
+            initialTitle={prefill.title}
+            initialDescription={prefill.description}
+            pinTarget
             onCreated={(ticket) => {
               setCreateOpen(false);
               settledRef.current = true;

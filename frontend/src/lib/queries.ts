@@ -417,6 +417,25 @@ export interface OverviewResponse {
   // OPEN risks on projects in scope. Same visibility scope as the rest of
   // the response (backend/src/routes/overview.ts).
   workCounts: WorkCounts;
+  // Picker options for the Overview's TAM / Assignee filters: the distinct
+  // TAMs and open-task assignees inside the caller's visible scope.
+  people: OverviewPeople;
+}
+
+export interface OverviewPerson {
+  id: number;
+  username: string;
+}
+
+export interface OverviewPeople {
+  tams: OverviewPerson[];
+  assignees: OverviewPerson[];
+}
+
+/** Person filters of GET /overview; both optional, AND-composed server-side. */
+export interface OverviewFilters {
+  tamId?: number;
+  assigneeId?: number;
 }
 
 export interface WorkCounts {
@@ -501,6 +520,8 @@ export interface TasksFilter {
   assignedToId?: number;
   labelId?: number;
   customerId?: number;
+  /** Tasks on projects whose TAM is this user. */
+  tamId?: number;
   overdue?: boolean;
   /** true = hide DONE tasks (open work only). */
   open?: boolean;
@@ -851,7 +872,7 @@ export const queryKeys = {
   itopContacts: (customerId: number) => ["itop", "customers", customerId, "contacts"] as const,
 };
 
-export function useOverview() {
+export function useOverview(filters: OverviewFilters = {}) {
   // The portfolio block's isOverdue/daysOverdue are badged against the
   // CALLER's local calendar day (backend/src/lib/dateBoundary.ts) — sent on
   // every request since the block is always present in the response. `today`
@@ -864,9 +885,13 @@ export function useOverview() {
   // not a background timer nobody asked for.)
   const today = dateToDay(new Date())!;
   return useQuery({
-    queryKey: [...queryKeys.overview, today],
-    queryFn: ({ signal }) =>
-      apiRequest<OverviewResponse>(`/overview?today=${today}`, { signal }),
+    queryKey: [...queryKeys.overview, today, filters.tamId ?? null, filters.assigneeId ?? null],
+    queryFn: ({ signal }) => {
+      const params = new URLSearchParams({ today });
+      if (filters.tamId) params.set("tamId", String(filters.tamId));
+      if (filters.assigneeId) params.set("assigneeId", String(filters.assigneeId));
+      return apiRequest<OverviewResponse>(`/overview?${params.toString()}`, { signal });
+    },
     // The day-boundary key change (above) shouldn't flash a loading
     // skeleton on every render after midnight — keep showing the previous
     // day's data while the new key's request resolves in the background.
@@ -1384,6 +1409,7 @@ function tasksQueryString(filter: TasksFilter, offset = 0): string {
   if (filter.assignedToId) params.set("assignedToId", String(filter.assignedToId));
   if (filter.labelId) params.set("labelId", String(filter.labelId));
   if (filter.customerId) params.set("customerId", String(filter.customerId));
+  if (filter.tamId) params.set("tamId", String(filter.tamId));
   if (filter.overdue) {
     params.set("overdue", "true");
     // The server badges "overdue" against the CALLER's local calendar day,
@@ -3241,13 +3267,13 @@ export function useCustomerTickets(
 export function useItopCustomerMapped(
   customerId: number | null,
   { enabled = true }: { enabled?: boolean } = {},
-): boolean {
+): { mapped: boolean; known: boolean; isError: boolean } {
   const query = useCustomerTickets(customerId ?? -1, {
     scope: "ongoing",
     enabled: enabled && customerId !== null,
     poll: false,
   });
-  return query.data?.mapped === true;
+  return { mapped: query.data?.mapped === true, known: query.data !== undefined, isError: query.isError };
 }
 
 export function useRequestItopRefresh() {
@@ -3288,14 +3314,36 @@ export function useRequestItopRefresh() {
 // (`not_found`, covering unknown/hidden/unmapped alike per
 // routes/itop.ts) is an expected steady state (the ref hasn't synced yet, or
 // never will), not a transient failure worth retrying.
-export function useItopTicketByRef(ref: string | null) {
+export function useItopTicketByRef(ref: string | null, { enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.itopTicketByRef(ref ?? ""),
     queryFn: ({ signal }) =>
       apiRequest<ItopTicketRow>(`/itop/tickets/by-ref/${encodeURIComponent(ref ?? "")}`, {
         signal,
       }),
-    enabled: !!ref,
+    enabled: !!ref && enabled,
+    retry: false,
+    staleTime: 60_000,
+  });
+}
+
+// Batched twin of `useItopTicketByRef` for the project List's Ticket column:
+// one request resolves every pinned ref on screen (GET /itop/tickets/by-refs,
+// snapshot-only, max 200). A ref whose ticket is unknown or hidden maps to
+// null. The ref set is sorted+joined into the key so a reorder doesn't refetch;
+// it shares the `itopTicketByRefRoot` prefix so a refresh invalidates it too.
+export const ITOP_BY_REFS_MAX = 200;
+
+export function useItopTicketsByRefs(refs: readonly string[], { enabled = true }: { enabled?: boolean } = {}) {
+  const unique = [...new Set(refs)].sort().slice(0, ITOP_BY_REFS_MAX);
+  return useQuery({
+    queryKey: [...queryKeys.itopTicketByRefRoot, "batch", unique.join(",")] as const,
+    queryFn: ({ signal }) =>
+      apiRequest<Record<string, ItopTicketRow | null>>(
+        `/itop/tickets/by-refs?refs=${encodeURIComponent(unique.join(","))}`,
+        { signal },
+      ),
+    enabled: enabled && unique.length > 0,
     retry: false,
     staleTime: 60_000,
   });

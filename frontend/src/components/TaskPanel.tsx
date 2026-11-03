@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { usePanelFocus } from "@/hooks/usePanelFocus";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { ConfirmModal } from "./ConfirmModal";
@@ -14,7 +14,9 @@ import { LabelPicker } from "./LabelPicker";
 import { OutlineMentions } from "./OutlineMentions";
 import { TASK_STATUS_TONE_CLASS } from "./StatusChip";
 import { TaskConflictDialog } from "./TaskConflictDialog";
+import { RowTicketCell, type RowTicketContext } from "@/components/itop/RowTicketCell";
 import { TaskTicketField } from "@/components/itop/TaskTicketField";
+import { useCanCreateItopTicket } from "@/components/itop/useCanCreateItopTicket";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { Sortable, SortableItem, SortableItemHandle } from "@/components/reui/sortable";
 import { ApiError } from "@/lib/api";
@@ -43,6 +45,7 @@ import {
   useDeleteTask,
   useDuplicateTask,
   useItopStatus,
+  useItopTicketsByRefs,
   useProject,
   useProjectEpics,
   useProjectLabels,
@@ -100,6 +103,8 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   // task itself has no customer of its own, so this is the one extra fetch
   // this panel needs for that field.
   const { data: project } = useProject(projectId);
+  const { data: itopStatusData } = useItopStatus();
+  const subtaskCreateGate = useCanCreateItopTicket(project?.customerId ?? null, project?.customer?.name ?? null);
 
   const { data: tasks } = useProjectTasks(projectId);
   const { data: sections } = useProjectSections(projectId);
@@ -121,6 +126,21 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     // global (position asc, id asc) sort surviving the filter() above.
     .sort((a, b) => a.position - b.position || a.id - b.id);
   const subtasksDone = subtasks.filter((s) => s.status === "DONE").length;
+  const { data: subtaskTickets } = useItopTicketsByRefs(
+    subtasks.flatMap((s) => (s.itopTicketRef ? [s.itopTicketRef] : [])),
+    { enabled: itopConfigured && hasPermission(user, "customer:read") },
+  );
+  const subtaskTicketCtx: RowTicketContext | null =
+    itopConfigured && project
+      ? {
+          projectId,
+          projectName: project.name,
+          customerId: project.customerId,
+          baseUrl: itopStatusData?.baseUrl ?? null,
+          gate: subtaskCreateGate,
+          byRef: subtaskTickets,
+        }
+      : null;
 
   // Max depth is 1 (backend/src/lib/taskOrdering.ts's assertValidParent), so a
   // task with a parent can never have subtasks of its own — `isSubtask` is what
@@ -153,6 +173,8 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const [editingSection, setEditingSection] = useState(false);
   const [editingEpic, setEditingEpic] = useState(false);
   const [newSubtask, setNewSubtask] = useState("");
+  // Remembered across quick-adds while the panel stays open.
+  const [newSubtaskAssigneeId, setNewSubtaskAssigneeId] = useState<number | null>(null);
   const [editingSubtaskId, setEditingSubtaskId] = useState<number | null>(null);
   const [subtaskTitleDraft, setSubtaskTitleDraft] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -190,9 +212,15 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   // sheet) is showing: Escape belongs to that sheet, and closing the panel
   // under a pending create would unmount the field that pins the new ref.
   const [nestedSheetOpen, setNestedSheetOpen] = useState(false);
+  // Row ticket cells report balanced open/close; a count keeps one cell's close from clearing another's.
+  const [rowOverlayCount, setRowOverlayCount] = useState(0);
+  const onRowOverlayChange = useCallback(
+    (open: boolean) => setRowOverlayCount((c) => Math.max(0, c + (open ? 1 : -1))),
+    [],
+  );
   // The conflict dialog and the delete confirm are modals with their own
   // Escape handling — the same keypress must not also close the panel.
-  const modalOpen = conflict !== null || confirmDelete || nestedSheetOpen;
+  const modalOpen = conflict !== null || confirmDelete || nestedSheetOpen || rowOverlayCount > 0;
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" && !modalOpen) onClose();
@@ -314,6 +342,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
         parentTaskId: task.id,
         sectionId: task.sectionId,
         status: "TODO",
+        ...(newSubtaskAssigneeId !== null ? { assignedToId: newSubtaskAssigneeId } : {}),
       });
       setNewSubtask("");
     } catch (err) {
@@ -325,6 +354,10 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
 
   function toggleSubtask(s: Task) {
     updateTask.mutate({ id: s.id, patch: { status: s.status === "DONE" ? "TODO" : "DONE" } });
+  }
+
+  function setSubtaskAssignee(s: Task, assignedToId: number | null) {
+    updateTask.mutate({ id: s.id, patch: { assignedToId } });
   }
 
   function startSubtaskRename(s: Task) {
@@ -798,8 +831,11 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                   itopTicketRef={task.itopTicketRef}
                   canEdit={canEdit}
                   customerId={project?.customerId ?? null}
+                  customerName={project?.customer?.name ?? null}
                   taskTitle={task.title}
                   taskDescription={task.description}
+                  projectName={project?.name ?? null}
+                  parentTitle={(tasks ?? []).find((t) => t.id === task.parentTaskId)?.title ?? null}
                   onSave={(ref) => patch({ itopTicketRef: ref })}
                   onCreateSheetOpenChange={setNestedSheetOpen}
                 />
@@ -912,6 +948,24 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         {s.title}
                       </button>
                     )}
+                    {subtaskTicketCtx && (canEdit || s.itopTicketRef) && (
+                      <RowTicketCell
+                        task={s}
+                        parentTitle={task.title}
+                        canEdit={canEdit}
+                        ctx={subtaskTicketCtx}
+                        onOverlayOpenChange={onRowOverlayChange}
+                      />
+                    )}
+                    <SubtaskAssigneePicker
+                      canEdit={canEdit}
+                      users={users ?? []}
+                      assignee={s.assignedTo}
+                      value={s.assignedToId}
+                      addsMember={assigneeAddsMember}
+                      label={`Assignee for ${s.title}`}
+                      onChange={(id) => setSubtaskAssignee(s, id)}
+                    />
                     {canEdit && editingSubtaskId !== s.id && (
                       // A single direct button, not the Gantt tree's "…" row menu
                       // (ui/context-menu.tsx): rename is the only action this row
@@ -971,7 +1025,16 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     placeholder="Add subtask"
                     maxLength={200}
                     readOnly={createTask.isPending}
-                    className="flex-1 border-none bg-transparent text-[13px] text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden"
+                    className="min-w-0 flex-1 border-none bg-transparent text-[13px] text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden"
+                  />
+                  <SubtaskAssigneePicker
+                    canEdit={canEdit}
+                    users={users ?? []}
+                    assignee={(users ?? []).find((u) => u.id === newSubtaskAssigneeId) ?? null}
+                    value={newSubtaskAssigneeId}
+                    addsMember={assigneeAddsMember}
+                    label="Assignee for new subtask"
+                    onChange={setNewSubtaskAssigneeId}
                   />
                 </form>
               )}
@@ -1117,5 +1180,66 @@ function PanelComments({ taskId, projectId }: { taskId: number; projectId: numbe
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Avatar-only assignee control for the panel's narrow subtask rows: the avatar
+ * is the trigger, and picking swaps in a native select (same pattern as the
+ * panel's own Assignee row) until a choice is made or focus leaves.
+ */
+function SubtaskAssigneePicker({
+  canEdit,
+  users,
+  assignee,
+  value,
+  addsMember,
+  label,
+  onChange,
+}: {
+  canEdit: boolean;
+  users: { id: number; username: string }[];
+  assignee: { id: number; username: string } | null | undefined;
+  value: number | null;
+  addsMember: (id: number | null | undefined) => boolean;
+  label: string;
+  onChange: (id: number | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing && canEdit) {
+    return (
+      <select
+        autoFocus
+        aria-label={label}
+        value={value ?? ""}
+        onChange={(e) => {
+          onChange(e.target.value === "" ? null : Number(e.target.value));
+          setEditing(false);
+        }}
+        onBlur={() => setEditing(false)}
+        className="w-28 shrink-0 rounded-sm border border-outline-variant bg-surface-container-lowest px-1 py-0.5 text-xs text-on-surface focus:border-primary focus:outline-hidden"
+      >
+        <option value="">Unassigned</option>
+        {users.map((u) => (
+          <option key={u.id} value={u.id}>
+            {`${u.username}${addsMember(u.id) ? " (not on project)" : ""}`}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={!canEdit}
+      onClick={() => setEditing(true)}
+      aria-label={label}
+      title={assignee ? assignee.username : "Unassigned"}
+      className="shrink-0 rounded-full outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
+    >
+      <AssigneeAvatar user={assignee ?? null} size="xs" />
+    </button>
   );
 }

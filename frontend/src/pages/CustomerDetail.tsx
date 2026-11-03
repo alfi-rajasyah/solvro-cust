@@ -32,7 +32,7 @@ export function CustomerDetail() {
   const customerId = id ? Number(id) : null;
   const navigate = useNavigate();
   const { user } = useAuth();
-  const canMutate = hasPermission(user, "project:write");
+  const canMutate = hasPermission(user, "customer:write");
   const { data: outlineConfig } = useOutlineConfig();
 
   const { data: customer, isLoading, isError, error } = useCustomer(customerId);
@@ -54,9 +54,9 @@ export function CustomerDetail() {
   // skips the fetch rather than skipping the hook call.
   const itopStatus = useItopStatus();
   const itopConfigured = itopStatus.data?.configured ?? false;
-  // The tickets endpoints require `project:read` (403 otherwise), so a user
+  // The tickets endpoints require `customer:read` (403 otherwise), so a user
   // without it never fires the gate query and never sees the tab.
-  const canReadTickets = hasPermission(user, "project:read");
+  const canReadTickets = hasPermission(user, "customer:read");
   const itopTicketsGate = useCustomerTickets(customerId ?? -1, {
     scope: "ongoing",
     enabled: itopConfigured && canReadTickets && customerId !== null,

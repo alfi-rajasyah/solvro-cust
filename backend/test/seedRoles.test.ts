@@ -17,6 +17,22 @@ const MIGRATION = new URL(
   import.meta.url,
 );
 
+const CUSTOMER_MIGRATION = new URL(
+  "../prisma/migrations/20261103090000_customer_permissions/migration.sql",
+  import.meta.url,
+);
+
+async function runMigration(url: URL): Promise<void> {
+  const statements = readFileSync(url, "utf8")
+    .split("\n")
+    .filter((line) => !line.startsWith("--"))
+    .join("\n")
+    .split(";")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const statement of statements) await prisma.$executeRawUnsafe(statement);
+}
+
 async function permissionsOf(roleName: string): Promise<unknown> {
   return (await prisma.role.findUniqueOrThrow({ where: { roleName } })).permissions;
 }
@@ -79,21 +95,40 @@ describe("builtin_roles_last_reset migration", () => {
       data: { roleName: `Custom ${Date.now()}`, permissions: ["project:view-all"] },
     });
 
-    const sql = readFileSync(MIGRATION, "utf8")
-      .split("\n")
-      .filter((line) => !line.startsWith("--"))
-      .join("\n")
-      .split(";")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    for (const statement of sql) await prisma.$executeRawUnsafe(statement);
+    // Migrations run in order: the reset, then the customer-permissions backfill.
+    await runMigration(MIGRATION);
+    await runMigration(CUSTOMER_MIGRATION);
 
+    // Same set of permissions; the backfill appends, so order may differ.
     for (const [roleName, permissions] of Object.entries(ROLE_PERMISSIONS)) {
-      expect(await permissionsOf(roleName)).toEqual(permissions);
+      expect([...((await permissionsOf(roleName)) as string[])].sort()).toEqual([...permissions].sort());
     }
     // Custom roles are not touched.
     expect(await permissionsOf(custom.roleName)).toEqual(["project:view-all"]);
     await prisma.role.delete({ where: { id: custom.id } });
+  });
+});
+
+describe("customer_permissions migration", () => {
+  it("adds customer:read/write beside project:read/write, idempotently, leaving * and others alone", async () => {
+    const stamp = Date.now();
+    const make = (suffix: string, permissions: string[]) =>
+      prisma.role.create({ data: { roleName: `Mig ${suffix} ${stamp}`, permissions } });
+    const rw = await make("rw", ["project:read", "project:write", "task:read"]);
+    const ro = await make("ro", ["project:read"]);
+    const star = await make("star", ["*"]);
+    const none = await make("none", ["task:read"]);
+    const done = await make("done", ["project:read", "customer:read"]);
+
+    await runMigration(CUSTOMER_MIGRATION);
+    await runMigration(CUSTOMER_MIGRATION);
+
+    expect(await permissionsOf(rw.roleName)).toEqual(["project:read", "project:write", "task:read", "customer:read", "customer:write"]);
+    expect(await permissionsOf(ro.roleName)).toEqual(["project:read", "customer:read"]);
+    expect(await permissionsOf(star.roleName)).toEqual(["*"]);
+    expect(await permissionsOf(none.roleName)).toEqual(["task:read"]);
+    expect(await permissionsOf(done.roleName)).toEqual(["project:read", "customer:read"]);
+    await prisma.role.deleteMany({ where: { id: { in: [rw.id, ro.id, star.id, none.id, done.id] } } });
   });
 });
 

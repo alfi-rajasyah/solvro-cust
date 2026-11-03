@@ -31,6 +31,7 @@ export function NewTicketSheet({
   onCreated,
   initialTitle,
   initialDescription,
+  pinTarget = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -48,6 +49,8 @@ export function NewTicketSheet({
    * `useState`'s initial value, not a `useEffect` sync. */
   initialTitle?: string;
   initialDescription?: string;
+  /** True when the caller pins the new ref to a task/row, so the stale-create notice tells the user to pin it after the next sync. */
+  pinTarget?: boolean;
 }) {
   const { data: myToken } = useMyItopToken();
   const { data: contacts, isLoading: contactsLoading } = useItopContacts(customerId);
@@ -100,7 +103,9 @@ export function NewTicketSheet({
       {
         onSuccess: (result) => {
           if (isStaleTicketCreate(result)) {
-            setStaleNotice(`Created in iTop as #${result.id} — it appears after the next sync.`);
+            setStaleNotice(pinTarget
+              ? `Created in iTop as #${result.id}, pin it after the next sync.`
+              : `Created in iTop as #${result.id} — it appears after the next sync.`);
             return;
           }
           const created = { id: result.id, ref: result.ref };
@@ -148,6 +153,11 @@ export function NewTicketSheet({
       }
     >
       <div className="space-y-3">
+        {myToken?.personName && (
+          <p className="text-meta text-on-surface-variant">
+            Created as {myToken.personName} with your personal iTop token
+          </p>
+        )}
         <label className="block">
           <span className={LABEL_CLASS}>Type</span>
           <select
@@ -241,9 +251,6 @@ export function NewTicketSheet({
         </p>
       )}
 
-      {myToken?.personName && (
-        <p className="mt-3 text-[12px] text-on-surface-variant">Created in iTop as {myToken.personName}</p>
-      )}
     </Modal>
   );
 }

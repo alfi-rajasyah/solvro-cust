@@ -18,6 +18,9 @@
 import { useState } from "react";
 import { DailyItopStrip } from "@/components/itop/DailyItopStrip";
 import { Input } from "@/components/ui/input";
+import { hasPermission, useAuth } from "@/lib/auth";
+import { dayFromIso } from "@/lib/dateField";
+import { fmtDay } from "@/lib/formatDate";
 import {
   type DailyItopCustomer,
   type DailyReviewCustomer,
@@ -38,6 +41,9 @@ export interface OperationsCardProps {
 }
 
 export function OperationsCard({ customer, today, days, currentUserId, canDeleteAny, itop }: OperationsCardProps) {
+  const { user } = useAuth();
+  const canRead = hasPermission(user, "customer:read");
+  const canWrite = hasPermission(user, "customer:write");
   const addNote = useAddCustomerNote(customer.id);
   const updateNote = useUpdateCustomerNote(customer.id);
   const deleteNote = useDeleteCustomerNote(customer.id);
@@ -49,7 +55,7 @@ export function OperationsCard({ customer, today, days, currentUserId, canDelete
   // no persistent today row to append into then, so the strip goes
   // read-only (no "Add to note" buttons) rather than silently dropping the
   // insert into a day that isn't today.
-  const hasTodayRow = days.includes(today);
+  const hasTodayRow = days.includes(today) && canWrite;
 
   return (
     <article className="rounded-sm border border-outline-variant bg-surface-container-lowest">
@@ -76,6 +82,24 @@ export function OperationsCard({ customer, today, days, currentUserId, canDelete
         </div>
       )}
 
+      {!canRead ? (
+        <p className="px-4 py-3 text-sm text-on-surface-variant">
+          You don't have access to customer notes.
+        </p>
+      ) : !canWrite ? (
+        <ul className="space-y-2 px-4 py-3">
+          {customer.operationsNotes.length === 0 && (
+            <li className="text-sm text-on-surface-variant">No operations notes this week.</li>
+          )}
+          {customer.operationsNotes.map((note) => (
+            <li key={note.id} className="text-sm text-on-surface">
+              <span className="mr-2 text-meta text-on-surface-variant">{fmtDay(dayFromIso(note.noteDate))}</span>
+              <span className="font-semibold">{note.title}</span>
+              <p className="whitespace-pre-wrap">{note.body}</p>
+            </li>
+          ))}
+        </ul>
+      ) : (
       <div className="px-4 py-3">
         <WeekNotesEditor
           // Keyed by the displayed week's Monday — see ProjectCard.tsx's
@@ -126,6 +150,7 @@ export function OperationsCard({ customer, today, days, currentUserId, canDelete
           onPendingInsertApplied={() => setPendingInsert(null)}
         />
       </div>
+      )}
     </article>
   );
 }

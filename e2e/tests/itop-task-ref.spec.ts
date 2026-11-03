@@ -315,7 +315,7 @@ test.describe("TaskPanel Create in iTop", () => {
     await expect(sheet).toBeVisible();
     // Prefilled from the task (Task 7.2's acceptance: title + description).
     await expect(sheet.locator("input[type='text']")).toHaveValue(taskTitle);
-    await expect(sheet.locator("textarea")).toHaveValue("Repro steps for the ticket.");
+    await expect(sheet.locator("textarea")).toHaveValue(new RegExp(`^Repro steps for the ticket\\.\\n\\nSolvro: .* › ${taskTitle}$`));
 
     // Caller is required (`canSubmit` in NewTicketSheet.tsx) — the mocked
     // contacts list has exactly one option.

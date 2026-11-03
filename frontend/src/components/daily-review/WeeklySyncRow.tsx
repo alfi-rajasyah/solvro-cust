@@ -5,7 +5,7 @@
 // holds no draft state — each modal owns its own, initialised fresh from
 // `customer.weeklyUpdate` every time it opens, since it's mounted only
 // while open (`activeModal` below), never leaking text between weeks or
-// between opens. The two buttons render only for `project:write` (as
+// between opens. The two buttons render only for `customer:write` (as
 // DailyReview.tsx already gates other write actions); without it the row
 // is read-only status text.
 import { useState } from "react";
@@ -26,7 +26,7 @@ export interface WeeklySyncRowProps {
 
 export function WeeklySyncRow({ customer, week }: WeeklySyncRowProps) {
   const { user } = useAuth();
-  const canWrite = hasPermission(user, "project:write");
+  const canWrite = hasPermission(user, "customer:write");
   const [activeModal, setActiveModal] = useState<"midweek" | "reflection" | null>(null);
 
   const update = customer.weeklyUpdate;

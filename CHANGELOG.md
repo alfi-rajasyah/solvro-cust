@@ -15,6 +15,65 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-03 — Subtask assignee on subtask rows
+
+- Subtask rows in the project List and in the task panel now show the subtask's assignee and let you change it. The panel's "Add subtask" field also takes an optional assignee, so a subtask can be assigned as it is created. Assigning someone who isn't on the project adds them to it, as for tasks (`frontend/src/pages/views/ProjectList.tsx`, `frontend/src/components/TaskPanel.tsx`, `e2e/tests/subtask-assignee.spec.ts`).
+
+### Added — 2026-11-03 — Overview filters by TAM and assignee
+
+- The Overview can be filtered by TAM and by assignee with two pickers in the header. The choice is kept in the URL, so it survives a reload and can be shared.
+- The task tiles, open risks, projects needing attention, the portfolio timeline and recent notes all narrow to the chosen people, and the tile hints and panel subtitles name the filter. With an assignee chosen, the counts include that person's subtasks.
+- The tile links carry the filter to the Tasks page, which shows removable filter chips and lists exactly the tasks the tile counted.
+- `GET /overview` accepts `tamId` and `assigneeId` and returns the TAMs and assignees found in the projects the caller can see. `GET /tasks` accepts `tamId` (`backend/src/routes/overview.ts`, `backend/src/routes/tasks.ts`, `frontend/src/pages/Overview.tsx`, `frontend/src/pages/Tasks.tsx`, `frontend/src/lib/queries.ts`).
+
+### Added — 2026-11-03 — iTop tickets on task and subtask rows
+
+- The project List has a Ticket column when iTop is connected. It shows each task's and subtask's pinned iTop ticket as a ref chip with a status dot. The row menu can pin an existing ticket or create one in iTop under your personal token; the new ref is pinned to that row. The task panel's subtask rows have the same control.
+- A ticket created from a row gets a context line in its description: "Solvro: project › task", or "Solvro: project › parent task › subtask". The New ticket sheet states that it creates the ticket as you, with your personal iTop token.
+- When "Create in iTop" is unavailable, the reason links to the place it's fixed: Settings for your token, Admin → iTop for actions and customer mapping (admins only). `/admin?tab=itop` opens the iTop tab directly.
+- A new read-only `GET /itop/tickets/by-refs` looks up many pinned tickets in one request, from the local snapshot only (`backend/src/routes/itop.ts`, `frontend/src/components/itop/`, `frontend/src/pages/views/ProjectList.tsx`, `frontend/src/components/TaskPanel.tsx`).
+
+### Fixed — 2026-11-03 — "Create in iTop" says why it is unavailable
+
+- "Create in iTop" used to disappear silently. It now shows a one-line reason, checked in this order:
+  1. the project has no customer;
+  2. you lack "Manage customers";
+  3. iTop actions are turned off;
+  4. you haven't added your personal iTop token;
+  5. you lack "View customers";
+  6. the customer isn't mapped to an iTop organisation. (`frontend/src/components/itop/useCanCreateItopTicket.ts`, `frontend/src/components/itop/TaskTicketField.tsx`).
+
+### Fixed — 2026-11-03 — Personal iTop tokens save on profiles that cannot read iTop user accounts
+
+- Saving a personal iTop token now proves ownership with iTop's own "current contact" lookup. The token is accepted when the person it belongs to has your Solvro email, and a token that belongs to someone else is refused.
+- Profiles that cannot read iTop's `User` and `PersonalToken` classes, which iTop's default profiles do not allow, can now save their own token. Those reads are still used, when allowed, to fill in the token's expiry.
+- When the lookup is unavailable, the previous rule applies, and its "could not confirm" error now names the iTop class it was refused (`backend/src/routes/itopUser.ts`).
+
+### Added — 2026-11-03 — Customer permissions
+
+- New role permissions mirror the project ones: "View customers" (`customer:read`), "Manage customers" (`customer:write`) and "See all customers" (`customer:view-all`). Admins tick them per role in Admin → Roles.
+- Customer pages and endpoints (list, detail, operations notes, weekly updates, services, Outline documents, iTop tickets and contacts) require "View customers", and customer edits require "Manage customers". So does creating an iTop ticket, since the ticket is filed for a customer.
+- "See all customers" shows every customer, and together with "Manage customers" lets you edit them. It does not show their projects, and deleting a customer or changing its owner still needs the customer's owner.
+- Without "View customers", these are hidden or emptied:
+  - the Customers page and nav entry;
+  - customers in search and recent notes;
+  - the Daily Review's operations notes, weekly updates and iTop strip;
+  - the project form's customer picker, which explains why.
+
+  Without "View customers", these also go:
+  - the Weekly Sync page and nav entry;
+  - the customer filter on the Tasks and Projects pages;
+  - pinned tickets' iTop status, since a ticket's data belongs to its customer;
+  - the Services tab's customer-subscription lookup.
+
+  Without "Manage customers", the Daily Review operations notes are read-only, and the New customer and New ticket controls (including the ⌘K action) are hidden.
+- Help → "Who can do what" explains the three customer permissions, and the Help topics for Customers and Weekly Sync appear only to holders of "View customers" (`frontend/src/lib/helpContent.ts`) (`backend/src/lib/visibility.ts`, `backend/src/routes/customers.ts`, `frontend/src/lib/auth.tsx`, `frontend/src/App.tsx`).
+
+### Changed — 2026-11-03 — Existing roles keep customer access
+
+- A data migration gives "View customers" to every role that has "View projects", and "Manage customers" to every role that has "Manage projects", so no one loses access on upgrade. The full-access role is untouched.
+- The built-in TAM role includes both; the built-in Stakeholder role includes "View customers". "See all customers" is never granted automatically (`backend/prisma/migrations/20261103090000_customer_permissions/`, `backend/prisma/builtInRoles.ts`).
+
 ### Fixed — 2026-11-02 — Keyboard focus is visible on every bordered control
 
 - Bordered buttons, inputs, selects and the switch that showed only a faint 30% green ring on keyboard focus now also turn their border green, like the app's form fields already did. The faint ring alone falls below the 3:1 contrast a focus indicator needs; the green border meets it. Applies across the daily review and weekly sync screens, Utilization, the admin iTop and Outline settings, the Outline docs tab and dialog, the Embed-in-Outline dialog, iTop ticket panels, cards and filter pills, the customer header, the project actions, members and share controls, project activity, the notifications popover, the top bar, the right sidebar, Help, public share and embed buttons, and the error screen. The Settings theme options, which had no keyboard focus indicator at all, now get the same border and ring (`frontend/src/components/**`, `frontend/src/pages/**`, `frontend/src/components/ui/switch.tsx`).

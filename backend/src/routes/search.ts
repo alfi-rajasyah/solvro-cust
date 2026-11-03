@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth, requirePermission } from "../http/auth.js";
+import { hasPermission, requireAuth, requirePermission } from "../http/auth.js";
 import { validate } from "../http/validate.js";
 import { customerVisibilityFilter, projectVisibilityFilter } from "../lib/visibility.js";
 
@@ -62,7 +62,7 @@ searchRouter.get("/", validate("query", searchQuerySchema), async (req, res) => 
       orderBy: { title: "asc" },
       take: GROUP_LIMIT,
     }),
-    prisma.customer.findMany({
+    !hasPermission(req.user!, "customer:read") ? Promise.resolve([]) : prisma.customer.findMany({
       // Customer Visibility (docs/plans/customer-visibility-spec.md §5.4,
       // Decision 11): a search hit must obey the same rule as every other
       // customer read — a customer owned by another TAM with no project of

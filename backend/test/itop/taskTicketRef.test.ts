@@ -169,6 +169,50 @@ describe("GET /itop/tickets/by-ref/:ref", () => {
   });
 });
 
+describe("GET /itop/tickets/by-refs", () => {
+  it("returns visible tickets and null for hidden, unmapped and unknown refs in one call", async () => {
+    const owner = await createUserWithRole("TAM");
+    const other = await createUserWithRole("TAM");
+    const mine = await prisma.customer.create({
+      data: { name: `by-refs mine ${Date.now()}-${Math.random()}`, description: "d", tamId: owner.userId },
+    });
+    const theirs = await prisma.customer.create({
+      data: { name: `by-refs theirs ${Date.now()}-${Math.random()}`, description: "d", tamId: other.userId },
+    });
+    const visible = await createTicket({ customerId: mine.id });
+    const hidden = await createTicket({ customerId: theirs.id });
+    const unmapped = await createTicket({ customerId: null });
+
+    const res = await call("get", `/itop/tickets/by-refs?refs=${visible.ref},${hidden.ref},${unmapped.ref},NOPE-999999`, owner.token);
+    expect(res.status).toBe(200);
+    expect(res.body[visible.ref].id).toBe(visible.id);
+    expect(res.body[visible.ref].ref).toBe(visible.ref);
+    expect(res.body[hidden.ref]).toBeNull();
+    expect(res.body[unmapped.ref]).toBeNull();
+    expect(res.body["NOPE-999999"]).toBeNull();
+    expect(Object.keys(res.body)).toHaveLength(4);
+  });
+
+  it("answers an empty object for an empty refs list", async () => {
+    const { token } = await createUserWithRole("TAM");
+    const res = await call("get", "/itop/tickets/by-refs?refs=", token);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({});
+  });
+
+  it("400s more than 200 refs and accepts exactly 200", async () => {
+    const { token } = await createUserWithRole("TAM");
+    const refs = (n: number) => Array.from({ length: n }, (_, i) => `X-${100000 + i}`).join(",");
+    expect((await call("get", `/itop/tickets/by-refs?refs=${refs(201)}`, token)).status).toBe(400);
+    expect((await call("get", `/itop/tickets/by-refs?refs=${refs(200)}`, token)).status).toBe(200);
+  });
+
+  it("403s a user without ticket read permission", async () => {
+    const { token } = await createUserWithRole("PENDING");
+    expect((await call("get", "/itop/tickets/by-refs?refs=R-000001", token)).status).toBe(403);
+  });
+});
+
 describe("PATCH /tasks/:id itopTicketRef + GET /itop/tickets/by-ref/:ref — end to end", () => {
   it("a ref pinned to a task that also exists in the snapshot resolves via by-ref", async () => {
     const owner = await createUserWithRole("TAM");

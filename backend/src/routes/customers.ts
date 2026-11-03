@@ -31,8 +31,8 @@ const createCustomerSchema = z.object({
   accountManager: z.string().max(200).optional(),
   solutionArchitect: z.string().max(200).optional(),
   description: z.string().min(1, "Description is required").max(5000),
-  // TAM ownership gate is `project:write` (Decision 8) — the same permission
-  // this router already requires for writes; there is no `customer:write`.
+  // Setting a null (unowned) TAM is a `project:view-all` move (Decision 4/8);
+  // writes to this router need `customer:write`.
   tamId: z.number().int().positive().nullable().optional(),
   outlineUrl: outlineUrlSchema.optional(),
 });
@@ -223,9 +223,9 @@ const customersListQuerySchema = z.object({
 });
 
 // Read gate (2026-10 security hardening): the list and the detail need
-// `project:read` — a PENDING account used to list every unowned customer
-// here. Sub-resources keep their own `project:read` / `project:write` gates.
-const customerReadGate = requirePermission("project:read");
+// `customer:read` — a PENDING account used to list every unowned customer
+// here. Sub-resources use `customer:read` / `customer:write` too.
+const customerReadGate = requirePermission("customer:read");
 
 customersRouter.get("/", customerReadGate, validate("query", customersListQuerySchema), async (req, res) => {
   const user = req.user!;
@@ -388,7 +388,7 @@ const assignServicesSchema = z.object({
 
 customersRouter.put(
   "/:id/services",
-  requirePermission("project:write"),
+  requirePermission("customer:write"),
   validate("params", idParamSchema),
   validate("body", assignServicesSchema),
   async (req, res) => {
@@ -435,7 +435,7 @@ customersRouter.put(
 
 customersRouter.post(
   "/",
-  requirePermission("project:write"),
+  requirePermission("customer:write"),
   validate("body", createCustomerSchema),
   async (req, res) => {
     const body = req.body as z.infer<typeof createCustomerSchema>;
@@ -482,7 +482,7 @@ customersRouter.post(
 
 customersRouter.patch(
   "/:id",
-  requirePermission("project:write"),
+  requirePermission("customer:write"),
   validate("params", idParamSchema),
   validate("body", updateCustomerSchema),
   async (req, res) => {
@@ -571,7 +571,7 @@ customersRouter.patch(
 
 customersRouter.delete(
   "/:id",
-  requirePermission("project:write"),
+  requirePermission("customer:write"),
   validate("params", idParamSchema),
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
@@ -587,7 +587,7 @@ customersRouter.delete(
 
 customersRouter.get(
   "/:id/notes",
-  requirePermission("project:read"),
+  requirePermission("customer:read"),
   validate("params", idParamSchema),
   validate("query", customerNoteListQuerySchema),
   async (req, res) => {
@@ -616,7 +616,7 @@ customersRouter.get(
 
 customersRouter.post(
   "/:id/notes",
-  requirePermission("project:write"),
+  requirePermission("customer:write"),
   validate("params", idParamSchema),
   validate("body", createCustomerNoteSchema),
   async (req, res) => {
@@ -640,7 +640,7 @@ customersRouter.post(
 
 customersRouter.patch(
   "/:id/notes/:noteId",
-  requirePermission("project:write"),
+  requirePermission("customer:write"),
   validate("params", customerNoteParamSchema),
   validate("body", updateCustomerNoteSchema),
   async (req, res) => {
@@ -675,7 +675,7 @@ customersRouter.patch(
 
 customersRouter.delete(
   "/:id/notes/:noteId",
-  requirePermission("project:write"),
+  requirePermission("customer:write"),
   validate("params", customerNoteParamSchema),
   async (req, res) => {
     const { id, noteId } = req.params as unknown as z.infer<
@@ -730,7 +730,7 @@ const weeklyUpdateInclude = {
 
 customersRouter.get(
   "/:id/weekly-updates",
-  requirePermission("project:read"),
+  requirePermission("customer:read"),
   validate("params", idParamSchema),
   validate("query", weeklyUpdateListQuerySchema),
   async (req, res) => {
@@ -750,7 +750,7 @@ customersRouter.get(
 
 customersRouter.put(
   "/:id/weekly-updates/:weekStart",
-  requirePermission("project:write"),
+  requirePermission("customer:write"),
   validate("params", weeklyUpdateParamSchema),
   validate("body", saveWeeklyUpdateSchema),
   async (req, res) => {

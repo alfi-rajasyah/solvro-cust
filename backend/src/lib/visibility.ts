@@ -37,6 +37,14 @@ import { HttpError } from "../http/errors.js";
 // new arm.
 export interface VisibilityOptions {
   viaMembership?: boolean;
+  /**
+   * Customer filter only: the caller is asking "do I OWN this?", not "can I
+   * see this?". Skips the `customer:view-all` short-circuit, because that
+   * permission grants visibility, never ownership. Independent of
+   * `viaMembership`, so a future membership-excluding READ check keeps
+   * `customer:view-all`.
+   */
+  ownership?: boolean;
 }
 
 export function projectVisibilityFilter(
@@ -124,7 +132,8 @@ export async function ensureTaskVisible(
 }
 
 // Customer-scoping (docs/plans/customer-visibility-spec.md §3, Decisions 1-2):
-// `project:view-all` (or "*") sees every customer. Everyone else sees a
+// `project:view-all` (or "*") sees every customer, as does `customer:view-all`
+// (visibility, and the writes that follow visibility — never ownership; see below). Everyone else sees a
 // customer when they own it (`Customer.tamId`), when nobody owns it
 // (`tamId: null` — unowned customers stay visible to all, as before the
 // rule existed), or when at least one of its projects is visible to them
@@ -145,6 +154,12 @@ export function customerVisibilityFilter(
   opts: VisibilityOptions = {},
 ): Prisma.CustomerWhereInput {
   if (hasPermission(user, "project:view-all")) return {};
+  // `customer:view-all` (user decision 2026-11-03) widens customer visibility
+  // — and with it the customer sub-resource writes that follow visibility —
+  // never ownership. Owner checks pass `{ ownership: true }`, skip this
+  // short-circuit and fall through to the arms below. Projects stay gated by
+  // projectVisibilityFilter.
+  if (!opts.ownership && hasPermission(user, "customer:view-all")) return {};
   return {
     OR: [
       { tamId: user.sub },
@@ -194,7 +209,7 @@ export async function ensureCustomerOwnerAccess(
 ): Promise<void> {
   await ensureCustomerVisible(user, customerId);
   const owned = await prisma.customer.findFirst({
-    where: { id: customerId, ...customerVisibilityFilter(user, { viaMembership: false }) },
+    where: { id: customerId, ...customerVisibilityFilter(user, { viaMembership: false, ownership: true }) },
     select: { id: true },
   });
   if (!owned) {
