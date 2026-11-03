@@ -14,7 +14,7 @@ import { seedRoles, createUserWithRole } from "../testAuth.js";
 
 const app = createApp();
 
-function call(method: "get" | "patch", path: string, token: string) {
+function call(method: "get" | "patch" | "post", path: string, token: string) {
   return request(app)[method](path).set("Authorization", `Bearer ${token}`);
 }
 
@@ -140,6 +140,8 @@ describe("GET /itop/tickets/by-ref/:ref", () => {
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(ticket.id);
     expect(res.body.ref).toBe(ticket.ref);
+    // Read-only: the ticket's own customer, for the task panel's actions/timer.
+    expect(res.body.customerId).toBe(customer.id);
   });
 
   it("404s for a ticket whose customer is hidden from the caller", async () => {
@@ -231,5 +233,53 @@ describe("PATCH /tasks/:id itopTicketRef + GET /itop/tickets/by-ref/:ref — end
     expect(byRefRes.status).toBe(200);
     expect(byRefRes.body.id).toBe(ticket.id);
     expect(byRefRes.body.ref).toBe(ticket.ref);
+  });
+});
+
+describe("POST /projects/:id/tasks — itopTicketRef", () => {
+  let token: string;
+  let projectId: number;
+
+  beforeEach(async () => {
+    const owner = await createUserWithRole("TAM");
+    token = owner.token;
+    projectId = (await createProject(owner.userId)).id;
+  });
+
+  it("creates the task with the pinned ref", async () => {
+    const res = await call("post", `/projects/${projectId}/tasks`, token).send({
+      title: "Pinned at creation",
+      itopTicketRef: "TST-100200",
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.itopTicketRef).toBe("TST-100200");
+    const row = await prisma.task.findUniqueOrThrow({ where: { id: res.body.id } });
+    expect(row.itopTicketRef).toBe("TST-100200");
+  });
+
+  it("logs the pinned ref on the created event", async () => {
+    const res = await call("post", `/projects/${projectId}/tasks`, token).send({
+      title: "Logged pin",
+      itopTicketRef: "TST-100201",
+    });
+    expect(res.status).toBe(201);
+    const ev = await prisma.activityEvent.findFirstOrThrow({
+      where: { projectId, entityType: "task", entityId: res.body.id, action: "created" },
+    });
+    expect(ev.changes).toEqual({ itopTicketRef: { from: null, to: "TST-100201" } });
+  });
+
+  it("leaves the ref null when omitted", async () => {
+    const res = await call("post", `/projects/${projectId}/tasks`, token).send({ title: "No ref" });
+    expect(res.status).toBe(201);
+    expect(res.body.itopTicketRef).toBeNull();
+  });
+
+  it("400s a malformed ref", async () => {
+    const res = await call("post", `/projects/${projectId}/tasks`, token).send({
+      title: "Bad ref",
+      itopTicketRef: "nonsense",
+    });
+    expect(res.status).toBe(400);
   });
 });

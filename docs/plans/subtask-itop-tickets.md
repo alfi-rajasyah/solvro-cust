@@ -133,3 +133,30 @@ visible.
 Under `[Unreleased]` → Added: the project List shows each task's and subtask's pinned iTop ticket and its
 status, and the row menu can pin or create a ticket for that row (created under your personal iTop
 token). New read-only `GET /itop/tickets/by-refs` batch lookup.
+
+## 7. Follow-up (user request, 2026-11-03): start iTop work from the task modal and panel
+
+User: "make iTop assignments startable from project page/modal". They chose these three (not "create from the project page header"):
+
+### Task 5: Ticket field in the task modal
+`TaskFormModal` (New and Edit task) gets an "iTop ticket" field, shown when iTop is configured. You can pin an existing ref or "Create in iTop" (the same `NewTicketSheet` + `useCanCreateItopTicket` gate and reason line), so you never have to open the side panel afterwards.
+- **On a new task:** the ref, or a ticket created from the modal, is saved with the task's create request (`itopTicketRef` in `POST`).
+- **Create from a not-yet-saved task:** the sheet prefills from the modal's current title and description, plus the same context line.
+
+### Task 6: Assign the pinned ticket in iTop from the task panel and modal
+When a task (or subtask) has a pinned ticket, the panel's iTop row and the modal field offer:
+- "Assign to me";
+- the ticket's next status actions.
+
+These reuse the existing `POST /itop/tickets/:id/actions` (personal token, `loadWritableTicket`), plus the existing action logic and sheet in `components/itop/ticketActions.ts` / `ActionSheet.tsx`. There is no new write path. Shown only when `useCanCreateItopTicket`-style gating passes for writes (actions on, token set, `task:write`) and the ticket is in the snapshot.
+
+### Task 7: Start the ticket timer from the task panel
+The panel's iTop row shows the existing ticket timer (`TicketTimer` / `useTicketTimer`, logging via `POST /itop/tickets/:id/time`) for the pinned ticket: start, stop, and the elapsed time. This is the same component and the same rules as the ticket panel.
+
+### Acceptance
+- Each of Tasks 5–7 works on a task and on a subtask.
+- The guardrail grep stays clean: no app-token write, no new `client.create`.
+- e2e covers:
+  - pinning from the New task modal;
+  - "Assign to me" from the panel, with a mocked iTop stimulus;
+  - timer start and stop from the panel.

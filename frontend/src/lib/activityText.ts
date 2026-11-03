@@ -329,9 +329,11 @@ function buildBody(event: ActivityEvent): Parts {
       if (event.action === "created") {
         const assignee = changes ? asDelta(changes.assignee) : null;
         const who = assignee ? valueText("assignee", "task", assignee.to) : null;
+        const pinned = changes ? asDelta(changes.itopTicketRef) : null;
         return [
           ...named("created", "task", "a task"),
           ...(who && who !== "none" ? [txt(`, assigned to ${who}`)] : []),
+          ...(typeof pinned?.to === "string" ? [txt(`, pinned to iTop ticket ${pinned.to}`)] : []),
         ];
       }
       if (event.action === "deleted") return named("deleted", "task", "a task");

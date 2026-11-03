@@ -2058,6 +2058,8 @@ export interface CreateTaskInput {
   // Epics (docs/archive/plans/epics-spec.md §4/§5) — only meaningful for a
   // top-level task; the backend rejects it alongside `parentTaskId`.
   epicId?: number | null;
+  // Pins an iTop ticket at creation (docs/archive/plans/subtask-itop-tickets.md Task 5).
+  itopTicketRef?: string | null;
 }
 
 export function useCreateTask(projectId: number) {
@@ -3140,6 +3142,8 @@ export interface ItopTicketRow {
   slaTtoPassed: boolean;
   slaTtrPassed: boolean;
   resolutionDate: string | null;
+  /** The Solvro customer the ticket is linked to (null when unlinked). */
+  customerId: number | null;
   isMine: boolean;
 }
 

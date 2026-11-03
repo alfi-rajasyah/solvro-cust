@@ -24,6 +24,7 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 - The Overview can be filtered by TAM and by assignee with two pickers in the header. The choice is kept in the URL, so it survives a reload and can be shared.
 - The task tiles, open risks, projects needing attention, the portfolio timeline and recent notes all narrow to the chosen people, and the tile hints and panel subtitles name the filter. With an assignee chosen, the counts include that person's subtasks.
 - The tile links carry the filter to the Tasks page, which shows removable filter chips and lists exactly the tasks the tile counted.
+- The pickers' lists open below the picker with a capped, scrolling height, so a long list of people never covers the top bar. Typing a name still jumps to it.
 - `GET /overview` accepts `tamId` and `assigneeId` and returns the TAMs and assignees found in the projects the caller can see. `GET /tasks` accepts `tamId` (`backend/src/routes/overview.ts`, `backend/src/routes/tasks.ts`, `frontend/src/pages/Overview.tsx`, `frontend/src/pages/Tasks.tsx`, `frontend/src/lib/queries.ts`).
 
 ### Added — 2026-11-03 — iTop tickets on task and subtask rows
@@ -32,6 +33,14 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 - A ticket created from a row gets a context line in its description: "Solvro: project › task", or "Solvro: project › parent task › subtask". The New ticket sheet states that it creates the ticket as you, with your personal iTop token.
 - When "Create in iTop" is unavailable, the reason links to the place it's fixed: Settings for your token, Admin → iTop for actions and customer mapping (admins only). `/admin?tab=itop` opens the iTop tab directly.
 - A new read-only `GET /itop/tickets/by-refs` looks up many pinned tickets in one request, from the local snapshot only (`backend/src/routes/itop.ts`, `frontend/src/components/itop/`, `frontend/src/pages/views/ProjectList.tsx`, `frontend/src/components/TaskPanel.tsx`).
+
+### Added — 2026-11-03 — Start iTop work from the task form and panel
+
+- The New task and Edit task form has an iTop ticket field when iTop is connected. You can pin an existing ticket ref, or create one in iTop under your personal token, and a new task is saved with its ticket. `POST /projects/:id/tasks` accepts an optional `itopTicketRef`.
+- The task panel and the task form can act on a pinned iTop ticket: "Assign to me" and the ticket's next status actions (Pending, Resolve, Close, Reopen). These are written to iTop under your personal token.
+- A task created with a ticket pinned records it in the project activity feed ("pinned to iTop ticket R-…").
+- iTop ticket responses now include the ticket's linked `customerId` (read-only), and the task's ticket actions and timer use that customer.
+- The task panel shows the ticket's timer, so you can start and stop time logging without leaving the task. All of this works for tasks and subtasks (`frontend/src/components/itop/TicketQuickActions.tsx`, `frontend/src/components/TaskFormModal.tsx`, `frontend/src/components/TaskPanel.tsx`, `backend/src/routes/projects.ts`).
 
 ### Fixed — 2026-11-03 — "Create in iTop" says why it is unavailable
 

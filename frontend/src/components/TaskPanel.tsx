@@ -838,6 +838,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                   parentTitle={(tasks ?? []).find((t) => t.id === task.parentTaskId)?.title ?? null}
                   onSave={(ref) => patch({ itopTicketRef: ref })}
                   onCreateSheetOpenChange={setNestedSheetOpen}
+                  showTimer
                 />
               </>
             )}

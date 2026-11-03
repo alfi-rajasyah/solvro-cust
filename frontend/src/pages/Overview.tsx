@@ -138,7 +138,16 @@ function PersonPicker({
           <span className="text-label-caps uppercase text-on-surface-variant">{label}</span>
           <SelectValue placeholder="All" />
         </SelectTrigger>
-        <SelectContent align="end">
+        {/* Opens below the trigger, never over it: Base UI's default
+            alignItemWithTrigger places the selected item on the trigger, which
+            pushed long people lists up over the top bar and clipped their top.
+            Capped height scrolls; type-ahead (typing a name) still works. */}
+        <SelectContent
+          side="bottom"
+          align="start"
+          alignItemWithTrigger={false}
+          className="max-h-[min(var(--available-height),18rem)]"
+        >
           {options.map((o) => (
             <SelectItem key={o.value} value={o.value}>
               {o.label}

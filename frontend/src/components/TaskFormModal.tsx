@@ -5,6 +5,7 @@ import { DateRangeField } from "./DateRangeField";
 import { Drawer } from "./Drawer";
 import { EpicChip } from "./EpicChip";
 import { LabelPicker } from "./LabelPicker";
+import { TaskTicketField } from "./itop/TaskTicketField";
 import { TaskConflictDialog } from "./TaskConflictDialog";
 import {
   CRITICAL_PATH_GLYPH,
@@ -32,6 +33,8 @@ import {
   type UpdateTaskInput,
   useCreateTask,
   useDeleteTask,
+  useItopStatus,
+  useProject,
   useProjectEpics,
   useProjectLabels,
   useProjectSections,
@@ -97,6 +100,13 @@ export function TaskFormModal(props: TaskFormModalProps) {
   const [epicId, setEpicId] = useState<number | "">("");
   const [labelIds, setLabelIds] = useState<number[]>([]);
   const [isCriticalPath, setIsCriticalPath] = useState(false);
+  // iTop ticket (docs/archive/plans/subtask-itop-tickets.md Task 5). A new task
+  // holds the ref here and sends it with the create request; an existing task
+  // pins/clears it straight away, like the side panel does.
+  const [itopRef, setItopRef] = useState<string | null>(null);
+  const [nestedSheetOpen, setNestedSheetOpen] = useState(false);
+  const itopConfigured = useItopStatus().data?.configured ?? false;
+  const { data: project } = useProject(open ? projectId : null);
   const [error, setError] = useState<string | null>(null);
   // Drive the drawer's slide-out: every close path sets `closing`, and
   // the parent's real `onClose` (which unmounts us) only runs once the
@@ -136,6 +146,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
       setEpicId(editingTask.epicId ?? "");
       setLabelIds(editingTask.labels.map((l) => l.id));
       setIsCriticalPath(editingTask.isCriticalPath ?? false);
+      setItopRef(editingTask.itopTicketRef ?? null);
     } else {
       setTitle("");
       setDescription("");
@@ -149,6 +160,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
       setEpicId("");
       setLabelIds([]);
       setIsCriticalPath(false);
+      setItopRef(null);
     }
     // Primitives only — the props OBJECT gets fresh identity on every parent
     // render (query refetches, sibling mutations invalidating), and re-running
@@ -262,6 +274,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
           epicId: parent === null ? (epicId === "" ? null : Number(epicId)) : null,
           labelIds: labelIds.length > 0 ? labelIds : undefined,
           isCriticalPath,
+          itopTicketRef: itopRef ?? undefined,
         });
       }
       requestClose();
@@ -355,7 +368,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
     <Drawer
       open={open}
       closing={closing}
-      onClose={confirmDeleteOpen || conflict ? () => {} : requestClose}
+      onClose={confirmDeleteOpen || conflict || nestedSheetOpen ? () => {} : requestClose}
       onClosed={onClose}
       title={isEdit ? "Edit task" : "New task"}
       customHeader={customHeader}
@@ -566,6 +579,46 @@ export function TaskFormModal(props: TaskFormModalProps) {
               onChange={canEdit ? setLabelIds : () => {}}
             />
           </FieldRow>
+
+          {/* iTop ticket — only when iTop is connected */}
+          {itopConfigured && (
+            <FieldRow icon="confirmation_number" label="iTop ticket">
+              <TaskTicketField
+                itopTicketRef={itopRef}
+                canEdit={canEdit}
+                customerId={project?.customerId ?? null}
+                customerName={project?.customer?.name ?? null}
+                projectName={project?.name ?? null}
+                parentTitle={
+                  parentTaskId === ""
+                    ? null
+                    : ((projectTasks ?? []).find((t) => t.id === Number(parentTaskId))?.title ?? null)
+                }
+                taskTitle={title.trim()}
+                taskDescription={description.trim() || null}
+                onSave={(ref) => {
+                  if (!editingTask) {
+                    setItopRef(ref);
+                    return;
+                  }
+                  // `editingTask` is a frozen copy held by the caller, so the
+                  // local state is the source of truth; roll back on failure.
+                  const previous = itopRef;
+                  setItopRef(ref);
+                  update.mutate(
+                    { id: editingTask.id, patch: { itopTicketRef: ref } },
+                    {
+                      onError: (err) => {
+                        setItopRef(previous);
+                        setError(err instanceof ApiError ? err.message : "Could not update the iTop ticket.");
+                      },
+                    },
+                  );
+                }}
+                onCreateSheetOpenChange={setNestedSheetOpen}
+              />
+            </FieldRow>
+          )}
 
         </div>
 

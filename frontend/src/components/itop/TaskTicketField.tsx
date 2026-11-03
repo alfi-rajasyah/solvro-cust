@@ -12,6 +12,11 @@
 // form/mutation, not a value this row's own `onSave` can express. Success
 // still funnels back through `onSave(ref)`, so the created ticket is pinned
 // to the task exactly like a manually typed ref.
+//
+// A pinned ticket that resolves in the snapshot also gets
+// `TicketQuickActions` (assign to me, next status actions, optional timer;
+// docs/archive/plans/subtask-itop-tickets.md Tasks 6-7). The field is shared
+// by the task panel and the task modal.
 import { useEffect, useId, useRef, useState } from "react";
 import { Chip } from "@/components/StatusChip";
 import { ApiError } from "@/lib/api";
@@ -20,6 +25,7 @@ import { useItopStatus, useItopTicketByRef } from "@/lib/queries";
 import { GateReason } from "./GateReason";
 import { NewTicketSheet } from "./NewTicketSheet";
 import { buildTicketPrefill } from "./ticketPrefill";
+import { TicketQuickActions } from "./TicketQuickActions";
 import { useCanCreateItopTicket } from "./useCanCreateItopTicket";
 import { isItopRef, itopTicketUrl, statusLabel, statusTone } from "./ticketPresentation";
 
@@ -43,6 +49,7 @@ export function TaskTicketField({
   taskDescription,
   onSave,
   onCreateSheetOpenChange,
+  showTimer = false,
 }: {
   itopTicketRef: string | null;
   canEdit: boolean;
@@ -60,6 +67,8 @@ export function TaskTicketField({
   onSave: (ref: string | null) => void;
   /** Reports whether the nested New-ticket sheet is open, so the parent panel can leave Escape to the sheet instead of closing itself mid-create. */
   onCreateSheetOpenChange?: (open: boolean) => void;
+  /** Show the ticket timer under a pinned ticket (the task panel does; the modal does not). */
+  showTimer?: boolean;
 }) {
   const { data: status } = useItopStatus();
   const { user } = useAuth();
@@ -70,6 +79,8 @@ export function TaskTicketField({
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  // The quick-actions ActionSheet (Resolve / Pending / team) also owns Escape while open.
+  const [actionSheetOpen, setActionSheetOpen] = useState(false);
   const errorId = useId();
 
   // Keep the parent's Escape handling in sync with the nested sheet. The
@@ -77,9 +88,9 @@ export function TaskTicketField({
   const reportSheetOpen = useRef(onCreateSheetOpenChange);
   reportSheetOpen.current = onCreateSheetOpenChange;
   useEffect(() => {
-    reportSheetOpen.current?.(createOpen);
+    reportSheetOpen.current?.(createOpen || actionSheetOpen);
     return () => reportSheetOpen.current?.(false);
-  }, [createOpen]);
+  }, [createOpen, actionSheetOpen]);
 
   // Creating a ticket is a write (POST /itop/tickets) — the shared gate also
   // says why it is unavailable, so the row never goes silently bare.
@@ -167,7 +178,11 @@ export function TaskTicketField({
               setDraft(e.target.value);
             }}
             onKeyDown={(e) => {
-              if (e.key === "Enter") commit();
+              if (e.key === "Enter") {
+                // Inside the New-task modal's <form>, Enter must pin the ref, not submit the task.
+                e.preventDefault();
+                commit();
+              }
               if (e.key === "Escape" && editing) setEditing(false);
             }}
             onBlur={commit}
@@ -225,6 +240,7 @@ export function TaskTicketField({
   const url = ticket && status.baseUrl ? itopTicketUrl(status.baseUrl, ticket) : null;
 
   return (
+    <div>
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="font-mono text-xs text-on-surface">{itopTicketRef}</span>
       {ticket ? (
@@ -261,6 +277,15 @@ export function TaskTicketField({
           </button>
         </>
       )}
+    </div>
+    {ticket && (
+      <TicketQuickActions
+        ticket={ticket}
+        canEdit={canEdit}
+        showTimer={showTimer}
+        onSheetOpenChange={setActionSheetOpen}
+      />
+    )}
     </div>
   );
 }

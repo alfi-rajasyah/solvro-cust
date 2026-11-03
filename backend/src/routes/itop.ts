@@ -138,6 +138,7 @@ const TICKET_ROW_SELECT = {
   slaTtoPassed: true,
   slaTtrPassed: true,
   resolutionDate: true,
+  customerId: true,
 } satisfies Prisma.ItopTicketSelect;
 
 /** Structural shape `toTicketRow` needs — satisfied by a full `ItopTicket` row (the single-ticket and write routes, which pass `withLogs: true`) as well as by the `TICKET_ROW_SELECT`-shaped partial rows the list/daily routes fetch (which never do). */
@@ -184,6 +185,9 @@ function toTicketRow(
     slaTtoPassed: ticket.slaTtoPassed,
     slaTtrPassed: ticket.slaTtrPassed,
     resolutionDate: ticket.resolutionDate,
+    // Read-only: the Solvro customer the ticket is linked to, so the task
+    // panel's actions/timer use the ticket's own customer, not the project's.
+    customerId: ticket.customerId,
     isMine: myItopPersonId !== null && ticket.agentPersonId === myItopPersonId,
     ...(options.withLogs
       ? {
