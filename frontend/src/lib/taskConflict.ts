@@ -17,6 +17,7 @@ export const TRACKED_FIELDS = [
   "title",
   "description",
   "status",
+  "statusId",
   "priority",
   "startDate",
   "dueDate",
@@ -36,6 +37,7 @@ export interface TaskExpected {
   title?: string;
   description?: string | null;
   status?: TaskStatus;
+  statusId?: number;
   priority?: Priority;
   startDate?: string | null;
   dueDate?: string | null;
@@ -189,7 +191,8 @@ export function fieldsToAdopt(
 export interface TaskFormValues {
   title: string;
   description: string | null;
-  status: TaskStatus;
+  /** The workspace status (docs/archive/plans/custom-task-statuses.md); the server derives the category. */
+  statusId: number;
   priority: Priority;
   startDate: string | null;
   dueDate: string | null;
@@ -221,7 +224,7 @@ export function diffTaskForm(
   if (form.title !== base.title) patch.title = form.title;
   const baseDescription = base.description?.trim() || null;
   if (form.description !== baseDescription) patch.description = form.description;
-  if (form.status !== base.status) patch.status = form.status;
+  if (form.statusId !== base.statusId) patch.statusId = form.statusId;
   if (form.priority !== base.priority) patch.priority = form.priority;
   if (dayFromIso(form.startDate) !== dayFromIso(base.startDate)) {
     patch.startDate = form.startDate;
@@ -247,6 +250,7 @@ export const CONFLICT_FIELD_LABEL: Record<TrackedField, string> = {
   title: "Title",
   description: "Description",
   status: "Status",
+  statusId: "Status",
   priority: "Priority",
   startDate: "Start date",
   dueDate: "Due date",
@@ -266,6 +270,7 @@ export interface ConflictLookups {
   epics?: { id: number; title: string }[];
   labels?: { id: number; name: string }[];
   tasks?: { id: number; title: string }[];
+  statuses?: { id: number; name: string }[];
 }
 
 export interface ConflictRow {
@@ -289,6 +294,7 @@ export function withServerTask(lookups: ConflictLookups, task: Task | undefined)
     users: [...(lookups.users ?? []), ...(task.assignedTo ? [task.assignedTo] : [])],
     sections: [...(lookups.sections ?? []), ...(task.section ? [task.section] : [])],
     labels: [...(lookups.labels ?? []), ...(task.labels ?? [])],
+    statuses: [...(lookups.statuses ?? []), ...(task.statusDef ? [task.statusDef] : [])],
   };
 }
 
@@ -316,6 +322,8 @@ export function formatConflictValue(
       return typeof value === "string" && value.trim() !== "" ? value : "(empty)";
     case "status":
       return TASK_STATUS_LABEL[value as TaskStatus] ?? String(value);
+    case "statusId":
+      return named(lookups.statuses, value, (st) => st.name, "No status");
     case "priority":
       return PRIORITY_LABEL[value as Priority] ?? String(value);
     case "startDate":

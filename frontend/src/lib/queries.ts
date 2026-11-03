@@ -546,7 +546,10 @@ export interface Risk {
 }
 
 export interface TasksFilter {
+  /** A whole category (`?status=`). */
   status?: TaskStatus;
+  /** One workspace status (`?statusId=`). */
+  statusId?: number;
   priority?: Priority;
   assignedToId?: number;
   labelId?: number;
@@ -1453,6 +1456,7 @@ function invalidateProjectHealth(qc: QueryClient, projectId: number) {
 function tasksQueryString(filter: TasksFilter, offset = 0): string {
   const params = new URLSearchParams();
   if (filter.status) params.set("status", filter.status);
+  if (filter.statusId) params.set("statusId", String(filter.statusId));
   if (filter.priority) params.set("priority", filter.priority);
   if (filter.assignedToId) params.set("assignedToId", String(filter.assignedToId));
   if (filter.labelId) params.set("labelId", String(filter.labelId));
@@ -2124,6 +2128,8 @@ export interface CreateTaskInput {
   title: string;
   description?: string;
   status?: TaskStatus;
+  /** A workspace status; wins over `status` (the server derives the category from it). */
+  statusId?: number;
   priority?: Priority;
   startDate?: string | null;
   dueDate?: string | null;
@@ -3948,6 +3954,7 @@ export const adminQueryKeys = {
   itopCustomers: ["admin", "itop", "customers"] as const,
   itopPersons: ["admin", "itop", "persons"] as const,
   outlineSettings: ["admin", "settings", "outline"] as const,
+  taskStatuses: ["admin", "task-statuses"] as const,
 };
 
 export interface AdminRole {
@@ -3956,6 +3963,52 @@ export interface AdminRole {
   permissions: string[];
   userCount: number;
   builtIn: boolean;
+}
+
+// Admin → Task statuses (docs/archive/plans/custom-task-statuses.md §3 B1):
+// the workspace list plus how many tasks sit on each status.
+export type AdminTaskStatusDef = TaskStatusDef & { taskCount: number };
+
+export function useAdminTaskStatuses() {
+  return useQuery({
+    queryKey: adminQueryKeys.taskStatuses,
+    queryFn: ({ signal }) =>
+      apiRequest<AdminTaskStatusDef[]>("/admin/task-statuses", { signal }),
+  });
+}
+
+export interface SaveTaskStatusesInput {
+  statuses: Array<{
+    id?: number;
+    name: string;
+    category: TaskStatus;
+    color: StatusTone;
+    isDefault: boolean;
+  }>;
+  /** removed status id -> kept status id its tasks move to. */
+  moveTo?: Record<string, number>;
+}
+
+// Whole-list save. A rename, recolour, category move or delete changes what
+// every task payload shows, so the task-carrying caches are refreshed too.
+export function useSaveTaskStatuses() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SaveTaskStatusesInput) =>
+      apiRequest<TaskStatusDef[]>("/admin/task-statuses", { method: "PUT", body: input }),
+    onSuccess: async () => {
+      qc.invalidateQueries({ queryKey: queryKeys.taskStatuses });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["epics"] }); // epic stories carry statusDef
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: queryKeys.overview });
+      qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.customers });
+      qc.invalidateQueries({ queryKey: queryKeys.executiveReport() });
+      qc.invalidateQueries({ queryKey: ["search"] }); // every search(q) key
+      await qc.invalidateQueries({ queryKey: adminQueryKeys.taskStatuses });
+    },
+  });
 }
 
 export function useAdminRoles() {

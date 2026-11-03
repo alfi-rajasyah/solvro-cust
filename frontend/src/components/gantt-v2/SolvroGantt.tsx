@@ -1483,7 +1483,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
               const task = taskId !== null ? taskById.get(taskId) : undefined;
               return (
                 <>
-                  {task && <TaskStatusDot status={task.status} />}
+                  {task && <TaskStatusDot status={task.status} def={task.statusDef} />}
                   {/* Critical Path mark (plan §3) — glyph only, tight tree
                       column; the shared component carries the label as its
                       title/aria-label. `me-1.5` matches TaskStatusDot's own

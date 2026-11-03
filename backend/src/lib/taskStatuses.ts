@@ -118,6 +118,20 @@ export async function listTaskStatusDefs(tx: Tx = prisma) {
   });
 }
 
+/**
+ * The list plus how many tasks sit on each status (one groupBy, no N+1) — what
+ * the admin editor shows beside each row and uses to decide whether a delete
+ * needs a `moveTo` target.
+ */
+export async function listTaskStatusDefsWithCounts(tx: Tx = prisma) {
+  const [defs, counts] = await Promise.all([
+    listTaskStatusDefs(tx),
+    tx.task.groupBy({ by: ["statusId"], _count: { _all: true } }),
+  ]);
+  const byId = new Map(counts.map((c) => [c.statusId, c._count._all]));
+  return defs.map((d) => ({ ...d, taskCount: byId.get(d.id) ?? 0 }));
+}
+
 export interface StatusDefInput {
   /** Present = an existing status (renamed / recoloured / moved); absent = new. */
   id?: number;

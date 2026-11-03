@@ -17,7 +17,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { commitDraft, dayFromIso, isoFromDay } from "@/lib/dateField";
-import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
+import { StatusSelect } from "@/components/StatusSelect";
+import { PRIORITY_LABEL } from "@/lib/labels";
 import {
   diffTaskForm,
   fieldsToAdopt,
@@ -40,11 +41,12 @@ import {
   useProjectSections,
   useProjectTasks,
   useUpdateTask,
+  defaultStatusIds,
+  useTaskStatuses,
   useUsers,
 } from "@/lib/queries";
 
 const PRIORITIES: Priority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
-const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 
 const PRIORITY_COLOR: Record<Priority, string> = {
   LOW: "text-on-surface",
@@ -59,6 +61,8 @@ interface CreateProps {
   mode: "create";
   projectId: number;
   initialStatus?: TaskStatus;
+  /** Kanban "add task here" on a custom-status column: create directly in that status. */
+  initialStatusId?: number;
   initialParentTaskId?: number | null;
   initialSectionId?: number | null;
 }
@@ -83,6 +87,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
   const update = useUpdateTask(projectId);
   const remove = useDeleteTask(projectId);
   const { data: users } = useUsers();
+  const { data: statusDefs } = useTaskStatuses();
   const { data: projectTasks } = useProjectTasks(open ? projectId : null);
   const { data: sections } = useProjectSections(open ? projectId : null);
   const { data: epics } = useProjectEpics(open ? projectId : null);
@@ -90,7 +95,9 @@ export function TaskFormModal(props: TaskFormModalProps) {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<TaskStatus>("TODO");
+  // The workspace status id. `null` on create = the default status of the
+  // opening category (resolved against the loaded list, or by the server).
+  const [statusId, setStatusId] = useState<number | null>(null);
   const [priority, setPriority] = useState<Priority>("MEDIUM");
   const [startDate, setStartDate] = useState<string>("");
   const [dueDate, setDueDate] = useState<string>("");
@@ -136,7 +143,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
       baseTaskRef.current = editingTask;
       setTitle(editingTask.title);
       setDescription(editingTask.description ?? "");
-      setStatus(editingTask.status);
+      setStatusId(editingTask.statusId);
       setPriority(editingTask.priority);
       setStartDate(dayFromIso(editingTask.startDate) ?? "");
       setDueDate(dayFromIso(editingTask.dueDate) ?? "");
@@ -150,7 +157,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
     } else {
       setTitle("");
       setDescription("");
-      setStatus(createProps?.initialStatus ?? "TODO");
+      setStatusId(createProps?.initialStatusId ?? null);
       setPriority("MEDIUM");
       setStartDate("");
       setDueDate("");
@@ -171,6 +178,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
     isEdit,
     editingTask?.id,
     createProps?.initialStatus,
+    createProps?.initialStatusId,
     createProps?.initialParentTaskId,
     createProps?.initialSectionId,
   ]);
@@ -237,7 +245,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
         const { patch, expected } = diffTaskForm(base ?? editingTask, {
           title: title.trim(),
           description: description.trim() || null,
-          status,
+          statusId: statusId ?? (base ?? editingTask).statusId,
           priority,
           startDate: startIso,
           dueDate: dueIso,
@@ -264,7 +272,13 @@ export function TaskFormModal(props: TaskFormModalProps) {
         await create.mutateAsync({
           title: title.trim(),
           description: description.trim() || undefined,
-          status,
+          // An explicit pick (or a column-specific create) sends the exact
+          // status; otherwise the opening category maps to its default one.
+          ...(statusId !== null
+            ? { statusId }
+            : createProps?.initialStatus
+              ? { status: createProps.initialStatus }
+              : {}),
           priority,
           startDate: startIso,
           dueDate: dueIso,
@@ -309,7 +323,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
     const adopt = fieldsToAdopt(patch, stale.conflicts);
     if (adopt.has("title")) setTitle(t.title);
     if (adopt.has("description")) setDescription(t.description ?? "");
-    if (adopt.has("status")) setStatus(t.status);
+    if (adopt.has("statusId")) setStatusId(t.statusId);
     if (adopt.has("priority")) setPriority(t.priority);
     if (adopt.has("startDate")) setStartDate(dayFromIso(t.startDate) ?? "");
     if (adopt.has("dueDate")) setDueDate(dayFromIso(t.dueDate) ?? "");
@@ -438,18 +452,12 @@ export function TaskFormModal(props: TaskFormModalProps) {
 
           {/* Status */}
           <FieldRow icon="radio_button_checked" label="Status">
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as TaskStatus)}
+            <StatusSelect
+              value={statusId ?? defaultStatusIds(statusDefs)[createProps?.initialStatus ?? "TODO"] ?? null}
+              onChange={(def) => setStatusId(def.id)}
               disabled={!canEdit}
-              className="cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden disabled:cursor-default"
-            >
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {TASK_STATUS_LABEL[s]}
-                </option>
-              ))}
-            </select>
+              className="bg-transparent text-xs font-semibold"
+            />
           </FieldRow>
 
           {/* Critical Path */}
@@ -715,6 +723,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                   epics,
                   labels,
                   tasks: projectTasks,
+                  statuses: statusDefs,
                 },
                 conflict.stale.task,
               ),

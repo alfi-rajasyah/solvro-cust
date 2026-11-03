@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Task, TaskStatus } from "@/lib/queries";
+import { columnIdOf } from "./adapter";
 import { mapCommitToPatch, type KanbanCommitMetaLike } from "./commitMapper";
 import { withStatus } from "@/lib/taskStatusFixture";
 
@@ -33,6 +34,16 @@ function makeTask(
     ...overrides,
   });
 }
+
+// Board columns are status defs (docs/archive/plans/custom-task-statuses.md §3 B3).
+// The seeded defs (lib/taskStatusFixture.ts) are ids 1/2/3; column ids are
+// `status-<defId>` and a patch carries the numeric def id.
+const ID: Record<TaskStatus, number> = { TODO: 1, IN_PROGRESS: 2, DONE: 3 };
+const COL: Record<TaskStatus, string> = {
+  TODO: columnIdOf({ id: ID.TODO }),
+  IN_PROGRESS: columnIdOf({ id: ID.IN_PROGRESS }),
+  DONE: columnIdOf({ id: ID.DONE }),
+};
 
 interface ReferenceFixture {
   A: Task;
@@ -69,11 +80,11 @@ function globalOrder(tasks: Task[]): Task[] {
 }
 
 /** groupedAll equivalent (ProjectKanban.tsx:204-209) — unfiltered per-status buckets, same ordering. */
-function groupedAll(tasks: Task[]): Record<TaskStatus, Task[]> {
-  const map: Record<TaskStatus, Task[]> = { TODO: [], IN_PROGRESS: [], DONE: [] };
-  for (const t of tasks) map[t.status].push(t);
-  for (const status of Object.keys(map) as TaskStatus[]) {
-    map[status].sort((a, b) => a.position - b.position || a.id - b.id);
+function groupedAll(tasks: Task[]): Record<string, Task[]> {
+  const map: Record<string, Task[]> = { [COL.TODO]: [], [COL.IN_PROGRESS]: [], [COL.DONE]: [] };
+  for (const t of tasks) map[columnIdOf({ id: t.statusId })].push(t);
+  for (const key of Object.keys(map)) {
+    map[key].sort((a, b) => a.position - b.position || a.id - b.id);
   }
   return map;
 }
@@ -83,19 +94,19 @@ describe("commitMapper — section 1: card drops, same column", () => {
     const { A, B, C, D, E } = referenceFixture();
     const global = globalOrder([A, B, C, D, E]);
     const previousValue = groupedAll(global);
-    const committedValue = { ...previousValue, TODO: [C, A, B] };
+    const committedValue = { ...previousValue, [COL.TODO]: [C, A, B] };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 2,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 0,
       previousValue,
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: C.id,
-      patch: { status: "TODO", position: 0 },
+      patch: { statusId: ID.TODO, position: 0 },
     });
   });
 
@@ -107,18 +118,18 @@ describe("commitMapper — section 1: card drops, same column", () => {
     const { A, B, C, D, E } = referenceFixture();
     const global = globalOrder([A, B, C, D, E]);
     const previousValue = groupedAll(global);
-    const committedValue = { ...previousValue, TODO: [A, C, B] };
+    const committedValue = { ...previousValue, [COL.TODO]: [A, C, B] };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 1,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 2,
       previousValue,
     };
 
     const result = mapCommitToPatch(global, committedValue, meta);
-    expect(result).toEqual({ taskId: B.id, patch: { status: "TODO", position: 2 } });
+    expect(result).toEqual({ taskId: B.id, patch: { statusId: ID.TODO, position: 2 } });
     // Explicitly assert this is NOT the no-op B.position (1) that the
     // moved-excluded-index bug would have produced.
     expect(result?.patch.position).not.toBe(B.position);
@@ -132,9 +143,9 @@ describe("commitMapper — section 1: card drops, same column", () => {
     const committedValue = groupedAll(global);
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 1,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 1,
       previousValue,
     };
@@ -154,9 +165,9 @@ describe("commitMapper — section 1: card drops, same column", () => {
     const committedValue = groupedAll(global);
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 1,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 1,
       previousValue,
     };
@@ -173,19 +184,19 @@ describe("commitMapper — section 1: card drops, same column", () => {
     const { A, B, C, D, E } = referenceFixture();
     const global = globalOrder([A, B, C, D, E]);
     const previousValue = groupedAll(global);
-    const committedValue = { ...previousValue, TODO: [C, A, B] };
+    const committedValue = { ...previousValue, [COL.TODO]: [C, A, B] };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 2,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 0,
       previousValue,
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: C.id,
-      patch: { status: "TODO", position: 0 },
+      patch: { statusId: ID.TODO, position: 0 },
     });
   });
 });
@@ -197,21 +208,21 @@ describe("commitMapper — section 2: card drops, cross column", () => {
     const previousValue = groupedAll(global);
     const committedValue = {
       ...previousValue,
-      TODO: [A, D, B, C],
-      IN_PROGRESS: [],
+      [COL.TODO]: [A, D, B, C],
+      [COL.IN_PROGRESS]: [],
     };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "IN_PROGRESS",
+      activeContainer: COL.IN_PROGRESS,
       activeIndex: 0,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 1,
       previousValue,
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: D.id,
-      patch: { status: "TODO", position: 1 },
+      patch: { statusId: ID.TODO, position: 1 },
     });
   });
 
@@ -221,9 +232,9 @@ describe("commitMapper — section 2: card drops, cross column", () => {
     // arrangement, which can land the moved card on EITHER side of the
     // over-card depending on pointer position (top-half vs bottom-half of
     // the over-card). CC-1 above covers "moved lands before over-card"
-    // (committed TODO: [A, D, B, C]); this sibling covers the other
+    // (committed [COL.TODO]: [A, D, B, C]); this sibling covers the other
     // reachable arrangement — "moved lands after over-card" (committed
-    // TODO: [A, B, D, C]) — same gesture, same fixture, different drop
+    // [COL.TODO]: [A, B, D, C]) — same gesture, same fixture, different drop
     // half.
     //
     // Hand derivation from the moved-excluded global list:
@@ -237,21 +248,21 @@ describe("commitMapper — section 2: card drops, cross column", () => {
     const previousValue = groupedAll(global);
     const committedValue = {
       ...previousValue,
-      TODO: [A, B, D, C],
-      IN_PROGRESS: [],
+      [COL.TODO]: [A, B, D, C],
+      [COL.IN_PROGRESS]: [],
     };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "IN_PROGRESS",
+      activeContainer: COL.IN_PROGRESS,
       activeIndex: 0,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 2,
       previousValue,
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: D.id,
-      patch: { status: "TODO", position: 2 },
+      patch: { statusId: ID.TODO, position: 2 },
     });
   });
 
@@ -261,21 +272,21 @@ describe("commitMapper — section 2: card drops, cross column", () => {
     const previousValue = groupedAll(global);
     const committedValue = {
       ...previousValue,
-      TODO: [A, B, C, E],
-      DONE: [],
+      [COL.TODO]: [A, B, C, E],
+      [COL.DONE]: [],
     };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "DONE",
+      activeContainer: COL.DONE,
       activeIndex: 0,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 3,
       previousValue,
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: E.id,
-      patch: { status: "TODO", position: 3 },
+      patch: { statusId: ID.TODO, position: 3 },
     });
   });
 
@@ -285,20 +296,20 @@ describe("commitMapper — section 2: card drops, cross column", () => {
     const previousValue = groupedAll(global);
     const committedValue = {
       ...previousValue,
-      TODO: [A, B],
-      IN_PROGRESS: [C],
+      [COL.TODO]: [A, B],
+      [COL.IN_PROGRESS]: [C],
     };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 2,
-      overContainer: "IN_PROGRESS",
+      overContainer: COL.IN_PROGRESS,
       overIndex: 0,
       previousValue,
     };
 
     const result = mapCommitToPatch(global, committedValue, meta);
-    expect(result).toEqual({ taskId: C.id, patch: { status: "IN_PROGRESS" } });
+    expect(result).toEqual({ taskId: C.id, patch: { statusId: ID.IN_PROGRESS } });
     // Hard constraint: no `position` key at all, not `position: undefined`.
     expect(result && "position" in result.patch).toBe(false);
   });
@@ -309,23 +320,23 @@ describe("commitMapper — section 3: filter-active variants (filter-agnostic �
     const { A, B, C, D, E } = referenceFixture();
     const global = globalOrder([A, B, C, D, E]); // unfiltered — always passed in full
     const previousValue: Record<string, Task[]> = {
-      TODO: [A, C], // B hidden
-      IN_PROGRESS: [D],
-      DONE: [E],
+      [COL.TODO]: [A, C], // B hidden
+      [COL.IN_PROGRESS]: [D],
+      [COL.DONE]: [E],
     };
-    const committedValue = { ...previousValue, TODO: [C, A] };
+    const committedValue = { ...previousValue, [COL.TODO]: [C, A] };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 1,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 0,
       previousValue,
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: C.id,
-      patch: { status: "TODO", position: 0 },
+      patch: { statusId: ID.TODO, position: 0 },
     });
   });
 
@@ -333,35 +344,35 @@ describe("commitMapper — section 3: filter-active variants (filter-agnostic �
     const { A, B, C, D, E } = referenceFixture();
     const global = globalOrder([A, B, C, D, E]);
     const previousValue: Record<string, Task[]> = {
-      TODO: [A, B], // C hidden
-      IN_PROGRESS: [D],
-      DONE: [E],
+      [COL.TODO]: [A, B], // C hidden
+      [COL.IN_PROGRESS]: [D],
+      [COL.DONE]: [E],
     };
     const committedValue = {
       ...previousValue,
-      TODO: [B],
-      IN_PROGRESS: [D, A],
+      [COL.TODO]: [B],
+      [COL.IN_PROGRESS]: [D, A],
     };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 0,
-      overContainer: "IN_PROGRESS",
+      overContainer: COL.IN_PROGRESS,
       overIndex: 1,
       previousValue,
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: A.id,
-      patch: { status: "IN_PROGRESS", position: 3 },
+      patch: { statusId: ID.IN_PROGRESS, position: 3 },
     });
   });
 
   it("FA-2b: filter hides C; drag A onto card D (cross-column) — moved lands BEFORE over-card (WYSIWYG alternate)", () => {
     // Phase 1 Review Addenda #6, same delta as CC-1b but under an active
     // filter: FA-2 above covers "moved lands after over-card" (committed
-    // IN_PROGRESS: [D, A]); this sibling covers "moved lands before
-    // over-card" (committed IN_PROGRESS: [A, D]).
+    // [COL.IN_PROGRESS]: [D, A]); this sibling covers "moved lands before
+    // over-card" (committed [COL.IN_PROGRESS]: [A, D]).
     //
     // Hand derivation from the moved-excluded global list:
     //   global (unfiltered — filter never touches this input) excl. A (id 1)
@@ -373,27 +384,27 @@ describe("commitMapper — section 3: filter-active variants (filter-agnostic �
     const { A, B, C, D, E } = referenceFixture();
     const global = globalOrder([A, B, C, D, E]);
     const previousValue: Record<string, Task[]> = {
-      TODO: [A, B], // C hidden
-      IN_PROGRESS: [D],
-      DONE: [E],
+      [COL.TODO]: [A, B], // C hidden
+      [COL.IN_PROGRESS]: [D],
+      [COL.DONE]: [E],
     };
     const committedValue = {
       ...previousValue,
-      TODO: [B],
-      IN_PROGRESS: [A, D],
+      [COL.TODO]: [B],
+      [COL.IN_PROGRESS]: [A, D],
     };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 0,
-      overContainer: "IN_PROGRESS",
+      overContainer: COL.IN_PROGRESS,
       overIndex: 0,
       previousValue,
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: A.id,
-      patch: { status: "IN_PROGRESS", position: 2 },
+      patch: { statusId: ID.IN_PROGRESS, position: 2 },
     });
   });
 
@@ -407,27 +418,27 @@ describe("commitMapper — section 3: filter-active variants (filter-agnostic �
     const { A, B, C, D, E } = referenceFixture();
     const global = globalOrder([A, B, C, D, E]); // unfiltered — still contains D
     const previousValue: Record<string, Task[]> = {
-      TODO: [A, B, C],
-      IN_PROGRESS: [], // D hidden by filter
-      DONE: [E],
+      [COL.TODO]: [A, B, C],
+      [COL.IN_PROGRESS]: [], // D hidden by filter
+      [COL.DONE]: [E],
     };
     const committedValue = {
       ...previousValue,
-      TODO: [B, C],
-      IN_PROGRESS: [A], // still only the moved card visible — D remains hidden
+      [COL.TODO]: [B, C],
+      [COL.IN_PROGRESS]: [A], // still only the moved card visible — D remains hidden
     };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 0,
-      overContainer: "IN_PROGRESS",
+      overContainer: COL.IN_PROGRESS,
       overIndex: 0,
       previousValue,
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: A.id,
-      patch: { status: "IN_PROGRESS", position: 3 },
+      patch: { statusId: ID.IN_PROGRESS, position: 3 },
     });
   });
 
@@ -435,30 +446,30 @@ describe("commitMapper — section 3: filter-active variants (filter-agnostic �
     const { A, B, C, D, E } = referenceFixture();
     const global = globalOrder([A, B, C, D, E]);
     const previousValue: Record<string, Task[]> = {
-      TODO: [A, C], // B hidden
-      IN_PROGRESS: [D],
-      DONE: [E],
+      [COL.TODO]: [A, C], // B hidden
+      [COL.IN_PROGRESS]: [D],
+      [COL.DONE]: [E],
     };
-    const committedValue = { ...previousValue, TODO: [C, A] };
+    const committedValue = { ...previousValue, [COL.TODO]: [C, A] };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 0,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 1,
       previousValue,
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: A.id,
-      patch: { status: "TODO", position: 2 },
+      patch: { statusId: ID.TODO, position: 2 },
     });
   });
 
   it("FA-5 (Phase 2 review, 2026-07-27): filter hides C; column-body drop of D onto TODO anchors on C (true last member), not B (last VISIBLE card)", () => {
     // M2 fix. Fixture: A,B,C TODO / D IN_PROGRESS / E DONE, filter hides C.
     // Dragging D onto the TODO column BODY (not onto a card) is a genuine
-    // column-append: SolvroKanban.tsx sets meta.appendToStatus = "TODO" from
+    // column-append: SolvroKanban.tsx sets meta.appendToColumn = "TODO" from
     // meta.event.over?.id resolving to the column id. The committed
     // (filtered) TODO shows only [A, B, D] — C stays invisible — so D's
     // committed predecessor is B, NOT C. Without the explicit signal,
@@ -467,106 +478,106 @@ describe("commitMapper — section 3: filter-active variants (filter-agnostic �
     const { A, B, C, D, E } = referenceFixture();
     const global = globalOrder([A, B, C, D, E]);
     const previousValue: Record<string, Task[]> = {
-      TODO: [A, B], // C hidden
-      IN_PROGRESS: [D],
-      DONE: [E],
+      [COL.TODO]: [A, B], // C hidden
+      [COL.IN_PROGRESS]: [D],
+      [COL.DONE]: [E],
     };
     const committedValue = {
       ...previousValue,
-      TODO: [A, B, D], // D appended after the two VISIBLE cards only
-      IN_PROGRESS: [],
+      [COL.TODO]: [A, B, D], // D appended after the two VISIBLE cards only
+      [COL.IN_PROGRESS]: [],
     };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "IN_PROGRESS",
+      activeContainer: COL.IN_PROGRESS,
       activeIndex: 0,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 2,
       previousValue,
-      appendToStatus: "TODO",
+      appendToColumn: COL.TODO,
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: D.id,
-      patch: { status: "TODO", position: 3 },
+      patch: { statusId: ID.TODO, position: 3 },
     });
   });
 
   it("FA-5-MS (Phase 2 review, 2026-07-27): move-sheet variant of FA-5 — same explicit signal, same true-end anchor", () => {
     // Same fixture/hazard as FA-5, reached through the synthesized move-sheet
     // commit shape (buildColumnAppendCommit) instead of a real drag — proves
-    // mapCommitToPatch's appendToStatus handling is shared by both callers,
+    // mapCommitToPatch's appendToColumn handling is shared by both callers,
     // not drag-path-specific (matches the existing "MS rows share the exact
     // column-append code path CC rows use" test's own framing, section 5).
     const { A, B, C, D, E } = referenceFixture();
     const global = globalOrder([A, B, C, D, E]);
     const previousValue: Record<string, Task[]> = {
-      TODO: [A, B], // C hidden
-      IN_PROGRESS: [D],
-      DONE: [E],
+      [COL.TODO]: [A, B], // C hidden
+      [COL.IN_PROGRESS]: [D],
+      [COL.DONE]: [E],
     };
     const committedValue = {
       ...previousValue,
-      TODO: [A, B, D],
-      IN_PROGRESS: [],
+      [COL.TODO]: [A, B, D],
+      [COL.IN_PROGRESS]: [],
     };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "IN_PROGRESS",
+      activeContainer: COL.IN_PROGRESS,
       activeIndex: 0,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 2, // targetColumn.length before append, per buildColumnAppendCommit
       previousValue,
-      appendToStatus: "TODO",
+      appendToColumn: COL.TODO,
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: D.id,
-      patch: { status: "TODO", position: 3 },
+      patch: { statusId: ID.TODO, position: 3 },
     });
   });
 
-  it("card-to-card drops under a filter still use visible-neighbor math even when appendToStatus names a different column (mismatched signal is ignored)", () => {
-    // Guards the branch condition itself — `meta.appendToStatus ===
-    // targetStatus`, not merely `meta.appendToStatus` truthy. Reuses FA-2's
+  it("card-to-card drops under a filter still use visible-neighbor math even when appendToColumn names a different column (mismatched signal is ignored)", () => {
+    // Guards the branch condition itself — `meta.appendToColumn ===
+    // targetStatus`, not merely `meta.appendToColumn` truthy. Reuses FA-2's
     // fixture/gesture (card-to-card cross-column drop under a filter) with a
-    // deliberately mismatched appendToStatus ("DONE", not the actual drop
+    // deliberately mismatched appendToColumn ("DONE", not the actual drop
     // target "IN_PROGRESS") to prove the neighbor-based resolvePosition path
     // still runs — the explicit signal never leaks into other columns' math.
     const { A, B, C, D, E } = referenceFixture();
     const global = globalOrder([A, B, C, D, E]);
     const previousValue: Record<string, Task[]> = {
-      TODO: [A, B], // C hidden
-      IN_PROGRESS: [D],
-      DONE: [E],
+      [COL.TODO]: [A, B], // C hidden
+      [COL.IN_PROGRESS]: [D],
+      [COL.DONE]: [E],
     };
     const committedValue = {
       ...previousValue,
-      TODO: [B],
-      IN_PROGRESS: [D, A],
+      [COL.TODO]: [B],
+      [COL.IN_PROGRESS]: [D, A],
     };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 0,
-      overContainer: "IN_PROGRESS",
+      overContainer: COL.IN_PROGRESS,
       overIndex: 1,
       previousValue,
-      appendToStatus: "DONE",
+      appendToColumn: COL.DONE,
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: A.id,
-      patch: { status: "IN_PROGRESS", position: 3 },
+      patch: { statusId: ID.IN_PROGRESS, position: 3 },
     });
   });
 });
 
-describe("commitMapper — T10 (2026-07-27) M2 refinement: appendToStatus requires arrangement agreement", () => {
+describe("commitMapper — T10 (2026-07-27) M2 refinement: appendToColumn requires arrangement agreement", () => {
   // Diagnosis (G9a failure, real drag run): dragging one card onto another's
   // TOP edge sometimes resolves dnd-kit's `over` to the COLUMN itself (not
   // the card) even though the live-preview arrangement clearly shows a
-  // card-to-card "insert before" — SolvroKanban.tsx's `appendToStatus`
+  // card-to-card "insert before" — SolvroKanban.tsx's `appendToColumn`
   // derivation only inspects `meta.event.over?.id`, so it set the signal
   // unconditionally in that case. The three rows below pin the fixed rule:
   // the signal only takes effect when the COMMITTED ARRANGEMENT itself also
@@ -577,8 +588,8 @@ describe("commitMapper — T10 (2026-07-27) M2 refinement: appendToStatus requir
   it("(a) G9a-shape: signal set but committed arrangement shows moved NOT last -> signal ignored, neighbor math used", () => {
     // Reproduces the real bug this fix addresses. Minimal 2-card TODO
     // column: v2 dragged onto v1's card, landing BEFORE it (committed
-    // TODO: [v2, v1] — v2 is NOT last, v1 follows). A mis-resolved
-    // `meta.event.over?.id` set `appendToStatus: "TODO"` anyway.
+    // [COL.TODO]: [v2, v1] — v2 is NOT last, v1 follows). A mis-resolved
+    // `meta.event.over?.id` set `appendToColumn: COL.TODO` anyway.
     //
     // Under the OLD (unconditional) M2 code this signal alone would have
     // taken the append branch: `columnAppendPosition` anchors on the
@@ -598,20 +609,20 @@ describe("commitMapper — T10 (2026-07-27) M2 refinement: appendToStatus requir
     const v2 = makeTask({ id: 102, title: "v2", status: "TODO", position: 1 });
     const global = globalOrder([v1, v2]);
     const previousValue = groupedAll(global);
-    const committedValue = { ...previousValue, TODO: [v2, v1] };
+    const committedValue = { ...previousValue, [COL.TODO]: [v2, v1] };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 1,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 0,
       previousValue,
-      appendToStatus: "TODO", // mis-resolved signal — arrangement disagrees
+      appendToColumn: COL.TODO, // mis-resolved signal — arrangement disagrees
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: v2.id,
-      patch: { status: "TODO", position: 0 },
+      patch: { statusId: ID.TODO, position: 0 },
     });
   });
 
@@ -625,36 +636,36 @@ describe("commitMapper — T10 (2026-07-27) M2 refinement: appendToStatus requir
     const { A, B, C, D, E } = referenceFixture();
     const global = globalOrder([A, B, C, D, E]);
     const previousValue: Record<string, Task[]> = {
-      TODO: [A, B], // C hidden
-      IN_PROGRESS: [D],
-      DONE: [E],
+      [COL.TODO]: [A, B], // C hidden
+      [COL.IN_PROGRESS]: [D],
+      [COL.DONE]: [E],
     };
     const committedValue = {
       ...previousValue,
-      TODO: [A, B, D], // D appended after the two VISIBLE cards only
-      IN_PROGRESS: [],
+      [COL.TODO]: [A, B, D], // D appended after the two VISIBLE cards only
+      [COL.IN_PROGRESS]: [],
     };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "IN_PROGRESS",
+      activeContainer: COL.IN_PROGRESS,
       activeIndex: 0,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 2, // last index in a 3-item committed column -> agreement
       previousValue,
-      appendToStatus: "TODO",
+      appendToColumn: COL.TODO,
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: D.id,
-      patch: { status: "TODO", position: 3 },
+      patch: { statusId: ID.TODO, position: 3 },
     });
   });
 
   it("(c) no signal, moved last VISIBLE with a hidden true-last: neighbor math anchors on the visible predecessor, not the hidden card — correct WYSIWYG for a card-targeted drop", () => {
     // Contrast with (b)/FA-5 immediately above: the IDENTICAL committed
-    // arrangement (TODO: [A, B, D], C hidden by the filter) but reached by
+    // arrangement ([COL.TODO]: [A, B, D], C hidden by the filter) but reached by
     // dropping D directly ONTO card B (over resolves to B's own card id, so
-    // SolvroKanban.tsx never sets `appendToStatus` in the first place — see
+    // SolvroKanban.tsx never sets `appendToColumn` in the first place — see
     // its `overId` derivation) rather than onto the column body. This is
     // the case the ORIGINAL (pre-M2) mapper had to handle on its own: with
     // no signal, `mapCommitToPatch` must NOT reach for the hidden true-last
@@ -669,28 +680,28 @@ describe("commitMapper — T10 (2026-07-27) M2 refinement: appendToStatus requir
     const { A, B, C, D, E } = referenceFixture();
     const global = globalOrder([A, B, C, D, E]);
     const previousValue: Record<string, Task[]> = {
-      TODO: [A, B], // C hidden
-      IN_PROGRESS: [D],
-      DONE: [E],
+      [COL.TODO]: [A, B], // C hidden
+      [COL.IN_PROGRESS]: [D],
+      [COL.DONE]: [E],
     };
     const committedValue = {
       ...previousValue,
-      TODO: [A, B, D], // D dropped directly onto B, landing after it
-      IN_PROGRESS: [],
+      [COL.TODO]: [A, B, D], // D dropped directly onto B, landing after it
+      [COL.IN_PROGRESS]: [],
     };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "IN_PROGRESS",
+      activeContainer: COL.IN_PROGRESS,
       activeIndex: 0,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 2,
       previousValue,
-      // no appendToStatus — over resolved to card B, not the column
+      // no appendToColumn — over resolved to card B, not the column
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: D.id,
-      patch: { status: "TODO", position: 2 },
+      patch: { statusId: ID.TODO, position: 2 },
     });
   });
 });
@@ -703,9 +714,9 @@ describe("commitMapper — section 4: no-op guards", () => {
     const committedValue = groupedAll(global);
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "IN_PROGRESS",
+      activeContainer: COL.IN_PROGRESS,
       activeIndex: 0,
-      overContainer: "IN_PROGRESS",
+      overContainer: COL.IN_PROGRESS,
       overIndex: 0,
       previousValue,
     };
@@ -726,9 +737,9 @@ describe("commitMapper — section 4: no-op guards", () => {
     const committedValue = groupedAll(global); // C ([A,B,C]) unchanged — already last
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 2,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 2,
       previousValue,
     };
@@ -748,9 +759,9 @@ describe("commitMapper — section 4: no-op guards", () => {
     const committedValue = groupedAll(global); // restoreOnCancel snapped back to previousValue
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 1,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 1,
       previousValue,
     };
@@ -766,21 +777,21 @@ describe("commitMapper — section 5: mobile move sheet", () => {
     const previousValue = groupedAll(global);
     const committedValue = {
       ...previousValue,
-      TODO: [A, B],
-      IN_PROGRESS: [D, C],
+      [COL.TODO]: [A, B],
+      [COL.IN_PROGRESS]: [D, C],
     };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 2,
-      overContainer: "IN_PROGRESS",
+      overContainer: COL.IN_PROGRESS,
       overIndex: 1,
       previousValue,
     };
 
     expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
       taskId: C.id,
-      patch: { status: "IN_PROGRESS", position: 3 },
+      patch: { statusId: ID.IN_PROGRESS, position: 3 },
     });
   });
 
@@ -795,9 +806,9 @@ describe("commitMapper — section 5: mobile move sheet", () => {
     const committedValue = groupedAll(global);
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 2,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 2,
       previousValue,
     };
@@ -811,20 +822,20 @@ describe("commitMapper — section 5: mobile move sheet", () => {
     const previousValue = groupedAll(global);
     const committedValue = {
       ...previousValue,
-      TODO: [A, B],
-      IN_PROGRESS: [C],
+      [COL.TODO]: [A, B],
+      [COL.IN_PROGRESS]: [C],
     };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 2,
-      overContainer: "IN_PROGRESS",
+      overContainer: COL.IN_PROGRESS,
       overIndex: 0,
       previousValue,
     };
 
     const result = mapCommitToPatch(global, committedValue, meta);
-    expect(result).toEqual({ taskId: C.id, patch: { status: "IN_PROGRESS" } });
+    expect(result).toEqual({ taskId: C.id, patch: { statusId: ID.IN_PROGRESS } });
     expect(result && "position" in result.patch).toBe(false);
   });
 
@@ -839,33 +850,33 @@ describe("commitMapper — section 5: mobile move sheet", () => {
     const global = globalOrder([A, B, C, D, E]);
     const previousValue = groupedAll(global);
 
-    const ccCommitted = { ...previousValue, TODO: [A, B, C, E], DONE: [] };
+    const ccCommitted = { ...previousValue, [COL.TODO]: [A, B, C, E], [COL.DONE]: [] };
     const ccMeta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "DONE",
+      activeContainer: COL.DONE,
       activeIndex: 0,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 3,
       previousValue,
     };
 
-    const msCommitted = { ...previousValue, TODO: [A, B], IN_PROGRESS: [D, C] };
+    const msCommitted = { ...previousValue, [COL.TODO]: [A, B], [COL.IN_PROGRESS]: [D, C] };
     const msMeta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 2,
-      overContainer: "IN_PROGRESS",
+      overContainer: COL.IN_PROGRESS,
       overIndex: 1,
       previousValue,
     };
 
     expect(mapCommitToPatch(global, ccCommitted, ccMeta)).toEqual({
       taskId: E.id,
-      patch: { status: "TODO", position: 3 },
+      patch: { statusId: ID.TODO, position: 3 },
     });
     expect(mapCommitToPatch(global, msCommitted, msMeta)).toEqual({
       taskId: C.id,
-      patch: { status: "IN_PROGRESS", position: 3 },
+      patch: { statusId: ID.IN_PROGRESS, position: 3 },
     });
   });
 });
@@ -879,15 +890,15 @@ describe("commitMapper — column-kind commits", () => {
     // as an item commit, to prove the "column" kind short-circuit fires
     // independently of the arrangement guard.
     const committedValue: Record<string, Task[]> = {
-      TODO: previousValue.IN_PROGRESS,
-      IN_PROGRESS: previousValue.TODO,
-      DONE: previousValue.DONE,
+      [COL.TODO]: previousValue[COL.IN_PROGRESS],
+      [COL.IN_PROGRESS]: previousValue[COL.TODO],
+      [COL.DONE]: previousValue[COL.DONE],
     };
     const meta: KanbanCommitMetaLike = {
       kind: "column",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 0,
-      overContainer: "IN_PROGRESS",
+      overContainer: COL.IN_PROGRESS,
       overIndex: 1,
       previousValue,
     };
@@ -897,9 +908,9 @@ describe("commitMapper — column-kind commits", () => {
 });
 
 describe("commitMapper — Phase 1 review hardening (findings 5 & 6)", () => {
-  it("unknown overContainer (not a KANBAN_STATUS) fires no request instead of an unchecked cast", () => {
-    // Finding 5: previously `meta.overContainer as TaskStatus` trusted the
-    // input unconditionally. A "BOGUS" container isn't in KANBAN_STATUSES
+  it("unknown overContainer (not a board column id) fires no request instead of an unchecked cast", () => {
+    // Finding 5: previously `meta.overContainer as a status` trusted the
+    // input unconditionally. A "BOGUS" container isn't a `status-<id>` column id
     // (adapter.ts), so the mapper must reject it and return null. The
     // committed value deliberately differs from previousValue (adds a
     // "BOGUS" key) so this exercises the container-validation guard
@@ -911,7 +922,7 @@ describe("commitMapper — Phase 1 review hardening (findings 5 & 6)", () => {
     const committedValue: Record<string, Task[]> = { ...previousValue, BOGUS: [C] };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "TODO",
+      activeContainer: COL.TODO,
       activeIndex: 2,
       overContainer: "BOGUS",
       overIndex: 0,
@@ -942,24 +953,148 @@ describe("commitMapper — Phase 1 review hardening (findings 5 & 6)", () => {
     const previousValue = groupedAll(global);
     const stale = makeTask({ id: 999, title: "STALE", status: "TODO", position: 99 });
     const committedValue: Record<string, Task[]> = {
-      TODO: [A, B, C, stale, E],
-      IN_PROGRESS: [D],
-      DONE: [],
+      [COL.TODO]: [A, B, C, stale, E],
+      [COL.IN_PROGRESS]: [D],
+      [COL.DONE]: [],
     };
     const meta: KanbanCommitMetaLike = {
       kind: "item",
-      activeContainer: "DONE",
+      activeContainer: COL.DONE,
       activeIndex: 0,
-      overContainer: "TODO",
+      overContainer: COL.TODO,
       overIndex: 4,
       previousValue,
     };
 
     const result = mapCommitToPatch(global, committedValue, meta);
-    expect(result).toEqual({ taskId: E.id, patch: { status: "TODO", position: 4 } });
+    expect(result).toEqual({ taskId: E.id, patch: { statusId: ID.TODO, position: 4 } });
     // Explicitly assert the clamp actually did work — the un-clamped raw
     // candidate (5) would be a subtly-wrong request the backend's own clamp
     // would silently reinterpret differently than intended.
     expect(result?.patch.position).not.toBe(5);
+  });
+});
+
+describe("commitMapper — custom statuses (docs/archive/plans/custom-task-statuses.md §3 B3)", () => {
+  // A workspace status "QA / UAT" (id 10, Active) beside the seeded defs.
+  const QA = { id: 10, name: "QA / UAT", color: "violet", category: "IN_PROGRESS", position: 5 } as const;
+  const QA_COL = columnIdOf(QA);
+
+  function qaTask(overrides: Pick<Task, "id" | "title" | "position">): Task {
+    return makeTask({ ...overrides, status: "IN_PROGRESS", statusId: QA.id, statusDef: QA });
+  }
+
+  it("dropping into a custom-status column patches that statusId, not the category's default", () => {
+    const { A, B, C, D, E } = referenceFixture();
+    const global = globalOrder([A, B, C, D, E]);
+    const previousValue = { ...groupedAll(global), [QA_COL]: [] };
+    const committedValue = { ...previousValue, [COL.TODO]: [B, C], [QA_COL]: [A] };
+    const meta: KanbanCommitMetaLike = {
+      kind: "item",
+      activeContainer: COL.TODO,
+      activeIndex: 0,
+      overContainer: QA_COL,
+      overIndex: 0,
+      previousValue,
+      appendToColumn: QA_COL,
+    };
+
+    // QA is genuinely empty -> status-only patch (no position), like CC-3.
+    expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
+      taskId: A.id,
+      patch: { statusId: QA.id },
+    });
+  });
+
+  it("two statuses of the SAME category are distinct columns: moving IN_PROGRESS -> QA writes statusId", () => {
+    const { A, B, C, D, E } = referenceFixture();
+    const global = globalOrder([A, B, C, D, E]);
+    const previousValue = { ...groupedAll(global), [QA_COL]: [] };
+    const committedValue = { ...previousValue, [COL.IN_PROGRESS]: [], [QA_COL]: [D] };
+    const meta: KanbanCommitMetaLike = {
+      kind: "item",
+      activeContainer: COL.IN_PROGRESS,
+      activeIndex: 0,
+      overContainer: QA_COL,
+      overIndex: 0,
+      previousValue,
+      appendToColumn: QA_COL,
+    };
+
+    const result = mapCommitToPatch(global, committedValue, meta);
+    expect(result).toEqual({ taskId: D.id, patch: { statusId: QA.id } });
+  });
+
+  it("a within-column reorder inside a custom status sends that column's statusId", () => {
+    const q1 = qaTask({ id: 21, title: "q1", position: 0 });
+    const q2 = qaTask({ id: 22, title: "q2", position: 1 });
+    const q3 = qaTask({ id: 23, title: "q3", position: 2 });
+    const global = globalOrder([q1, q2, q3]);
+    const previousValue: Record<string, Task[]> = {
+      [COL.TODO]: [],
+      [COL.IN_PROGRESS]: [],
+      [COL.DONE]: [],
+      [QA_COL]: [q1, q2, q3],
+    };
+    const committedValue = { ...previousValue, [QA_COL]: [q3, q1, q2] };
+    const meta: KanbanCommitMetaLike = {
+      kind: "item",
+      activeContainer: QA_COL,
+      activeIndex: 2,
+      overContainer: QA_COL,
+      overIndex: 0,
+      previousValue,
+    };
+
+    expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
+      taskId: q3.id,
+      patch: { statusId: QA.id, position: 0 },
+    });
+  });
+
+  it("column-append anchors on the true last member of the custom column, not of its category", () => {
+    const { A } = referenceFixture();
+    const d = makeTask({ id: 4, title: "D", status: "IN_PROGRESS", position: 3 });
+    const q1 = qaTask({ id: 21, title: "q1", position: 4 });
+    const global = globalOrder([A, d, q1]);
+    const previousValue: Record<string, Task[]> = {
+      [COL.TODO]: [A],
+      [COL.IN_PROGRESS]: [d],
+      [COL.DONE]: [],
+      [QA_COL]: [q1],
+    };
+    const committedValue = { ...previousValue, [COL.TODO]: [], [QA_COL]: [q1, A] };
+    const meta: KanbanCommitMetaLike = {
+      kind: "item",
+      activeContainer: COL.TODO,
+      activeIndex: 0,
+      overContainer: QA_COL,
+      overIndex: 1,
+      previousValue,
+      appendToColumn: QA_COL,
+    };
+
+    // Moved-excluded global = [d, q1]; q1 is index 1 -> append at 2.
+    expect(mapCommitToPatch(global, committedValue, meta)).toEqual({
+      taskId: A.id,
+      patch: { statusId: QA.id, position: 2 },
+    });
+  });
+
+  it("a bare numeric overContainer (a task id, not a column id) fires no request", () => {
+    const { A, B, C, D, E } = referenceFixture();
+    const global = globalOrder([A, B, C, D, E]);
+    const previousValue = groupedAll(global);
+    const committedValue: Record<string, Task[]> = { ...previousValue, "2": [C] };
+    const meta: KanbanCommitMetaLike = {
+      kind: "item",
+      activeContainer: COL.TODO,
+      activeIndex: 2,
+      overContainer: "2",
+      overIndex: 0,
+      previousValue,
+    };
+
+    expect(mapCommitToPatch(global, committedValue, meta)).toBeNull();
   });
 });

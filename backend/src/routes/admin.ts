@@ -11,7 +11,11 @@ import { bustAuthConfigCache } from "../authConfig.js";
 import { isUsernameConflict, normalizeUsername, USERNAME_MAX } from "../lib/username.js";
 import { recordActivity, shortLabel, type ActivityChanges } from "../lib/activity.js";
 import { notifyForEvent } from "../lib/notifications.js";
-import { saveTaskStatusDefs, STATUS_TONES } from "../lib/taskStatuses.js";
+import {
+  listTaskStatusDefsWithCounts,
+  saveTaskStatusDefs,
+  STATUS_TONES,
+} from "../lib/taskStatuses.js";
 
 export const adminRouter = Router();
 
@@ -695,6 +699,11 @@ const saveTaskStatusesSchema = z
     },
     { message: "A status id appears twice", path: ["statuses"] },
   );
+
+// The editor's read: the list plus per-status task counts.
+adminRouter.get("/task-statuses", async (_req, res) => {
+  res.json(await listTaskStatusDefsWithCounts());
+});
 
 adminRouter.put(
   "/task-statuses",

@@ -12,7 +12,7 @@ import { EpicChip } from "./EpicChip";
 import { InlineDateRangeEditor } from "./InlineDateRangeEditor";
 import { LabelPicker } from "./LabelPicker";
 import { OutlineMentions } from "./OutlineMentions";
-import { TASK_STATUS_TONE_CLASS } from "./StatusChip";
+import { StatusSelect } from "./StatusSelect";
 import { TaskConflictDialog } from "./TaskConflictDialog";
 import { RowTicketCell, type RowTicketContext } from "@/components/itop/RowTicketCell";
 import { TaskTicketField } from "@/components/itop/TaskTicketField";
@@ -24,7 +24,7 @@ import { hasPermission, useAuth } from "@/lib/auth";
 import { CommentBody, CommentComposer } from "@/components/CommentMentions";
 import { fmtAgo, fmtRange } from "@/lib/formatDate";
 import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
-import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
+import { PRIORITY_LABEL } from "@/lib/labels";
 import {
   buildExpected,
   datePatchFromEdit,
@@ -37,7 +37,6 @@ import {
 import {
   type Priority,
   type Task,
-  type TaskStatus,
   type UpdateTaskInput,
   useAddComment,
   useComments,
@@ -53,10 +52,10 @@ import {
   useProjectSections,
   useProjectTasks,
   useUpdateTask,
+  useTaskStatuses,
   useUsers,
 } from "@/lib/queries";
 
-const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 
 const PRIORITY_ORDER: Priority[] = ["LOW", "MEDIUM", "HIGH"];
 const PRIORITY_ICON_CLASS: Record<Priority, string> = {
@@ -110,6 +109,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const { data: sections } = useProjectSections(projectId);
   const { data: epics, isLoading: epicsLoading } = useProjectEpics(projectId);
   const { data: users } = useUsers();
+  const { data: statusDefs } = useTaskStatuses();
   const { data: labels } = useProjectLabels(projectId);
   const assigneeAddsMember = useAssigneeMembership(projectId);
   const updateTask = useUpdateTask(projectId);
@@ -165,7 +165,6 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const taskEpicPending = task !== null && task.epicId !== null && epicsLoading;
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [editingDates, setEditingDates] = useState(false);
@@ -237,7 +236,6 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     setEditingEpic(false);
     setEditingSubtaskId(null);
     setMenuOpen(false);
-    setStatusMenuOpen(false);
     setError(null);
     setConflict(null);
   }, [taskId]);
@@ -440,46 +438,14 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
       >
         {/* Header */}
         <div className="flex items-center gap-2 border-b border-outline-variant px-4 py-3">
-          <div className="relative">
-            <button
-              type="button"
-              disabled={!canEdit}
-              onClick={() => setStatusMenuOpen((v) => !v)}
-              className={[
-                "inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-display text-meta font-semibold",
-                TASK_STATUS_TONE_CLASS[task.status],
-                canEdit ? "cursor-pointer" : "cursor-default",
-              ].join(" ")}
-            >
-              {TASK_STATUS_LABEL[task.status]}
-              {canEdit && (
-                <span aria-hidden="true" className="material-symbols-outlined text-[13px]">expand_more</span>
-              )}
-            </button>
-            {statusMenuOpen && canEdit && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setStatusMenuOpen(false)} />
-                <div className="absolute left-0 z-20 mt-1 w-36 rounded-lg border border-outline-variant bg-surface-container-lowest py-1 shadow-overlay">
-                  {STATUSES.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => {
-                        patch({ status: s });
-                        setStatusMenuOpen(false);
-                      }}
-                      className={[
-                        "flex w-full items-center px-3 py-1.5 text-left text-xs hover:bg-surface-container",
-                        s === task.status ? "font-bold text-primary" : "text-on-surface",
-                      ].join(" ")}
-                    >
-                      {TASK_STATUS_LABEL[s]}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+          <StatusSelect
+            variant="chip"
+            value={task.statusId}
+            fallback={task.statusDef}
+            disabled={!canEdit}
+            onChange={(def) => patch({ statusId: def.id })}
+            className="px-2.5 py-1"
+          />
           <span className="flex-1" />
           <CopyLinkButton
             label="Copy task link"
@@ -1072,6 +1038,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     epics,
                     labels,
                     tasks,
+                    statuses: statusDefs,
                   },
                   conflict.stale.task,
                 ),

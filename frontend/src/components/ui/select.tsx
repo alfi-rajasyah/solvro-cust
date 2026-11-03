@@ -82,9 +82,13 @@ function SelectContent({
   sideOffset = 4,
   side,
   alignOffset,
+  // SOLVRO PATCH: same Positioner-level z-index passthrough as
+  // ui/popover.tsx's `positionerClassName` (frontend/CLAUDE.md, "Popover
+  // z-index"), so a Select opened inside Modal.tsx's z-100 layer can outrank it.
+  positionerClassName,
   children,
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.List> &
+}: React.ComponentProps<typeof SelectPrimitive.List> & { positionerClassName?: string } &
   Pick<
     React.ComponentProps<typeof SelectPrimitive.Positioner>,
     "align" | "alignItemWithTrigger" | "sideOffset" | "side" | "alignOffset"
@@ -97,6 +101,7 @@ function SelectContent({
         sideOffset={sideOffset}
         side={side}
         alignOffset={alignOffset}
+        className={cn(positionerClassName)}
       >
         <SelectPrimitive.Popup
           data-slot="select-content"
@@ -115,11 +120,14 @@ function SelectContent({
             // overlay by definition, and this repo hasn't yet reconciled
             // that with §4's `shadow-overlay`-whitelist token — pending a
             // global popup-shadow decision, tracked as a gap rather than
-            // fixed ad hoc here). `z-50` follows ui/popover.tsx's/
+            // fixed ad hoc here; whitelisted consumers such as StatusSelect
+            // override it with `shadow-overlay!` on their SelectContent).
+            // `z-50` follows ui/popover.tsx's/
             // ui/dropdown-menu.tsx's precedent (on the Popup, not the
             // Positioner — frontend/CLAUDE.md's z-101 override convention
             // only applies when a caller needs to outrank the Modal layer;
-            // no current consumer needs that here).
+            // StatusSelect does inside TaskFormModal, via the
+            // `positionerClassName` patch above).
             "z-50 max-h-(--available-height) min-w-[8rem] origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-ending-style:animate-out data-ending-style:fade-out-0 data-ending-style:zoom-out-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95",
             className
           )}
@@ -160,4 +168,34 @@ function SelectItem({
   )
 }
 
-export { Select, SelectTrigger, SelectValue, SelectContent, SelectItem }
+// SOLVRO PATCH — Group/Label wrappers for StatusSelect's category headers
+// (docs/archive/plans/custom-task-statuses.md §3 B2). Base UI's
+// Select.Group labels its items for assistive tech via GroupLabel.
+function SelectGroup({
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Group>) {
+  return <SelectPrimitive.Group data-slot="select-group" {...props} />
+}
+
+function SelectLabel({
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.GroupLabel>) {
+  return (
+    <SelectPrimitive.GroupLabel
+      data-slot="select-label"
+      className={cn("px-2 py-1.5 text-xs text-muted-foreground", className)}
+      {...props}
+    />
+  )
+}
+
+export {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+  SelectGroup,
+  SelectLabel,
+}

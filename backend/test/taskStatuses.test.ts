@@ -315,6 +315,27 @@ describe("stale write on statusId", () => {
   });
 });
 
+describe("GET /admin/task-statuses", () => {
+  it("is admin-only and returns the list with per-status task counts", async () => {
+    const { admin, tam, project } = await setup();
+    expect((await request(app).get("/admin/task-statuses").set(auth(tam.token))).status).toBe(403);
+    const counts = async () => {
+      const r = await request(app).get("/admin/task-statuses").set(auth(admin.token));
+      expect(r.status).toBe(200);
+      return { res: r, byId: Object.fromEntries(r.body.map((d: { id: number; taskCount: number }) => [d.id, d.taskCount])) as Record<number, number> };
+    };
+    const before = (await counts()).byId;
+    await makeTask(project.id, 2, "IN_PROGRESS");
+    await makeTask(project.id, 2, "IN_PROGRESS");
+    await makeTask(project.id, 3, "DONE");
+    const { res, byId } = await counts();
+    expect(byId[1]).toBe(before[1]);
+    expect(byId[2]).toBe(before[2] + 2);
+    expect(byId[3]).toBe(before[3] + 1);
+    expect(res.body[0]).toMatchObject({ id: 1, name: "To do", category: "TODO", color: "gray", position: 0, isDefault: true });
+  });
+});
+
 describe("PUT /admin/task-statuses", () => {
   it("is admin-only", async () => {
     const { tam } = await setup();

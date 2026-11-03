@@ -222,12 +222,15 @@ projectsRouter.post(
     if (body.tamId !== undefined && body.tamId !== req.user!.sub) {
       await assertUserExists(prisma, body.tamId, "tam_not_found", "TAM not found");
     }
-    await assertWipLimitKeys(prisma, body.wipLimits);
 
     // The project and its `created` event commit together. The event snapshots
     // who holds the TAM seat and the customer — ids and display names only,
     // never emails (docs/archive/plans/internal-sync.md).
     const project = await prisma.$transaction(async (tx) => {
+      // Shared status-list lock first, then the key check, so an admin delete
+      // of a status cannot slip in between the check and the write.
+      await lockStatusListShared(tx);
+      await assertWipLimitKeys(tx, body.wipLimits);
       const created = await tx.project.create({
         data: {
           name: body.name,
@@ -450,7 +453,6 @@ projectsRouter.patch(
       data.customer = { connect: { id: body.customerId } };
     }
     if (body.wipLimits !== undefined) {
-      await assertWipLimitKeys(prisma, body.wipLimits);
       data.wipLimits = body.wipLimits === null ? Prisma.JsonNull : body.wipLimits;
     }
     if (body.excludeFromPortfolio !== undefined) {
@@ -458,6 +460,10 @@ projectsRouter.patch(
     }
 
     const updated = await prisma.$transaction(async (tx) => {
+      // Status-list lock before any row lock (same order as task writes), so a
+      // WIP-limit save cannot race an admin delete of a status it names.
+      await lockStatusListShared(tx);
+      await assertWipLimitKeys(tx, body.wipLimits);
       // Lock first so a concurrent save serialises and the diff is against the
       // row this write actually replaced.
       await tx.$queryRaw`SELECT id FROM projects WHERE id = ${id} FOR NO KEY UPDATE`;

@@ -14,6 +14,7 @@ import { ProjectStatusChip } from "@/components/StatusChip";
 import { Tabs } from "@/components/Tabs";
 import { ItopTab } from "@/components/admin/ItopTab";
 import { OutlineTab } from "@/components/admin/OutlineTab";
+import { TaskStatusesTab } from "@/components/admin/TaskStatusesTab";
 import { ApiError } from "@/lib/api";
 import {
   type AdminProject,
@@ -45,13 +46,14 @@ import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll
 import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type Tab = "users" | "roles" | "signin" | "projects" | "itop" | "outline";
+type Tab = "users" | "roles" | "signin" | "projects" | "statuses" | "itop" | "outline";
 
 const TAB_ITEMS: ReadonlyArray<{ key: Tab; label: string }> = [
   { key: "users", label: "Users" },
   { key: "roles", label: "Roles" },
   { key: "signin", label: "Sign-in" },
   { key: "projects", label: "Project Override" },
+  { key: "statuses", label: "Task statuses" },
   { key: "itop", label: "iTop" },
   { key: "outline", label: "Outline" },
 ];
@@ -76,6 +78,16 @@ export function Admin() {
   const [tab, setTab] = useState<Tab>(
     TAB_ITEMS.some((t) => t.key === requestedTab) ? (requestedTab as Tab) : "users",
   );
+  // The Task statuses tab edits a draft; leaving it with unsaved changes asks
+  // first. This only covers switching tabs here (plus beforeunload inside the
+  // tab): react-router's BrowserRouter cannot block a sidebar/link navigation,
+  // so leaving the page that way still discards the draft.
+  const [statusesDirty, setStatusesDirty] = useState(false);
+  const [pendingTab, setPendingTab] = useState<Tab | null>(null);
+  function changeTab(next: Tab) {
+    if (tab === "statuses" && statusesDirty && next !== tab) setPendingTab(next);
+    else setTab(next);
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -87,7 +99,7 @@ export function Admin() {
           Manage users and force-reassign project ownership.
         </p>
         <div className="mt-4 overflow-x-auto">
-          <Tabs items={TAB_ITEMS} active={tab} onChange={setTab} />
+          <Tabs items={TAB_ITEMS} active={tab} onChange={changeTab} />
         </div>
       </header>
       <div className="flex-1 overflow-auto p-4 md:p-6">
@@ -95,9 +107,22 @@ export function Admin() {
         {tab === "roles" && <RolesTab />}
         {tab === "signin" && <SignInTab />}
         {tab === "projects" && <ProjectsTab />}
+        {tab === "statuses" && <TaskStatusesTab onDirtyChange={setStatusesDirty} />}
         {tab === "itop" && <ItopTab />}
         {tab === "outline" && <OutlineTab />}
       </div>
+      <ConfirmModal
+        open={pendingTab !== null}
+        onClose={() => setPendingTab(null)}
+        onConfirm={() => {
+          if (pendingTab) setTab(pendingTab);
+          setPendingTab(null);
+        }}
+        title="Discard unsaved changes?"
+        body="Your edits to the task statuses have not been saved. Leaving this tab discards them."
+        confirmLabel="Discard changes"
+        confirmTone="danger"
+      />
     </div>
   );
 }

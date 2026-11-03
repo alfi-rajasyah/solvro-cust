@@ -22,6 +22,17 @@ import type { Page } from "@playwright/test";
 // PointerSensor); touch cases only make sense on the mobile project (dnd-kit
 // TouchSensor, 250ms hold).
 
+/** The seeded default status def id of a category — a drop's PATCH now carries
+ * `statusId` (the board has one column per workspace status), and a column's
+ * `data-value` is `status-<defId>`. */
+async function defaultDefId(base: string, token: string, category: string): Promise<number> {
+  const res = await fetch(`${base}/api/task-statuses`, { headers: { Authorization: `Bearer ${token}` } });
+  const defs = (await res.json()) as Array<{ id: number; category: string; isDefault: boolean }>;
+  const def = defs.find((d) => d.category === category && d.isDefault);
+  if (!def) throw new Error(`no default status for ${category}`);
+  return def.id;
+}
+
 function byTitle<T extends { title: string }>(tasks: T[], t: string) {
   return tasks.find((x) => x.title === t);
 }
@@ -377,7 +388,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     expect(requests.length).toBe(1);
     const body = requests[0].body;
     expect(body).toBeTruthy();
-    expect(body?.status).toBe("DONE");
+    expect(body?.statusId).toBe(await defaultDefId(base, seededProject.token, "DONE"));
     expect(Object.prototype.hasOwnProperty.call(body ?? {}, "position")).toBe(false);
 
     const after = await getTasks(base, seededProject.token, seededProject.projectId);
@@ -458,7 +469,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     });
 
     expect(requests.length).toBe(1);
-    expect(requests[0].body).toEqual({ status: "TODO", position: expectedPosition });
+    expect(requests[0].body).toEqual({ statusId: await defaultDefId(base, seededProject.token, "TODO"), position: expectedPosition });
 
     const after = globalTopLevel(await getTasks(base, seededProject.token, seededProject.projectId));
     const titles = after.map((t) => t.title);
@@ -542,7 +553,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     });
 
     expect(requests.length).toBe(1);
-    expect(requests[0].body).toEqual({ status: "TODO", position: expectedPosition });
+    expect(requests[0].body).toEqual({ statusId: await defaultDefId(base, seededProject.token, "TODO"), position: expectedPosition });
 
     const after = globalTopLevel(await getTasks(base, seededProject.token, seededProject.projectId));
     const movedIndexAfter = after.findIndex((t) => t.id === moved.id);
@@ -747,7 +758,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     });
 
     expect(requests.length).toBe(1);
-    expect(requests[0].body).toEqual({ status: "TODO", position: 0 });
+    expect(requests[0].body).toEqual({ statusId: await defaultDefId(base, token, "TODO"), position: 0 });
 
     const after = globalTopLevel(await getTasks(base, token, projectId));
     const titles = after.map((t) => t.title);
@@ -826,12 +837,14 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // drop so the append signal (`over.id === "TODO"`) actually fires.
     // Columns are full-height now (`md:h-full`, SolvroKanban.tsx), so target
     // the column's OWN bottom padding via its
-    // `[data-slot="kanban-column"][data-value="TODO"]` bounding box — well
+    // `[data-slot="kanban-column"][data-value="status-<todoDefId>"]` bounding box — well
     // clear of any card rect, regardless of how many cards are visible.
     // Verified against a live fixture (visibleOther/hiddenLast/source): this
     // produces exactly one PATCH anchored on hiddenLast (the true last
     // member), not visibleOther.
-    const todoColumn = page.locator('[data-slot="kanban-column"][data-value="TODO"]');
+    const todoColumn = page.locator(
+      `[data-slot="kanban-column"][data-value="status-${await defaultDefId(base, token, "TODO")}"]`,
+    );
     const columnBox = await todoColumn.boundingBox();
     expect(columnBox, "TODO column not found").toBeTruthy();
 
@@ -843,7 +856,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     });
 
     expect(requests.length).toBe(1);
-    expect(requests[0].body).toEqual({ status: "TODO", position: expectedPosition });
+    expect(requests[0].body).toEqual({ statusId: await defaultDefId(base, token, "TODO"), position: expectedPosition });
 
     const after = globalTopLevel(await getTasks(base, token, projectId));
     const titles = after.map((t) => t.title);
@@ -1041,8 +1054,8 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     const parentSelect = dialog.locator('div.flex.items-center.gap-3:has(span:text-is("Parent")) select');
     await parentSelect.selectOption("");
 
-    const statusSelect = dialog.locator('div.flex.items-center.gap-3:has(span:text-is("Status")) select');
-    await statusSelect.selectOption("DONE");
+    await dialog.getByRole("combobox", { name: "Status" }).click();
+    await page.getByRole("option", { name: "Done", exact: true }).click();
 
     await dialog.getByRole("button", { name: "Save", exact: true }).click();
     await page.waitForTimeout(600);

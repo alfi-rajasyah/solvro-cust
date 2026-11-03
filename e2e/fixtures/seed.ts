@@ -236,11 +236,14 @@ export async function setWipLimits(
     const def = defs.find((d) => d.isDefault && d.category === key);
     keyed[def ? String(def.id) : key] = limit;
   }
-  await fetch(`${base}/api/projects/${projectId}`, {
+  const res = await fetch(`${base}/api/projects/${projectId}`, {
     method: "PATCH",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ wipLimits: keyed }),
   });
+  if (!res.ok) {
+    throw new Error(`setWipLimits failed ${res.status}: ${await res.text().catch(() => "")}`);
+  }
 }
 
 export interface SeededEpic {

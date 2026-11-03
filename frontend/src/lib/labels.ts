@@ -19,6 +19,15 @@ export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   DONE: "Done",
 };
 
+// Category group headers in the status picker (docs/archive/plans/custom-task-statuses.md
+// §3 B2). The category itself still reads "To do" / "In progress" / "Done"
+// (TASK_STATUS_LABEL) wherever a bare category is shown.
+export const TASK_CATEGORY_GROUP_LABEL: Record<TaskStatus, string> = {
+  TODO: "Not started",
+  IN_PROGRESS: "Active",
+  DONE: "Done",
+};
+
 export const PRIORITY_LABEL: Record<Priority, string> = {
   LOW: "Low",
   MEDIUM: "Medium",
@@ -96,7 +105,6 @@ function toOptions<T extends string>(
 }
 
 // Enum declaration order (workflow order), not alphabetical.
-export const taskStatusOptions = toOptions(TASK_STATUS_LABEL);
 export const priorityOptions = toOptions(PRIORITY_LABEL);
 export const riskStatusOptions = toOptions(RISK_STATUS_LABEL);
 export const riskCategoryOptions = toOptions(RISK_CATEGORY_LABEL);

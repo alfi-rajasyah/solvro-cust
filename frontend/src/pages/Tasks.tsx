@@ -13,12 +13,13 @@ import { PriorityBadge } from "@/components/PriorityBadge";
 import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import { Tabs } from "@/components/Tabs";
 import { TaskFormModal } from "@/components/TaskFormModal";
-import { TaskStatusChip } from "@/components/StatusChip";
+import { STATUS_TONE_DOT_CLASS, TaskStatusChip } from "@/components/StatusChip";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { dateToDay, dayFromIso } from "@/lib/dateField";
 import { fmtDay, fmtDue } from "@/lib/formatDate";
 import { parseWeekKey, weekKeyOf } from "@/lib/isoWeek";
-import { priorityOptions, taskStatusOptions } from "@/lib/labels";
+import { TASK_CATEGORY_GROUP_LABEL, priorityOptions } from "@/lib/labels";
+import { statusFilterOptions, statusFilterToQuery, statusSortKey } from "@/lib/taskStatuses";
 import {
   type Filter,
   type FilterFieldConfig,
@@ -33,15 +34,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   type Priority,
   type Task,
-  type TaskStatus,
   type TaskWithProject,
   type TasksFilter,
   useCustomers,
   useInfiniteTasks,
+  useTaskStatuses,
   useUsers,
 } from "@/lib/queries";
 
-const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 const PRIORITY_ORDER: Record<Priority, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
 // Stable empty-array reference for `data:` while `useInfiniteTasks` is loading —
@@ -129,6 +129,7 @@ export function Tasks() {
   const canRead = hasPermission(user, "project:read");
   const { data: users } = useUsers(canRead);
   const { data: customers } = useCustomers(canRead && hasPermission(user, "customer:read"));
+  const { data: statusDefs } = useTaskStatuses();
 
   const filterFields = useMemo<FilterFieldConfig<string>[]>(
     () => [
@@ -137,7 +138,15 @@ export function Tasks() {
         label: "Status",
         type: "select",
         operators: ONLY_IS_OPERATOR,
-        options: taskStatusOptions,
+        // Grouped by category; a whole category is one pick (?status=), a
+        // single status another (?statusId=) — see lib/taskStatuses.ts.
+        options: statusFilterOptions(statusDefs, TASK_CATEGORY_GROUP_LABEL).map((o) => ({
+          value: o.value,
+          label: o.label,
+          icon: o.def ? (
+            <span aria-hidden="true" className={`size-2 rounded-full ${STATUS_TONE_DOT_CLASS[o.def.color]}`} />
+          ) : undefined,
+        })),
       },
       {
         key: "priority",
@@ -166,7 +175,7 @@ export function Tasks() {
           ]
         : []),
     ],
-    [users, customers, user],
+    [users, customers, user, statusDefs],
   );
 
   // Derive the TasksFilter useInfiniteTasks/queries.ts expects from the active Filter
@@ -190,7 +199,7 @@ export function Tasks() {
       // An explicit Status chip wins over the view's "hide Done" — otherwise
       // picking Status "Done" inside an open-only view would always be empty.
       open: status ? undefined : base.open,
-      status: status as TaskStatus | undefined,
+      ...statusFilterToQuery(status),
       priority: priority as Priority | undefined,
       // Likewise an Assignee chip wins over "My open"'s current user.
       assignedToId:
@@ -341,9 +350,9 @@ export function Tasks() {
       },
       {
         id: "status",
-        accessorFn: (row) => STATUSES.indexOf(row.status),
+        accessorFn: (row) => statusSortKey(row.statusDef),
         header: ({ column }) => <DataGridColumnHeader column={column} title="Status" />,
-        cell: ({ row }) => <TaskStatusChip status={row.original.status} />,
+        cell: ({ row }) => <TaskStatusChip status={row.original.status} def={row.original.statusDef} />,
         meta: { skeleton: <Skeleton className="h-4 w-16 rounded-full" /> },
       },
     ],
