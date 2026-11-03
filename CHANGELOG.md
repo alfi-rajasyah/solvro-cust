@@ -15,6 +15,16 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-03 — A project can belong to several customers
+
+- A project can be linked to several customers, one of them primary. Anyone who can see any of its customers can see the project, and it appears under each linked customer on the customer page, in the Daily Review and in the Weekly Sync.
+- Breadcrumbs, guest share pages, portfolio rows, recent-notes labels and search labels use the primary customer. A shared project counts once in portfolio roll-ups.
+- Only the project's owner can change which customers it is linked to. Deleting a customer makes the project's oldest remaining customer its primary.
+- Project responses include `customers` and `primaryCustomer` next to the existing `customerId` and `customer` fields, which now mean the primary customer. Create and update accept `customers: [{ id, isPrimary }]`, and a single `customerId` still works. On update, a single `customerId` never removes other customers: it keeps the current primary, moves the primary to an already-linked customer, or adds a new customer as primary. Replacing the whole set takes `customers`.
+- The TAM and the owner of any linked customer can manage a shared project: delete it, change its TAM, change its customer links and create guest share links. A project appears under a customer you don't own, in your Daily Review, only if you are its TAM or a member.
+- The project activity log records the set of linked customers, and deleting a project records the deletion for each linked customer (`backend/src/lib/projectCustomers.ts`, `backend/src/lib/visibility.ts`, `backend/src/routes/projects.ts`, `backend/src/routes/customers.ts`, `backend/src/lib/dailyReviewScope.ts`).
+- A data migration moves every project's customer into the new `project_customers` table, which allows exactly one primary per project, and removes `projects.customer_id` (`backend/prisma/migrations/20261103150000_project_customers/`). The demo seed gains one project shared by two customers.
+
 ### Added — 2026-11-03 — Customisable task statuses
 
 - **Admin → Task statuses**: admins can rename, recolour, add, reorder (drag within a category), set the default of, and delete task statuses, grouped under Not started, Active and Done.

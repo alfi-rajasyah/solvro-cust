@@ -28,7 +28,7 @@ async function fixture() {
     data: { name: uniq("Customer"), description: "d", tamId: tam.userId },
   });
   const project = await prisma.project.create({
-    data: { name: uniq("Project"), tamId: tam.userId, customerId: customer.id, status: "ACTIVE" },
+    data: { name: uniq("Project"), tamId: tam.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE" },
   });
   return { tam, other, outsider, customer, project };
 }
@@ -443,7 +443,7 @@ describe("members", () => {
 
 describe("project updates", () => {
   it("records name, status and customer; other fields and re-saves record nothing", async () => {
-    const { tam, project } = await fixture();
+    const { tam, project, customer } = await fixture();
     const customer2 = await prisma.customer.create({
       data: { name: uniq("Customer2"), description: "d", tamId: tam.userId },
     });
@@ -471,7 +471,7 @@ describe("project updates", () => {
     expect(events[0]!.changes).toEqual({
       name: { from: project.name, to: "Renamed project" },
       status: { from: "ACTIVE", to: "ON_HOLD" },
-      customerId: { from: project.customerId, to: customer2.id },
+      customers: { from: [customer.name], to: [customer.name, customer2.name].sort((x, y) => x.localeCompare(y)) },
     });
     expect(JSON.stringify(events)).not.toContain("changed description text");
   });

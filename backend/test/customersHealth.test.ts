@@ -59,10 +59,10 @@ describe("GET /customers health", () => {
       data: { name: uniq("Attached"), description: "d", tamId: other.userId },
     });
     const visible = await prisma.project.create({
-      data: { name: uniq("Vis"), tamId: tam.userId, customerId: attached.id, status: "ACTIVE" },
+      data: { name: uniq("Vis"), tamId: tam.userId, customers: { create: { customerId: attached.id, isPrimary: true } }, status: "ACTIVE" },
     });
     const hidden = await prisma.project.create({
-      data: { name: uniq("Hid"), tamId: other.userId, customerId: attached.id, status: "ACTIVE" },
+      data: { name: uniq("Hid"), tamId: other.userId, customers: { create: { customerId: attached.id, isPrimary: true } }, status: "ACTIVE" },
     });
 
     await addTask(visible.id, { dueDate: "2026-09-20" }); // overdue
@@ -79,7 +79,7 @@ describe("GET /customers health", () => {
 
     // A second visible project of the same customer adds to the roll-up.
     const visible2 = await prisma.project.create({
-      data: { name: uniq("Vis2"), tamId: tam.userId, customerId: attached.id, status: "ACTIVE" },
+      data: { name: uniq("Vis2"), tamId: tam.userId, customers: { create: { customerId: attached.id, isPrimary: true } }, status: "ACTIVE" },
     });
     await addTask(visible2.id, { dueDate: "2026-09-10" });
     await addRisk(visible2.id, "OPEN");
@@ -95,7 +95,7 @@ describe("GET /customers health", () => {
       data: { name: uniq("Boundary"), description: "d", tamId: tam.userId },
     });
     const project = await prisma.project.create({
-      data: { name: uniq("P"), tamId: tam.userId, customerId: customer.id, status: "ACTIVE" },
+      data: { name: uniq("P"), tamId: tam.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE" },
     });
     await addTask(project.id, { dueDate: "2026-09-30" });
 

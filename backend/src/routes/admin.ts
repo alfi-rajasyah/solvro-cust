@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { projectCustomersInclude, withProjectCustomers } from "../lib/projectCustomers.js";
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcrypt";
 import { Prisma, TaskStatus } from "@prisma/client";
@@ -602,11 +603,11 @@ adminRouter.get("/projects", async (_req, res) => {
     orderBy: { updatedAt: "desc" },
     include: {
       tam: { select: { id: true, username: true } },
-      customer: { select: { id: true, name: true } },
+      ...projectCustomersInclude,
       _count: { select: { tasks: true } },
     },
   });
-  res.json(projects);
+  res.json(projects.map(withProjectCustomers));
 });
 
 const reassignSchema = z.object({
@@ -649,7 +650,7 @@ adminRouter.put(
         data: { tamId: newTamId },
         include: {
           tam: { select: { id: true, username: true } },
-          customer: { select: { id: true, name: true } },
+          ...projectCustomersInclude,
           _count: { select: { tasks: true } },
         },
       });
@@ -669,7 +670,7 @@ adminRouter.put(
       await notifyForEvent(tx, event);
       return result;
     });
-    res.json(updated);
+    res.json(withProjectCustomers(updated));
   },
 );
 

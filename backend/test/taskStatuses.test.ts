@@ -36,7 +36,7 @@ async function setup() {
   const admin = await createUserWithRole("ADMIN");
   const tam = await createUserWithRole("TAM");
   const project = await prisma.project.create({
-    data: { name: uniq("Project"), tamId: tam.userId, customerId: null, status: "ACTIVE" },
+    data: { name: uniq("Project"), tamId: tam.userId, status: "ACTIVE" },
   });
   return { admin, tam, project };
 }

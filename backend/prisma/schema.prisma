@@ -272,9 +272,12 @@ model Project {
   // never part of the guest payload or any export.
   outlineUrl           String?          @map("outline_url")
   tamId                Int              @map("tam_id")
-  customerId           Int?             @map("customer_id")
   tam                  User             @relation("ProjectTAM", fields: [tamId], references: [id])
-  customer             Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  // Customers this project belongs to (docs/archive/plans/multi-customer-projects.md):
+  // zero or more links, at most one `isPrimary` (partial unique index in the
+  // migration). Visibility goes through ANY link; breadcrumbs, guest links and
+  // portfolio rows use the primary.
+  customers            ProjectCustomer[]
   status               ProjectStatus    @default(PLANNING)
   // Kanban WIP limits per task status. Shape: {"<TaskStatusDef id>":
   // number|null, ...} (docs/archive/plans/custom-task-statuses.md §2).
@@ -306,7 +309,6 @@ model Project {
   outlineMentions      OutlineMention[]
 
   @@index([tamId])
-  @@index([customerId])
   @@index([status])
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "projects_name_trgm_idx")
   @@map("projects")
@@ -399,6 +401,22 @@ model CustomerActivityEvent {
   @@map("customer_activity_events")
 }
 
+// Join between a project and each customer it belongs to. Exactly one primary
+// per project is enforced by a raw-SQL partial unique index
+// (project_customers_one_primary_idx) that Prisma cannot express.
+model ProjectCustomer {
+  projectId  Int      @map("project_id")
+  customerId Int      @map("customer_id")
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  addedAt    DateTime @default(now()) @map("added_at")
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, customerId])
+  @@index([customerId])
+  @@map("project_customers")
+}
+
 model Customer {
   id                Int                     @id @default(autoincrement())
   name              String                  @unique
@@ -409,7 +427,7 @@ model Customer {
   // validated by lib/outlineUrl.ts). Never part of the guest payload or any export.
   outlineUrl        String?                 @map("outline_url")
   createdAt         DateTime                @default(now()) @map("created_at")
-  projects          Project[]
+  projects          ProjectCustomer[]
   services          CustomerService[]
   tamId             Int?                    @map("tam_id")
   tam               User?                   @relation("CustomerTam", fields: [tamId], references: [id], onDelete: SetNull)

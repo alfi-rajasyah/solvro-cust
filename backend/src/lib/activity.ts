@@ -182,14 +182,18 @@ export function diffRiskChanges(before: RiskSnapshot, after: RiskSnapshot): Acti
 export interface ProjectSnapshot {
   name: string;
   status: string;
-  customerId: number | null;
+  /** Names of every linked customer, sorted (docs/archive/plans/multi-customer-projects.md). */
+  customers: string[];
 }
 
-/** Only the fields the log tracks: name, status, customer. */
+/** Only the fields the log tracks: name, status, the linked customer set. */
 export function diffProjectChanges(before: ProjectSnapshot, after: ProjectSnapshot): ActivityChanges {
   const changes: ActivityChanges = {};
-  for (const field of ["name", "status", "customerId"] as const) {
+  for (const field of ["name", "status"] as const) {
     if (before[field] !== after[field]) changes[field] = fromTo(before[field], after[field]);
+  }
+  if (JSON.stringify(before.customers) !== JSON.stringify(after.customers)) {
+    changes.customers = fromTo(before.customers, after.customers);
   }
   return changes;
 }

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { hasPermission, requireAuth, requirePermission } from "../http/auth.js";
 import { validate } from "../http/validate.js";
-import { resolveDailyReviewScope } from "../lib/dailyReviewScope.js";
+import { groupCustomerIds, resolveDailyReviewScope } from "../lib/dailyReviewScope.js";
 import {
   isValidDayString,
   overdueBoundary,
@@ -93,7 +93,7 @@ dailyReviewRouter.get(
 
     // Customer-first scope (Decisions 8-10) — shared with GET /overview/badges;
     // see lib/dailyReviewScope.ts.
-    const { customers, projects } = await resolveDailyReviewScope(user);
+    const { customers, projects, ownedCustomerIds } = await resolveDailyReviewScope(user);
     const projectIds = projects.map((p) => p.id);
     const customerIds = customers.map((c) => c.id);
 
@@ -286,7 +286,9 @@ dailyReviewRouter.get(
         id: p.id,
         name: p.name,
         status: p.status,
-        customerId: p.customerId,
+        // Legacy single-customer field (= primary link) kept for one release;
+        // grouping below uses every link (docs/archive/plans/multi-customer-projects.md).
+        customerId: p.customers.find((l) => l.isPrimary)?.customerId ?? null,
         baselineLockedAt: p.baselineLockedAt,
         phase: phaseOf(bySection),
         progress: { done, total },
@@ -322,11 +324,18 @@ dailyReviewRouter.get(
       };
     });
 
-    const projectsByCustomerId = groupBy(
-      projectDtos.filter((p) => p.customerId !== null),
-      (p) => p.customerId as number,
-    );
-    const unassignedProjects = projectDtos.filter((p) => p.customerId === null);
+    // A shared project appears under EVERY in-scope customer it is linked to
+    // (one Weekly Sync highlight per customer); "unassigned" = no links at all.
+    const inScopeCustomerIds = new Set(customerIds);
+    const projectsByCustomerId = new Map<number, typeof projectDtos>();
+    projectDtos.forEach((dto, i) => {
+      for (const cid of groupCustomerIds(projects[i], inScopeCustomerIds, ownedCustomerIds)) {
+        const list = projectsByCustomerId.get(cid) ?? [];
+        list.push(dto);
+        projectsByCustomerId.set(cid, list);
+      }
+    });
+    const unassignedProjects = projectDtos.filter((_, i) => projects[i].customers.length === 0);
 
     const customerNotesByCustomer = groupBy(customerNotes, (n) => n.customerId);
     const weeklyUpdateByCustomer = new Map(weeklyUpdates.map((wu) => [wu.customerId, wu]));

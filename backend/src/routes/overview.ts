@@ -12,7 +12,7 @@ import {
   utcMidnightOfDayString,
 } from "../lib/dateBoundary.js";
 import { parseWeekKey, weekKeyOf } from "../lib/isoWeek.js";
-import { resolveDailyReviewScope } from "../lib/dailyReviewScope.js";
+import { groupCustomerIds, resolveDailyReviewScope } from "../lib/dailyReviewScope.js";
 
 export const overviewRouter = Router();
 
@@ -190,7 +190,8 @@ overviewRouter.get("/badges", validate("query", badgesQuerySchema), async (req, 
   const { today } = req.query as unknown as z.infer<typeof badgesQuerySchema>;
   const user = req.user!;
 
-  const { projects } = await resolveDailyReviewScope(user);
+  const { customers, projects, ownedCustomerIds } = await resolveDailyReviewScope(user);
+  const inScope = new Set(customers.map((c) => c.id));
   const projectIds = projects.map((p) => p.id);
   const reviews =
     projectIds.length === 0
@@ -207,7 +208,9 @@ overviewRouter.get("/badges", validate("query", badgesQuerySchema), async (req, 
 
   const pendingCustomers = new Set<number>();
   for (const p of projects) {
-    if (p.customerId !== null && !reviewed.has(p.id)) pendingCustomers.add(p.customerId);
+    if (reviewed.has(p.id)) continue;
+    // A shared project is pending under EVERY in-scope customer it is linked to.
+    for (const cid of groupCustomerIds(p, inScope, ownedCustomerIds)) pendingCustomers.add(cid);
   }
 
   res.json({ dailyReviewPending: pendingCustomers.size });

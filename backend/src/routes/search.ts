@@ -39,7 +39,8 @@ searchRouter.get("/", validate("query", searchQuerySchema), async (req, res) => 
         id: true,
         name: true,
         status: true,
-        customer: { select: { name: true } },
+        // Hit label = the primary customer.
+        customers: { where: { isPrimary: true }, take: 1, select: { customer: { select: { name: true } } } },
       },
       orderBy: { name: "asc" },
       take: GROUP_LIMIT,
@@ -81,7 +82,7 @@ searchRouter.get("/", validate("query", searchQuerySchema), async (req, res) => 
       id: p.id,
       name: p.name,
       status: p.status,
-      customerName: p.customer?.name ?? null,
+      customerName: p.customers[0]?.customer.name ?? null,
     })),
     tasks: tasks.map((t) => ({
       id: t.id,

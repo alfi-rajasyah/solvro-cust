@@ -31,7 +31,7 @@ function uniq(label: string): string {
 
 async function createProject(ownerUserId: number): Promise<number> {
   const project = await prisma.project.create({
-    data: { name: uniq("Project"), tamId: ownerUserId, customerId: null, status: "ACTIVE" },
+    data: { name: uniq("Project"), tamId: ownerUserId, status: "ACTIVE" },
   });
   return project.id;
 }

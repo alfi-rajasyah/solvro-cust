@@ -207,6 +207,14 @@ export interface ProjectHealth {
   endDate: string | null;
 }
 
+/** One customer a project belongs to (docs/archive/plans/multi-customer-projects.md). */
+export interface ProjectCustomerLink {
+  id: number;
+  name: string;
+  tamId?: number | null;
+  isPrimary: boolean;
+}
+
 export interface ProjectSummary {
   id: number;
   name: string;
@@ -224,7 +232,14 @@ export interface ProjectSummary {
   createdAt: string;
   updatedAt: string;
   tam: { id: number; username: string };
+  /** Legacy single customer = the primary; kept one release alongside `customers`. */
   customer: { id: number; name: string } | null;
+  /** Every linked customer, primary first. Optional so hand-built fixtures still type-check. */
+  customers?: ProjectCustomerLink[];
+  primaryCustomer?: ProjectCustomerLink | null;
+  /** On a customer's project list only: is THIS customer the project's primary, and is it shared. */
+  isPrimary?: boolean;
+  isShared?: boolean;
   _count: { tasks: number };
   /** Optional so hand-built fixtures and mutation responses (bare rows) still type-check. */
   health?: ProjectHealth;
@@ -1515,7 +1530,9 @@ export interface CreateProjectInput {
   /** Optional http(s) link to the project's Outline page; null for none. Validated server-side. */
   outlineUrl?: string | null;
   tamId?: number;
-  customerId: number;
+  /** Legacy single customer (becomes the primary); `customers` wins when both are sent. */
+  customerId?: number;
+  customers?: { id: number; isPrimary: boolean }[];
   status?: ProjectStatus;
   wipLimits?: WipLimits | null;
   excludeFromPortfolio?: boolean;

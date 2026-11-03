@@ -19,7 +19,7 @@ import { outlineUrlSchema } from "../lib/outlineUrl.js";
 import {
   ensureProjectOwnerAccess,
   ensureProjectVisible,
-  isCustomerVisible,
+  areCustomersVisible,
   projectVisibilityFilter,
 } from "../lib/visibility.js";
 import {
@@ -48,6 +48,17 @@ import {
 import { epicCreatedChanges } from "../lib/epicActivity.js";
 import { notifyForEvent } from "../lib/notifications.js";
 import {
+  customerLinksSchema,
+  customerNotFound,
+  linkedCustomerNames,
+  linksFromBody,
+  patchLinks,
+  type CustomerLinkInput,
+  projectCustomersInclude,
+  syncProjectCustomers,
+  withProjectCustomers,
+} from "../lib/projectCustomers.js";
+import {
   assertWipLimitKeys,
   lockStatusListShared,
   newTaskStatus,
@@ -68,16 +79,25 @@ const wipLimitsSchema = z
   )
   .nullable();
 
-export const createProjectSchema = z.object({
+// `customers` is the multi-customer body (at least one, exactly one primary);
+// the legacy single `customerId` is still accepted and maps to one primary
+// link (docs/archive/plans/multi-customer-projects.md).
+export const createProjectSchema = z
+  .object({
   name: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
   outlineUrl: outlineUrlSchema.optional(),
   tamId: z.number().int().positive().optional(),
-  customerId: z.number().int().positive(),
+  customerId: z.number().int().positive().optional(),
+  customers: customerLinksSchema.optional(),
   status: z.nativeEnum(ProjectStatus).optional(),
   wipLimits: wipLimitsSchema.optional(),
   excludeFromPortfolio: z.boolean().optional(),
-});
+  })
+  .refine((b) => b.customers !== undefined || b.customerId !== undefined, {
+    message: "customers is required",
+    path: ["customers"],
+  });
 
 const updateProjectSchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -86,6 +106,7 @@ const updateProjectSchema = z.object({
   status: z.nativeEnum(ProjectStatus).optional(),
   tamId: z.number().int().positive().optional(),
   customerId: z.number().int().positive().optional(),
+  customers: customerLinksSchema.optional(),
   wipLimits: wipLimitsSchema.optional(),
   excludeFromPortfolio: z.boolean().optional(),
 });
@@ -111,7 +132,7 @@ const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 // includes (GET /, /:id/tasks, etc.) separate — they're intentionally lighter.
 const projectDetailInclude = {
   tam: { select: { id: true, username: true, email: true, avatarUrl: true } },
-  customer: { select: { id: true, name: true, tamId: true } },
+  ...projectCustomersInclude,
   baselineLockedBy: { select: { id: true, username: true } },
   _count: { select: { tasks: true } },
   services: {
@@ -190,14 +211,15 @@ projectsRouter.get("/", validate("query", projectListQuerySchema), async (req, r
     typeof projectListQuerySchema
   >;
   const where: Prisma.ProjectWhereInput = projectVisibilityFilter(req.user!);
-  if (customerId) where.customerId = customerId;
+  // Any linked customer, not just the primary.
+  if (customerId) where.customers = { some: { customerId } };
   const projects = await prisma.project.findMany({
     where,
     orderBy: { updatedAt: "desc" },
     include: {
       _count: { select: { tasks: true } },
       tam: { select: { id: true, username: true } },
-      customer: { select: { id: true, name: true } },
+      ...projectCustomersInclude,
     },
   });
   // Health for exactly the projects the visibility filter returned — one
@@ -206,7 +228,7 @@ projectsRouter.get("/", validate("query", projectListQuerySchema), async (req, r
     projects.map((p) => p.id),
     today,
   );
-  res.json(projects.map((p) => ({ ...p, health: health.get(p.id) })));
+  res.json(projects.map((p) => ({ ...withProjectCustomers(p), health: health.get(p.id) })));
 });
 
 projectsRouter.post(
@@ -216,9 +238,8 @@ projectsRouter.post(
   async (req, res) => {
     const body = req.body as z.infer<typeof createProjectSchema>;
     const tamId = body.tamId ?? req.user!.sub;
-    if (!(await isCustomerVisible(req.user!, body.customerId))) {
-      throw new HttpError(400, "customer_not_found", "Customer not found");
-    }
+    const links = linksFromBody(body)!;
+    if (!(await areCustomersVisible(req.user!, links.map((l) => l.id)))) throw customerNotFound();
     if (body.tamId !== undefined && body.tamId !== req.user!.sub) {
       await assertUserExists(prisma, body.tamId, "tam_not_found", "TAM not found");
     }
@@ -237,17 +258,17 @@ projectsRouter.post(
           description: body.description,
           outlineUrl: body.outlineUrl ?? null,
           tamId,
-          customerId: body.customerId,
           status: body.status ?? "PLANNING",
           wipLimits: body.wipLimits ?? undefined,
           excludeFromPortfolio: body.excludeFromPortfolio ?? false,
         },
       });
-      const [tam, customer] = await Promise.all([
+      await syncProjectCustomers(tx, created.id, links);
+      const primaryId = links.find((l) => l.isPrimary)!.id;
+      const [tam, customer, names] = await Promise.all([
         tx.user.findUniqueOrThrow({ where: { id: created.tamId }, select: { id: true, username: true } }),
-        created.customerId === null
-          ? null
-          : tx.customer.findUnique({ where: { id: created.customerId }, select: { id: true, name: true } }),
+        tx.customer.findUnique({ where: { id: primaryId }, select: { id: true, name: true } }),
+        linkedCustomerNames(tx, created.id),
       ]);
       const event = await recordActivity(tx, {
         projectId: created.id,
@@ -256,13 +277,14 @@ projectsRouter.post(
         entityId: created.id,
         action: "created",
         entityLabel: shortLabel(created.name),
-        changes: { tam, customer } as Prisma.InputJsonObject as ActivityChanges,
+        // `customer` = the primary; the full set is added only when shared.
+        changes: (names.length > 1 ? { tam, customer, customers: names } : { tam, customer }) as Prisma.InputJsonObject as ActivityChanges,
       });
       // The named TAM gets an `assigned` notification (never the actor).
       await notifyForEvent(tx, event);
-      return created;
+      return tx.project.findUniqueOrThrow({ where: { id: created.id }, include: projectCustomersInclude });
     });
-    res.status(201).json(project);
+    res.status(201).json(withProjectCustomers(project));
   },
 );
 
@@ -293,7 +315,7 @@ projectsRouter.get("/:id", validate("params", idParamSchema), validate("query", 
       : Promise.resolve([]),
   ]);
   res.json({
-    ...project,
+    ...withProjectCustomers(project),
     health: {
       ...healthByProject.get(id)!,
       slipDays: computeSlipDays(project.baselineLockedAt, slipTasks),
@@ -353,7 +375,7 @@ projectsRouter.post(
         include: projectDetailInclude,
       });
     });
-    res.json(updated);
+    res.json(withProjectCustomers(updated));
   },
 );
 
@@ -411,7 +433,7 @@ projectsRouter.put(
       where: { id },
       include: projectDetailInclude,
     });
-    res.json(updated);
+    res.json(withProjectCustomers(updated));
   },
 );
 
@@ -427,15 +449,21 @@ projectsRouter.patch(
 
     // Re-parenting a project (TAM or customer) is owner-only; a member may
     // still edit everything else. Re-saving the current values is not a change.
-    if (body.tamId !== undefined || body.customerId !== undefined) {
+    // Changing the customer links (add, remove, or move the primary) is
+    // owner-only too (docs/archive/plans/multi-customer-projects.md).
+    let links: CustomerLinkInput[] | undefined;
+    if (body.tamId !== undefined || body.customers !== undefined || body.customerId !== undefined) {
       const current = await prisma.project.findUniqueOrThrow({
         where: { id },
-        select: { tamId: true, customerId: true },
+        select: { tamId: true, customers: { select: { customerId: true, isPrimary: true } } },
       });
-      if (
-        (body.tamId !== undefined && body.tamId !== current.tamId) ||
-        (body.customerId !== undefined && body.customerId !== current.customerId)
-      ) {
+      links = patchLinks(body, current.customers);
+      const sig = (ls: { id: number; isPrimary: boolean }[]) =>
+        ls.map((l) => `${l.id}:${l.isPrimary}`).sort().join(",");
+      const linksChanged =
+        links !== undefined &&
+        sig(links) !== sig(current.customers.map((c) => ({ id: c.customerId, isPrimary: c.isPrimary })));
+      if ((body.tamId !== undefined && body.tamId !== current.tamId) || linksChanged) {
         await ensureProjectOwnerAccess(req.user!, id);
       }
     }
@@ -446,11 +474,8 @@ projectsRouter.patch(
     if (body.outlineUrl !== undefined) data.outlineUrl = body.outlineUrl;
     if (body.status !== undefined) data.status = body.status;
     if (body.tamId !== undefined) data.tam = { connect: { id: body.tamId } };
-    if (body.customerId !== undefined) {
-      if (!(await isCustomerVisible(req.user!, body.customerId))) {
-        throw new HttpError(400, "customer_not_found", "Customer not found");
-      }
-      data.customer = { connect: { id: body.customerId } };
+    if (links !== undefined && !(await areCustomersVisible(req.user!, links.map((l) => l.id)))) {
+      throw customerNotFound();
     }
     if (body.wipLimits !== undefined) {
       data.wipLimits = body.wipLimits === null ? Prisma.JsonNull : body.wipLimits;
@@ -472,16 +497,18 @@ projectsRouter.patch(
         select: {
           name: true,
           status: true,
-          customerId: true,
           tam: { select: { id: true, username: true } },
         },
       });
+      const namesBefore = await linkedCustomerNames(tx, id);
       const result = await tx.project.update({ where: { id }, data });
+      if (links !== undefined) await syncProjectCustomers(tx, id, links);
+      const namesAfter = links === undefined ? namesBefore : await linkedCustomerNames(tx, id);
       // Name, status, customer and the TAM seat are logged (ids and usernames
       // only); a re-save records nothing.
       const changes: ActivityChanges = diffProjectChanges(
-        { name: before.name, status: before.status, customerId: before.customerId },
-        result,
+        { name: before.name, status: before.status, customers: namesBefore },
+        { name: result.name, status: result.status, customers: namesAfter },
       );
       if (before.tam.id !== result.tamId) {
         const to = await tx.user.findUnique({ where: { id: result.tamId }, select: { id: true, username: true } });
@@ -499,9 +526,9 @@ projectsRouter.patch(
       // The new TAM (changes.tam `to`) gets an `assigned` notification; the
       // actor and inactive users are skipped inside.
       await notifyForEvent(tx, event);
-      return result;
+      return tx.project.findUniqueOrThrow({ where: { id }, include: projectCustomersInclude });
     });
-    res.json(updated);
+    res.json(withProjectCustomers(updated));
   },
 );
 
@@ -523,17 +550,22 @@ projectsRouter.delete(
     const deleted = await prisma.$transaction(async (tx) => {
       const project = await tx.project.findUnique({
         where: { id },
-        select: { name: true, customerId: true },
+        select: { name: true, customers: { select: { customerId: true } } },
       });
       if (!project) throw new HttpError(404, "not_found", "Project not found");
-      await tx.customerActivityEvent.create({
-        data: {
-          customerId: project.customerId,
+      // One event per linked customer, so each customer's feed shows it; a
+      // project with no customer still leaves one (customer-less) record.
+      const customerIds: (number | null)[] = project.customers.length
+        ? project.customers.map((c) => c.customerId)
+        : [null];
+      await tx.customerActivityEvent.createMany({
+        data: customerIds.map((customerId) => ({
+          customerId,
           actorId,
           action: "project_deleted",
           projectId: id,
           projectName: project.name,
-        },
+        })),
       });
       await tx.project.delete({ where: { id } });
       return project;
@@ -543,7 +575,7 @@ projectsRouter.delete(
         event: "project.deleted",
         projectId: id,
         projectName: deleted.name,
-        customerId: deleted.customerId,
+        customerIds: deleted.customers.map((c) => c.customerId),
         actorId,
         at: new Date().toISOString(),
       },

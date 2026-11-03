@@ -65,7 +65,7 @@ describe("GET /search", () => {
       data: { name: `${n} Corp`, description: "d" },
     });
     const project = await prisma.project.create({
-      data: { name: `${n} Project`, tamId: userId, customerId: customer.id },
+      data: { name: `${n} Project`, tamId: userId, customers: { create: { customerId: customer.id, isPrimary: true } }},
     });
     const task = await prisma.task.create({
       data: { statusId: SID.TODO, title: `${n} Task`, projectId: project.id, position: 0 },
