@@ -8,6 +8,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 
@@ -31,7 +32,7 @@ async function fixture() {
     data: { name: uniq("Project"), tamId: tam.userId, customerId: customer.id, status: "ACTIVE" },
   });
   const task = await prisma.task.create({
-    data: {
+    data: { statusId: SID.TODO,
       projectId: project.id,
       title: "Original",
       description: "desc",
@@ -91,7 +92,7 @@ describe("PATCH /tasks/:id — expected (per-field optimistic check)", () => {
 
   it("lists every conflicting field", async () => {
     const { tam, task } = await fixture();
-    await prisma.task.update({ where: { id: task.id }, data: { status: "DONE", isMilestone: true } });
+    await prisma.task.update({ where: { id: task.id }, data: { status: "DONE", statusId: SID.DONE, isMilestone: true } });
     const res = await patch(tam.token, task.id, {
       status: "IN_PROGRESS",
       expected: { status: "TODO", isMilestone: false, isCriticalPath: false },
@@ -205,7 +206,7 @@ describe("PATCH /tasks/:id — expected (per-field optimistic check)", () => {
   it("checks expected before a reorder (position) and writes nothing on conflict", async () => {
     const { tam, project, task } = await fixture();
     const sibling = await prisma.task.create({
-      data: { projectId: project.id, title: "Sibling", position: 1 },
+      data: { statusId: SID.TODO, projectId: project.id, title: "Sibling", position: 1 },
     });
     await prisma.task.update({ where: { id: task.id }, data: { position: 0 } });
 
@@ -287,7 +288,7 @@ describe("PATCH /tasks/:id — expected (per-field optimistic check)", () => {
     // FOR KEY SHARE on the task row, which a FOR UPDATE lock would deadlock with.
     for (let i = 0; i < 20; i++) {
       const task = await prisma.task.create({
-        data: { projectId: project.id, title: "Original", labels: { connect: [{ id: a.id }, { id: b.id }] } },
+        data: { statusId: SID.TODO, projectId: project.id, title: "Original", labels: { connect: [{ id: a.id }, { id: b.id }] } },
       });
       const both = await Promise.all([
         patch(tam.token, task.id, { labelIds: [a.id, c.id], expected: { title: "Original" } }),
@@ -304,7 +305,7 @@ describe("PATCH /tasks/:id — expected (per-field optimistic check)", () => {
     });
     // Repeat on fresh tasks so a lucky interleaving can't hide a missing lock.
     for (let i = 0; i < 5; i++) {
-      const task = await prisma.task.create({ data: { projectId: project.id, title: "Original" } });
+      const task = await prisma.task.create({ data: { statusId: SID.TODO, projectId: project.id, title: "Original" } });
       const expected = { title: "Original" };
       const both = await Promise.all([
         patch(tam.token, task.id, { title: "From A", expected }),

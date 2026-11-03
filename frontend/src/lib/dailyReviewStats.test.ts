@@ -15,6 +15,8 @@ import type {
   WeeklyUpdate,
 } from "./queries";
 
+const TODO_DEF = { id: 1, name: "To do", color: "gray", category: "TODO", position: 0 } as const;
+
 // Same "2026-W35" fixture week as weeklyDraft.test.ts / isoWeek.test.ts.
 const WEEK = {
   key: "2026-W35",
@@ -206,12 +208,12 @@ describe("computeDailyReviewStats", () => {
   it("sums overdue tasks and open risks across all in-scope projects", () => {
     const p1 = project({
       id: 1,
-      overdueTasks: [{ id: 1, title: "t", dueDate: "2026-08-20T00:00:00.000Z", status: "TODO" }],
+      overdueTasks: [{ id: 1, title: "t", dueDate: "2026-08-20T00:00:00.000Z", status: "TODO", statusDef: TODO_DEF }],
       openRisks: [{ id: 1, description: "r", probability: 3, impact: 3, status: "OPEN" }],
     });
     const p2 = project({
       id: 2,
-      overdueTasks: [{ id: 2, title: "t2", dueDate: "2026-08-21T00:00:00.000Z", status: "TODO" }],
+      overdueTasks: [{ id: 2, title: "t2", dueDate: "2026-08-21T00:00:00.000Z", status: "TODO", statusDef: TODO_DEF }],
     });
     const data = response({ customers: [customer({ projects: [p1] })], unassignedProjects: [p2] });
     const stats = computeDailyReviewStats(data);

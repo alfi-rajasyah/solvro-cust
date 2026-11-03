@@ -15,6 +15,41 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-03 — Customisable task statuses
+
+- **Admin → Task statuses**: admins can rename, recolour, add, reorder (drag within a category), set the default of, and delete task statuses, grouped under Not started, Active and Done.
+  - Deleting a status that still has tasks asks where to move them.
+  - "Reset to defaults" restores To do, In progress and Done.
+  - Unsaved edits are guarded when you leave the tab.
+  - `GET /admin/task-statuses` returns the list with a task count per status (`frontend/src/components/admin/TaskStatusesTab.tsx`, `backend/src/routes/admin.ts`).
+- **One status picker everywhere**: the task panel, task form, List, Timeline and Daily Review use one dropdown, which lists the workspace's statuses under Not started, Active and Done with a colour dot.
+- **Status chips** show each task's own status name and colour on the List, Timeline, Tasks page, Gantt tree and embedded task list. The status-change warning when two people edit a task names the status (`frontend/src/components/StatusSelect.tsx`, `frontend/src/components/StatusChip.tsx`).
+- **Tasks page**: the status filter lists statuses grouped by category and can filter on a whole category. The status column sorts by category, then by status order.
+- **Kanban**:
+  - The board shows one column per status, under a Not started, Active and Done band.
+  - A card dropped into a column takes that exact status, and "Add task here" creates in that status.
+  - Done-category columns can be collapsed, which is remembered per viewer.
+  - The project form's WIP limits list one field per status, and the mobile "Move to" sheet groups statuses by category (`frontend/src/components/kanban-v2/`, `frontend/src/components/ProjectFormModal.tsx`).
+- The Help pages describe the Admin → Task statuses tab, the Kanban board's status columns and the Timeline's status dropdown. Epic story lists show each task's own status.
+- The Gantt tree's status dot for To do tasks is a stronger gray, so it stays visible in dark mode.
+- Gantt bars, exports, epic statuses and guest share pages stay on the three categories.
+
+### Changed — 2026-11-03 — Kanban WIP pill turns amber at the limit
+
+- A column's WIP pill turns amber as soon as the column reaches its limit, not only when it goes over (`frontend/src/components/kanban-v2/SolvroKanban.tsx`).
+
+### Changed — 2026-11-03 — Task statuses are workspace-defined
+
+- Task statuses are now stored as workspace-defined statuses. Each belongs to To do, In progress or Done, which keep deciding overdue, progress and "done".
+- The existing three statuses are migrated as-is, so existing tasks keep their current look. Existing Kanban WIP limits are migrated to the new per-status format. The `wipLimits` body of `POST`/`PATCH /projects` is now keyed by status id, and the old category keys (`TODO`, `IN_PROGRESS`, `DONE`) are refused with a 400.
+- Task responses include a `statusDef` (id, name, colour, category, position). Tasks can be filtered with `?statusId=` alongside the existing `?status=`, which still filters by category.
+- Each status has a colour tone (gray, primary, emerald, amber or violet) that follows the light and dark themes. The three migrated statuses keep today's look.
+- The activity log now records the status name, including moves between two statuses of the same category (`backend/prisma/migrations/20261103120000_task_status_defs/`, `backend/src/lib/taskStatuses.ts`, `backend/src/routes/tasks.ts`, `backend/src/routes/projects.ts`).
+
+### Added — 2026-11-03 — Task status list API
+
+- `GET /task-statuses` lists the workspace's task statuses, and admins can replace the whole list with `PUT /admin/task-statuses`. The list must keep at least one status per category, exactly one default per category, and unique names. Removing a status that still has tasks requires choosing a status to move them to (`backend/src/routes/taskStatuses.ts`, `backend/src/routes/admin.ts`).
+
 ### Added — 2026-11-03 — Subtask assignee on subtask rows
 
 - Subtask rows in the project List and in the task panel now show the subtask's assignee and let you change it. The panel's "Add subtask" field also takes an optional assignee, so a subtask can be assigned as it is created. Assigning someone who isn't on the project adds them to it, as for tasks (`frontend/src/pages/views/ProjectList.tsx`, `frontend/src/components/TaskPanel.tsx`, `e2e/tests/subtask-assignee.spec.ts`).

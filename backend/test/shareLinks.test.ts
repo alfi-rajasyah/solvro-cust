@@ -9,6 +9,7 @@ import { prisma } from "../src/prisma.js";
 import { publicShareRateLimiter, PUBLIC_SHARE_RATE_LIMIT } from "../src/routes/publicShare.js";
 import { derivePhase, generateShareToken, hashShareToken } from "../src/lib/shareLinks.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 
@@ -72,7 +73,7 @@ function makeTask(
 ) {
   taskPos += 1;
   return prisma.task.create({
-    data: {
+    data: { statusId: SID[data.status ?? "TODO"],
       projectId,
       title: data.title ?? uniq("Task"),
       description: data.description,

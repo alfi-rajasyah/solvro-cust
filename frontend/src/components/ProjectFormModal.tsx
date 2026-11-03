@@ -5,14 +5,17 @@ import { Alert, AlertDescription } from "@/components/reui/alert";
 import { parseOutlineUrl } from "@/lib/outlineUrl";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { saveErrorMessage } from "@/lib/ownerAccess";
-import { PROJECT_STATUS_LABEL, taskStatusOptions } from "@/lib/labels";
+import { PROJECT_STATUS_LABEL, TASK_CATEGORY_GROUP_LABEL } from "@/lib/labels";
+import { STATUS_TONE_DOT_CLASS } from "@/components/StatusChip";
+import { groupStatusDefs } from "@/lib/taskStatuses";
 import {
   type ProjectDetail,
   type ProjectStatus,
-  type TaskStatus,
+  type TaskStatusDef,
   type WipLimits,
   useCreateProject,
   useCustomers,
+  useTaskStatuses,
   useUpdateProject,
   useUsers,
 } from "@/lib/queries";
@@ -25,27 +28,41 @@ const PROJECT_STATUSES: ProjectStatus[] = [
   "CANCELLED",
 ];
 
-const WIP_COLUMNS = taskStatusOptions;
+// Form-local representation: each status's limit as the literal <input>
+// string value ("" = no limit), keyed by status def id, so the field can be
+// edited freely without fighting number coercion on every keystroke.
+type WipLimitsForm = Record<string, string>;
 
-// Form-local representation: each column's limit as the literal <input>
-// string value ("" = no limit) so the field can be edited freely without
-// fighting number coercion on every keystroke.
-type WipLimitsForm = Record<TaskStatus, string>;
-
-function wipLimitsToForm(limits: WipLimits | null | undefined): WipLimitsForm {
-  return {
-    TODO: limits?.TODO != null ? String(limits.TODO) : "",
-    IN_PROGRESS: limits?.IN_PROGRESS != null ? String(limits.IN_PROGRESS) : "",
-    DONE: limits?.DONE != null ? String(limits.DONE) : "",
-  };
+function wipLimitsToForm(limits: WipLimits | null | undefined, defs: readonly TaskStatusDef[]): WipLimitsForm {
+  const form: WipLimitsForm = {};
+  for (const def of defs) {
+    const v = limits?.[String(def.id)];
+    form[String(def.id)] = v != null ? String(v) : "";
+  }
+  return form;
 }
 
-function formToWipLimits(form: WipLimitsForm): WipLimits {
+function formToWipLimits(
+  form: WipLimitsForm,
+  existing: WipLimits | null | undefined,
+  knownIds: ReadonlySet<string>,
+): WipLimits {
   const toLimit = (v: string): number | null => {
     const n = Number(v);
     return v.trim() !== "" && Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
   };
-  return { TODO: toLimit(form.TODO), IN_PROGRESS: toLimit(form.IN_PROGRESS), DONE: toLimit(form.DONE) };
+  // Only statuses that still exist: the server rejects an unknown id.
+  const out: WipLimits = {};
+  for (const [key, limit] of Object.entries(existing ?? {})) {
+    if (knownIds.has(key)) out[key] = limit;
+  }
+  for (const [key, value] of Object.entries(form)) {
+    if (!knownIds.has(key)) continue;
+    const limit = toLimit(value);
+    // An emptied field clears a stored limit; an untouched empty one stays absent.
+    if (limit !== null || key in out) out[key] = limit;
+  }
+  return out;
 }
 
 interface Props {
@@ -78,6 +95,9 @@ export function ProjectFormModal({
 
   const create = useCreateProject();
   const update = useUpdateProject(project?.id ?? 0);
+  const { data: statusDefs } = useTaskStatuses();
+  const wipDefs = statusDefs ?? [];
+  const knownIds = new Set((statusDefs ?? []).map((d) => String(d.id)));
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -87,7 +107,7 @@ export function ProjectFormModal({
   const [tamId, setTamId] = useState<number | "">("");
   const [customerId, setCustomerId] = useState<number | "">("");
   const [status, setStatus] = useState<ProjectStatus>("PLANNING");
-  const [wipLimits, setWipLimits] = useState<WipLimitsForm>(wipLimitsToForm(null));
+  const [wipLimits, setWipLimits] = useState<WipLimitsForm>({});
   const [excludeFromPortfolio, setExcludeFromPortfolio] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,7 +122,7 @@ export function ProjectFormModal({
       setTamId(project.tamId);
       setCustomerId(project.customerId ?? "");
       setStatus(project.status);
-      setWipLimits(wipLimitsToForm(project.wipLimits));
+      setWipLimits(wipLimitsToForm(project.wipLimits, wipDefs));
       setExcludeFromPortfolio(project.excludeFromPortfolio);
     } else {
       setName("");
@@ -111,7 +131,7 @@ export function ProjectFormModal({
       setTamId("");
       setCustomerId("");
       setStatus("PLANNING");
-      setWipLimits(wipLimitsToForm(null));
+      setWipLimits(wipLimitsToForm(null, wipDefs));
       setExcludeFromPortfolio(false);
     }
     // Seed on open / project switch only — `project` gets a fresh identity on
@@ -119,6 +139,16 @@ export function ProjectFormModal({
     // this reset wipes in-progress input (docs/archive/plans/collaboration-and-sharing.md).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, project?.id]);
+
+  // The WIP fields map onto status ids, so they can only be filled once the
+  // status list has arrived (usually already cached by the board).
+  const defsLoaded = statusDefs !== undefined;
+  useEffect(() => {
+    if (!open || !defsLoaded) return;
+    setWipLimits(wipLimitsToForm(project?.wipLimits, wipDefs));
+    // Seed when the list arrives; edits made afterwards are not overwritten.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defsLoaded]);
 
   // TAM dropdown lists all users — role names no longer gate who's eligible
   // to be assigned (admin's choice). Anti-self-clutter not done here because
@@ -159,7 +189,9 @@ export function ProjectFormModal({
               }
             : {}),
           status,
-          wipLimits: formToWipLimits(wipLimits),
+          // Left out while the status list is unknown, so a save can never
+          // wipe the stored limits.
+          wipLimits: defsLoaded ? formToWipLimits(wipLimits, project.wipLimits, knownIds) : undefined,
           excludeFromPortfolio,
         });
         onSaved?.(project.id);
@@ -171,7 +203,7 @@ export function ProjectFormModal({
           tamId: tamId === "" ? undefined : Number(tamId),
           customerId: Number(customerId),
           status,
-          wipLimits: formToWipLimits(wipLimits),
+          wipLimits: defsLoaded ? formToWipLimits(wipLimits, null, knownIds) : undefined,
           excludeFromPortfolio,
         });
         onSaved?.(created.id);
@@ -312,25 +344,39 @@ export function ProjectFormModal({
         )}
 
         <Field label="WIP limit — leave empty for none">
-          <div className="grid grid-cols-3 gap-3">
-            {WIP_COLUMNS.map((col) => (
-              <label key={col.value} className="block">
-                <span className="mb-1 block text-xs text-on-surface-variant">
-                  {col.label}
-                </span>
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  inputMode="numeric"
-                  value={wipLimits[col.value]}
-                  onChange={(e) =>
-                    setWipLimits((prev) => ({ ...prev, [col.value]: e.target.value }))
-                  }
-                  placeholder="—"
-                  className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
-                />
-              </label>
+          <div className="space-y-3">
+            {groupStatusDefs(statusDefs).map((group) => (
+              <div key={group.category}>
+                <p className="mb-1 text-label-caps uppercase text-on-surface-variant">
+                  {TASK_CATEGORY_GROUP_LABEL[group.category]}
+                </p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {group.defs.map((def) => (
+                    <label key={def.id} className="block">
+                      <span className="mb-1 flex items-center gap-1.5 text-xs text-on-surface-variant">
+                        <span
+                          aria-hidden="true"
+                          className={`h-2 w-2 shrink-0 rounded-full ${STATUS_TONE_DOT_CLASS[def.color]}`}
+                        />
+                        <span className="min-w-0 truncate">{def.name}</span>
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        inputMode="numeric"
+                        value={wipLimits[String(def.id)] ?? ""}
+                        disabled={!defsLoaded}
+                        onChange={(e) =>
+                          setWipLimits((prev) => ({ ...prev, [String(def.id)]: e.target.value }))
+                        }
+                        placeholder="—"
+                        className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </Field>

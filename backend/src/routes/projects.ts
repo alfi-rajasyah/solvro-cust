@@ -47,17 +47,25 @@ import {
 } from "../lib/activity.js";
 import { epicCreatedChanges } from "../lib/epicActivity.js";
 import { notifyForEvent } from "../lib/notifications.js";
+import {
+  assertWipLimitKeys,
+  lockStatusListShared,
+  newTaskStatus,
+  resolveStatusWrite,
+  statusDefInclude,
+} from "../lib/taskStatuses.js";
 import { lockProjectOrder } from "../lib/orderLock.js";
 
-// Kanban WIP limits — one optional positive-int cap per top-level status
+// Kanban WIP limits — one optional positive-int cap per task status
 // column, or null/absent for "no limit". Visual-only on the board (amber
 // pill), never enforced server-side as a hard block.
+// Keyed by TaskStatusDef id (as a string); every key must name a known status
+// (checked against the table in assertWipLimitKeys).
 const wipLimitsSchema = z
-  .object({
-    TODO: z.number().int().positive().nullable().optional(),
-    IN_PROGRESS: z.number().int().positive().nullable().optional(),
-    DONE: z.number().int().positive().nullable().optional(),
-  })
+  .record(
+    z.string().regex(/^[1-9]\d{0,9}$/),
+    z.number().int().positive().nullable(),
+  )
   .nullable();
 
 export const createProjectSchema = z.object({
@@ -116,7 +124,10 @@ const createTaskSchema = z
   .object({
     title: z.string().min(1).max(200),
     description: z.string().max(2000).optional(),
+    // `statusId` (a workspace status) or the legacy category-only `status`
+    // (mapped to that category's default); absent = the TODO default.
     status: z.nativeEnum(TaskStatus).optional(),
+    statusId: z.number().int().positive().optional(),
     priority: z.nativeEnum(Priority).optional(),
     startDate: dateInput.nullable().optional(),
     dueDate: dateInput.nullable().optional(),
@@ -158,7 +169,9 @@ const createEpicSchema = z.object({
 });
 
 const taskListQuerySchema = z.object({
+  // Category semantics, as before custom statuses; `statusId` narrows to one.
   status: z.nativeEnum(TaskStatus).optional(),
+  statusId: z.coerce.number().int().positive().optional(),
   parentTaskId: z
     .union([z.literal("null"), z.coerce.number().int().positive()])
     .optional(),
@@ -214,6 +227,10 @@ projectsRouter.post(
     // who holds the TAM seat and the customer — ids and display names only,
     // never emails (docs/archive/plans/internal-sync.md).
     const project = await prisma.$transaction(async (tx) => {
+      // Shared status-list lock first, then the key check, so an admin delete
+      // of a status cannot slip in between the check and the write.
+      await lockStatusListShared(tx);
+      await assertWipLimitKeys(tx, body.wipLimits);
       const created = await tx.project.create({
         data: {
           name: body.name,
@@ -443,6 +460,10 @@ projectsRouter.patch(
     }
 
     const updated = await prisma.$transaction(async (tx) => {
+      // Status-list lock before any row lock (same order as task writes), so a
+      // WIP-limit save cannot race an admin delete of a status it names.
+      await lockStatusListShared(tx);
+      await assertWipLimitKeys(tx, body.wipLimits);
       // Lock first so a concurrent save serialises and the diff is against the
       // row this write actually replaced.
       await tx.$queryRaw`SELECT id FROM projects WHERE id = ${id} FOR NO KEY UPDATE`;
@@ -538,11 +559,14 @@ projectsRouter.get(
   validate("query", taskListQuerySchema),
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
-    const { status, parentTaskId } = req.query as unknown as z.infer<typeof taskListQuerySchema>;
+    const { status, statusId, parentTaskId } = req.query as unknown as z.infer<
+      typeof taskListQuerySchema
+    >;
     await ensureProjectVisible(req.user!, id);
 
     const where: Prisma.TaskWhereInput = { projectId: id };
     if (status) where.status = status;
+    if (statusId) where.statusId = statusId;
     if (parentTaskId === "null") where.parentTaskId = null;
     else if (typeof parentTaskId === "number") where.parentTaskId = parentTaskId;
 
@@ -554,6 +578,7 @@ projectsRouter.get(
         labels: true,
         section: { select: { id: true, name: true, position: true, color: true } },
         _count: { select: { subtasks: true, comments: true } },
+        ...statusDefInclude,
       },
     });
     res.json(tasks);
@@ -570,9 +595,11 @@ projectsRouter.post(
     const body = req.body as z.infer<typeof createTaskSchema>;
     await ensureProjectVisible(req.user!, id);
 
-    const status = body.status ?? "TODO";
-
     const task = await prisma.$transaction(async (tx) => {
+      await lockStatusListShared(tx);
+      // statusId / legacy status -> both columns; neither -> the TODO default.
+      const initialStatus =
+        (await resolveStatusWrite(tx, body)) ?? (await newTaskStatus(tx));
       if (body.parentTaskId) {
         // assertValidParent needs a real taskId to compare against for the
         // self-parent / subtask-depth checks; a not-yet-created task can't
@@ -618,7 +645,8 @@ projectsRouter.post(
           projectId: id,
           title: body.title,
           description: body.description,
-          status,
+          status: initialStatus.status,
+          statusId: initialStatus.statusId,
           priority: body.priority ?? "MEDIUM",
           // Milestones anchor to their due date; keep startDate in lockstep
           // so geometry and exports see a single-day marker.
@@ -644,6 +672,7 @@ projectsRouter.post(
           labels: true,
           section: { select: { id: true, name: true, position: true, color: true } },
           _count: { select: { subtasks: true, comments: true } },
+          ...statusDefInclude,
         },
       });
       const event = await recordActivity(tx, {

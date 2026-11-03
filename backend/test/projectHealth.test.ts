@@ -5,6 +5,7 @@ import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { computeProjectHealth } from "../src/lib/projectHealth.js";
 import { seedRoles, createUserWithRole } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 // lib/projectHealth.ts + the `health` block on GET /projects, GET /projects/:id
 // and the nested projects[] of GET /customers/:id. A TAM (not admin) is used
@@ -43,7 +44,7 @@ async function createTask(
   } = {},
 ): Promise<number> {
   const task = await prisma.task.create({
-    data: {
+    data: { statusId: SID[o.status ?? "TODO"],
       projectId,
       title: "Task",
       status: o.status ?? "TODO",

@@ -143,7 +143,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
         points: [
           "Tasks grouped by section. Use \"Add section\", \"Add task\", and \"Reorder sections\" in the toolbar.",
           "Drag a row by its handle to reorder it or move it to another section.",
-          "Change the assignee, due date, priority, and status directly in the row. Click the priority flag to cycle Low → Medium → High; set Urgent from the task form.",
+          "Change the assignee, due date, priority, and status (a dropdown grouped Not started / Active / Done) directly in the row. Click the priority flag to cycle Low → Medium → High; set Urgent from the task form.",
           "Each section's menu can rename, duplicate, or delete it. Deleting a section keeps its tasks.",
           "Click a row to open the task panel.",
         ],
@@ -151,9 +151,9 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         title: "Kanban",
         points: [
-          "Columns To do, In progress, and Done. Drag cards between or within columns.",
+          "One column per task status, under a Not started / Active / Done band; Done columns can be collapsed. Drag cards between or within columns.",
           "Use \"Filter\" to show one assignee or priority. Use \"Add task\" or a column's \"Add task here\".",
-          "A column count turns amber when it goes over its WIP limit.",
+          "A column count turns amber when it reaches its WIP limit (set per status in the project form).",
           "On a phone, swipe between columns and move a card with its \"Card options\" button and the \"Move to\" sheet.",
         ],
       },
@@ -170,7 +170,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         title: "Timeline",
         points: [
-          "Top-level tasks as a vertical timeline, sorted by start date. Change a task's status with its one-click buttons. Click a title to edit the task.",
+          "Top-level tasks as a vertical timeline, sorted by start date. Change a task's status with its status dropdown. Click a title to edit the task.",
           "This is a phase-level read of the plan; the Gantt is the task-level view where you change dates.",
         ],
       },
@@ -427,7 +427,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     icon: "admin_panel_settings",
     route: "/admin",
     requires: "*",
-    summary: "Manage users, roles, sign-in, project ownership, and the iTop connection.",
+    summary: "Manage users, roles, sign-in, project ownership, task statuses, and the iTop connection.",
     entries: [
       {
         title: "Users and roles",
@@ -441,6 +441,14 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
         points: [
           "Sign-in: connect Google sign-in with a client ID and the allowed email domains.",
           "Project Override: reassign the TAM of any project.",
+        ],
+      },
+      {
+        title: "Task statuses",
+        points: [
+          "Task statuses: one list for the whole workspace, grouped as Not started, Active and Done. Rename, recolour, add, delete, and drag to reorder within a group, then \"Save changes\".",
+          "Each group has a default status; new tasks start in the Not started default. Deleting a status that has tasks asks where to move them.",
+          "\"Reset to defaults\" restores To do, In progress and Done.",
         ],
       },
       {

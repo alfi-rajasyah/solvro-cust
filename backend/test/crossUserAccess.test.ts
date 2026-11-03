@@ -11,6 +11,7 @@ import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import type { Response } from "supertest";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 
@@ -39,7 +40,7 @@ beforeAll(async () => {
     data: { name: `Cross-user project ${stamp}`, tamId: owner.userId, customerId: customer.id, status: "ACTIVE" },
   });
   const [a, b, c] = await Promise.all(
-    ["A", "B", "C"].map((title, position) => prisma.task.create({ data: { projectId: project.id, title, position } })),
+    ["A", "B", "C"].map((title, position) => prisma.task.create({ data: { statusId: SID.TODO, projectId: project.id, title, position } })),
   );
   const risk = await prisma.risk.create({ data: { projectId: project.id, description: "Supplier delay" } });
   const dependency = await prisma.taskDependency.create({

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcrypt";
-import { Prisma } from "@prisma/client";
+import { Prisma, TaskStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireAdmin } from "../http/auth.js";
@@ -11,6 +11,11 @@ import { bustAuthConfigCache } from "../authConfig.js";
 import { isUsernameConflict, normalizeUsername, USERNAME_MAX } from "../lib/username.js";
 import { recordActivity, shortLabel, type ActivityChanges } from "../lib/activity.js";
 import { notifyForEvent } from "../lib/notifications.js";
+import {
+  listTaskStatusDefsWithCounts,
+  saveTaskStatusDefs,
+  STATUS_TONES,
+} from "../lib/taskStatuses.js";
 
 export const adminRouter = Router();
 
@@ -665,5 +670,46 @@ adminRouter.put(
       return result;
     });
     res.json(updated);
+  },
+);
+
+// Whole-list save of the workspace task statuses
+// (docs/archive/plans/custom-task-statuses.md §2). Rule violations are 409s
+// raised by saveTaskStatusDefs; this schema only checks shape.
+const saveTaskStatusesSchema = z
+  .object({
+    statuses: z
+      .array(
+        z.object({
+          id: z.number().int().positive().optional(),
+          name: z.string().trim().min(1).max(40),
+          category: z.nativeEnum(TaskStatus),
+          color: z.enum(STATUS_TONES),
+          isDefault: z.boolean(),
+        }),
+      )
+      .min(1)
+      .max(60),
+    moveTo: z.record(z.string().regex(/^[1-9]\d{0,9}$/), z.number().int().positive()).optional(),
+  })
+  .refine(
+    (b) => {
+      const ids = b.statuses.flatMap((s) => (s.id === undefined ? [] : [s.id]));
+      return new Set(ids).size === ids.length;
+    },
+    { message: "A status id appears twice", path: ["statuses"] },
+  );
+
+// The editor's read: the list plus per-status task counts.
+adminRouter.get("/task-statuses", async (_req, res) => {
+  res.json(await listTaskStatusDefsWithCounts());
+});
+
+adminRouter.put(
+  "/task-statuses",
+  validate("body", saveTaskStatusesSchema),
+  async (req, res) => {
+    const body = req.body as z.infer<typeof saveTaskStatusesSchema>;
+    res.json(await saveTaskStatusDefs(body));
   },
 );

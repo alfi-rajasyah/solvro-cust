@@ -4,6 +4,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { seedRoles, createUserWithRole } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 // GET /tasks?overdue=true (routes/tasks.ts). Real contract (2026-08-02 user
 // ruling): overdue = due before the CALLER's calendar day (`?today=`,
@@ -50,7 +51,7 @@ async function createTask(overrides: {
   dueDate?: Date | null;
 }): Promise<number> {
   const task = await prisma.task.create({
-    data: {
+    data: { statusId: SID[overrides.status ?? "TODO"],
       projectId,
       title: "Task",
       status: overrides.status ?? "TODO",

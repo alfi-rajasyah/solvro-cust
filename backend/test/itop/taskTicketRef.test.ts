@@ -11,6 +11,7 @@ import request from "supertest";
 import { createApp } from "../../src/app.js";
 import { prisma } from "../../src/prisma.js";
 import { seedRoles, createUserWithRole } from "../testAuth.js";
+import { SID } from "../statusFixtures.js";
 
 const app = createApp();
 
@@ -30,7 +31,7 @@ async function createProject(tamId: number) {
 
 async function createTask(projectId: number) {
   return prisma.task.create({
-    data: { projectId, title: "Task with a possible iTop ref" },
+    data: { statusId: SID.TODO, projectId, title: "Task with a possible iTop ref" },
   });
 }
 

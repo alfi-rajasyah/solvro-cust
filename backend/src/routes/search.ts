@@ -4,6 +4,7 @@ import { prisma } from "../prisma.js";
 import { hasPermission, requireAuth, requirePermission } from "../http/auth.js";
 import { validate } from "../http/validate.js";
 import { customerVisibilityFilter, projectVisibilityFilter } from "../lib/visibility.js";
+import { STATUS_DEF_SELECT } from "../lib/taskStatuses.js";
 
 const searchQuerySchema = z.object({
   q: z
@@ -56,6 +57,7 @@ searchRouter.get("/", validate("query", searchQuerySchema), async (req, res) => 
         id: true,
         title: true,
         status: true,
+        statusDef: { select: STATUS_DEF_SELECT },
         projectId: true,
         project: { select: { name: true } },
       },
@@ -85,6 +87,7 @@ searchRouter.get("/", validate("query", searchQuerySchema), async (req, res) => 
       id: t.id,
       title: t.title,
       status: t.status,
+      statusDef: t.statusDef,
       projectId: t.projectId,
       projectName: t.project.name,
     })),

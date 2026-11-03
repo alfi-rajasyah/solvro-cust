@@ -7,6 +7,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 
@@ -48,7 +49,7 @@ describe("projectVisibilityFilter — member arm", () => {
     const { tam, member, customer, project } = await fixture();
     await addMember(project.id, member.userId, tam.userId);
     const task = await prisma.task.create({
-      data: { projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
+      data: { statusId: SID.TODO, projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
     });
 
     const list = await request(app).get("/projects").set(auth(member.token));
@@ -129,7 +130,7 @@ describe("GET /projects/:id/members", () => {
     await addMember(project.id, outsider.userId, tam.userId);
     const mk = (projectId: number, assignedToId: number | null) =>
       prisma.task.create({
-        data: { projectId, title: "T", status: "TODO", priority: "MEDIUM", position: 0, assignedToId },
+        data: { statusId: SID.TODO, projectId, title: "T", status: "TODO", priority: "MEDIUM", position: 0, assignedToId },
       });
     await mk(project.id, member.userId);
     await mk(project.id, member.userId);
@@ -308,7 +309,7 @@ describe("DELETE /projects/:id/members/:userId", () => {
     await addMember(other.id, member.userId, tam.userId);
     const mk = (projectId: number, assignedToId: number) =>
       prisma.task.create({
-        data: { projectId, title: "T", status: "TODO", priority: "MEDIUM", position: 0, assignedToId },
+        data: { statusId: SID.TODO, projectId, title: "T", status: "TODO", priority: "MEDIUM", position: 0, assignedToId },
       });
     const mine = await mk(project.id, member.userId);
     const tamTask = await mk(project.id, tam.userId);
@@ -328,7 +329,7 @@ describe("DELETE /projects/:id/members/:userId", () => {
   it("DELETE for a non-member (e.g. the TAM) leaves that user's tasks assigned", async () => {
     const { tam, project } = await fixture();
     const task = await prisma.task.create({
-      data: { projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0, assignedToId: tam.userId },
+      data: { statusId: SID.TODO, projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0, assignedToId: tam.userId },
     });
     const del = await request(app)
       .delete(`/projects/${project.id}/members/${tam.userId}`)
@@ -341,7 +342,7 @@ describe("DELETE /projects/:id/members/:userId", () => {
     const { tam, member, project } = await fixture();
     await addMember(project.id, member.userId, tam.userId);
     const task = await prisma.task.create({
-      data: { projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0, assignedToId: member.userId },
+      data: { statusId: SID.TODO, projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0, assignedToId: member.userId },
     });
     // Reassign the TAM to the existing member; their member row stays behind.
     await prisma.project.update({ where: { id: project.id }, data: { tamId: member.userId } });

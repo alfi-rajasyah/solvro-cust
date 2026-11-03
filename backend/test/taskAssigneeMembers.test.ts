@@ -7,6 +7,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 
@@ -110,7 +111,7 @@ describe("POST /projects/:id/tasks — assignee becomes a member", () => {
 describe("PATCH /tasks/:id — assignee becomes a member", () => {
   async function newTask(projectId: number) {
     return prisma.task.create({
-      data: { projectId, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
+      data: { statusId: SID.TODO, projectId, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
     });
   }
 

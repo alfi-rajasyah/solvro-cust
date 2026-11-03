@@ -7,6 +7,7 @@ import {
   RISK_CATEGORY_LABEL,
   RISK_STATUS_LABEL,
   SHARE_LINK_STATUS_LABEL,
+  TASK_CATEGORY_GROUP_LABEL,
   TASK_STATUS_LABEL,
   WEEKLY_HEALTH_LABEL,
   WEEKLY_STATUS_LABEL,
@@ -16,7 +17,6 @@ import {
   riskLevel,
   riskLevelFromScore,
   riskStatusOptions,
-  taskStatusOptions,
 } from "./labels";
 
 describe("label maps", () => {
@@ -24,6 +24,14 @@ describe("label maps", () => {
     expect(TASK_STATUS_LABEL).toEqual({
       TODO: "To do",
       IN_PROGRESS: "In progress",
+      DONE: "Done",
+    });
+  });
+
+  it("uses the agreed status-picker group headers", () => {
+    expect(TASK_CATEGORY_GROUP_LABEL).toEqual({
+      TODO: "Not started",
+      IN_PROGRESS: "Active",
       DONE: "Done",
     });
   });
@@ -95,11 +103,6 @@ describe("label maps", () => {
 
 describe("option lists", () => {
   it("keeps enum order and pairs value with label", () => {
-    expect(taskStatusOptions).toEqual([
-      { value: "TODO", label: "To do" },
-      { value: "IN_PROGRESS", label: "In progress" },
-      { value: "DONE", label: "Done" },
-    ]);
     expect(priorityOptions.map((o) => o.value)).toEqual([
       "LOW",
       "MEDIUM",

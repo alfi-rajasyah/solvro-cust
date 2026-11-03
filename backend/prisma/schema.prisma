@@ -276,8 +276,8 @@ model Project {
   tam                  User             @relation("ProjectTAM", fields: [tamId], references: [id])
   customer             Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
   status               ProjectStatus    @default(PLANNING)
-  // Kanban WIP limits per top-level status column. Shape:
-  // {"TODO": number|null, "IN_PROGRESS": number|null, "DONE": number|null}.
+  // Kanban WIP limits per task status. Shape: {"<TaskStatusDef id>":
+  // number|null, ...} (docs/archive/plans/custom-task-statuses.md §2).
   // null (or an absent key) means "no limit" for that column. Visual only —
   // the board never blocks a move when a column is over its limit, it just
   // renders the count pill in amber.
@@ -470,6 +470,23 @@ model ProjectService {
   @@map("project_services")
 }
 
+// Workspace-wide, admin-defined task statuses, each in one of the three fixed
+// categories (the TaskStatus enum). Exactly one isDefault per category — a
+// partial unique index in the migration enforces "at most one", the admin
+// save route enforces "exactly one".
+// See docs/archive/plans/custom-task-statuses.md §1.
+model TaskStatusDef {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique
+  category  TaskStatus
+  color     String
+  position  Int
+  isDefault Boolean    @default(false) @map("is_default")
+  tasks     Task[]
+
+  @@map("task_status_defs")
+}
+
 model Task {
   id                Int              @id @default(autoincrement())
   projectId         Int              @map("project_id")
@@ -478,7 +495,12 @@ model Task {
   section           Section?         @relation(fields: [sectionId], references: [id], onDelete: SetNull)
   title             String
   description       String?
+  // `status` is the CATEGORY of `statusDef` and is always written in lockstep
+  // with `statusId` (lib/taskStatuses.ts) — every "is it done / open?" read
+  // keeps using it (docs/archive/plans/custom-task-statuses.md §1).
   status            TaskStatus       @default(TODO)
+  statusId          Int              @map("status_id")
+  statusDef         TaskStatusDef    @relation(fields: [statusId], references: [id], onDelete: Restrict)
   priority          Priority         @default(MEDIUM)
   startDate         DateTime?        @map("start_date")
   dueDate           DateTime?        @map("due_date")
@@ -536,6 +558,7 @@ model Task {
   @@index([sectionId])
   @@index([assignedToId])
   @@index([status])
+  @@index([statusId])
   @@index([priority])
   @@index([dueDate])
   @@index([parentTaskId])

@@ -4,6 +4,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 // `health` on GET /customers: overdue tasks and open risks rolled up over the
 // caller's VISIBLE projects of each customer, plus that ISO week's weekly
@@ -23,7 +24,7 @@ const day = (s: string) => new Date(`${s}T00:00:00.000Z`);
 
 async function addTask(projectId: number, o: { status?: "TODO" | "DONE"; dueDate: string }) {
   await prisma.task.create({
-    data: { projectId, title: "T", status: o.status ?? "TODO", dueDate: day(o.dueDate) },
+    data: { statusId: SID[o.status ?? "TODO"], projectId, title: "T", status: o.status ?? "TODO", dueDate: day(o.dueDate) },
   });
 }
 

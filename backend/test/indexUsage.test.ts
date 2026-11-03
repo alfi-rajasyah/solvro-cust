@@ -2,6 +2,7 @@ import "./env.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/prisma.js";
 import { seedRoles, createAdminAndToken } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const seededProjectIds: number[] = [];
 
@@ -38,8 +39,8 @@ describe("index usage", () => {
     });
     seededProjectIds.push(project.id);
     await prisma.$executeRawUnsafe(
-      `INSERT INTO tasks (project_id, title)
-       SELECT ${project.id}, 'filler task ' || md5(g::text) FROM generate_series(1, 5000) g`,
+      `INSERT INTO tasks (project_id, title, status_id)
+       SELECT ${project.id}, 'filler task ' || md5(g::text), ${SID.TODO} FROM generate_series(1, 5000) g`,
     );
     await prisma.$executeRawUnsafe("ANALYZE tasks");
 

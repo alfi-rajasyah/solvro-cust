@@ -16,11 +16,12 @@ import {
 } from "./embedViews";
 import { safeRedirectPath } from "./safeRedirect";
 import type { Section, Task, TaskStatus } from "./queries";
+import { withStatus } from "./taskStatusFixture";
 
 const TODAY = "2026-10-09";
 
 function task(over: Partial<Task> & { id: number }): Task {
-  return {
+  return withStatus({
     projectId: 1,
     title: `T${over.id}`,
     description: null,
@@ -43,7 +44,7 @@ function task(over: Partial<Task> & { id: number }): Task {
     _count: { subtasks: 0, comments: 0 },
     itopTicketRef: null,
     ...over,
-  };
+  });
 }
 
 const iso = (day: string) => `${day}T00:00:00.000Z`;

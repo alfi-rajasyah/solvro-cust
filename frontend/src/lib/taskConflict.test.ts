@@ -13,9 +13,10 @@ import {
   type TaskFormValues,
 } from "./taskConflict";
 import type { Task } from "./queries";
+import { withStatus } from "./taskStatusFixture";
 
 function makeTask(over: Partial<Task> = {}): Task {
-  return {
+  return withStatus({
     id: 7,
     projectId: 1,
     title: "Ship it",
@@ -42,14 +43,14 @@ function makeTask(over: Partial<Task> = {}): Task {
     _count: { subtasks: 0, comments: 0 },
     itopTicketRef: null,
     ...over,
-  };
+  });
 }
 
 function formFrom(t: Task, over: Partial<TaskFormValues> = {}): TaskFormValues {
   return {
     title: t.title,
     description: t.description?.trim() || null,
-    status: t.status,
+    statusId: t.statusId,
     priority: t.priority,
     startDate: t.startDate,
     dueDate: t.dueDate,
@@ -173,6 +174,21 @@ describe("diffTaskForm", () => {
     const { patch } = diffTaskForm(base, formFrom(base, { title: "Renamed" }));
     expect(patch).toEqual({ title: "Renamed" });
     expect("status" in patch).toBe(false);
+  });
+
+  it("sends a changed workspace status as statusId, with the base statusId expected", () => {
+    const { patch, expected } = diffTaskForm(base, formFrom(base, { statusId: 9 }));
+    expect(patch).toEqual({ statusId: 9 });
+    expect(expected).toEqual({ statusId: base.statusId });
+  });
+
+  it("names a statusId conflict from the status lookups", () => {
+    const rows = formatConflictRows(
+      [{ field: "statusId", expected: 1, current: 2 }],
+      { statusId: 9 },
+      { statuses: [{ id: 2, name: "In progress" }, { id: 9, name: "QA / UAT" }] },
+    );
+    expect(rows).toEqual([{ field: "statusId", label: "Status", now: "In progress", yours: "QA / UAT" }]);
   });
 
   it("covers parent, epic and critical path", () => {

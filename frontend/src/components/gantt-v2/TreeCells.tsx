@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { InlineDateRangeEditor } from "@/components/InlineDateRangeEditor";
-import { TaskStatusChip } from "@/components/StatusChip";
+import { STATUS_TONE_DOT_CLASS, TaskStatusChip } from "@/components/StatusChip";
 import { dayFromIso, dayToDate } from "@/lib/dateField";
 import { isTaskOverdue } from "@/lib/formatDate";
 import { fmtDateRangeDDMM } from "@/lib/gantt/geometry";
 import { SECTION_COLOR_PRESETS } from "@/lib/gantt/palette";
-import type { Task, TaskStatus } from "@/lib/queries";
+import type { Task, TaskStatus, TaskStatusRef } from "@/lib/queries";
+import { CATEGORY_DEFAULT_TONE } from "@/lib/taskStatuses";
 import { cn } from "@/lib/utils";
 
 // The predicate lives in `lib/formatDate.ts` (so Kanban cards need not pull in
@@ -160,21 +161,23 @@ export function SectionColorCell({ sectionId, color, canEdit, onPick }: SectionC
 // blue — same primary token TaskStatusChip's "blue" tone renders), DONE
 // emerald.
 const STATUS_DOT_TONE_CLASS: Record<TaskStatus, string> = {
-  TODO: "bg-surface-container-highest",
-  IN_PROGRESS: "bg-primary",
-  DONE: "bg-chip-emerald-text",
+  TODO: STATUS_TONE_DOT_CLASS[CATEGORY_DEFAULT_TONE.TODO],
+  IN_PROGRESS: STATUS_TONE_DOT_CLASS[CATEGORY_DEFAULT_TONE.IN_PROGRESS],
+  DONE: STATUS_TONE_DOT_CLASS[CATEGORY_DEFAULT_TONE.DONE],
 };
 
 /** Small colored status dot rendered before a task's name (SolvroGantt.tsx's
  * `renderResourceLabel`). Task rows (incl. subtasks) only — the caller skips
  * this for section/pseudo-group rows. */
-export function TaskStatusDot({ status }: { status: TaskStatus }) {
+export function TaskStatusDot({ status, def }: { status: TaskStatus; def?: Pick<TaskStatusRef, "color"> | null }) {
   return (
     <span
       aria-hidden="true"
       className={cn(
         "me-1.5 inline-block size-2 shrink-0 rounded-full",
-        STATUS_DOT_TONE_CLASS[status],
+        // A workspace status carries its own tone (same dot map as the pickers);
+        // without one, the bare category's. Bar colours stay category-based.
+        def ? STATUS_TONE_DOT_CLASS[def.color] : STATUS_DOT_TONE_CLASS[status],
       )}
     />
   );
@@ -192,7 +195,7 @@ export function TaskStatusDot({ status }: { status: TaskStatus }) {
 export function TaskStatusCell({ task }: { task: Task }) {
   return (
     <div className="min-w-0 overflow-hidden whitespace-nowrap">
-      <TaskStatusChip status={task.status} />
+      <TaskStatusChip status={task.status} def={task.statusDef} />
     </div>
   );
 }
