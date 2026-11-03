@@ -223,7 +223,6 @@ export interface ProjectSummary {
   outlineUrl: string | null;
   status: ProjectStatus;
   tamId: number;
-  customerId: number | null;
   wipLimits: WipLimits | null;
   /** Administrative container (e.g. Opty Timelines) — hidden from portfolio roll-ups. */
   excludeFromPortfolio: boolean;
@@ -232,11 +231,10 @@ export interface ProjectSummary {
   createdAt: string;
   updatedAt: string;
   tam: { id: number; username: string };
-  /** Legacy single customer = the primary; kept one release alongside `customers`. */
-  customer: { id: number; name: string } | null;
-  /** Every linked customer, primary first. Optional so hand-built fixtures still type-check. */
-  customers?: ProjectCustomerLink[];
-  primaryCustomer?: ProjectCustomerLink | null;
+  /** Every linked customer, primary first (docs/archive/plans/multi-customer-projects.md). */
+  customers: ProjectCustomerLink[];
+  /** The primary link, or null when the project has no customer. */
+  primaryCustomer: ProjectCustomerLink | null;
   /** On a customer's project list only: is THIS customer the project's primary, and is it shared. */
   isPrimary?: boolean;
   isShared?: boolean;
@@ -249,8 +247,6 @@ export interface ProjectDetail extends ProjectSummary {
   /** Present on GET /projects/:id; adds the baseline slip (whole days, null without a baseline). */
   health?: ProjectHealth & { slipDays: number | null };
   tam: { id: number; username: string; email: string; avatarUrl?: string | null };
-  /** `tamId` is the customer's owner (null = unowned). */
-  customer: { id: number; name: string; tamId?: number | null } | null;
   baselineLockedBy: { id: number; username: string } | null;
   services: ProjectServiceAssignment[];
 }
@@ -1530,8 +1526,7 @@ export interface CreateProjectInput {
   /** Optional http(s) link to the project's Outline page; null for none. Validated server-side. */
   outlineUrl?: string | null;
   tamId?: number;
-  /** Legacy single customer (becomes the primary); `customers` wins when both are sent. */
-  customerId?: number;
+  /** At least one link, exactly one primary. */
   customers?: { id: number; isPrimary: boolean }[];
   status?: ProjectStatus;
   wipLimits?: WipLimits | null;
@@ -1546,7 +1541,7 @@ export interface CreateProjectInput {
 // never surfaced as a runtime bug, but a caller trusting the type to read
 // e.g. `.tam.username` off a freshly-created project would silently get
 // `undefined` with no type error to catch it.
-export type CreatedProject = Omit<ProjectSummary, "tam" | "customer" | "_count">;
+export type CreatedProject = Omit<ProjectSummary, "tam" | "_count">;
 
 export function useCreateProject() {
   const qc = useQueryClient();
@@ -1576,7 +1571,8 @@ export interface UpdateProjectInput {
   outlineUrl?: string | null;
   status?: ProjectStatus;
   tamId?: number;
-  customerId?: number;
+  /** Owner-only: replaces the link set (at least one, exactly one primary). */
+  customers?: { id: number; isPrimary: boolean }[];
   wipLimits?: WipLimits | null;
   excludeFromPortfolio?: boolean;
 }
@@ -3328,6 +3324,20 @@ export function useRemoveMyItopToken() {
   });
 }
 
+function fetchCustomerTickets(
+  customerId: number,
+  scope: ItopTicketScope,
+  cls: ItopTicketClass | undefined,
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams({ scope });
+  if (cls) params.set("class", cls);
+  return apiRequest<CustomerTicketsResponse>(
+    `/itop/customers/${customerId}/tickets?${params.toString()}`,
+    { signal },
+  );
+}
+
 export function useCustomerTickets(
   customerId: number,
   {
@@ -3339,14 +3349,7 @@ export function useCustomerTickets(
 ) {
   return useQuery({
     queryKey: queryKeys.customerTickets(customerId, scope, cls),
-    queryFn: ({ signal }) => {
-      const params = new URLSearchParams({ scope });
-      if (cls) params.set("class", cls);
-      return apiRequest<CustomerTicketsResponse>(
-        `/itop/customers/${customerId}/tickets?${params.toString()}`,
-        { signal },
-      );
-    },
+    queryFn: ({ signal }) => fetchCustomerTickets(customerId, scope, cls, signal),
     enabled,
     staleTime: 30_000,
     // The first `refetchInterval` in the app (frontend/CLAUDE.md's Task 1.8
@@ -3379,6 +3382,31 @@ export function useItopCustomerMapped(
     poll: false,
   });
   return { mapped: query.data?.mapped === true, known: query.data !== undefined, isError: query.isError };
+}
+
+// Which of a project's linked customers are mapped to an iTop organisation
+// (docs/archive/plans/multi-customer-projects.md, 7.3). Shares the exact query
+// key of `useCustomerTickets(id, { scope: "ongoing" })`, so it reuses that
+// cache. `ids` empty = no lookups (single-customer projects never call this
+// with more than one id).
+export function useItopMappedCustomerIds(
+  ids: readonly number[],
+  { enabled = true }: { enabled?: boolean } = {},
+): { mappedIds: Set<number>; known: boolean } {
+  const results = useQueries({
+    queries: ids.map((customerId) => ({
+      queryKey: queryKeys.customerTickets(customerId, "ongoing", undefined),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        fetchCustomerTickets(customerId, "ongoing", undefined, signal),
+      enabled,
+      staleTime: 30_000,
+    })),
+  });
+  const mappedIds = new Set<number>();
+  results.forEach((r, i) => {
+    if (r.data?.mapped === true) mappedIds.add(ids[i]);
+  });
+  return { mappedIds, known: results.every((r) => r.data !== undefined || r.isError) };
 }
 
 export function useRequestItopRefresh() {
@@ -3953,11 +3981,11 @@ export interface AdminProject {
   description: string | null;
   status: ProjectStatus;
   tamId: number;
-  customerId: number | null;
   createdAt: string;
   updatedAt: string;
   tam: { id: number; username: string };
-  customer: { id: number; name: string } | null;
+  primaryCustomer: { id: number; name: string } | null;
+  customers: { id: number; name: string; isPrimary: boolean }[];
   _count: { tasks: number };
 }
 

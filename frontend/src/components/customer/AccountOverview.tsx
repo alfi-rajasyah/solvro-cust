@@ -50,7 +50,11 @@ export function AccountOverview({
 }) {
   return (
     <div className="space-y-6">
-      <Section icon="assignment" title="Projects">
+      <Section
+        icon="assignment"
+        title="Projects"
+        meta={projectCountsLabel(customer.projects)}
+      >
         {customer.projects.length === 0 ? (
           <EmptyState
             icon="assignment"
@@ -78,10 +82,13 @@ export function AccountOverview({
 function Section({
   icon,
   title,
+  meta,
   children,
 }: {
   icon: string;
   title: string;
+  /** Muted count line after the title (e.g. "2 own · 2 shared"). */
+  meta?: string;
   children: ReactNode;
 }) {
   return (
@@ -93,6 +100,7 @@ function Section({
         <h2 className="font-display text-sm font-bold text-on-surface">
           {title}
         </h2>
+        {meta && <span className="text-meta text-on-surface-variant">{meta}</span>}
       </div>
       {children}
     </section>
@@ -158,6 +166,14 @@ function HealthCell({ project }: { project: ProjectSummary }) {
   );
 }
 
+/** "4 · 2 own · 2 shared" once any project is shared; empty for no projects. */
+export function projectCountsLabel(projects: readonly { isShared?: boolean }[]): string | undefined {
+  if (projects.length === 0) return undefined;
+  const shared = projects.filter((p) => p.isShared).length;
+  if (shared === 0) return `${projects.length}`;
+  return `${projects.length} · ${projects.length - shared} own · ${shared} shared`;
+}
+
 function ProjectsDataGrid({ projects }: { projects: ProjectSummary[] }) {
   const [sorting, setSorting] = useState<SortingState>([]);
 
@@ -173,12 +189,25 @@ function ProjectsDataGrid({ projects }: { projects: ProjectSummary[] }) {
         // consistent across the app for the same data.
         sortingFn: "alphanumeric",
         cell: ({ row }) => (
-          <Link
-            to={`/projects/${row.original.id}`}
-            className="font-medium text-on-surface hover:text-primary"
-          >
-            {row.original.name}
-          </Link>
+          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <Link
+              to={`/projects/${row.original.id}`}
+              className="font-medium text-on-surface hover:text-primary"
+            >
+              {row.original.name}
+            </Link>
+            {row.original.isShared && row.original.primaryCustomer && (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-outline-variant px-1.5 py-0.5 text-meta text-on-surface-variant">
+                <span aria-hidden="true" className="material-symbols-outlined text-[14px]">
+                  link
+                </span>
+                Shared · primary:{" "}
+                <span className="font-semibold text-on-surface">
+                  {row.original.primaryCustomer.name}
+                </span>
+              </span>
+            )}
+          </span>
         ),
         meta: { skeleton: <Skeleton className="h-3.5 w-32" /> },
       },

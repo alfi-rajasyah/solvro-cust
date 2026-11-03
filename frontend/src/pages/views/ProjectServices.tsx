@@ -18,14 +18,14 @@ export function ProjectServices() {
 
   const update = useUpdateProjectServices(project.id);
   const { data: customer, isLoading: customerLoading } = useCustomer(
-    hasPermission(user, "customer:read") ? project.customerId : null,
+    hasPermission(user, "customer:read") ? (project.primaryCustomer?.id ?? null) : null,
   );
   const [addAllError, setAddAllError] = useState<string | null>(null);
 
   const subscribedServiceIds = useMemo(() => {
-    if (!project.customerId || !customer) return undefined;
+    if (!project.primaryCustomer || !customer) return undefined;
     return new Set(customer.services.map((a) => a.serviceId));
-  }, [project.customerId, customer]);
+  }, [project.primaryCustomer, customer]);
 
   // Subscribed services not yet assigned at the project level — the set the
   // "Add all subscribed" bulk action fills in, carrying over the customer's

@@ -31,9 +31,8 @@ export interface ProjectCustomerDto {
 
 /**
  * Replaces the raw `customers` join rows of a project with the API shape:
- * `customers[]` (primary first), `primaryCustomer`, and the legacy
- * `customerId` / `customer` (= the primary), kept for one release so the
- * frontend can move over.
+ * `customers[]` (primary first) and `primaryCustomer`. The legacy single
+ * `customerId` / `customer` fields are gone from project responses.
  */
 export function withProjectCustomers<T extends { customers: LinkRow[] }>(project: T) {
   const customers: ProjectCustomerDto[] = project.customers.map((l) => ({
@@ -47,8 +46,6 @@ export function withProjectCustomers<T extends { customers: LinkRow[] }>(project
     ...project,
     customers,
     primaryCustomer: primary,
-    customerId: primary?.id ?? null,
-    customer: primary ? { id: primary.id, name: primary.name, tamId: primary.tamId } : null,
   };
 }
 

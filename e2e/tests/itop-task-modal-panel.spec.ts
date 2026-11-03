@@ -104,7 +104,7 @@ async function projectCustomerId(base: string, token: string, projectId: number)
   const res = await fetch(`${base}/api/projects/${projectId}?today=${new Date().toISOString().slice(0, 10)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const id = ((await res.json()) as { customer: { id: number } | null }).customer?.id;
+  const id = ((await res.json()) as { primaryCustomer: { id: number } | null }).primaryCustomer?.id;
   expect(id, "the fixture project has a customer").toBeDefined();
   return id!;
 }

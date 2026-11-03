@@ -21,24 +21,28 @@ const user = (id: number, permissions: string[] = ["project:read", "project:writ
 
 describe("canOwnProject", () => {
   it("is true for the project's TAM", () => {
-    expect(canOwnProject(user(1), { tamId: 1 }, undefined)).toBe(true);
+    expect(canOwnProject(user(1), { tamId: 1 }, [])).toBe(true);
   });
   it("is true for the owner of the project's customer", () => {
-    expect(canOwnProject(user(2), { tamId: 1 }, 2)).toBe(true);
+    expect(canOwnProject(user(2), { tamId: 1 }, [2])).toBe(true);
+  });
+  it("is true for the owner of ANY linked customer", () => {
+    expect(canOwnProject(user(2), { tamId: 1 }, [7, null, 2])).toBe(true);
   });
   it("is true for view-all and wildcard users", () => {
-    expect(canOwnProject(user(3, ["project:view-all"]), { tamId: 1 }, 9)).toBe(true);
-    expect(canOwnProject(user(3, ["*"]), { tamId: 1 }, null)).toBe(true);
+    expect(canOwnProject(user(3, ["project:view-all"]), { tamId: 1 }, [9])).toBe(true);
+    expect(canOwnProject(user(3, ["*"]), { tamId: 1 }, [null])).toBe(true);
   });
   it("is false for a member with access through membership only", () => {
-    expect(canOwnProject(user(4), { tamId: 1 }, 2)).toBe(false);
-    expect(canOwnProject(user(4), { tamId: 1 }, null)).toBe(false);
+    expect(canOwnProject(user(4), { tamId: 1 }, [2])).toBe(false);
+    expect(canOwnProject(user(4), { tamId: 1 }, [null])).toBe(false);
   });
-  it("is false while the customer owner is unknown", () => {
-    expect(canOwnProject(user(4), { tamId: 1 }, undefined)).toBe(false);
+  it("is false while the customer owners are unknown", () => {
+    expect(canOwnProject(user(4), { tamId: 1 }, [undefined])).toBe(false);
+    expect(canOwnProject(user(4), { tamId: 1 }, [])).toBe(false);
   });
   it("is false when signed out", () => {
-    expect(canOwnProject(null, { tamId: 1 }, 1)).toBe(false);
+    expect(canOwnProject(null, { tamId: 1 }, [1])).toBe(false);
   });
 });
 

@@ -56,7 +56,7 @@ Each mapped customer now has a **Tickets** tab. The first sync runs within the r
 
 ### Actions from Solvro
 
-TAMs can assign, set pending, resolve, close, and reopen tickets, add log entries, and create tickets from Solvro.
+TAMs can assign, set pending, resolve, close, and reopen tickets, add log entries, and create tickets from Solvro. When a project is linked to several customers mapped to different iTop organisations, the new-ticket form asks which organisation the ticket goes to.
 
 1. **In iTop, allow personal tokens** for the TAMs' profile. In the `authent-token` module settings of iTop's configuration file:
 

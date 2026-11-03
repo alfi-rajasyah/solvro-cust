@@ -361,6 +361,8 @@ A workspace task status carries a tone key (`TaskStatusDef.color`); `TaskStatusC
 | `amber` | `bg-chip-amber-bg text-chip-amber-text` | `bg-chip-amber-text` |
 | `violet` | `bg-chip-violet-bg text-chip-violet-text` | `bg-chip-violet-text` |
 
+`customer/PrimaryChip.tsx` (the "Primary" marker on a project's primary customer, shown when a project has several) is a bespoke chip on the `primary` tone pair: `rounded-sm bg-primary/10 px-1.5 py-0.5 text-meta text-primary dark:bg-primary/20`.
+
 `LabelChip.tsx` and `EpicChip.tsx` are not tone chips: the user-chosen colour is a 8px dot plus a `color-mix(… 14%, transparent)` background tint, and the text is always `text-on-surface` (so any stored colour stays readable in both themes). Both use the same `text-meta font-semibold leading-[18px]` rhythm as `CHIP_BASE`; `EpicChip` also truncates at `max-w-[160px]`.
 
 The generic `Chip` export takes any of `emerald` / `amber` / `rose` / `violet` / `blue` / `gray` directly for one-off use (risk scores, priority badges, etc.).

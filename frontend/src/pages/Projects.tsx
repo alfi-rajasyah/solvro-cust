@@ -189,8 +189,22 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
 
       {/* Bottom row: customer + avatar stack + task count */}
       <div className="mt-auto flex items-center justify-between gap-2 text-meta text-on-surface-variant">
-        <span className="min-w-0 flex-1 truncate">
-          {project.customer?.name ?? <em className="opacity-70">No customer</em>}
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          {project.primaryCustomer ? (
+            <>
+              <span className="min-w-0 truncate">{project.primaryCustomer.name}</span>
+              {project.customers.length > 1 && (
+                <span
+                  className="shrink-0"
+                  title={project.customers.map((c) => c.name).join(", ")}
+                >
+                  +{project.customers.length - 1}
+                </span>
+              )}
+            </>
+          ) : (
+            <em className="opacity-70">No customer</em>
+          )}
         </span>
         <div className="flex -space-x-1.5">
           <span

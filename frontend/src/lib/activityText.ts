@@ -82,6 +82,8 @@ const FIELD_NOUN: Record<string, string> = {
   assignedToId: "assignee",
   customer: "customer",
   customerId: "customer",
+  // A project's linked customer names (sorted), logged as { from: [...], to: [...] }.
+  customers: "customers",
   // A project's TAM seat and an epic's own columns.
   tam: "TAM",
   tamId: "TAM",
@@ -107,6 +109,10 @@ function fieldNoun(field: string): string {
 function valueText(field: string, entityType: string, v: unknown): string | null {
   if (v === null || v === undefined || v === "") return "none";
   if (typeof v === "boolean") return v ? "yes" : "no";
+  if (Array.isArray(v)) {
+    const names = nameList(v);
+    return names.length ? names.join(", ") : "none";
+  }
   if (isRecord(v)) {
     for (const key of ["username", "name", "title"]) {
       const inner = v[key];
@@ -414,7 +420,15 @@ function buildBody(event: ActivityEvent): Parts {
       break;
     }
     case "project":
-      if (event.action === "created") return label ? [txt("created the project "), ent(label)] : [txt("created the project")];
+      if (event.action === "created") {
+        // A shared project's creation also logs its customer names (bare array).
+        const names = changes ? nameList(changes.customers) : [];
+        const withCustomers =
+          names.length > 1 ? [txt(` with customers ${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`)] : [];
+        return label
+          ? [txt("created the project "), ent(label), ...withCustomers]
+          : [txt("created the project"), ...withCustomers];
+      }
       if (event.action === "updated") {
         return updateSentence({ ...event, entityLabel: null }, changes ?? {}, "the project", "project");
       }

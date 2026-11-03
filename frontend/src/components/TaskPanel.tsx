@@ -17,6 +17,7 @@ import { TaskConflictDialog } from "./TaskConflictDialog";
 import { RowTicketCell, type RowTicketContext } from "@/components/itop/RowTicketCell";
 import { TaskTicketField } from "@/components/itop/TaskTicketField";
 import { useCanCreateItopTicket } from "@/components/itop/useCanCreateItopTicket";
+import { useItopOrgChoice } from "@/components/itop/useItopOrgChoice";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { Sortable, SortableItem, SortableItemHandle } from "@/components/reui/sortable";
 import { ApiError } from "@/lib/api";
@@ -102,8 +103,9 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   // task itself has no customer of its own, so this is the one extra fetch
   // this panel needs for that field.
   const { data: project } = useProject(projectId);
+  const itopOrg = useItopOrgChoice(project?.customers ?? []);
   const { data: itopStatusData } = useItopStatus();
-  const subtaskCreateGate = useCanCreateItopTicket(project?.customerId ?? null, project?.customer?.name ?? null);
+  const subtaskCreateGate = useCanCreateItopTicket(itopOrg.customerId, itopOrg.customerName);
 
   const { data: tasks } = useProjectTasks(projectId);
   const { data: sections } = useProjectSections(projectId);
@@ -135,7 +137,9 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
       ? {
           projectId,
           projectName: project.name,
-          customerId: project.customerId,
+          customerId: itopOrg.customerId,
+          organisations: itopOrg.organisations,
+          organisationLabel: itopOrg.organisationLabel,
           baseUrl: itopStatusData?.baseUrl ?? null,
           gate: subtaskCreateGate,
           byRef: subtaskTickets,
@@ -796,8 +800,10 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                 <TaskTicketField
                   itopTicketRef={task.itopTicketRef}
                   canEdit={canEdit}
-                  customerId={project?.customerId ?? null}
-                  customerName={project?.customer?.name ?? null}
+                  customerId={itopOrg.customerId}
+                  customerName={itopOrg.customerName}
+                  organisations={itopOrg.organisations}
+                  organisationLabel={itopOrg.organisationLabel}
                   taskTitle={task.title}
                   taskDescription={task.description}
                   projectName={project?.name ?? null}

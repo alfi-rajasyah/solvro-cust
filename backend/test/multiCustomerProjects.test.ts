@@ -77,8 +77,9 @@ describe("visibility through any linked customer", () => {
       [b.id, false],
     ]);
     expect(detail.body.primaryCustomer.id).toBe(a.id);
-    expect(detail.body.customerId).toBe(a.id); // legacy field = primary
-    expect(detail.body.customer.id).toBe(a.id);
+    // The legacy single-customer fields are gone from project responses.
+    expect(detail.body).not.toHaveProperty("customerId");
+    expect(detail.body).not.toHaveProperty("customer");
 
     const tasks = await request(app).get("/tasks").query({ customerId: b.id }).set(auth(tamB.token));
     expect(tasks.body.map((t: { projectId: number }) => t.projectId)).toContain(project.id);
@@ -101,7 +102,10 @@ describe("visibility through any linked customer", () => {
     expect(detail.status).toBe(200);
     const row = detail.body.projects.find((p: { id: number }) => p.id === project.id);
     expect(row).toMatchObject({ isPrimary: false, isShared: true });
+    expect(row.primaryCustomer).toMatchObject({ isPrimary: true });
     expect(row.primaryCustomer.id).not.toBe(b.id);
+    expect(row).not.toHaveProperty("customerId");
+    expect(row).not.toHaveProperty("customer");
   });
 });
 
@@ -286,7 +290,8 @@ describe("link changes", () => {
 
     const viaLegacy = await request(app).post("/projects").set(auth(tam.token)).send({ name: uniq("L"), customerId: a.id });
     expect(viaLegacy.status).toBe(201);
-    expect(viaLegacy.body.customerId).toBe(a.id);
+    expect(viaLegacy.body.primaryCustomer.id).toBe(a.id);
+    expect(viaLegacy.body).not.toHaveProperty("customerId");
   });
 
   it("a member's legacy re-save with the current primary is not a link change; moving the primary is owner-only", async () => {
@@ -381,5 +386,32 @@ describe("claiming an unowned customer", () => {
     await sharedProject(other.userId, mine.id, [unowned.id]); // someone else's project is under `unowned`
     const res = await request(app).patch(`/customers/${unowned.id}`).set(auth(tam.token)).send({ tamId: tam.userId });
     expect(res.status).toBe(403);
+  });
+});
+
+describe("owning one linked customer is not owning the other", () => {
+  it("the owner of a linked customer cannot delete or reassign the OTHER customer; its own owner can", async () => {
+    const { tamA, tamB, a, b } = await world();
+    // tamB sees A through the shared project but owns only B.
+    const del = await request(app).delete(`/customers/${a.id}`).set(auth(tamB.token));
+    expect(del.status).toBe(403);
+    expect(del.body.code).toBe("owner_only");
+    const other = await createUserWithRole("TAM");
+    const reassign = await request(app).patch(`/customers/${a.id}`).set(auth(tamB.token)).send({ tamId: other.userId });
+    expect(reassign.status).toBe(403);
+    expect(reassign.body.code).toBe("owner_only");
+    expect(await prisma.projectCustomer.count({ where: { customerId: a.id } })).toBe(1);
+    // Its own owner is unaffected: tamB can change B's owner and delete B.
+    const own = await request(app).patch(`/customers/${b.id}`).set(auth(tamB.token)).send({ tamId: tamB.userId });
+    expect(own.status).toBe(200);
+    expect((await request(app).delete(`/customers/${b.id}`).set(auth(tamB.token))).status).toBe(204);
+    // tamA (the project's TAM) still owns A.
+    expect((await request(app).delete(`/customers/${a.id}`).set(auth(tamA.token))).status).toBe(204);
+  });
+
+  it("the project's TAM still passes the customer owner check on a customer under their project", async () => {
+    const { tamA, b } = await world();
+    // Project TAM rule unchanged: TAM of a project under B.
+    expect((await request(app).delete(`/customers/${b.id}`).set(auth(tamA.token))).status).toBe(204);
   });
 });

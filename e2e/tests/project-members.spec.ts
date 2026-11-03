@@ -295,11 +295,12 @@ test.describe("Project members", () => {
       await memberPage.goto(`/projects/${projectId}/overview`, { waitUntil: "networkidle" });
       await expect(memberPage.getByRole("button", { name: "More project actions" })).toBeHidden();
       await memberPage.getByRole("button", { name: /Edit$/ }).click();
-      const customerSelect = memberPage
-        .getByRole("dialog")
-        .locator("select")
-        .filter({ has: memberPage.getByRole("option", { name: "Select customer…" }) });
-      await expect(customerSelect).toBeDisabled();
+      const customers = memberPage.getByTestId("project-customers-field");
+      await expect(customers.getByTestId("project-customer-row")).toHaveCount(1);
+      // Read-only: no add picker, no remove, the primary radio is locked.
+      await expect(customers.getByLabel("Add customer")).toHaveCount(0);
+      await expect(customers.getByRole("button", { name: /^Remove / })).toHaveCount(0);
+      await expect(customers.getByRole("radio")).toBeDisabled();
       await memberPage.keyboard.press("Escape");
 
       await memberPage.goto(`/customers/${customerId}`, { waitUntil: "networkidle" });

@@ -134,15 +134,15 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
               <dt className="text-on-surface-variant">TAM</dt>
               <dd className="font-medium text-on-surface">{project.tam.username}</dd>
             </div>
-            {project.customer && (
+            {project.primaryCustomer && (
               <div className="flex justify-between">
                 <dt className="text-on-surface-variant">Customer</dt>
                 <dd>
                   <Link
-                    to={`/customers/${project.customer.id}`}
+                    to={`/customers/${project.primaryCustomer.id}`}
                     className="font-medium text-primary hover:underline"
                   >
-                    {project.customer.name}
+                    {project.primaryCustomer.name}
                   </Link>
                 </dd>
               </div>
@@ -254,13 +254,13 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
           </section>
         )}
 
-        {project.customer && (
+        {project.primaryCustomer && (
           <section>
             <h3 className="mb-2 font-display text-label-caps uppercase text-on-surface-variant">
               Customer
             </h3>
             <Link
-              to={`/customers/${project.customer.id}`}
+              to={`/customers/${project.primaryCustomer.id}`}
               className="flex items-start gap-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-3 transition-colors hover:border-primary/40"
             >
               <span aria-hidden="true"
@@ -274,7 +274,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                   Customer account
                 </p>
                 <p className="mt-0.5 text-meta text-on-surface-variant">
-                  Open the account page for {project.customer.name}.
+                  Open the account page for {project.primaryCustomer.name}.
                 </p>
                 <span className="mt-2 inline-flex items-center gap-1 text-meta font-semibold text-primary">
                   Go to customer

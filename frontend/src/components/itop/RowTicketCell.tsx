@@ -35,6 +35,9 @@ export interface RowTicketContext {
   projectId: number;
   projectName: string;
   customerId: number | null;
+  /** 2+ iTop-mapped customers on the project: the sheet's Organisation picker (`customerId` is the default). */
+  organisations?: ReadonlyArray<{ id: number; name: string }>;
+  organisationLabel?: string | null;
   baseUrl: string | null;
   gate: CreateGate;
   /** Lookup results from the batched by-refs request (undefined while loading). */
@@ -284,6 +287,8 @@ export function RowTicketCell({
             open
             onClose={() => setCreateOpen(false)}
             customerId={ctx.customerId}
+            organisations={ctx.organisations}
+            organisationLabel={ctx.organisationLabel}
             initialTitle={prefill.title}
             initialDescription={prefill.description}
             pinTarget

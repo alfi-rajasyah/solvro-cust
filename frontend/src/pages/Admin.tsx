@@ -1650,7 +1650,7 @@ function ProjectsTab() {
       // "" fallback (not null) so the column's cell values stay string —
       // required for the "alphanumeric" comparator, and sorts projects
       // without a linked customer first ascending.
-      accessorFn: (row) => row.customer?.name ?? "",
+      accessorFn: (row) => row.primaryCustomer?.name ?? "",
       header: ({ column }) => <DataGridColumnHeader column={column} title="Customer" />,
       // Customer names are entity/company names, not person names — same
       // "alphanumeric" bucket as the "project" column above, not
@@ -1659,7 +1659,7 @@ function ProjectsTab() {
       sortingFn: "alphanumeric",
       cell: ({ row }) => (
         <span className="text-on-surface-variant">
-          {row.original.customer?.name ?? "—"}
+          {row.original.primaryCustomer?.name ?? "—"}
         </span>
       ),
       meta: { skeleton: <Skeleton className="h-3.5 w-28" /> },

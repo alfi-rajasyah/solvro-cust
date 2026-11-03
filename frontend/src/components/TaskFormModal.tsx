@@ -6,6 +6,7 @@ import { Drawer } from "./Drawer";
 import { EpicChip } from "./EpicChip";
 import { LabelPicker } from "./LabelPicker";
 import { TaskTicketField } from "./itop/TaskTicketField";
+import { useItopOrgChoice } from "./itop/useItopOrgChoice";
 import { TaskConflictDialog } from "./TaskConflictDialog";
 import {
   CRITICAL_PATH_GLYPH,
@@ -114,6 +115,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
   const [nestedSheetOpen, setNestedSheetOpen] = useState(false);
   const itopConfigured = useItopStatus().data?.configured ?? false;
   const { data: project } = useProject(open ? projectId : null);
+  const itopOrg = useItopOrgChoice(project?.customers ?? []);
   const [error, setError] = useState<string | null>(null);
   // Drive the drawer's slide-out: every close path sets `closing`, and
   // the parent's real `onClose` (which unmounts us) only runs once the
@@ -594,8 +596,10 @@ export function TaskFormModal(props: TaskFormModalProps) {
               <TaskTicketField
                 itopTicketRef={itopRef}
                 canEdit={canEdit}
-                customerId={project?.customerId ?? null}
-                customerName={project?.customer?.name ?? null}
+                customerId={itopOrg.customerId}
+                customerName={itopOrg.customerName}
+                organisations={itopOrg.organisations}
+                organisationLabel={itopOrg.organisationLabel}
                 projectName={project?.name ?? null}
                 parentTitle={
                   parentTaskId === ""

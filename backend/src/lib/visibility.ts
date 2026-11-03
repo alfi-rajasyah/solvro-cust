@@ -167,7 +167,13 @@ export function customerVisibilityFilter(
     OR: [
       { tamId: user.sub },
       { tamId: null },
-      { projects: { some: { project: projectVisibilityFilter(user, opts) } } },
+      // Plain visibility: any project the caller can see. An OWNER check
+      // (`ownership`) narrows this to projects the caller is TAM of: the owner
+      // of one linked customer owns the shared PROJECT, never the other
+      // customer (docs/archive/plans/multi-customer-projects.md, decision 4).
+      opts.ownership
+        ? { projects: { some: { project: { tamId: user.sub } } } }
+        : { projects: { some: { project: projectVisibilityFilter(user, opts) } } },
     ],
   };
 }

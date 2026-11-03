@@ -388,10 +388,7 @@ function flattenCustomerProjects<P extends LinkedProject>(links: { isPrimary: bo
       customers: ordered.map((c) => ({ id: c.customer.id, name: c.customer.name, isPrimary: c.isPrimary })),
       isPrimary: l.isPrimary,
       isShared: ordered.length > 1,
-      primaryCustomer: primary,
-      // Legacy pair, like every other project response.
-      customerId: primary?.id ?? null,
-      customer: primary,
+      primaryCustomer: primary ? { ...primary, isPrimary: true } : null,
     };
   });
 }

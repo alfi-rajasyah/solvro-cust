@@ -251,7 +251,7 @@ test.describe("TaskPanel Create in iTop", () => {
       `${base}/api/projects/${projectId}?today=${new Date().toISOString().slice(0, 10)}`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
-    const customerId = ((await projectRes.json()) as { customer: { id: number } | null }).customer?.id;
+    const customerId = ((await projectRes.json()) as { primaryCustomer: { id: number } | null }).primaryCustomer?.id;
     expect(customerId, "the fixture project has a customer").toBeDefined();
     const taskTitle = `Create ticket ${stamp()}`;
     // `createTask`'s `CreateTaskInput` has no `description` field (nothing

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Modal } from "./Modal";
+import { addLink, linkBody, removeLink, setPrimaryLink } from "@/lib/projectCustomerLinks";
+import { PrimaryChip } from "@/components/customer/PrimaryChip";
 import { OutlineUrlField } from "./OutlineUrlField";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { parseOutlineUrl } from "@/lib/outlineUrl";
@@ -9,6 +11,7 @@ import { PROJECT_STATUS_LABEL, TASK_CATEGORY_GROUP_LABEL } from "@/lib/labels";
 import { STATUS_TONE_DOT_CLASS } from "@/components/StatusChip";
 import { groupStatusDefs } from "@/lib/taskStatuses";
 import {
+  type ProjectCustomerLink,
   type ProjectDetail,
   type ProjectStatus,
   type TaskStatusDef,
@@ -105,7 +108,8 @@ export function ProjectFormModal({
   const [outlineUrlError, setOutlineUrlError] = useState<string | null>(null);
   const outlineUrlInput = useRef<HTMLInputElement>(null);
   const [tamId, setTamId] = useState<number | "">("");
-  const [customerId, setCustomerId] = useState<number | "">("");
+  // Linked customers, in display order; exactly one isPrimary while non-empty.
+  const [links, setLinks] = useState<ProjectCustomerLink[]>([]);
   const [status, setStatus] = useState<ProjectStatus>("PLANNING");
   const [wipLimits, setWipLimits] = useState<WipLimitsForm>({});
   const [excludeFromPortfolio, setExcludeFromPortfolio] = useState(false);
@@ -120,7 +124,7 @@ export function ProjectFormModal({
       setDescription(project.description ?? "");
       setOutlineUrl(project.outlineUrl ?? "");
       setTamId(project.tamId);
-      setCustomerId(project.customerId ?? "");
+      setLinks(project.customers.map((c) => ({ id: c.id, name: c.name, isPrimary: c.isPrimary })));
       setStatus(project.status);
       setWipLimits(wipLimitsToForm(project.wipLimits, wipDefs));
       setExcludeFromPortfolio(project.excludeFromPortfolio);
@@ -129,7 +133,7 @@ export function ProjectFormModal({
       setDescription("");
       setOutlineUrl("");
       setTamId("");
-      setCustomerId("");
+      setLinks([]);
       setStatus("PLANNING");
       setWipLimits(wipLimitsToForm(null, wipDefs));
       setExcludeFromPortfolio(false);
@@ -153,6 +157,7 @@ export function ProjectFormModal({
   // TAM dropdown lists all users — role names no longer gate who's eligible
   // to be assigned (admin's choice). Anti-self-clutter not done here because
   // useUsers() doesn't expose `active`.
+  const canEditLinks = canReadCustomers && (!isEdit || canChangeOwnership);
   const tams = users ?? [];
   const canPickTam = user?.permissions?.includes("*") ?? false;
 
@@ -163,8 +168,10 @@ export function ProjectFormModal({
       setError("Name is required.");
       return;
     }
-    if (customerId === "") {
-      setError("Customer is required.");
+    // Only enforced where the field is editable: a member (or a user without
+    // customer:read) saving other fields of an unlinked project must still work.
+    if (links.length === 0 && (!isEdit || canEditLinks)) {
+      setError("At least one customer is required.");
       return;
     }
     // Client-side twin of the server rule (http/https, ≤ 2048, empty clears).
@@ -185,7 +192,8 @@ export function ProjectFormModal({
           ...(canChangeOwnership
             ? {
                 tamId: tamId === "" ? undefined : Number(tamId),
-                customerId: Number(customerId),
+                // An unlinked project edited by someone who can't edit links sends none.
+                ...(links.length > 0 ? { customers: linkBody(links) } : {}),
               }
             : {}),
           status,
@@ -201,7 +209,7 @@ export function ProjectFormModal({
           description: description.trim() || undefined,
           outlineUrl: parsedOutline.value,
           tamId: tamId === "" ? undefined : Number(tamId),
-          customerId: Number(customerId),
+          customers: linkBody(links),
           status,
           wipLimits: defsLoaded ? formToWipLimits(wipLimits, null, knownIds) : undefined,
           excludeFromPortfolio,
@@ -276,41 +284,15 @@ export function ProjectFormModal({
           inputClassName="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
         />
 
-        <Field label="Customer" required>
-          <select
-            value={customerId === "" ? "" : String(customerId)}
-            onChange={(e) =>
-              setCustomerId(e.target.value === "" ? "" : Number(e.target.value))
-            }
-            disabled={!canReadCustomers || (isEdit && !canChangeOwnership)}
-            className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            <option value="">
-              {customers && customers.length === 0
-                ? "No customers — create one in the Customers tab first"
-                : "Select customer…"}
-            </option>
-            {(customers ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-            {/* A member may not see the customer in the list; keep it shown. */}
-            {project?.customer && !(customers ?? []).some((c) => c.id === project.customer!.id) && (
-              <option value={project.customer.id}>{project.customer.name}</option>
-            )}
-          </select>
-          {!canReadCustomers && (
-            <p className="mt-1 text-meta text-on-surface-variant">
-              You don't have access to customers, so one can't be chosen here. Ask an admin for the "View customers" permission.
-            </p>
-          )}
-          {canReadCustomers && isEdit && !canChangeOwnership && (
-            <p className="mt-1 text-meta text-on-surface-variant">
-              Only the project's TAM or the customer's owner can move it to another customer.
-            </p>
-          )}
-        </Field>
+        <CustomersField
+          links={links}
+          onChange={setLinks}
+          options={customers ?? []}
+          canReadCustomers={canReadCustomers}
+          readOnly={!canEditLinks}
+          noCustomersExist={customers !== undefined && customers.length === 0}
+          ownerNotice={canReadCustomers && isEdit && !canChangeOwnership}
+        />
 
         <Field label="Status">
           <select
@@ -426,5 +408,128 @@ function Field({
       </span>
       {children}
     </label>
+  );
+}
+
+const LINK_ACTION_CLASS =
+  "rounded-sm font-display text-meta font-semibold text-primary hover:underline outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
+
+// "Customers" list of Triage 05 (docs/archive/plans/multi-customer-projects.md):
+// a primary radio, the name, a Primary chip or "Set as primary", remove, and
+// an add picker limited to the customers the caller can see.
+function CustomersField({
+  links,
+  onChange,
+  options,
+  canReadCustomers,
+  readOnly,
+  noCustomersExist,
+  ownerNotice,
+}: {
+  links: ProjectCustomerLink[];
+  onChange: (next: ProjectCustomerLink[]) => void;
+  options: readonly { id: number; name: string }[];
+  canReadCustomers: boolean;
+  readOnly: boolean;
+  noCustomersExist: boolean;
+  ownerNotice: boolean;
+}) {
+  const available = options.filter((c) => !links.some((l) => l.id === c.id));
+  return (
+    <fieldset className="block" data-testid="project-customers-field">
+      <legend className="mb-1.5 block text-label-caps uppercase text-on-surface-variant">
+        Customers<span className="ml-1 text-error">*</span>
+      </legend>
+      {links.length > 0 && (
+        <ul className="divide-y divide-outline-variant/60 rounded-lg border border-outline-variant bg-surface-container-lowest">
+          {links.map((l) => (
+            <li key={l.id} className="flex items-center gap-3 px-3 py-2" data-testid="project-customer-row">
+              <input
+                type="radio"
+                name="primary-customer"
+                checked={l.isPrimary}
+                disabled={readOnly}
+                onChange={() => onChange(setPrimaryLink(links, l.id))}
+                aria-label={`Make ${l.name} the primary customer`}
+                className="h-4 w-4 shrink-0 accent-primary"
+              />
+              <span className="min-w-0 flex-1 truncate text-sm text-on-surface">{l.name}</span>
+              {l.isPrimary ? (
+                <PrimaryChip />
+              ) : (
+                !readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => onChange(setPrimaryLink(links, l.id))}
+                    className={LINK_ACTION_CLASS}
+                  >
+                    Set as primary
+                  </button>
+                )
+              )}
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => onChange(removeLink(links, l.id))}
+                  disabled={links.length === 1}
+                  aria-label={`Remove ${l.name}`}
+                  title={links.length === 1 ? "A project needs at least one customer" : undefined}
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-[18px]">
+                    close
+                  </span>
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!readOnly && (
+        <div className="mt-2 flex items-center gap-2">
+          <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-primary">
+            add
+          </span>
+          <select
+            value=""
+            onChange={(e) => {
+              const c = options.find((o) => o.id === Number(e.target.value));
+              if (c) onChange(addLink(links, c));
+            }}
+            aria-label="Add customer"
+            disabled={available.length === 0}
+            className="min-w-0 flex-1 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            <option value="">
+              {noCustomersExist
+                ? "No customers — create one in the Customers tab first"
+                : links.length === 0
+                  ? "Select customer…"
+                  : "Add customer…"}
+            </option>
+            {available.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {links.length > 1 && (
+        <p className="mt-1.5 text-meta text-on-surface-variant">
+          The primary customer is the one used for the breadcrumb, the public share page and new iTop tickets by default.
+        </p>
+      )}
+      {!canReadCustomers && (
+        <p className="mt-1 text-meta text-on-surface-variant">
+          You don't have access to customers, so one can't be chosen here. Ask an admin for the "View customers" permission.
+        </p>
+      )}
+      {ownerNotice && (
+        <p className="mt-1 text-meta text-on-surface-variant">
+          Only the project's TAM or the owner of one of its customers can change its customers.
+        </p>
+      )}
+    </fieldset>
   );
 }

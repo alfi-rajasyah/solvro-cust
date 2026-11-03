@@ -132,7 +132,7 @@ function ProjectMembersDialog({
       await remove.mutateAsync(userId);
       // Only when they actually lost access: the TAM, a customer owner or a
       // view-all user keeps it, and stays on the page.
-      if (userId === user?.id && !canOwnProject(user, project, project.customer?.tamId)) {
+      if (userId === user?.id && !canOwnProject(user, project, project.customers.map((c) => c.tamId))) {
         onClose();
         navigate("/projects", { replace: true });
       }

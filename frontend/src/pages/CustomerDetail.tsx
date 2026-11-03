@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AccountHeader, sumProjectHealth } from "@/components/customer/AccountHeader";
 import { AccountOverview } from "@/components/customer/AccountOverview";
+import { CustomerDeleteBody, sharedProjectsOf } from "@/components/customer/CustomerDeleteBody";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { CustomerFormModal } from "@/components/CustomerFormModal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
@@ -271,7 +272,12 @@ export function CustomerDetail() {
         onClose={() => setConfirmDeleteOpen(false)}
         onConfirm={() => void handleDelete()}
         title="Delete customer"
-        body={`Delete customer "${customer.name}"? Linked projects keep their tasks but lose the customer link.`}
+        body={
+          <CustomerDeleteBody
+            name={customer.name}
+            shared={sharedProjectsOf(customer.id, customer.projects)}
+          />
+        }
         confirmLabel="Delete"
         confirmTone="danger"
         busy={deleteCustomer.isPending}

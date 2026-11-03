@@ -30,7 +30,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
   const { data: customer } = useCustomer(route.customerId);
   const crumbs = buildCrumbs(location.pathname, {
     projectName: project?.name,
-    projectCustomer: project?.customer,
+    projectCustomer: project?.primaryCustomer,
     customerName: customer?.name,
   });
 
