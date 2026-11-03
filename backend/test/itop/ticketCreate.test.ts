@@ -248,6 +248,23 @@ describe("permission gating", () => {
     expect(fixture.state.writeLog.filter((w) => w.operation === "core/create")).toHaveLength(0);
   });
 
+  it("403s a task:write caller without customer:write on POST /itop/tickets", async () => {
+    const roleName = "TEST_TASKWRITE_NO_CUSTOMER_WRITE";
+    const permissions = ["project:read", "task:write", "customer:read"];
+    await prisma.role.upsert({ where: { roleName }, update: { permissions }, create: { roleName, permissions } });
+    const user = await createUserWithRole(roleName);
+    await linkPersonalToken(user.userId, FAKE_ITOP_TOKENS.rina);
+    const res = await call("post", "/itop/tickets", user.token, {
+      customerId: fixture.customer1Id,
+      class: "UserRequest",
+      title: "Should not be created",
+      description: "Blocked by customer:write.",
+      callerId: 1,
+    });
+    expect(res.status).toBe(403);
+    expect(fixture.state.writeLog.filter((w) => w.operation === "core/create")).toHaveLength(0);
+  });
+
   it("403s a PENDING user on the picklists and on POST /itop/tickets", async () => {
     const pending = await createUserWithRole("PENDING");
     expect((await call("get", "/itop/services", pending.token)).status).toBe(403);

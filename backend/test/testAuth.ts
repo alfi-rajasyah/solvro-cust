@@ -7,14 +7,14 @@ import { signToken } from "../src/http/auth.js";
 // itself (which calls process.exit on completion).
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   ADMIN: ["*"],
-  TAM: ["project:read", "project:write", "task:read", "task:write", "task:comment"],
-  STAKEHOLDER: ["project:read", "task:comment"],
+  TAM: ["project:read", "project:write", "customer:read", "customer:write", "task:read", "task:write", "task:comment"],
+  STAKEHOLDER: ["project:read", "customer:read", "task:comment"],
   PENDING: [],
   // Test-only (not seeded by the app): a read-everything role, the kind an
   // admin can create in Admin > Roles. Stands in where a suite needs
   // `project:view-all` without `project:write` — STAKEHOLDER carried that
   // grant until the 2026-10 security hardening.
-  AUDITOR: ["project:read", "project:view-all"],
+  AUDITOR: ["project:read", "customer:read", "project:view-all"],
 };
 
 export async function seedRoles(): Promise<void> {

@@ -51,10 +51,10 @@ async function createProject(overrides: { tamId: number; customerId?: number | n
 async function createViewAllWriterAndToken(): Promise<{ userId: number; token: string }> {
   await prisma.role.upsert({
     where: { roleName: "TEST_VIEW_ALL_WRITER" },
-    update: { permissions: ["project:write", "project:view-all"] },
+    update: { permissions: ["project:write", "customer:read", "customer:write", "project:view-all"] },
     create: {
       roleName: "TEST_VIEW_ALL_WRITER",
-      permissions: ["project:write", "project:view-all"],
+      permissions: ["project:write", "customer:read", "customer:write", "project:view-all"],
     },
   });
   return createUserWithRole("TEST_VIEW_ALL_WRITER");
@@ -324,5 +324,184 @@ describe("PATCH /customers/:id — un-owning guard (Decision 4 anti-bypass)", ()
       .send({ tamId: null });
     expect(res.status).toBe(200);
     expect(res.body.tam).toBeNull();
+  });
+});
+
+// `customer:view-all` (user decision 2026-11-03): sees every customer, but
+// never gains project access or customer ownership.
+describe("customer:view-all permission", () => {
+  async function holderAndToken() {
+    await prisma.role.upsert({
+      where: { roleName: "TEST_CUSTOMER_VIEW_ALL" },
+      update: { permissions: ["project:read", "customer:read", "customer:write", "customer:view-all"] },
+      create: {
+        roleName: "TEST_CUSTOMER_VIEW_ALL",
+        permissions: ["project:read", "customer:read", "customer:write", "customer:view-all"],
+      },
+    });
+    return createUserWithRole("TEST_CUSTOMER_VIEW_ALL");
+  }
+
+  it("holder sees every customer in the list, on detail and in search", async () => {
+    const { owned, attached, unowned, unrelated } = await fourCustomerFixture();
+    const holder = await holderAndToken();
+    const auth = { Authorization: `Bearer ${holder.token}` };
+
+    const list = await request(app).get("/customers").set(auth);
+    expect(list.status).toBe(200);
+    const ids = list.body.map((c: any) => c.id);
+    for (const c of [owned, attached, unowned, unrelated]) expect(ids).toContain(c.id);
+
+    const detail = await request(app).get(`/customers/${unrelated.id}`).set(auth);
+    expect(detail.status).toBe(200);
+    // Projects stay gated: the unrelated customer's project is not listed.
+    expect(detail.body.projects).toEqual([]);
+    expect(detail.body._count.projects).toBe(0);
+
+    const search = await request(app).get("/search").query({ q: unrelated.name }).set(auth);
+    expect(search.status).toBe(200);
+    expect(search.body.customers.map((c: any) => c.id)).toContain(unrelated.id);
+    expect(search.body.projects).toEqual([]);
+  });
+
+  it("holder still gets 404 on another TAM's project", async () => {
+    const { otherTam, unrelated } = await fourCustomerFixture();
+    const project = await createProject({ tamId: otherTam.userId, customerId: unrelated.id });
+    const holder = await holderAndToken();
+    const res = await request(app)
+      .get(`/projects/${project.id}`)
+      .set("Authorization", `Bearer ${holder.token}`);
+    expect(res.status).toBe(404);
+  });
+
+  it("holder cannot delete or reassign another TAM's customer (403 owner_only)", async () => {
+    const { unrelated } = await fourCustomerFixture();
+    const holder = await holderAndToken();
+    const auth = { Authorization: `Bearer ${holder.token}` };
+
+    const del = await request(app).delete(`/customers/${unrelated.id}`).set(auth);
+    expect(del.status).toBe(403);
+    expect(del.body.code).toBe("owner_only");
+
+    const patch = await request(app)
+      .patch(`/customers/${unrelated.id}`)
+      .set(auth)
+      .send({ tamId: holder.userId });
+    expect(patch.status).toBe(403);
+
+    const list = await request(app).get("/customers").set(auth);
+    const row = list.body.find((c: any) => c.id === unrelated.id);
+    expect(row.canChangeOwner).toBe(false);
+    expect(await prisma.customer.count({ where: { id: unrelated.id } })).toBe(1);
+  });
+
+  it("holder's Daily Review scope is unchanged (other TAMs' customers stay out)", async () => {
+    const { unrelated, unowned } = await fourCustomerFixture();
+    const holder = await holderAndToken();
+    const res = await request(app)
+      .get("/daily-review")
+      .query({ week: "2026-W35", today: "2026-08-28" })
+      .set("Authorization", `Bearer ${holder.token}`);
+    expect(res.status).toBe(200);
+    const ids = res.body.customers.map((c: any) => c.id);
+    expect(ids).not.toContain(unrelated.id);
+    expect(ids).not.toContain(unowned.id);
+  });
+
+  it("a non-holder TAM is unchanged: still 404 on the unrelated customer", async () => {
+    const { tam, unrelated } = await fourCustomerFixture();
+    const res = await request(app)
+      .get(`/customers/${unrelated.id}`)
+      .set("Authorization", `Bearer ${tam.token}`);
+    expect(res.status).toBe(404);
+  });
+});
+
+// Customer permissions mirror project permissions (user decision 2026-11-03).
+describe("customer:read / customer:write gates", () => {
+  async function userWith(permissions: string[]) {
+    const roleName = `TEST_CP_${permissions.join("_").replace(/[^a-z_-]/gi, "")}`;
+    await prisma.role.upsert({
+      where: { roleName },
+      update: { permissions },
+      create: { roleName, permissions },
+    });
+    return createUserWithRole(roleName);
+  }
+
+  it("project:read without customer:read gets 403 on customer reads", async () => {
+    const { unowned } = await fourCustomerFixture();
+    const u = await userWith(["project:read", "project:write"]);
+    const auth = { Authorization: `Bearer ${u.token}` };
+    expect((await request(app).get("/customers").set(auth)).status).toBe(403);
+    expect((await request(app).get(`/customers/${unowned.id}`).set(auth)).status).toBe(403);
+    expect((await request(app).get(`/customers/${unowned.id}/notes`).set(auth)).status).toBe(403);
+    expect((await request(app).get(`/itop/customers/${unowned.id}/tickets`).set(auth)).status).toBe(403);
+    expect((await request(app).get(`/customers/${unowned.id}/outline/docs`).set(auth)).status).toBe(403);
+    expect((await request(app).get(`/customers/${unowned.id}/weekly-updates`).set(auth)).status).toBe(403);
+    expect((await request(app).get(`/itop/customers/${unowned.id}/contacts`).set(auth)).status).toBe(403);
+    expect((await request(app).get("/itop/tickets/by-refs").query({ refs: "R-000001" }).set(auth)).status).toBe(403);
+    expect((await request(app).get("/itop/tickets/1").set(auth)).status).toBe(403);
+    expect((await request(app).get("/itop/tickets/by-ref/R-000001").set(auth)).status).toBe(403);
+    // Search and recent notes stay reachable but leave customers out.
+    const search = await request(app).get("/search").query({ q: unowned.name }).set(auth);
+    expect(search.status).toBe(200);
+    expect(search.body.customers).toEqual([]);
+  });
+
+  it("customer:read without customer:write gets 403 on customer writes", async () => {
+    const { unowned } = await fourCustomerFixture();
+    const u = await userWith(["project:read", "project:write", "customer:read"]);
+    const auth = { Authorization: `Bearer ${u.token}` };
+    expect((await request(app).get(`/customers/${unowned.id}`).set(auth)).status).toBe(200);
+    expect((await request(app).post("/customers").set(auth).send({ name: uniq("N"), description: "d" })).status).toBe(403);
+    expect((await request(app).patch(`/customers/${unowned.id}`).set(auth).send({ name: "x" })).status).toBe(403);
+    expect((await request(app).delete(`/customers/${unowned.id}`).set(auth)).status).toBe(403);
+    expect((await request(app).put(`/customers/${unowned.id}/services`).set(auth).send({ services: [] })).status).toBe(403);
+    expect((await request(app).post(`/customers/${unowned.id}/notes`).set(auth).send({ noteDate: "2026-08-28", body: "b" })).status).toBe(403);
+  });
+
+  it("view-all + write edits another TAM's customer metadata, but still 403 on delete and reassign", async () => {
+    const { unrelated } = await fourCustomerFixture();
+    const u = await userWith(["project:read", "customer:read", "customer:write", "customer:view-all"]);
+    const auth = { Authorization: `Bearer ${u.token}` };
+    const edit = await request(app).patch(`/customers/${unrelated.id}`).set(auth).send({ name: "Edited by holder" });
+    expect(edit.status).toBe(200);
+    expect(edit.body.name).toBe("Edited by holder");
+    const reassign = await request(app).patch(`/customers/${unrelated.id}`).set(auth).send({ tamId: u.userId });
+    expect(reassign.status).toBe(403);
+    const del = await request(app).delete(`/customers/${unrelated.id}`).set(auth);
+    expect(del.status).toBe(403);
+    expect(del.body.code).toBe("owner_only");
+  });
+});
+
+describe("customer data is left out without customer:read", () => {
+  it("/notes/recent and /daily-review omit operations notes and the weekly update", async () => {
+    const roleName = "TEST_PROJECT_READ_WRITE_NO_CUSTOMER";
+    const permissions = ["project:read", "project:write"];
+    await prisma.role.upsert({ where: { roleName }, update: { permissions }, create: { roleName, permissions } });
+    const u = await createUserWithRole(roleName);
+    const customer = await createCustomer({ tamId: u.userId });
+    await createProject({ tamId: u.userId, customerId: customer.id });
+    const today = new Date();
+    const day = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    await prisma.customerNote.create({
+      data: { customerId: customer.id, authorId: u.userId, body: "ops body", title: "Ops title", noteDate: day },
+    });
+    await prisma.weeklyUpdate.create({
+      data: { customerId: customer.id, weekStart: new Date("2026-08-24T00:00:00.000Z"), authorId: u.userId, category: "Weekly text", status: "DRAFT" },
+    });
+    const auth = { Authorization: `Bearer ${u.token}` };
+
+    const recent = await request(app).get("/notes/recent").set(auth);
+    expect(recent.status).toBe(200);
+    expect(JSON.stringify(recent.body)).not.toContain("Ops title");
+
+    const review = await request(app).get("/daily-review").query({ week: "2026-W35", today: "2026-08-28" }).set(auth);
+    expect(review.status).toBe(200);
+    const cust = review.body.customers.find((c: any) => c.id === customer.id);
+    expect(cust.operationsNotes).toEqual([]);
+    expect(cust.weeklyUpdate).toBeNull();
   });
 });

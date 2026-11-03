@@ -119,7 +119,7 @@ export function App() {
           <Route
             path="customers"
             element={
-              <PermissionGuard permission="project:read">
+              <PermissionGuard permission="customer:read">
                 <Customers />
               </PermissionGuard>
             }
@@ -127,7 +127,7 @@ export function App() {
           <Route
             path="customers/:id"
             element={
-              <PermissionGuard permission="project:read">
+              <PermissionGuard permission="customer:read">
                 <CustomerDetail />
               </PermissionGuard>
             }
@@ -143,7 +143,7 @@ export function App() {
           <Route
             path="weekly-sync"
             element={
-              <PermissionGuard permission="project:read">
+              <PermissionGuard permission="customer:read">
                 <WeeklySync />
               </PermissionGuard>
             }

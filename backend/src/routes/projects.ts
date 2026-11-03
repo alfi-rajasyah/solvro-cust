@@ -127,6 +127,15 @@ const createTaskSchema = z
     sectionId: z.number().int().positive().nullable().optional(),
     labelIds: z.array(z.number().int().positive()).optional(),
     epicId: z.number().int().positive().nullable().optional(),
+    // Same format as PATCH /tasks/:id's itopTicketRef (routes/tasks.ts): the
+    // New-task modal pins a ref at creation
+    // (docs/archive/plans/subtask-itop-tickets.md Task 5).
+    itopTicketRef: z
+      .string()
+      .trim()
+      .regex(/^[A-Z]{1,3}-\d{4,8}$/)
+      .nullable()
+      .optional(),
   })
   .refine((b) => !b.isMilestone || b.dueDate != null, {
     message: "A milestone requires a due date",
@@ -624,6 +633,7 @@ projectsRouter.post(
           parentTaskId: body.parentTaskId ?? null,
           sectionId: body.sectionId ?? null,
           epicId: body.epicId ?? null,
+          itopTicketRef: body.itopTicketRef ?? null,
           position,
           labels: body.labelIds && body.labelIds.length > 0
             ? { connect: body.labelIds.map((lid) => ({ id: lid })) }

@@ -62,8 +62,9 @@ export function Customers() {
     [user, projectTamIdsByCustomer],
   );
 
-  const canMutate = hasPermission(user, "project:write");
-  const viewAll = hasPermission(user, "project:view-all");
+  const canMutate = hasPermission(user, "customer:write");
+  // Copy only: whether the list shows every customer. Unowned/create rules stay project:view-all.
+  const viewAll = hasPermission(user, "project:view-all") || hasPermission(user, "customer:view-all");
   useNewParam("1", canMutate, () => setCreateOpen(true));
 
   async function handleDelete(c: CustomerSummary) {

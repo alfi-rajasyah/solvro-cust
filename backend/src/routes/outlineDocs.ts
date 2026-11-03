@@ -72,7 +72,7 @@ customerOutlineDocsRouter.use(requireAuth);
 
 customerOutlineDocsRouter.get(
   "/:id/outline/docs",
-  requirePermission("project:read"),
+  requirePermission("customer:read"),
   validate("params", paramsSchema),
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof paramsSchema>;
@@ -85,7 +85,7 @@ customerOutlineDocsRouter.get(
 
 customerOutlineDocsRouter.post(
   "/:id/outline/docs",
-  requirePermission("project:write"),
+  requirePermission("customer:write"),
   validate("params", paramsSchema),
   validate("body", createDocSchema),
   async (req, res) => {

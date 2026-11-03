@@ -69,6 +69,12 @@ const VIEWS = [
 type ViewKey = (typeof VIEWS)[number]["key"];
 const DEFAULT_VIEW: ViewKey = "open";
 
+// A positive-integer URL param, or undefined for anything else.
+function idParam(raw: string | null): number | undefined {
+  const n = Number(raw);
+  return raw !== null && Number.isInteger(n) && n > 0 && n <= 2147483647 ? n : undefined;
+}
+
 function parseView(raw: string | null): ViewKey {
   return VIEWS.find((v) => v.key === raw)?.key ?? DEFAULT_VIEW;
 }
@@ -97,12 +103,24 @@ export function Tasks() {
   // Filters chip state is UI-only (Filter[]); it is derived down into the
   // TasksFilter shape useInfiniteTasks/queries.ts already expects — see `filter` below.
   const [activeFilters, setActiveFilters] = useState<Filter<string>[]>([]);
-  const [topLevel, setTopLevel] = useState(true);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Person filters carried in from the Overview (?tamId=&assigneeId=). With an
+  // assignee the list includes subtasks by default, so it matches the Overview
+  // tile that links here; the "Top-level only" box can still narrow it.
+  const urlTamId = idParam(searchParams.get("tamId"));
+  const urlAssigneeId = idParam(searchParams.get("assigneeId"));
+  const [topLevel, setTopLevel] = useState(urlAssigneeId === undefined);
+  // Clearing (or Back/Forward changing) the assignee param restores the
+  // default "Top-level only"; setting it includes subtasks.
+  const [seenAssigneeId, setSeenAssigneeId] = useState(urlAssigneeId);
+  if (seenAssigneeId !== urlAssigneeId) {
+    setSeenAssigneeId(urlAssigneeId);
+    setTopLevel(urlAssigneeId === undefined);
+  }
   // TanStack owns header sorting (DataGridColumnHeader). It starts empty: the
   // server already returns rows soonest-due first (`sort=due`), and a header
   // click re-sorts the loaded rows client-side.
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [searchParams, setSearchParams] = useSearchParams();
   const view = parseView(searchParams.get("view"));
   const { user } = useAuth();
   const [editTask, setEditTask] = useState<TaskWithProject | null>(null);
@@ -110,7 +128,7 @@ export function Tasks() {
   // /users and /customers need project:read; without it the filters stay empty.
   const canRead = hasPermission(user, "project:read");
   const { data: users } = useUsers(canRead);
-  const { data: customers } = useCustomers(canRead);
+  const { data: customers } = useCustomers(canRead && hasPermission(user, "customer:read"));
 
   const filterFields = useMemo<FilterFieldConfig<string>[]>(
     () => [
@@ -135,15 +153,20 @@ export function Tasks() {
         operators: ONLY_IS_OPERATOR,
         options: (users ?? []).map((u) => ({ value: String(u.id), label: u.username })),
       },
-      {
-        key: "customerId",
-        label: "Customer",
-        type: "select",
-        operators: ONLY_IS_OPERATOR,
-        options: (customers ?? []).map((c) => ({ value: String(c.id), label: c.name })),
-      },
+      // Hidden without customer:read: GET /customers would 403 and the picker would be empty.
+      ...(hasPermission(user, "customer:read")
+        ? [
+            {
+              key: "customerId",
+              label: "Customer",
+              type: "select" as const,
+              operators: ONLY_IS_OPERATOR,
+              options: (customers ?? []).map((c) => ({ value: String(c.id), label: c.name })),
+            },
+          ]
+        : []),
     ],
-    [users, customers],
+    [users, customers, user],
   );
 
   // Derive the TasksFilter useInfiniteTasks/queries.ts expects from the active Filter
@@ -170,11 +193,15 @@ export function Tasks() {
       status: status as TaskStatus | undefined,
       priority: priority as Priority | undefined,
       // Likewise an Assignee chip wins over "My open"'s current user.
-      assignedToId: assignedToId === undefined ? base.assignedToId : Number(assignedToId),
+      assignedToId:
+        assignedToId !== undefined
+          ? Number(assignedToId)
+          : (urlAssigneeId ?? base.assignedToId),
+      tamId: urlTamId,
       customerId: customerId === undefined ? undefined : Number(customerId),
       topLevel: topLevel || undefined,
     };
-  }, [activeFilters, topLevel, view, todayDay, userId]);
+  }, [activeFilters, topLevel, view, todayDay, userId, urlTamId, urlAssigneeId]);
 
   const { data, isLoading, isError, error, refetch, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useInfiniteTasks(filter);
@@ -187,11 +214,25 @@ export function Tasks() {
         const params = new URLSearchParams(prev);
         if (next === DEFAULT_VIEW) params.delete("view");
         else params.set("view", next);
+        // "My open" is its own assignee scope; a carried-in assignee would fight it.
+        if (next === "my-open") params.delete("assigneeId");
         return params;
       },
       { replace: false },
     );
   };
+
+  const clearParam = (key: "tamId" | "assigneeId") => {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        params.delete(key);
+        return params;
+      },
+      { replace: true },
+    );
+  };
+  const nameOf = (id: number) => users?.find((u) => u.id === id)?.username ?? `User #${id}`;
 
   const columns = useMemo<ColumnDef<TaskWithProject>[]>(
     () => [
@@ -358,13 +399,27 @@ export function Tasks() {
           onClick={() => {
             setActiveFilters([]);
             setTopLevel(true);
-            setView(DEFAULT_VIEW);
+            setSearchParams({}, { replace: false });
           }}
           className="ml-auto rounded-sm border border-outline-variant px-2 py-1 font-display text-sm text-on-surface-variant hover:border-primary hover:text-primary font-semibold"
         >
           Reset
         </button>
       </div>
+
+      {(urlTamId !== undefined || urlAssigneeId !== undefined) && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {urlTamId !== undefined && (
+            <PersonChip label={`TAM: ${nameOf(urlTamId)}`} onClear={() => clearParam("tamId")} />
+          )}
+          {urlAssigneeId !== undefined && (
+            <PersonChip
+              label={`Assigned to ${nameOf(urlAssigneeId)}`}
+              onClear={() => clearParam("assigneeId")}
+            />
+          )}
+        </div>
+      )}
 
       {isError && (
         <QueryErrorAlert title="Could not load tasks" error={error} onRetry={refetch} />
@@ -466,3 +521,20 @@ function startOfToday() {
 
 // Re-export Task to silence TS in callers that import this file.
 export type { Task };
+
+// Removable chip for a person filter carried in the URL from the Overview.
+function PersonChip({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-sm border border-primary bg-surface-container-lowest py-0.5 pl-2 pr-0.5 text-meta font-semibold text-on-surface">
+      {label}
+      <button
+        type="button"
+        aria-label={`Remove filter: ${label}`}
+        onClick={onClear}
+        className="flex h-5 w-5 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:text-primary outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+      >
+        <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
+      </button>
+    </span>
+  );
+}

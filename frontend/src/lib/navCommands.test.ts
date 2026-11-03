@@ -19,17 +19,20 @@ describe("filterNavCommands", () => {
     expect(filterNavCommands((p) => p === "project:read", "").map((c) => c.label)).toContain("Projects");
   });
 
-  it("lists Customers, Daily Review and Weekly Sync only to holders of project:read", () => {
+  it("lists Daily Review to holders of project:read, Customers and Weekly Sync to holders of customer:read", () => {
     const ungated = filterNavCommands(none, "").map((c) => c.label);
     expect(ungated).not.toContain("Customers");
     expect(ungated).not.toContain("Daily Review");
     expect(ungated).not.toContain("Weekly Sync");
     const reader = filterNavCommands((p) => p === "project:read", "").map((c) => c.label);
-    expect(reader).toContain("Customers");
+    expect(reader).not.toContain("Customers");
     expect(reader).toContain("Daily Review");
-    expect(reader).toContain("Weekly Sync");
-    expect(NAV_COMMANDS.find((c) => c.to === "/weekly-sync")?.requires).toBe("project:read");
-    expect(NAV_COMMANDS.find((c) => c.to === "/customers")?.requires).toBe("project:read");
+    expect(reader).not.toContain("Weekly Sync");
+    const customerReader = filterNavCommands((p) => p === "customer:read", "").map((c) => c.label);
+    expect(customerReader).toContain("Customers");
+    expect(customerReader).toContain("Weekly Sync");
+    expect(NAV_COMMANDS.find((c) => c.to === "/weekly-sync")?.requires).toBe("customer:read");
+    expect(NAV_COMMANDS.find((c) => c.to === "/customers")?.requires).toBe("customer:read");
     expect(NAV_COMMANDS.find((c) => c.to === "/daily-review")?.requires).toBe("project:read");
   });
 

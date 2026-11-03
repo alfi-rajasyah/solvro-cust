@@ -137,10 +137,16 @@ export function diffTaskChanges(before: TaskSnapshot, after: TaskSnapshot): Acti
 }
 
 /** Changes recorded for a freshly created task: only who it was assigned to. */
-export function taskCreatedChanges(after: Pick<TaskSnapshot, "assignedTo">): ActivityChanges {
-  return after.assignedTo
-    ? { assignee: fromTo(null, { id: after.assignedTo.id, username: after.assignedTo.username }) }
-    : {};
+export function taskCreatedChanges(
+  after: Pick<TaskSnapshot, "assignedTo"> & Partial<Pick<TaskSnapshot, "itopTicketRef">>,
+): ActivityChanges {
+  const changes: ActivityChanges = {};
+  if (after.assignedTo) {
+    changes.assignee = fromTo(null, { id: after.assignedTo.id, username: after.assignedTo.username });
+  }
+  // A task created with an iTop ticket pinned logs it, like a later pin does.
+  if (after.itopTicketRef) changes.itopTicketRef = fromTo(null, after.itopTicketRef);
+  return changes;
 }
 
 export interface RiskSnapshot {

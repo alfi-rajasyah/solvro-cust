@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   PortfolioCalendar,
   sortPortfolioRows,
@@ -6,10 +6,13 @@ import {
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import { ProjectStatusChip } from "@/components/StatusChip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { dateToDay, dayFromIso } from "@/lib/dateField";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { fmtDay, fmtDayLong } from "@/lib/formatDate";
 import {
+  type OverviewFilters,
+  type OverviewPerson,
   type OverviewResponse,
   type ProjectHealth,
   type ProjectStatus,
@@ -40,14 +43,56 @@ export function Overview() {
   return <OverviewLoaded />;
 }
 
+// A positive-integer URL param, or undefined for anything else.
+function idParam(raw: string | null): number | undefined {
+  const n = Number(raw);
+  return raw !== null && Number.isInteger(n) && n > 0 && n <= 2147483647 ? n : undefined;
+}
+
 function OverviewLoaded() {
-  const { data, isLoading, isError, error, refetch } = useOverview();
+  // The person filters live in the URL (/overview?tamId=7&assigneeId=12) so a
+  // reload or a shared link keeps them.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filters: OverviewFilters = {
+    tamId: idParam(searchParams.get("tamId")),
+    assigneeId: idParam(searchParams.get("assigneeId")),
+  };
+  const setFilter = (key: "tamId" | "assigneeId", id: number | undefined) => {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if (id === undefined) params.delete(key);
+        else params.set(key, String(id));
+        return params;
+      },
+      { replace: true },
+    );
+  };
+  const { data, isLoading, isError, error, refetch } = useOverview(filters);
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h1 className="font-display text-h1 text-on-surface">Overview</h1>
-        <p className="text-sm text-on-surface-variant">{fmtDayLong(dateToDay(new Date()))}</p>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          <h1 className="font-display text-h1 text-on-surface">Overview</h1>
+          <p className="text-sm text-on-surface-variant">{fmtDayLong(dateToDay(new Date()))}</p>
+        </div>
+        {(data || filters.tamId !== undefined || filters.assigneeId !== undefined) && (
+          <div className="flex flex-wrap items-center gap-2">
+            <PersonPicker
+              label="TAM"
+              people={data?.people.tams ?? []}
+              value={filters.tamId}
+              onChange={(id) => setFilter("tamId", id)}
+            />
+            <PersonPicker
+              label="Assignee"
+              people={data?.people.assignees ?? []}
+              value={filters.assigneeId}
+              onChange={(id) => setFilter("assigneeId", id)}
+            />
+          </div>
+        )}
       </div>
 
       {isLoading && <SkeletonGrid />}
@@ -56,12 +101,108 @@ function OverviewLoaded() {
         <QueryErrorAlert title="Could not load overview" error={error} onRetry={refetch} />
       )}
 
-      {data && <OverviewBody data={data} />}
+      {data && <OverviewBody data={data} filters={filters} />}
     </div>
   );
 }
 
-function OverviewBody({ data }: { data: OverviewResponse }) {
+// One person filter: a select showing the chosen person, plus a × that clears
+// it. An id the server no longer lists (out of scope) still shows, as "User #id".
+function PersonPicker({
+  label,
+  people,
+  value,
+  onChange,
+}: {
+  label: string;
+  people: OverviewPerson[];
+  value: number | undefined;
+  onChange: (id: number | undefined) => void;
+}) {
+  const options = people.map((p) => ({ value: String(p.id), label: p.username }));
+  if (value !== undefined && !options.some((o) => o.value === String(value))) {
+    options.push({ value: String(value), label: `User #${value}` });
+  }
+  return (
+    <div className="flex items-center gap-1">
+      <Select
+        items={options}
+        value={value === undefined ? null : String(value)}
+        onValueChange={(v) => onChange(v === null ? undefined : Number(v))}
+      >
+        <SelectTrigger
+          size="sm"
+          aria-label={`${label} filter`}
+          className={value === undefined ? "text-on-surface-variant" : "border-primary text-on-surface"}
+        >
+          <span className="text-label-caps uppercase text-on-surface-variant">{label}</span>
+          <SelectValue placeholder="All" />
+        </SelectTrigger>
+        {/* Opens below the trigger, never over it: Base UI's default
+            alignItemWithTrigger places the selected item on the trigger, which
+            pushed long people lists up over the top bar and clipped their top.
+            Capped height scrolls; type-ahead (typing a name) still works. */}
+        <SelectContent
+          side="bottom"
+          align="start"
+          alignItemWithTrigger={false}
+          className="max-h-[min(var(--available-height),18rem)]"
+        >
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {value !== undefined && (
+        <button
+          type="button"
+          aria-label={`Clear ${label} filter`}
+          onClick={() => onChange(undefined)}
+          className="flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:text-primary outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+        >
+          <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function OverviewBody({ data, filters }: { data: OverviewResponse; filters: OverviewFilters }) {
+  const assigneeName = data.people.assignees.find((p) => p.id === filters.assigneeId)?.username;
+  const assigneeLabel = filters.assigneeId === undefined ? null : (assigneeName ?? `User #${filters.assigneeId}`);
+  const tamName = data.people.tams.find((p) => p.id === filters.tamId)?.username;
+  const tamLabel = filters.tamId === undefined ? null : (tamName ?? `User #${filters.tamId}`);
+  // Combined phrase for tile hints and panel subtitles.
+  const scopeHint =
+    assigneeLabel && tamLabel
+      ? `assigned to ${assigneeLabel} on ${tamLabel}'s projects`
+      : assigneeLabel
+        ? `assigned to ${assigneeLabel}`
+        : tamLabel
+          ? `on ${tamLabel}'s projects`
+          : null;
+  const timelineHint =
+    tamLabel || assigneeLabel
+      ? `Where ${tamLabel ? `${tamLabel}'s projects` : "the projects"}${
+          assigneeLabel ? ` with ${assigneeLabel}'s open tasks` : ""
+        } sit across the year`
+      : null;
+  const projectsHint =
+    assigneeLabel && tamLabel
+      ? `on ${tamLabel}'s projects where ${assigneeLabel} has open tasks`
+      : assigneeLabel
+        ? `on projects where ${assigneeLabel} has open tasks`
+        : tamLabel
+          ? `on ${tamLabel}'s projects`
+          : null;
+  const filtered = filters.tamId !== undefined || filters.assigneeId !== undefined;
+  // Tile links carry the filter to /tasks, which reads the same params.
+  const personQs =
+    (filters.tamId ? `&tamId=${filters.tamId}` : "") +
+    (filters.assigneeId ? `&assigneeId=${filters.assigneeId}` : "");
+  const portfolioIds = new Set(data.portfolio.map((p) => p.id));
   const { overdue, dueThisWeek, openRisks } = data.workCounts;
   // GET /notes/recent needs project:read (docs/archive/plans/internal-sync.md);
   // without it the panel would only show a 403 error.
@@ -82,25 +223,25 @@ function OverviewBody({ data }: { data: OverviewResponse }) {
         <Kpi
           label="Overdue"
           value={overdue}
-          hint={overdue === 1 ? "open task past due" : "open tasks past due"}
+          hint={scopeHint ?? (overdue === 1 ? "open task past due" : "open tasks past due")}
           icon="event_busy"
           tone={overdue > 0 ? "error" : "neutral"}
-          to="/tasks?view=overdue"
+          to={`/tasks?view=overdue${personQs}`}
           ariaLabel={`Overdue: ${overdue} ${overdue === 1 ? "task" : "tasks"}`}
         />
         <Kpi
           label="Due this week"
           value={dueThisWeek}
-          hint="open, due by Sunday"
+          hint={scopeHint ? `due by Sunday, ${scopeHint}` : "open, due by Sunday"}
           icon="date_range"
           tone="primary"
-          to="/tasks?view=week"
+          to={`/tasks?view=week${personQs}`}
           ariaLabel={`Due this week: ${dueThisWeek} ${dueThisWeek === 1 ? "task" : "tasks"}`}
         />
         <Kpi
           label="Open risks"
           value={openRisks}
-          hint="across your projects"
+          hint={projectsHint ?? "across your projects"}
           icon="warning"
           tone="neutral"
           to="/daily-review"
@@ -111,7 +252,10 @@ function OverviewBody({ data }: { data: OverviewResponse }) {
       {/* Projects needing attention */}
       <div className="min-w-0 rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
         <header className="mb-3 flex items-center justify-between">
-          <h3 className="font-display text-sm font-bold text-on-surface">Projects needing attention</h3>
+          <div>
+            <h3 className="font-display text-sm font-bold text-on-surface">Projects needing attention</h3>
+            {projectsHint && <p className="text-xs text-on-surface-variant">{projectsHint.replace(/^on /, "")}</p>}
+          </div>
           <Link to="/projects" className="text-meta font-semibold text-primary hover:underline">
             View all →
           </Link>
@@ -177,7 +321,7 @@ function OverviewBody({ data }: { data: OverviewResponse }) {
         <header>
           <h3 className="font-display text-sm font-bold text-on-surface">Portfolio timeline</h3>
           <p className="text-xs text-on-surface-variant">
-            Where each of your projects sits across the year
+            {timelineHint ?? "Where each of your projects sits across the year"}
           </p>
         </header>
         {data.portfolio.length === 0 ? (
@@ -202,7 +346,7 @@ function OverviewBody({ data }: { data: OverviewResponse }) {
               Daily Review →
             </Link>
           </header>
-          <RecentNotesFeed />
+          <RecentNotesFeed projectIds={filtered ? portfolioIds : null} />
         </div>
       )}
     </>
@@ -249,7 +393,7 @@ function Kpi({ label, value, hint, icon, tone, to, ariaLabel }: KpiProps) {
 // (GET /notes/recent, useRecentNotes). Read-only and in-app only; the
 // panel header's Daily Review link is where notes are written. Owns its
 // own query, so it loads independently of useOverview()'s skeleton.
-function RecentNotesFeed() {
+function RecentNotesFeed({ projectIds }: { projectIds: Set<number> | null }) {
   const { data, isLoading, isError } = useRecentNotes();
   if (isLoading) {
     return (
@@ -265,14 +409,25 @@ function RecentNotesFeed() {
   if (!data) {
     return <p className="text-xs text-error">Could not load recent notes.</p>;
   }
+  // While a person filter is active, keep only notes on the filtered portfolio's
+  // projects; operations (customer) notes aren't tied to a project, so they hide.
+  const notes = projectIds
+    ? data.notes.filter((n) => n.project !== null && projectIds.has(n.project.id))
+    : data.notes;
   return (
     <>
       {isError && <p className="mb-2 text-xs text-error">Could not refresh — showing the last loaded notes.</p>}
-      {data.notes.length === 0 ? (
-        <EmptyHint label={`No notes in the last ${windowDays(data.from, data.to)} days.`} />
+      {notes.length === 0 ? (
+        <EmptyHint
+          label={
+            projectIds
+              ? "No recent notes on these projects."
+              : `No notes in the last ${windowDays(data.from, data.to)} days.`
+          }
+        />
       ) : (
         <ul className="max-h-96 divide-y divide-outline-variant overflow-y-auto text-xs">
-          {data.notes.map((n) => (
+          {notes.map((n) => (
             <RecentNoteRow key={`${n.kind}-${n.id}`} note={n} />
           ))}
         </ul>

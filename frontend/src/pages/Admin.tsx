@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import {
   getCoreRowModel,
@@ -69,7 +70,12 @@ const EMPTY_ROLES: AdminRole[] = [];
 const EMPTY_PROJECTS: AdminProject[] = [];
 
 export function Admin() {
-  const [tab, setTab] = useState<Tab>("users");
+  // `?tab=` deep-links a tab (e.g. the iTop hints link to /admin?tab=itop).
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const [tab, setTab] = useState<Tab>(
+    TAB_ITEMS.some((t) => t.key === requestedTab) ? (requestedTab as Tab) : "users",
+  );
 
   return (
     <div className="flex h-full flex-col">

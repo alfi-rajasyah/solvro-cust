@@ -55,10 +55,11 @@ export function DailyReview() {
   // query's key shape. A 404/error here (iTop not configured, or the dev
   // backend not caught up yet) just leaves `itopDaily` undefined — no strip
   // renders, nothing else on the page is affected. GET /itop/daily requires
-  // `project:read` (403 otherwise), so a user without it skips the fetch and
-  // the strip entirely.
+  // `project:read` (403 otherwise) and answers an empty list without
+  // `customer:read`, so a user without either skips the fetch and the strip.
   const { data: itopDaily } = useItopDaily(data?.today ?? dateToDay(new Date())!, {
-    enabled: Boolean(data) && hasPermission(user, "project:read"),
+    enabled:
+      Boolean(data) && hasPermission(user, "project:read") && hasPermission(user, "customer:read"),
   });
   const itopByCustomer = useMemo(() => {
     const map = new Map<number, DailyItopCustomer>();

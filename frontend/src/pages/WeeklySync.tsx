@@ -87,7 +87,7 @@ function computeDefaults(): { week: string; tab: WeeklySyncTab } {
 // "Copy as table" copies the rows on screen.
 export function WeeklySync() {
   const { user } = useAuth();
-  const canWrite = hasPermission(user, "project:write");
+  const canWrite = hasPermission(user, "customer:write");
   const [searchParams, setSearchParams] = useSearchParams();
 
   const defaults = useMemo(() => computeDefaults(), []);

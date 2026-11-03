@@ -17,7 +17,9 @@ export function ProjectServices() {
   const canMutate = hasPermission(user, "project:write");
 
   const update = useUpdateProjectServices(project.id);
-  const { data: customer, isLoading: customerLoading } = useCustomer(project.customerId);
+  const { data: customer, isLoading: customerLoading } = useCustomer(
+    hasPermission(user, "customer:read") ? project.customerId : null,
+  );
   const [addAllError, setAddAllError] = useState<string | null>(null);
 
   const subscribedServiceIds = useMemo(() => {

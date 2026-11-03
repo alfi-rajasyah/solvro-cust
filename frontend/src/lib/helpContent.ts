@@ -68,9 +68,9 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         title: "Who can do what",
         points: [
-          "Your role decides what you can change. \"Manage projects\" lets you create and edit projects, customers, sections, risks, notes, and weekly updates. \"Manage tasks\" lets you create, edit, move, and delete tasks.",
+          "Your role decides what you can change. \"Manage projects\" lets you create and edit projects, sections, risks, and project notes. \"Manage customers\" lets you create and edit customers, their operations notes, weekly updates, and services. \"Manage tasks\" lets you create, edit, move, and delete tasks.",
           "Without a permission, the matching buttons do not appear. Ask an admin if you need more access.",
-          "You see projects where you are the TAM and every project of a customer you own. Roles with \"See all projects\" see every project.",
+          "You see projects where you are the TAM and every project of a customer you own. Roles with \"See all projects\" see every project; roles with \"See all customers\" see every customer, but not its projects.",
         ],
       },
     ],
@@ -233,7 +233,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     title: "Customers",
     icon: "groups",
     route: "/customers",
-    requires: "project:read",
+    requires: "customer:read",
     summary: "Every project belongs to a customer. The customer page gathers its projects, services, weekly updates, and tickets.",
     entries: [
       {
@@ -303,7 +303,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     title: "Weekly Sync",
     icon: "table_chart",
     route: "/weekly-sync",
-    requires: "project:read",
+    requires: "customer:read",
     summary: "One update per customer per week: a mid-week check on Wednesday and a reflection on Friday, read together on Monday.",
     entries: [
       {

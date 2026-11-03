@@ -3,7 +3,7 @@ import { Modal } from "./Modal";
 import { OutlineUrlField } from "./OutlineUrlField";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { parseOutlineUrl } from "@/lib/outlineUrl";
-import { useAuth } from "@/lib/auth";
+import { hasPermission, useAuth } from "@/lib/auth";
 import { saveErrorMessage } from "@/lib/ownerAccess";
 import { PROJECT_STATUS_LABEL, taskStatusOptions } from "@/lib/labels";
 import {
@@ -72,7 +72,9 @@ export function ProjectFormModal({
   const { user } = useAuth();
   const isEdit = Boolean(project);
   const { data: users } = useUsers();
-  const { data: customers } = useCustomers();
+  // GET /customers needs customer:read; without it the picker can't list anything.
+  const canReadCustomers = hasPermission(user, "customer:read");
+  const { data: customers } = useCustomers(canReadCustomers);
 
   const create = useCreateProject();
   const update = useUpdateProject(project?.id ?? 0);
@@ -248,7 +250,7 @@ export function ProjectFormModal({
             onChange={(e) =>
               setCustomerId(e.target.value === "" ? "" : Number(e.target.value))
             }
-            disabled={isEdit && !canChangeOwnership}
+            disabled={!canReadCustomers || (isEdit && !canChangeOwnership)}
             className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-70"
           >
             <option value="">
@@ -266,7 +268,12 @@ export function ProjectFormModal({
               <option value={project.customer.id}>{project.customer.name}</option>
             )}
           </select>
-          {isEdit && !canChangeOwnership && (
+          {!canReadCustomers && (
+            <p className="mt-1 text-meta text-on-surface-variant">
+              You don't have access to customers, so one can't be chosen here. Ask an admin for the "View customers" permission.
+            </p>
+          )}
+          {canReadCustomers && isEdit && !canChangeOwnership && (
             <p className="mt-1 text-meta text-on-surface-variant">
               Only the project's TAM or the customer's owner can move it to another customer.
             </p>
