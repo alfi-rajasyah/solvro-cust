@@ -122,6 +122,16 @@ jobs:
       - name: Check setup.sh volume guard
         run: ci/check-setup-guard.sh
 
+      # `solvro update` (written by setup.sh) only runs a release's installer
+      # when it is newer, fully published and confirmed, after a backup.
+      - name: Check the solvro update command
+        run: ci/check-update-cli.sh
+
+      # A fresh install derives ports and bind address from the address people
+      # open (APP_URL); env vars still win; --advanced keeps the old defaults.
+      - name: Check setup.sh fresh-install settings
+        run: ci/check-setup-install.sh
+
       # VERSION, both package.json files and the image tag setup.sh pins must
       # name the same release.
       - name: Check release version consistency

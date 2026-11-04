@@ -52,7 +52,7 @@ Detail: [Outline guide](outline.md), step 1.
 
 Detail: [INSTALL.md](../../INSTALL.md) and [Server setup](server-setup.md#ports).
 
-1. Run `setup.sh` with `FRONTEND_PORT=8090`, `APP_URL=https://<solvro-host>`, `EMBED_FRAME_ANCESTORS=https://<outline-host>`, and `TRUST_PROXY="loopback, uniquelocal"`.
+1. Run `setup.sh` with `APP_URL=https://<solvro-host>` (this also selects website port `8090`), `EMBED_FRAME_ANCESTORS=https://<outline-host>`, and `TRUST_PROXY="loopback, uniquelocal"`. Change these later with `solvro config set`, and upgrade with `solvro update`.
 2. Sign in as the admin. Create the TAM users with the same emails as in iTop and Outline.
 
 Solvro needs only the Outline address here. Outline does not have to run yet.
