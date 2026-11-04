@@ -21,7 +21,7 @@ import { customerVisibilityFilter, projectVisibilityFilter } from "./visibility.
  * `projects` — ACTIVE projects in scope (Decision 9). Owned customer → every
  * ACTIVE project of that customer, whoever the project TAM is. Attached
  * customer → only the caller's own ACTIVE projects (TAM, or member). Decision
- * 10: ACTIVE projects with customerId: null that the caller is TAM or member
+ * 10: ACTIVE projects with no customer link that the caller is TAM or member
  * of (the "No customer" group).
  */
 export async function resolveDailyReviewScope(user: JwtPayload) {
@@ -39,7 +39,9 @@ export async function resolveDailyReviewScope(user: JwtPayload) {
           viewAll ? { tamId: { not: null } } : { tamId: user.sub },
           {
             projects: {
-              some: { AND: [{ status: "ACTIVE" }, projectVisibilityFilter(user)] },
+              some: {
+                project: { AND: [{ status: "ACTIVE" }, projectVisibilityFilter(user)] },
+              },
             },
           },
         ],
@@ -82,9 +84,11 @@ export async function resolveDailyReviewScope(user: JwtPayload) {
           { status: "ACTIVE" },
           {
             OR: [
-              { customerId: { in: ownedIds } },
-              { AND: [mine, { customerId: { in: attachedIds } }] },
-              { AND: [mine, { customerId: null }] },
+              // A shared project (several links) is in scope through ANY
+              // linked customer (docs/archive/plans/multi-customer-projects.md).
+              { customers: { some: { customerId: { in: ownedIds } } } },
+              { AND: [mine, { customers: { some: { customerId: { in: attachedIds } } } }] },
+              { AND: [mine, { customers: { none: {} } }] },
             ],
           },
         ],
@@ -97,7 +101,9 @@ export async function resolveDailyReviewScope(user: JwtPayload) {
       id: true,
       name: true,
       status: true,
-      customerId: true,
+      tamId: true,
+      members: { where: { userId: user.sub }, select: { userId: true } },
+      customers: { select: { customerId: true, isPrimary: true } },
       baselineLockedAt: true,
     },
   });
@@ -111,12 +117,34 @@ export async function resolveDailyReviewScope(user: JwtPayload) {
   // render as an empty group and inflate coverage.total. Owned customers
   // always stay, even with zero active projects — they still carry
   // operations notes and the weekly update (Decision 8).
+  // A shared project in scope only through an OWNED customer does not pull its
+  // other (attached) customers in: they need a project of the caller's own.
   const projectCustomerIds = new Set(
-    projects.map((p) => p.customerId).filter((id): id is number => id !== null),
+    projects
+      .filter((p) => viewAll || p.tamId === user.sub || p.members.length > 0)
+      .flatMap((p) => p.customers.map((l) => l.customerId)),
   );
   const customers = candidateCustomers.filter(
     (c) => ownedIdSet.has(c.id) || projectCustomerIds.has(c.id),
   );
 
-  return { customers, projects };
+  // `mine`: the caller's own project (view-all, TAM, or member). An ATTACHED
+  // customer's group takes a project only when it is `mine`; an OWNED
+  // customer's group takes every project linked to it.
+  const scoped = projects.map(({ tamId, members, ...p }) => ({
+    ...p,
+    mine: viewAll || tamId === user.sub || members.length > 0,
+  }));
+  return { customers, projects: scoped, ownedCustomerIds: ownedIdSet };
+}
+
+/** The in-scope customers whose group lists this project (see `resolveDailyReviewScope`). */
+export function groupCustomerIds(
+  project: { mine: boolean; customers: { customerId: number }[] },
+  inScope: ReadonlySet<number>,
+  owned: ReadonlySet<number>,
+): number[] {
+  return project.customers
+    .map((l) => l.customerId)
+    .filter((id) => inScope.has(id) && (owned.has(id) || project.mine));
 }

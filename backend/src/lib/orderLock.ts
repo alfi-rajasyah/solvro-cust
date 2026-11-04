@@ -1,8 +1,9 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 // One lock namespace per ordered list kind; the second key is the project id.
-// (Other advisory-lock namespaces in use: 7_311 dependencies, 7_312 weekly
-// updates, 0x6f75 Outline tokens.)
+// (Other advisory-lock namespaces in use: 7_301 task status list
+// (lib/taskStatuses.ts: shared by task writes, exclusive by the admin save),
+// 7_311 dependencies, 7_312 weekly updates, 0x6f75 Outline tokens.)
 const NAMESPACE = { tasks: 7_313, sections: 7_314, epics: 7_315 } as const;
 
 // How long a reorder waits for another one in the same project. Well under

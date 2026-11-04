@@ -29,7 +29,7 @@ async function customerFor(tamId: number) {
 
 async function projectFor(tamId: number, customerId: number | null, status: "ACTIVE" | "COMPLETED" = "ACTIVE") {
   return prisma.project.create({
-    data: { name: uniq("Project"), tamId, customerId, status },
+    data: { name: uniq("Project"), tamId, ...(customerId != null ? { customers: { create: { customerId, isPrimary: true } } } : {}), status },
   });
 }
 

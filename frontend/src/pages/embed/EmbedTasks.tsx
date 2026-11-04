@@ -152,7 +152,7 @@ function TaskRow({
         </EmbedExternalLink>
       </td>
       <td className="px-2 py-2 align-middle">
-        <TaskStatusChip status={task.status} />
+        <TaskStatusChip status={task.status} def={task.statusDef} />
       </td>
       <td className="px-2 py-2 align-middle">
         <div className="flex items-center gap-1.5">

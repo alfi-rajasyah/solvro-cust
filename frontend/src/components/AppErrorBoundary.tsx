@@ -34,7 +34,7 @@ type Props = {
 type State = { error: Error | null };
 
 const SECONDARY_BUTTON =
-  "rounded-lg border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
+  "rounded-lg border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
 const PRIMARY_BUTTON =
   "rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-on-primary hover:bg-primary/90 outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
 

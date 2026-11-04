@@ -38,7 +38,13 @@ export async function computePortfolioRows(
       status: true,
       updatedAt: true,
       tam: { select: { username: true } },
-      customer: { select: { id: true, name: true } },
+      // One row per project however many customers it has (a shared project
+      // counts once); the row's customer is the primary link.
+      customers: {
+        where: { isPrimary: true },
+        take: 1,
+        select: { customer: { select: { id: true, name: true } } },
+      },
       sections: {
         orderBy: { position: "asc" },
         select: { id: true, name: true, color: true },
@@ -115,8 +121,8 @@ export async function computePortfolioRows(
       name: project.name,
       status: project.status,
       tamName: project.tam.username,
-      customerId: project.customer?.id ?? null,
-      customerName: project.customer?.name ?? null,
+      customerId: project.customers[0]?.customer.id ?? null,
+      customerName: project.customers[0]?.customer.name ?? null,
       start,
       end,
       totalTasks,

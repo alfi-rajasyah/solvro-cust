@@ -37,6 +37,14 @@ import { HttpError } from "../http/errors.js";
 // new arm.
 export interface VisibilityOptions {
   viaMembership?: boolean;
+  /**
+   * Customer filter only: the caller is asking "do I OWN this?", not "can I
+   * see this?". Skips the `customer:view-all` short-circuit, because that
+   * permission grants visibility, never ownership. Independent of
+   * `viaMembership`, so a future membership-excluding READ check keeps
+   * `customer:view-all`.
+   */
+  ownership?: boolean;
 }
 
 export function projectVisibilityFilter(
@@ -46,7 +54,9 @@ export function projectVisibilityFilter(
   if (hasPermission(user, "project:view-all")) return {};
   const arms: Prisma.ProjectWhereInput[] = [
     { tamId: user.sub },
-    { customer: { tamId: user.sub } },
+    // Any linked customer (docs/archive/plans/multi-customer-projects.md): a
+    // shared project is visible to the owner of every customer it belongs to.
+    { customers: { some: { customer: { tamId: user.sub } } } },
   ];
   if (opts.viaMembership !== false) {
     arms.push({ members: { some: { userId: user.sub } } });
@@ -57,22 +67,22 @@ export function projectVisibilityFilter(
 /** What `canUserSeeProject` needs to know about one project. */
 export interface ProjectVisibilityFacts {
   tamId: number | null;
-  /** `Customer.tamId` of the project's customer; null when unowned or no customer. */
-  customerTamId: number | null;
+  /** `Customer.tamId` of every customer linked to the project (unowned ones omitted). */
+  customerTamIds: ReadonlySet<number>;
   /** Members among the users being checked (or all members). */
   memberIds: ReadonlySet<number>;
 }
 
 /**
  * Pure counterpart of `projectVisibilityFilter(user)` for one project whose
- * facts are already loaded: view-all, the project's TAM, the customer's owner,
- * or a member. Keep the two in step (see the note above them).
+ * facts are already loaded: view-all, the project's TAM, the owner of any
+ * linked customer, or a member. Keep the two in step (see the note above them).
  */
 export function canUserSeeProject(user: JwtPayload, project: ProjectVisibilityFacts): boolean {
   return (
     hasPermission(user, "project:view-all") ||
     project.tamId === user.sub ||
-    project.customerTamId === user.sub ||
+    project.customerTamIds.has(user.sub) ||
     project.memberIds.has(user.sub)
   );
 }
@@ -124,7 +134,8 @@ export async function ensureTaskVisible(
 }
 
 // Customer-scoping (docs/plans/customer-visibility-spec.md §3, Decisions 1-2):
-// `project:view-all` (or "*") sees every customer. Everyone else sees a
+// `project:view-all` (or "*") sees every customer, as does `customer:view-all`
+// (visibility, and the writes that follow visibility — never ownership; see below). Everyone else sees a
 // customer when they own it (`Customer.tamId`), when nobody owns it
 // (`tamId: null` — unowned customers stay visible to all, as before the
 // rule existed), or when at least one of its projects is visible to them
@@ -139,17 +150,30 @@ export async function ensureTaskVisible(
 // The third arm reuses projectVisibilityFilter as the single source of the
 // project rule. Its own owned-customer arm is redundant here (a project whose
 // customer is this customer, owned by me, is already arm 1) — kept for one
-// source of truth over one saved join.
+// source of truth over one saved join. `projects` is the ProjectCustomer join:
+// the customer is visible when ANY of its linked projects is.
 export function customerVisibilityFilter(
   user: JwtPayload,
   opts: VisibilityOptions = {},
 ): Prisma.CustomerWhereInput {
   if (hasPermission(user, "project:view-all")) return {};
+  // `customer:view-all` (user decision 2026-11-03) widens customer visibility
+  // — and with it the customer sub-resource writes that follow visibility —
+  // never ownership. Owner checks pass `{ ownership: true }`, skip this
+  // short-circuit and fall through to the arms below. Projects stay gated by
+  // projectVisibilityFilter.
+  if (!opts.ownership && hasPermission(user, "customer:view-all")) return {};
   return {
     OR: [
       { tamId: user.sub },
       { tamId: null },
-      { projects: { some: projectVisibilityFilter(user, opts) } },
+      // Plain visibility: any project the caller can see. An OWNER check
+      // (`ownership`) narrows this to projects the caller is TAM of: the owner
+      // of one linked customer owns the shared PROJECT, never the other
+      // customer (docs/archive/plans/multi-customer-projects.md, decision 4).
+      opts.ownership
+        ? { projects: { some: { project: { tamId: user.sub } } } }
+        : { projects: { some: { project: projectVisibilityFilter(user, opts) } } },
     ],
   };
 }
@@ -167,6 +191,20 @@ export async function isCustomerVisible(
     select: { id: true },
   });
   return customer !== null;
+}
+
+// Batch form of `isCustomerVisible` for a project's customer links: true when
+// EVERY id exists and is visible to the caller (one count query).
+export async function areCustomersVisible(
+  user: JwtPayload,
+  customerIds: readonly number[],
+): Promise<boolean> {
+  const ids = [...new Set(customerIds)];
+  if (ids.length === 0) return true;
+  const count = await prisma.customer.count({
+    where: { AND: [customerVisibilityFilter(user), { id: { in: ids } }] },
+  });
+  return count === ids.length;
 }
 
 // 404-if-not-visible preamble for customer-keyed routes (notes, weekly
@@ -194,7 +232,7 @@ export async function ensureCustomerOwnerAccess(
 ): Promise<void> {
   await ensureCustomerVisible(user, customerId);
   const owned = await prisma.customer.findFirst({
-    where: { id: customerId, ...customerVisibilityFilter(user, { viaMembership: false }) },
+    where: { id: customerId, ...customerVisibilityFilter(user, { viaMembership: false, ownership: true }) },
     select: { id: true },
   });
   if (!owned) {

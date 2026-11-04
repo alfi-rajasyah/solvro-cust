@@ -126,7 +126,7 @@ export function ProjectActivity({
                 type="button"
                 onClick={() => void fetchNextPage()}
                 disabled={isFetchingNextPage}
-                className={`inline-flex items-center gap-1.5 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 ${FOCUS_RING}`}
+                className={`inline-flex items-center gap-1.5 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 focus-visible:border-primary ${FOCUS_RING}`}
               >
                 {isFetchingNextPage ? "Loading…" : "Load more"}
               </button>

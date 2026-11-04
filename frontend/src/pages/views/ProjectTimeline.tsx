@@ -7,15 +7,14 @@ import { LabelChip } from "@/components/LabelChip";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { Timeline, TimelineIndicator, TimelineItem, TimelineSeparator } from "@/components/reui/timeline";
+import { StatusSelect } from "@/components/StatusSelect";
 import { TaskStatusChip } from "@/components/StatusChip";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { dateToDay, dayFromIso } from "@/lib/dateField";
 import { fmtRange } from "@/lib/formatDate";
-import { TASK_STATUS_LABEL } from "@/lib/labels";
 import { type Priority, type Task, type TaskStatus, useProjectTasks, useUpdateTask } from "@/lib/queries";
 
-const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 const PRIORITY_ORDER: Record<Priority, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
 // SOLVRO PATCH: status -> TimelineIndicator color, transplanted verbatim from the
@@ -114,7 +113,7 @@ export function ProjectTimeline() {
               subtasks={subtasksOf.get(task.id) ?? []}
               canEdit={canEdit}
               todayDay={todayDay}
-              onChangeStatus={(status) => updateTask.mutate({ id: task.id, patch: { status } })}
+              onChangeStatus={(statusId) => updateTask.mutate({ id: task.id, patch: { statusId } })}
               onEdit={() => setEditTask(task)}
             />
           ))}
@@ -148,7 +147,7 @@ function TaskTimelineItem({
   subtasks: Task[];
   canEdit: boolean;
   todayDay: string | null;
-  onChangeStatus: (status: TaskStatus) => void;
+  onChangeStatus: (statusId: number) => void;
   onEdit: () => void;
 }) {
   // Compare calendar days, not instants —
@@ -174,7 +173,7 @@ function TaskTimelineItem({
       <div className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4 transition-colors hover:border-primary/40">
         <div className="mb-1 flex items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <TaskStatusChip status={task.status} />
+            <TaskStatusChip status={task.status} def={task.statusDef} />
             <PriorityBadge priority={task.priority} compact />
             {task.isCriticalPath && <CriticalPathMark variant="chip" />}
             {task.labels.slice(0, 4).map((l) => (
@@ -223,22 +222,12 @@ function TaskTimelineItem({
         )}
         {canEdit && (
           <div className="mt-3 flex items-center gap-1">
-            {STATUSES.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => onChangeStatus(s)}
-                disabled={task.status === s}
-                className={[
-                  "rounded-sm px-2 py-1 font-display text-sm transition-colors font-semibold",
-                  task.status === s
-                    ? "cursor-default bg-primary text-on-primary"
-                    : "border border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary",
-                ].join(" ")}
-              >
-                {TASK_STATUS_LABEL[s]}
-              </button>
-            ))}
+            <StatusSelect
+              value={task.statusId}
+              fallback={task.statusDef}
+              onChange={(def) => onChangeStatus(def.id)}
+              ariaLabel={`Change status of ${task.title}`}
+            />
           </div>
         )}
       </div>

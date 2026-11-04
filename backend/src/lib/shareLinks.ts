@@ -90,7 +90,8 @@ export async function buildPublicSharePayload(
     select: {
       name: true,
       status: true,
-      customer: { select: { name: true } },
+      // Primary customer only — a guest never sees the other linked customers.
+      customers: { where: { isPrimary: true }, take: 1, select: { customer: { select: { name: true } } } },
       sections: {
         orderBy: [{ position: "asc" }, { id: "asc" }],
         select: {
@@ -122,7 +123,7 @@ export async function buildPublicSharePayload(
   return {
     project: {
       name: project.name,
-      customerName: project.customer?.name ?? null,
+      customerName: project.customers[0]?.customer.name ?? null,
       status: project.status,
     },
     phases: project.sections.map((s) => derivePhase(s.name, s.tasks)),

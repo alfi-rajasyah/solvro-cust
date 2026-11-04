@@ -124,6 +124,8 @@ interface ProjectSpec {
   name: string;
   description: string;
   customer: string;
+  /** Further customers this project is shared with (the `customer` above stays the primary). */
+  alsoFor?: string[];
   tam: UserKey;
   /** Who created the project, when not its TAM — an admin creating it for a TAM notifies that TAM. */
   createdBy?: UserKey;
@@ -546,7 +548,7 @@ const PROJECTS: ProjectSpec[] = [
       { title: "Teams & SharePoint", status: "IN_PROGRESS", color: "#7c3aed", owner: "dewi", start: -25, due: 2 },
     ],
     labels: [
-      ["training", "#10b981"],
+      ["training", "emerald"],
       ["customer-action", "#ef4444"],
     ],
     tasks: [
@@ -676,6 +678,24 @@ const PROJECTS: ProjectSpec[] = [
       ["depots", "docs"],
       ["docs", "done"],
     ],
+  },
+  {
+    // One project shared by two customers: Bank Arta is the primary, and
+    // Nusantara's TAM sees it too (docs/archive/plans/multi-customer-projects.md).
+    name: "DC2 Interconnect — Bank Arta × Nusantara",
+    description: "Private link between the Bank Arta and Nusantara Logistik second data-centre racks, delivered once for both customers.",
+    customer: "Bank Arta Sejahtera",
+    alsoFor: ["PT Nusantara Logistik"],
+    tam: "rizky",
+    status: "ACTIVE",
+    service: ["Managed Network", ["Cisco"]],
+    sections: [["Design", "#60a5fa"], ["Delivery", "#34d399"]],
+    tasks: [
+      { key: "design", title: "Agree the link design with both customers", section: "Design", status: "DONE", start: -14, due: -8, assignee: "rizky" },
+      { key: "order", title: "Order the cross-connect", section: "Delivery", status: "IN_PROGRESS", start: -6, due: 4, assignee: "rizky" },
+      { key: "live", title: "Interconnect live", section: "Delivery", status: "TODO", start: 10, due: 10, assignee: "rizky", milestone: true },
+    ],
+    deps: [["design", "order"], ["order", "live"]],
   },
 ];
 
@@ -889,6 +909,23 @@ async function main() {
 
   await wipe();
 
+  // The wipe emptied the workspace status list; restore the three defaults
+  // (the same rows the task_status_defs migration seeds) and remember each
+  // category's id for the task inserts below.
+  const defaultStatusIds = {} as Record<TaskStatus, number>;
+  for (const [position, [name, category, color]] of (
+    [
+      ["To do", "TODO", "gray"],
+      ["In progress", "IN_PROGRESS", "primary"],
+      ["Done", "DONE", "emerald"],
+    ] as const
+  ).entries()) {
+    const def = await prisma.taskStatusDef.create({
+      data: { name, category, color, position, isDefault: true },
+    });
+    defaultStatusIds[category] = def.id;
+  }
+
   // Users. The e2e smoke pre-flight logs in as the QA fixture admin, so it
   // is recreated alongside the demo accounts.
   const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
@@ -940,7 +977,12 @@ async function main() {
         description: p.description,
         status: p.status,
         tamId: users[p.tam],
-        customerId: customers.get(p.customer)!,
+        customers: {
+          create: [
+            { customerId: customers.get(p.customer)!, isPrimary: true },
+            ...(p.alsoFor ?? []).map((name) => ({ customerId: customers.get(name)!, isPrimary: false })),
+          ],
+        },
         baselineLockedAt: p.baselineLocked !== undefined ? day(p.baselineLocked) : null,
         baselineLockedById: p.baselineLocked !== undefined ? users[p.tam] : null,
         services: { create: { serviceId: services.get(p.service[0])!, tools: p.service[1] } },
@@ -988,6 +1030,7 @@ async function main() {
           title: t.title,
           description: t.description,
           status: t.status,
+          statusId: defaultStatusIds[t.status],
           priority: t.priority ?? "MEDIUM",
           startDate,
           dueDate,
@@ -1013,6 +1056,7 @@ async function main() {
             parentTaskId: task.id,
             title: s.title,
             status: s.status,
+            statusId: defaultStatusIds[s.status],
             startDate: s.start !== undefined ? day(s.start) : null,
             dueDate: s.due !== undefined ? day(s.due) : null,
             assignedToId: s.assignee ? users[s.assignee] : null,

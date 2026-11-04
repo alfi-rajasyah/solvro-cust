@@ -50,7 +50,7 @@ export async function filterActiveUsersWhoCanSeeProject(
 ): Promise<Set<number>> {
   const ids = [...new Set(userIds)];
   if (ids.length === 0) return new Set();
-  const [users, project] = await Promise.all([
+  const [users, project, linkedCustomers] = await Promise.all([
     tx.user.findMany({
       where: { id: { in: ids }, active: true },
       select: { id: true, role: { select: { roleName: true, permissions: true } } },
@@ -59,16 +59,22 @@ export async function filterActiveUsersWhoCanSeeProject(
       where: { id: projectId },
       select: {
         tamId: true,
-        customer: { select: { tamId: true } },
         members: { where: { userId: { in: ids } }, select: { userId: true } },
       },
+    }),
+    // Owners of EVERY customer linked to the project (one query, not one per link).
+    tx.customer.findMany({
+      where: { projects: { some: { projectId } }, tamId: { not: null } },
+      select: { tamId: true },
     }),
   ]);
   const visible = new Set<number>();
   if (!project) return visible;
   const facts: ProjectVisibilityFacts = {
     tamId: project.tamId,
-    customerTamId: project.customer?.tamId ?? null,
+    customerTamIds: new Set(
+      linkedCustomers.map((c) => c.tamId).filter((id): id is number => id !== null),
+    ),
     memberIds: new Set(project.members.map((m) => m.userId)),
   };
   for (const u of users) {

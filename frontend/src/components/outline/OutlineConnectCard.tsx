@@ -83,7 +83,7 @@ export function OutlineConnectCard() {
       data-testid="outline-connect-card"
       className="space-y-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-5"
     >
-      <h2 className="font-display text-[13px] font-bold uppercase tracking-wider text-on-surface">
+      <h2 className="font-display text-sm font-bold text-on-surface">
         Outline
       </h2>
       {noticeAlert}

@@ -7,6 +7,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 
@@ -27,7 +28,7 @@ async function fixture() {
     data: { name: uniq("Customer"), description: "d", tamId: tam.userId },
   });
   const project = await prisma.project.create({
-    data: { name: uniq("Project"), tamId: tam.userId, customerId: customer.id, status: "ACTIVE" },
+    data: { name: uniq("Project"), tamId: tam.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE" },
   });
   return { tam, assignee, project };
 }
@@ -110,7 +111,7 @@ describe("POST /projects/:id/tasks — assignee becomes a member", () => {
 describe("PATCH /tasks/:id — assignee becomes a member", () => {
   async function newTask(projectId: number) {
     return prisma.task.create({
-      data: { projectId, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
+      data: { statusId: SID.TODO, projectId, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
     });
   }
 

@@ -9,6 +9,7 @@ import { prisma } from "../src/prisma.js";
 import { recordActivity } from "../src/lib/activity.js";
 import { deleteExpiredActivityEvents } from "../src/lib/activityCleanup.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 
@@ -27,7 +28,7 @@ async function fixture() {
     data: { name: uniq("Customer"), description: "d", tamId: tam.userId },
   });
   const project = await prisma.project.create({
-    data: { name: uniq("Project"), tamId: tam.userId, customerId: customer.id, status: "ACTIVE" },
+    data: { name: uniq("Project"), tamId: tam.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE" },
   });
   return { tam, other, outsider, customer, project };
 }
@@ -37,7 +38,7 @@ const eventsOf = (projectId: number) =>
 
 async function makeTask(projectId: number, extra: Record<string, unknown> = {}) {
   return prisma.task.create({
-    data: { projectId, title: uniq("Task"), status: "TODO", priority: "MEDIUM", position: 0, ...extra },
+    data: { statusId: SID.TODO, projectId, title: uniq("Task"), status: "TODO", priority: "MEDIUM", position: 0, ...extra },
   });
 }
 
@@ -109,7 +110,7 @@ describe("task writes", () => {
     const otherUser = await prisma.user.findUniqueOrThrow({ where: { id: other.userId } });
     expect(updated.changes).toEqual({
       title: { from: "Configure backups", to: "Configure backup jobs" },
-      status: { from: "TODO", to: "IN_PROGRESS" },
+      status: { from: "To do", to: "In progress" },
       priority: { from: "MEDIUM", to: "HIGH" },
       dueDate: { from: "2026-10-02", to: "2026-10-05" },
       isCriticalPath: { from: false, to: true },
@@ -157,7 +158,29 @@ describe("task writes", () => {
     expect(move.status).toBe(200);
     const events = await eventsOf(project.id);
     expect(events).toHaveLength(1);
-    expect(events[0]!.changes).toEqual({ status: { from: "TODO", to: "DONE" } });
+    expect(events[0]!.changes).toEqual({ status: { from: "To do", to: "Done" } });
+  });
+
+  it("records a move between two statuses of the same category (by status name)", async () => {
+    const { tam, project } = await fixture();
+    const backlog = await prisma.taskStatusDef.create({
+      data: { name: uniq("Backlog"), category: "TODO", color: "#64748b", position: 9 },
+    });
+    const task = await makeTask(project.id, { title: "Same category" });
+    try {
+      const res = await request(app)
+        .patch(`/tasks/${task.id}`)
+        .set(auth(tam.token))
+        .send({ statusId: backlog.id });
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe("TODO");
+      const events = await eventsOf(project.id);
+      expect(events).toHaveLength(1);
+      expect(events[0]!.changes).toEqual({ status: { from: "To do", to: backlog.name } });
+    } finally {
+      await prisma.task.delete({ where: { id: task.id } });
+      await prisma.taskStatusDef.delete({ where: { id: backlog.id } });
+    }
   });
 
   it("a rejected stale write leaves no event", async () => {
@@ -420,7 +443,7 @@ describe("members", () => {
 
 describe("project updates", () => {
   it("records name, status and customer; other fields and re-saves record nothing", async () => {
-    const { tam, project } = await fixture();
+    const { tam, project, customer } = await fixture();
     const customer2 = await prisma.customer.create({
       data: { name: uniq("Customer2"), description: "d", tamId: tam.userId },
     });
@@ -448,7 +471,7 @@ describe("project updates", () => {
     expect(events[0]!.changes).toEqual({
       name: { from: project.name, to: "Renamed project" },
       status: { from: "ACTIVE", to: "ON_HOLD" },
-      customerId: { from: project.customerId, to: customer2.id },
+      customers: { from: [customer.name], to: [customer.name, customer2.name].sort((x, y) => x.localeCompare(y)) },
     });
     expect(JSON.stringify(events)).not.toContain("changed description text");
   });

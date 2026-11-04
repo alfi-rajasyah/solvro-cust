@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth, requirePermission } from "../http/auth.js";
+import { hasPermission, requireAuth, requirePermission } from "../http/auth.js";
 import { validate } from "../http/validate.js";
 import { customerVisibilityFilter, projectVisibilityFilter } from "../lib/visibility.js";
 import { isValidDayString, utcMidnightOfDayString, utcStartOfToday } from "../lib/dateBoundary.js";
@@ -77,11 +77,21 @@ notesRouter.get(
           updatedAt: true,
           author: { select: { id: true, username: true } },
           project: {
-            select: { id: true, name: true, customer: { select: { id: true, name: true } } },
+            select: {
+              id: true,
+              name: true,
+              // The label is the project's primary customer.
+              customers: {
+                where: { isPrimary: true },
+                take: 1,
+                select: { customer: { select: { id: true, name: true } } },
+              },
+            },
           },
         },
       }),
-      prisma.customerNote.findMany({
+      // Operations notes follow `customer:read`, not `project:read`.
+      !hasPermission(user, "customer:read") ? Promise.resolve([]) : prisma.customerNote.findMany({
         where: { noteDate, customer: customerVisibilityFilter(user) },
         orderBy: [{ noteDate: "desc" }, { updatedAt: "desc" }, { id: "desc" }],
         take: RECENT_NOTES_LIMIT,
@@ -106,7 +116,7 @@ notesRouter.get(
         title: null,
         author: n.author,
         project: { id: n.project.id, name: n.project.name },
-        customer: n.project.customer,
+        customer: n.project.customers[0]?.customer ?? null,
         updatedAt: n.updatedAt,
       })),
       ...customerNotes.map((n) => ({

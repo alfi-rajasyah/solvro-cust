@@ -14,19 +14,20 @@ export function hasViewAll(user: AuthUser | null | undefined): boolean {
 }
 
 /**
- * Owner access to a project: view-all, the project's TAM, or the owner of the
- * project's customer. `customerOwnerId` is `undefined` while unknown (the
- * customer list is still loading) and `null` for an unowned customer.
+ * Owner access to a project: view-all, the project's TAM, or the owner of ANY
+ * customer the project is linked to (docs/archive/plans/multi-customer-projects.md,
+ * decision 4). `customerOwnerIds` are the linked customers' owner ids; a
+ * `null` entry is an unowned customer and never matches.
  */
 export function canOwnProject(
   user: AuthUser | null | undefined,
   project: { tamId: number },
-  customerOwnerId: number | null | undefined,
+  customerOwnerIds: readonly (number | null | undefined)[],
 ): boolean {
   if (!user) return false;
   if (hasViewAll(user)) return true;
   if (project.tamId === user.id) return true;
-  return customerOwnerId != null && customerOwnerId === user.id;
+  return customerOwnerIds.some((id) => id != null && id === user.id);
 }
 
 /**
@@ -57,7 +58,7 @@ export function canChangeCustomerOwner(customer: { canChangeOwner?: boolean }): 
 }
 
 export const OWNER_ONLY_MESSAGE =
-  "Only the project's TAM or the customer's owner can do this. Ask them, or an admin.";
+  "Only the project's TAM or the owner of one of its customers can do this. Ask them, or an admin.";
 
 /** True for the backend's 403 `owner_only` refusal. */
 export function isOwnerOnlyError(err: unknown): boolean {

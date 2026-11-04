@@ -54,6 +54,16 @@ async function truncateAllTables(databaseUrl: string): Promise<void> {
     // Single statement so table order doesn't matter — CASCADE covers any
     // FK reference among the listed tables regardless of declaration order.
     await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${tableList} RESTART IDENTITY CASCADE;`);
+    // The truncate emptied the workspace task statuses the migration seeded;
+    // put the three defaults back with fixed ids 1-3 (test/statusFixtures.ts).
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO task_status_defs (id, name, category, color, position, is_default) VALUES
+        (1, 'To do', 'TODO', 'gray', 0, true),
+        (2, 'In progress', 'IN_PROGRESS', 'primary', 1, true),
+        (3, 'Done', 'DONE', 'emerald', 2, true);`);
+    await prisma.$executeRawUnsafe(
+      `SELECT setval(pg_get_serial_sequence('task_status_defs', 'id'), 3);`,
+    );
   } finally {
     await prisma.$disconnect();
   }

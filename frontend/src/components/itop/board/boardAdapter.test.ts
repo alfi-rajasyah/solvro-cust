@@ -21,6 +21,7 @@ function ticket(overrides: Partial<ItopTicketRow> & Pick<ItopTicketRow, "id" | "
     slaTtoPassed: false,
     slaTtrPassed: false,
     resolutionDate: null,
+    customerId: null,
     isMine: false,
     ...overrides,
   };

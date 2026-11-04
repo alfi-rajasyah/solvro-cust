@@ -5,6 +5,8 @@ import { DateRangeField } from "./DateRangeField";
 import { Drawer } from "./Drawer";
 import { EpicChip } from "./EpicChip";
 import { LabelPicker } from "./LabelPicker";
+import { TaskTicketField } from "./itop/TaskTicketField";
+import { useItopOrgChoice } from "./itop/useItopOrgChoice";
 import { TaskConflictDialog } from "./TaskConflictDialog";
 import {
   CRITICAL_PATH_GLYPH,
@@ -16,7 +18,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { commitDraft, dayFromIso, isoFromDay } from "@/lib/dateField";
-import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
+import { StatusSelect } from "@/components/StatusSelect";
+import { PRIORITY_LABEL } from "@/lib/labels";
 import {
   diffTaskForm,
   fieldsToAdopt,
@@ -32,16 +35,19 @@ import {
   type UpdateTaskInput,
   useCreateTask,
   useDeleteTask,
+  useItopStatus,
+  useProject,
   useProjectEpics,
   useProjectLabels,
   useProjectSections,
   useProjectTasks,
   useUpdateTask,
+  defaultStatusIds,
+  useTaskStatuses,
   useUsers,
 } from "@/lib/queries";
 
 const PRIORITIES: Priority[] = ["LOW", "MEDIUM", "HIGH", "URGENT"];
-const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 
 const PRIORITY_COLOR: Record<Priority, string> = {
   LOW: "text-on-surface",
@@ -56,6 +62,8 @@ interface CreateProps {
   mode: "create";
   projectId: number;
   initialStatus?: TaskStatus;
+  /** Kanban "add task here" on a custom-status column: create directly in that status. */
+  initialStatusId?: number;
   initialParentTaskId?: number | null;
   initialSectionId?: number | null;
 }
@@ -80,6 +88,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
   const update = useUpdateTask(projectId);
   const remove = useDeleteTask(projectId);
   const { data: users } = useUsers();
+  const { data: statusDefs } = useTaskStatuses();
   const { data: projectTasks } = useProjectTasks(open ? projectId : null);
   const { data: sections } = useProjectSections(open ? projectId : null);
   const { data: epics } = useProjectEpics(open ? projectId : null);
@@ -87,7 +96,9 @@ export function TaskFormModal(props: TaskFormModalProps) {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<TaskStatus>("TODO");
+  // The workspace status id. `null` on create = the default status of the
+  // opening category (resolved against the loaded list, or by the server).
+  const [statusId, setStatusId] = useState<number | null>(null);
   const [priority, setPriority] = useState<Priority>("MEDIUM");
   const [startDate, setStartDate] = useState<string>("");
   const [dueDate, setDueDate] = useState<string>("");
@@ -97,6 +108,14 @@ export function TaskFormModal(props: TaskFormModalProps) {
   const [epicId, setEpicId] = useState<number | "">("");
   const [labelIds, setLabelIds] = useState<number[]>([]);
   const [isCriticalPath, setIsCriticalPath] = useState(false);
+  // iTop ticket (docs/archive/plans/subtask-itop-tickets.md Task 5). A new task
+  // holds the ref here and sends it with the create request; an existing task
+  // pins/clears it straight away, like the side panel does.
+  const [itopRef, setItopRef] = useState<string | null>(null);
+  const [nestedSheetOpen, setNestedSheetOpen] = useState(false);
+  const itopConfigured = useItopStatus().data?.configured ?? false;
+  const { data: project } = useProject(open ? projectId : null);
+  const itopOrg = useItopOrgChoice(project?.customers ?? []);
   const [error, setError] = useState<string | null>(null);
   // Drive the drawer's slide-out: every close path sets `closing`, and
   // the parent's real `onClose` (which unmounts us) only runs once the
@@ -126,7 +145,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
       baseTaskRef.current = editingTask;
       setTitle(editingTask.title);
       setDescription(editingTask.description ?? "");
-      setStatus(editingTask.status);
+      setStatusId(editingTask.statusId);
       setPriority(editingTask.priority);
       setStartDate(dayFromIso(editingTask.startDate) ?? "");
       setDueDate(dayFromIso(editingTask.dueDate) ?? "");
@@ -136,10 +155,11 @@ export function TaskFormModal(props: TaskFormModalProps) {
       setEpicId(editingTask.epicId ?? "");
       setLabelIds(editingTask.labels.map((l) => l.id));
       setIsCriticalPath(editingTask.isCriticalPath ?? false);
+      setItopRef(editingTask.itopTicketRef ?? null);
     } else {
       setTitle("");
       setDescription("");
-      setStatus(createProps?.initialStatus ?? "TODO");
+      setStatusId(createProps?.initialStatusId ?? null);
       setPriority("MEDIUM");
       setStartDate("");
       setDueDate("");
@@ -149,6 +169,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
       setEpicId("");
       setLabelIds([]);
       setIsCriticalPath(false);
+      setItopRef(null);
     }
     // Primitives only — the props OBJECT gets fresh identity on every parent
     // render (query refetches, sibling mutations invalidating), and re-running
@@ -159,6 +180,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
     isEdit,
     editingTask?.id,
     createProps?.initialStatus,
+    createProps?.initialStatusId,
     createProps?.initialParentTaskId,
     createProps?.initialSectionId,
   ]);
@@ -225,7 +247,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
         const { patch, expected } = diffTaskForm(base ?? editingTask, {
           title: title.trim(),
           description: description.trim() || null,
-          status,
+          statusId: statusId ?? (base ?? editingTask).statusId,
           priority,
           startDate: startIso,
           dueDate: dueIso,
@@ -252,7 +274,13 @@ export function TaskFormModal(props: TaskFormModalProps) {
         await create.mutateAsync({
           title: title.trim(),
           description: description.trim() || undefined,
-          status,
+          // An explicit pick (or a column-specific create) sends the exact
+          // status; otherwise the opening category maps to its default one.
+          ...(statusId !== null
+            ? { statusId }
+            : createProps?.initialStatus
+              ? { status: createProps.initialStatus }
+              : {}),
           priority,
           startDate: startIso,
           dueDate: dueIso,
@@ -262,6 +290,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
           epicId: parent === null ? (epicId === "" ? null : Number(epicId)) : null,
           labelIds: labelIds.length > 0 ? labelIds : undefined,
           isCriticalPath,
+          itopTicketRef: itopRef ?? undefined,
         });
       }
       requestClose();
@@ -296,7 +325,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
     const adopt = fieldsToAdopt(patch, stale.conflicts);
     if (adopt.has("title")) setTitle(t.title);
     if (adopt.has("description")) setDescription(t.description ?? "");
-    if (adopt.has("status")) setStatus(t.status);
+    if (adopt.has("statusId")) setStatusId(t.statusId);
     if (adopt.has("priority")) setPriority(t.priority);
     if (adopt.has("startDate")) setStartDate(dayFromIso(t.startDate) ?? "");
     if (adopt.has("dueDate")) setDueDate(dayFromIso(t.dueDate) ?? "");
@@ -355,7 +384,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
     <Drawer
       open={open}
       closing={closing}
-      onClose={confirmDeleteOpen || conflict ? () => {} : requestClose}
+      onClose={confirmDeleteOpen || conflict || nestedSheetOpen ? () => {} : requestClose}
       onClosed={onClose}
       title={isEdit ? "Edit task" : "New task"}
       customHeader={customHeader}
@@ -425,18 +454,12 @@ export function TaskFormModal(props: TaskFormModalProps) {
 
           {/* Status */}
           <FieldRow icon="radio_button_checked" label="Status">
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as TaskStatus)}
+            <StatusSelect
+              value={statusId ?? defaultStatusIds(statusDefs)[createProps?.initialStatus ?? "TODO"] ?? null}
+              onChange={(def) => setStatusId(def.id)}
               disabled={!canEdit}
-              className="cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden disabled:cursor-default"
-            >
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {TASK_STATUS_LABEL[s]}
-                </option>
-              ))}
-            </select>
+              className="bg-transparent text-xs font-semibold"
+            />
           </FieldRow>
 
           {/* Critical Path */}
@@ -567,6 +590,48 @@ export function TaskFormModal(props: TaskFormModalProps) {
             />
           </FieldRow>
 
+          {/* iTop ticket — only when iTop is connected */}
+          {itopConfigured && (
+            <FieldRow icon="confirmation_number" label="iTop ticket">
+              <TaskTicketField
+                itopTicketRef={itopRef}
+                canEdit={canEdit}
+                customerId={itopOrg.customerId}
+                customerName={itopOrg.customerName}
+                organisations={itopOrg.organisations}
+                organisationLabel={itopOrg.organisationLabel}
+                projectName={project?.name ?? null}
+                parentTitle={
+                  parentTaskId === ""
+                    ? null
+                    : ((projectTasks ?? []).find((t) => t.id === Number(parentTaskId))?.title ?? null)
+                }
+                taskTitle={title.trim()}
+                taskDescription={description.trim() || null}
+                onSave={(ref) => {
+                  if (!editingTask) {
+                    setItopRef(ref);
+                    return;
+                  }
+                  // `editingTask` is a frozen copy held by the caller, so the
+                  // local state is the source of truth; roll back on failure.
+                  const previous = itopRef;
+                  setItopRef(ref);
+                  update.mutate(
+                    { id: editingTask.id, patch: { itopTicketRef: ref } },
+                    {
+                      onError: (err) => {
+                        setItopRef(previous);
+                        setError(err instanceof ApiError ? err.message : "Could not update the iTop ticket.");
+                      },
+                    },
+                  );
+                }}
+                onCreateSheetOpenChange={setNestedSheetOpen}
+              />
+            </FieldRow>
+          )}
+
         </div>
 
         {/* Description */}
@@ -662,6 +727,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                   epics,
                   labels,
                   tasks: projectTasks,
+                  statuses: statusDefs,
                 },
                 conflict.stale.task,
               ),

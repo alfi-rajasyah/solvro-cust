@@ -349,7 +349,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
                   >
                     {t.title}
                   </button>
-                  <TaskStatusChip status={t.status} />
+                  <TaskStatusChip status={t.status} def={t.statusDef} />
                 </li>
               ))}
             </ul>

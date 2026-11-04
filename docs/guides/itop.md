@@ -56,7 +56,7 @@ Each mapped customer now has a **Tickets** tab. The first sync runs within the r
 
 ### Actions from Solvro
 
-TAMs can assign, set pending, resolve, close, and reopen tickets, add log entries, and create tickets from Solvro.
+TAMs can assign, set pending, resolve, close, and reopen tickets, add log entries, and create tickets from Solvro. When a project is linked to several customers mapped to different iTop organisations, the new-ticket form asks which organisation the ticket goes to.
 
 1. **In iTop, allow personal tokens** for the TAMs' profile. In the `authent-token` module settings of iTop's configuration file:
 
@@ -70,7 +70,7 @@ TAMs can assign, set pending, resolve, close, and reopen tickets, add log entrie
 3. **In Solvro, turn on Actions from Solvro** in Admin > iTop.
 4. **Each TAM creates a personal token** in iTop (**My Account → Personal tokens**, scope `REST/JSON`) and saves it in Solvro at **Settings > iTop**.
 
-Solvro accepts a personal token only when it can confirm the token is the TAM's own: used with that token, Solvro reads the iTop User of the Person with the TAM's email and that user's own PersonalToken. If the token's profile cannot read those two classes, Solvro refuses it unless you opt in (see the troubleshooting table below and [CONFIGURATION.md](../CONFIGURATION.md)). Solvro never falls back to another token for a write.
+Solvro accepts a personal token only when it can confirm the token is the TAM's own: iTop reports which Person the token belongs to, and that Person's email must be the TAM's Solvro email. Only if iTop cannot report that does Solvro fall back to reading the iTop User and its PersonalToken, and refuses the token if the profile cannot read them, unless you opt in (see the troubleshooting table below and [CONFIGURATION.md](../CONFIGURATION.md)). Solvro never falls back to another token for a write.
 
 iTop's own lifecycle rules apply. Solvro sends iTop's default fields (assigning needs a team and an agent; resolving needs a solution). When your iTop has extra rules, the ticket panel shows iTop's refusal text as iTop wrote it.
 
@@ -102,7 +102,7 @@ To stop the background sync, for example during iTop maintenance, set `ITOP_SYNC
 | **Test connection** fails a check. | The application token cannot read that class. Add read rights on `Organization`, `UserRequest`, `Incident`, `Person`, and `Service`, and check the `REST Services User` profile. |
 | A TAM is not matched. | The iTop Person email differs from the Solvro email. Correct the email in iTop, then run the match again. |
 | A TAM's personal token is refused. | The token belongs to another iTop Person, or that Person's email differs from the TAM's Solvro email. Create the token while signed in to iTop as the TAM. |
-| Saving a personal token fails with "Solvro could not confirm this token is yours: it cannot read your iTop user account or its personal tokens. Ask your iTop administrator to allow that, or ask your Solvro admin to allow tokens Solvro cannot verify." (`itop_token_unverified`). | The token's iTop profile cannot read `User` or `PersonalToken` (a Support Agent profile cannot by default), so Solvro cannot prove the token is the TAM's own. Either grant that read right in iTop, or set `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS=true` in `~/solvro/.env` and run `docker compose up -d` in `~/solvro`; Solvro then accepts the token on the email match alone. Tokens saved before this check existed are not re-checked. Details: [CONFIGURATION.md](../CONFIGURATION.md). |
+| Saving a personal token fails with "Your iTop profile can't read the User class, so Solvro cannot confirm this token is yours. Ask your iTop admin to grant read access to User and PersonalToken, or ask your Solvro admin to allow tokens Solvro cannot verify." (the class named is `User` or `PersonalToken`) (`itop_token_unverified`). | iTop could not report which Person the token belongs to, and the token's profile cannot read `User` or `PersonalToken` (a Support Agent profile cannot by default), so Solvro cannot prove the token is the TAM's own. Either grant that read right in iTop, or set `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS=true` in `~/solvro/.env` and run `docker compose up -d` in `~/solvro`; Solvro then accepts the token on the email match alone. Tokens saved before this check existed are not re-checked. Details: [CONFIGURATION.md](../CONFIGURATION.md). |
 | The TAM cannot create a personal token in iTop. | The TAM's profile is not in `personal_tokens_allowed_profiles`. |
 | An action fails with a message from iTop. | iTop refused the change under its own rules. Fix the ticket in iTop, or adjust the rule there. |
 | Ticket times are off by some hours. | The **iTop server timezone** in Solvro differs from iTop's `timezone`. Make them equal; times are corrected at the next sync. |

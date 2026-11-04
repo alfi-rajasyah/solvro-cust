@@ -1,5 +1,6 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient, TaskStatus } from "@prisma/client";
 import { countSiblings, type SiblingKey } from "./taskOrdering.js";
+import { newTaskStatus } from "./taskStatuses.js";
 
 type Tx = Prisma.TransactionClient | PrismaClient;
 
@@ -9,7 +10,8 @@ export interface DuplicateOverrides {
 
 // Fields carried verbatim from source to copy — decisions 1, 3, 5, 6 and the
 // date half of decision 4 in docs/plans/duplicate-tasks-sections.md §3.
-// status always resets to TODO (decision 2) and baseline*Date always resets
+// status always resets to the TODO category's default status (decision 2;
+// docs/archive/plans/custom-task-statuses.md §1) and baseline*Date always resets
 // to null (decision 4) on every copy, top-level or subtask — never selected
 // here since the copy never reads them. No TaskDependency row is ever
 // created for a copy (decision 8); comments are never copied (decision 9) —
@@ -47,13 +49,15 @@ async function copyOne(
   newParentTaskId: number | null,
   newSectionId: number | null,
   position: number,
+  reset: { status: TaskStatus; statusId: number },
 ): Promise<number> {
   const copy = await tx.task.create({
     data: {
       projectId: source.projectId,
       title: source.title,
       description: source.description,
-      status: "TODO",
+      status: reset.status,
+      statusId: reset.statusId,
       priority: source.priority,
       startDate: source.startDate,
       dueDate: source.dueDate,
@@ -80,7 +84,7 @@ async function copyOne(
  * Copies every task in `sourceIds` (in the given order) plus, for each one,
  * its own subtasks (in source `position` then `id` order) — the shared
  * engine behind `POST /tasks/:id/duplicate` and `POST /sections/:id/duplicate`.
- * Every copy: resets `status` to `TODO`, clears both baseline date columns,
+ * Every copy: resets the status to the TODO default status, clears both baseline date columns,
  * connects the same labels as its source, and gets no `TaskDependency` rows
  * (dependencies are dropped; comments are never copied). A subtask source
  * naturally copies with no subtasks of its own — max depth is 1, so it has
@@ -124,6 +128,9 @@ export async function duplicateTaskTree(
 ): Promise<Map<number, number>> {
   const result = new Map<number, number>();
   if (sourceIds.length === 0) return result;
+
+  // Every copy starts in the TODO category's default status.
+  const reset = await newTaskStatus(tx);
 
   const sources = await tx.task.findMany({
     where: { id: { in: sourceIds } },
@@ -172,7 +179,7 @@ export async function duplicateTaskTree(
       projectId: source.projectId,
       parentTaskId: source.parentTaskId,
     });
-    const newTaskId = await copyOne(tx, source, source.parentTaskId, newSectionId, position);
+    const newTaskId = await copyOne(tx, source, source.parentTaskId, newSectionId, position, reset);
     result.set(sourceId, newTaskId);
 
     // The new parent was created one statement ago and has no children yet,
@@ -190,6 +197,7 @@ export async function duplicateTaskTree(
         newTaskId,
         newSubtaskSectionId,
         subtaskPosition++,
+        reset,
       );
       result.set(subtask.id, newSubtaskId);
     }

@@ -1,11 +1,12 @@
-import type { Task, TaskStatus } from "@/lib/queries";
-import { KANBAN_STATUSES } from "./adapter";
+import type { Task } from "@/lib/queries";
+import { statusIdOfColumn } from "./adapter";
 
 // Minimal STRUCTURAL type mirroring `KanbanCommitMeta<T>` from
 // `frontend/src/components/reui/kanban.tsx` — defined locally rather than
 // imported, per the acceptance criterion that neither this module nor
 // adapter.ts may import from the vendored kanban file (or from
-// `@dnd-kit/*`). Field-for-field match with the vendor shape (minus `event`,
+// `@dnd-kit/*`). Column ids are `status-<defId>` strings (see adapter.ts;
+// docs/archive/plans/custom-task-statuses.md §3 B3). Field-for-field match with the vendor shape (minus `event`,
 // which this pure function never needs): `kind` ("item" | "column"),
 // `activeContainer`/`activeIndex` describe where the drag STARTED (indexing
 // into `previousValue`), `overContainer`/`overIndex` describe where it
@@ -25,7 +26,7 @@ export interface KanbanCommitMetaLike<T = Task> {
    * body itself — not on a specific card — so the mapper doesn't have to
    * (mis)infer that from the committed arrangement. `SolvroKanban.tsx`
    * derives it from a real drag's `meta.event.over?.id` resolving to a
-   * `KANBAN_STATUSES` member rather than an item id; `buildColumnAppendCommit`
+   * board column id rather than an item id; `buildColumnAppendCommit`
    * sets it directly for the mobile move sheet's synthesized commit.
    *
    * T10 refinement: `meta.event.over?.id` resolving to a column id is NOT on
@@ -51,11 +52,12 @@ export interface KanbanCommitMetaLike<T = Task> {
    * column's true last card made a column-body append anchor on the last
    * *visible* card instead of the true one (FA-5).
    */
-  appendToStatus?: TaskStatus;
+  appendToColumn?: string;
 }
 
 export interface TaskPatch {
-  status: TaskStatus;
+  /** Target column's status def id. Always sent — a within-column reorder carries its own column's id. */
+  statusId: number;
   position?: number;
 }
 
@@ -65,15 +67,17 @@ export interface CommitResult {
 }
 
 /**
- * Type guard validating `meta.overContainer` against the known kanban
- * statuses (Phase 1 review finding 5) instead of an unchecked `as
- * TaskStatus` cast. `overContainer` originates from the vendored engine's
- * commit meta — this module doesn't import that file's types (see the
- * `KanbanCommitMetaLike` note above), so the field arrives typed as a bare
- * `string`; nothing upstream guarantees it's one of TODO/IN_PROGRESS/DONE.
+ * Parses `meta.overContainer` into a status def id, accepting only a column
+ * that actually exists in the committed value (Phase 1 review finding 5):
+ * `overContainer` originates from the vendored engine's commit meta — this
+ * module doesn't import that file's types (see the `KanbanCommitMetaLike`
+ * note above), so it arrives as a bare `string`, and nothing upstream
+ * guarantees it names a real column. A malformed or unknown column fires no
+ * request instead of writing a garbage `statusId`.
  */
-function isKanbanStatus(value: string): value is TaskStatus {
-  return (KANBAN_STATUSES as readonly string[]).includes(value);
+function parseColumnId(value: string, committedValue: Record<string, Task[]>): number | null {
+  if (!Object.prototype.hasOwnProperty.call(committedValue, value)) return null;
+  return statusIdOfColumn(value);
 }
 
 /** Column-membership + order signature (ids only) — what "arrangement" means for the no-op guard. */
@@ -150,28 +154,28 @@ function movedExcludedContext(unfilteredGlobalOrder: Task[], movedId: number) {
 
 /**
  * Column-append position: anchor on the UNFILTERED last member of
- * `targetStatus` (moved excluded), matching the old board's
+ * the target status (moved excluded), matching the old board's
  * `columnEndPosition` semantics — so a filter hiding the column's true last
  * card can never make the append land before it. Used both as
  * `resolvePosition`'s own fallback (no visible neighbor in the committed
  * arrangement) AND directly by `mapCommitToPatch` when the caller passes an
- * explicit `appendToStatus` signal (M2 fix) — a genuine column-body drop
+ * explicit `appendToColumn` signal (M2 fix) — a genuine column-body drop
  * must always anchor here, never on a merely-adjacent *visible* card.
  */
 function columnAppendPosition(
-  targetStatus: TaskStatus,
+  targetStatusId: number,
   movedId: number,
   unfilteredGlobalOrder: Task[],
 ): number | undefined {
   const { movedExcludedGlobal, findIndex, clamp } = movedExcludedContext(unfilteredGlobalOrder, movedId);
-  const unfilteredStatusMembers = movedExcludedGlobal.filter((t) => t.status === targetStatus);
+  const unfilteredStatusMembers = movedExcludedGlobal.filter((t) => t.statusId === targetStatusId);
   const last = unfilteredStatusMembers[unfilteredStatusMembers.length - 1];
   if (!last) return undefined;
   return clamp(findIndex(last.id) + 1);
 }
 
 function resolvePosition(
-  targetStatus: TaskStatus,
+  targetStatusId: number,
   targetColumn: Task[],
   movedIndexInColumn: number,
   movedId: number,
@@ -189,7 +193,7 @@ function resolvePosition(
     return clamp(findIndex(successor.id));
   }
 
-  return columnAppendPosition(targetStatus, movedId, unfilteredGlobalOrder);
+  return columnAppendPosition(targetStatusId, movedId, unfilteredGlobalOrder);
 }
 
 /**
@@ -218,13 +222,10 @@ export function mapCommitToPatch(
   // cancelled-drag-restored-to-original cases (SC-3, SC-4, NO-1, NO-3).
   if (arrangementsEqual(meta.previousValue, committedValue)) return null;
 
-  // Guard: reject an overContainer that isn't a known kanban status (Phase 1
-  // review finding 5) rather than trusting it via an unchecked cast — a
-  // malformed or future-column commit fires no request instead of writing a
-  // garbage `status`.
-  if (!isKanbanStatus(meta.overContainer)) return null;
-  const targetStatus = meta.overContainer;
-  const targetColumn = committedValue[targetStatus] ?? [];
+  // Guard: reject an overContainer that isn't a known board column.
+  const targetStatusId = parseColumnId(meta.overContainer, committedValue);
+  if (targetStatusId === null) return null;
+  const targetColumn = committedValue[meta.overContainer] ?? [];
   const moved = targetColumn[meta.overIndex];
   if (!moved) return null;
 
@@ -247,12 +248,13 @@ export function mapCommitToPatch(
   // the first place, so it always keeps using resolvePosition's neighbor-
   // based math (committed-arrangement inference stays authoritative there).
   const committedShowsMovedLast = meta.overIndex === targetColumn.length - 1;
-  const useColumnAppend = meta.appendToStatus === targetStatus && committedShowsMovedLast;
+  const useColumnAppend = meta.appendToColumn === meta.overContainer && committedShowsMovedLast;
   const position = useColumnAppend
-    ? columnAppendPosition(targetStatus, moved.id, unfilteredGlobalOrder)
-    : resolvePosition(targetStatus, targetColumn, meta.overIndex, moved.id, unfilteredGlobalOrder);
+    ? columnAppendPosition(targetStatusId, moved.id, unfilteredGlobalOrder)
+    : resolvePosition(targetStatusId, targetColumn, meta.overIndex, moved.id, unfilteredGlobalOrder);
 
-  const patch: TaskPatch = position === undefined ? { status: targetStatus } : { status: targetStatus, position };
+  const patch: TaskPatch =
+    position === undefined ? { statusId: targetStatusId } : { statusId: targetStatusId, position };
 
   // Guard 2 (defensive-only, Phase 1 review finding 2): the resolved patch
   // describes the task's CURRENT state exactly (status unchanged, and either
@@ -269,7 +271,7 @@ export function mapCommitToPatch(
   // invariant against future refactors that might weaken or bypass Guard 1
   // without this one noticing — not a target for dedicated test coverage;
   // no test tries to reach it without also tripping Guard 1 first.
-  if (current.status === patch.status && (patch.position === undefined || current.position === patch.position)) {
+  if (current.statusId === patch.statusId && (patch.position === undefined || current.position === patch.position)) {
     return null;
   }
 

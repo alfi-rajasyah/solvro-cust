@@ -7,6 +7,7 @@ import {
   type ColumnDef,
   type SortingState,
 } from "@tanstack/react-table";
+import { CustomerDeleteBody, sharedProjectsOf } from "@/components/customer/CustomerDeleteBody";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { CustomerFormModal } from "@/components/CustomerFormModal";
 import { EmptyState } from "@/components/EmptyState";
@@ -51,8 +52,8 @@ export function Customers() {
   const projectTamIdsByCustomer = useMemo(() => {
     const map = new Map<number, number[]>();
     for (const p of projects ?? []) {
-      if (p.customerId === null) continue;
-      map.set(p.customerId, [...(map.get(p.customerId) ?? []), p.tamId]);
+      // A shared project counts toward EVERY linked customer.
+      for (const c of p.customers) map.set(c.id, [...(map.get(c.id) ?? []), p.tamId]);
     }
     return map;
   }, [projects]);
@@ -62,8 +63,9 @@ export function Customers() {
     [user, projectTamIdsByCustomer],
   );
 
-  const canMutate = hasPermission(user, "project:write");
-  const viewAll = hasPermission(user, "project:view-all");
+  const canMutate = hasPermission(user, "customer:write");
+  // Copy only: whether the list shows every customer. Unowned/create rules stay project:view-all.
+  const viewAll = hasPermission(user, "project:view-all") || hasPermission(user, "customer:view-all");
   useNewParam("1", canMutate, () => setCreateOpen(true));
 
   async function handleDelete(c: CustomerSummary) {
@@ -79,8 +81,8 @@ export function Customers() {
   return (
     <div>
       <div className="mb-4 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-on-surface">Customers</h1>
+        <div className="min-w-0">
+          <h1 className="font-display text-h1 text-on-surface">Customers</h1>
           <p className="text-sm text-on-surface-variant">
             {viewAll
               ? "Customer database. Every project is mapped to a customer for cross-account visibility and reporting."
@@ -91,7 +93,7 @@ export function Customers() {
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 font-display text-sm text-on-primary transition-colors hover:bg-primary-container font-semibold"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 font-display text-sm text-on-primary transition-colors hover:bg-primary-container font-semibold"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
             New customer
@@ -158,7 +160,12 @@ export function Customers() {
         onClose={() => setDeleting(null)}
         onConfirm={() => deleting && void handleDelete(deleting)}
         title="Delete customer"
-        body={`Delete customer "${deleting?.name ?? ""}"? Linked projects keep their tasks but lose the customer link.`}
+        body={
+          <CustomerDeleteBody
+            name={deleting?.name ?? ""}
+            shared={deleting ? sharedProjectsOf(deleting.id, projects ?? []) : []}
+          />
+        }
         confirmLabel="Delete"
         confirmTone="danger"
         busy={deleteCustomer.isPending}

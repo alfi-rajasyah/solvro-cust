@@ -20,6 +20,7 @@ import {
   resetOutlineWebhookStateForTests,
 } from "../src/routes/webhook.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const lines: string[] = [];
 const app = createApp({ logger: pino({ level: "trace" }, { write: (chunk: string) => void lines.push(chunk) }) });
@@ -77,10 +78,10 @@ async function fixture() {
     data: { name: `Q ${Date.now()}-${Math.random()}`, tamId: tam.userId, status: "ACTIVE" },
   });
   const task = await prisma.task.create({
-    data: { projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
+    data: { statusId: SID.TODO, projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
   });
   const otherTask = await prisma.task.create({
-    data: { projectId: other.id, title: "U", status: "TODO", priority: "MEDIUM", position: 0 },
+    data: { statusId: SID.TODO, projectId: other.id, title: "U", status: "TODO", priority: "MEDIUM", position: 0 },
   });
   return { tam, project, other, task, otherTask };
 }

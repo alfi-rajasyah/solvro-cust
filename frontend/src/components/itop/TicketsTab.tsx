@@ -60,9 +60,10 @@ export function TicketsTab({
   const status = useItopStatus();
   const myToken = useMyItopToken();
   const { user } = useAuth();
-  // POST /itop/tickets needs task:write — no entry point for users without it.
+  // POST /itop/tickets needs task:write and customer:write — no entry point without them.
   const canCreateTicket =
-    hasPermission(user, "task:write") && (status.data?.actionsEnabled ?? false) && (myToken.data?.set ?? false);
+    hasPermission(user, "task:write") &&
+    hasPermission(user, "customer:write") && (status.data?.actionsEnabled ?? false) && (myToken.data?.set ?? false);
 
   const { data, isLoading, isError, error } = useCustomerTickets(customerId, {
     scope,

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, type FormEvent } from "react";
+import { useItopOrgChoice } from "@/components/itop/useItopOrgChoice";
 import {
   DndContext,
   KeyboardSensor,
@@ -25,14 +26,17 @@ import { DateField } from "@/components/DateField";
 import { EpicChip } from "@/components/EpicChip";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { SectionReorderModal } from "@/components/SectionReorderModal";
-import { TASK_STATUS_TONE_CLASS } from "@/components/StatusChip";
+import { TaskStatusChip } from "@/components/StatusChip";
+import { StatusSelect } from "@/components/StatusSelect";
 import { TaskFormModal } from "@/components/TaskFormModal";
+import { RowTicketCell, type RowTicketContext } from "@/components/itop/RowTicketCell";
+import { useCanCreateItopTicket } from "@/components/itop/useCanCreateItopTicket";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { commitDraft, dayFromIso } from "@/lib/dateField";
 import { useDragActivityGuard } from "@/lib/dragActivity";
 import { fmtDay, fmtDue } from "@/lib/formatDate";
-import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
+import { PRIORITY_LABEL } from "@/lib/labels";
 import { ASSIGN_ADDS_MEMBER_NOTICE } from "@/lib/projectMembers";
 import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
 import {
@@ -40,10 +44,11 @@ import {
   type Priority,
   type Section,
   type Task,
-  type TaskStatus,
   useCreateSection,
   useDeleteSection,
   useDuplicateSection,
+  useItopStatus,
+  useItopTicketsByRefs,
   useProjectEpics,
   useProjectSections,
   useProjectTasks,
@@ -66,7 +71,14 @@ function nextPriority(p: Priority): Priority {
   return PRIORITY_ORDER[(idx + 1) % PRIORITY_ORDER.length];
 }
 
-const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
+// List grid templates. The Ticket column exists only when iTop is configured;
+// without it the grid is exactly the pre-iTop one (no layout shift). Full
+// literals so Tailwind sees them.
+const GRID_BASE = "grid-cols-[28px_minmax(200px,1fr)_60px_70px_50px_100px]";
+const GRID_TICKET = "grid-cols-[28px_minmax(200px,1fr)_120px_60px_70px_50px_100px]";
+const MD_GRID_BASE = "md:grid-cols-[28px_minmax(200px,1fr)_60px_70px_50px_100px]";
+const MD_GRID_TICKET = "md:grid-cols-[28px_minmax(200px,1fr)_120px_60px_70px_50px_100px]";
+
 
 interface TaskNode {
   task: Task;
@@ -119,6 +131,36 @@ export function ProjectList() {
   const { data: users } = useUsers();
   const { data: epics } = useProjectEpics(project.id);
   const updateTask = useUpdateTask(project.id);
+
+  // Ticket column: one batched by-refs request per render covers every pinned
+  // ref (tasks and subtasks); the column exists only when iTop is configured.
+  const { data: itopStatus } = useItopStatus();
+  const itopOn = itopStatus?.configured ?? false;
+  const itopOrg = useItopOrgChoice(project.customers);
+  const createGate = useCanCreateItopTicket(itopOrg.customerId, itopOrg.customerName);
+  const pinnedRefs = useMemo(
+    () => (tasks ?? []).flatMap((t) => (t.itopTicketRef ? [t.itopTicketRef] : [])),
+    [tasks],
+  );
+  const { data: ticketsByRef } = useItopTicketsByRefs(pinnedRefs, {
+    enabled: itopOn && hasPermission(user, "customer:read"),
+  });
+  const ticketCtx = useMemo<RowTicketContext | null>(
+    () =>
+      itopOn
+        ? {
+            projectId: project.id,
+            projectName: project.name,
+            customerId: itopOrg.customerId,
+            organisations: itopOrg.organisations,
+            organisationLabel: itopOrg.organisationLabel,
+            baseUrl: itopStatus?.baseUrl ?? null,
+            gate: createGate,
+            byRef: ticketsByRef,
+          }
+        : null,
+    [itopOn, project.id, project.name, itopOrg, itopStatus?.baseUrl, createGate, ticketsByRef],
+  );
   const createSection = useCreateSection(project.id);
   const updateSection = useUpdateSection(project.id);
   const deleteSection = useDeleteSection(project.id);
@@ -288,9 +330,9 @@ export function ProjectList() {
     updateTask.mutate({ id: task.id, patch: { priority: nextPriority(task.priority) } });
   }
 
-  function setStatus(task: Task, status: TaskStatus) {
-    if (status === task.status) return;
-    updateTask.mutate({ id: task.id, patch: { status } });
+  function setStatus(task: Task, statusId: number) {
+    if (statusId === task.statusId) return;
+    updateTask.mutate({ id: task.id, patch: { statusId } });
   }
 
   function setAssignee(task: Task, assignedToId: number | null) {
@@ -517,9 +559,10 @@ export function ProjectList() {
 
       <div className="overflow-x-auto rounded-sm border border-outline-variant bg-surface-container-lowest md:min-h-0 md:flex-1 md:overflow-y-auto">
         {/* Column headers */}
-        <div className="hidden grid-cols-[28px_minmax(200px,1fr)_60px_70px_50px_100px] items-center gap-2 border-b border-outline-variant px-3 py-2 font-display text-label-caps uppercase text-on-surface-variant md:grid">
+        <div className={`hidden ${ticketCtx ? GRID_TICKET : GRID_BASE} items-center gap-2 border-b border-outline-variant px-3 py-2 font-display text-label-caps uppercase text-on-surface-variant md:grid`}>
           <span></span>
           <span>Name</span>
+          {ticketCtx && <span>Ticket</span>}
           <span>Owner</span>
           <span>Due</span>
           <span>Prio</span>
@@ -542,6 +585,7 @@ export function ProjectList() {
               canEdit={canEdit}
               users={users ?? []}
               epicMap={epicMap}
+              ticketCtx={ticketCtx}
               onToggle={() => toggleGroup(groupKeyOf(g.section?.id ?? null))}
               onAddTask={() =>
                 setCreateTaskCtx({ sectionId: g.section?.id ?? null, parentTaskId: null })
@@ -646,13 +690,14 @@ interface SectionGroupProps {
   canEdit: boolean;
   users: { id: number; username: string }[];
   epicMap: Map<number, Epic>;
+  ticketCtx: RowTicketContext | null;
   onToggle: () => void;
   onAddTask: () => void;
   onAddSubtask: (parentId: number) => void;
   onOpenTask: (id: number) => void;
   onToggleDone: (t: Task) => void;
   onCyclePriority: (t: Task) => void;
-  onSetStatus: (t: Task, status: TaskStatus) => void;
+  onSetStatus: (t: Task, statusId: number) => void;
   onSetAssignee: (t: Task, assignedToId: number | null) => void;
   onSetDates: (t: Task, start: string | null, due: string | null) => void;
   onRename: (s: Section | null) => void;
@@ -673,6 +718,7 @@ function SectionGroup({
   canEdit,
   users,
   epicMap,
+  ticketCtx,
   onToggle,
   onAddTask,
   onAddSubtask,
@@ -796,6 +842,7 @@ function SectionGroup({
               canEdit={canEdit}
               users={users}
               epicMap={epicMap}
+              ticketCtx={ticketCtx}
               onAddSubtask={onAddSubtask}
               onOpenTask={onOpenTask}
               onToggleDone={onToggleDone}
@@ -831,6 +878,7 @@ function TaskRow({
   canEdit,
   users,
   epicMap,
+  ticketCtx,
   onAddSubtask,
   onOpenTask,
   onToggleDone,
@@ -843,11 +891,12 @@ function TaskRow({
   canEdit: boolean;
   users: { id: number; username: string }[];
   epicMap: Map<number, Epic>;
+  ticketCtx: RowTicketContext | null;
   onAddSubtask: (parentId: number) => void;
   onOpenTask: (id: number) => void;
   onToggleDone: (t: Task) => void;
   onCyclePriority: (t: Task) => void;
-  onSetStatus: (t: Task, status: TaskStatus) => void;
+  onSetStatus: (t: Task, statusId: number) => void;
   onSetAssignee: (t: Task, assignedToId: number | null) => void;
   onSetDates: (t: Task, start: string | null, due: string | null) => void;
 }) {
@@ -866,7 +915,7 @@ function TaskRow({
         style={style}
         onClick={() => onOpenTask(task.id)}
         className={[
-          "hidden cursor-pointer grid-cols-[28px_minmax(200px,1fr)_60px_70px_50px_100px] items-center gap-2 border-t border-outline-variant px-3 py-1.5 hover:bg-surface-container-low md:grid",
+          `hidden cursor-pointer ${ticketCtx ? GRID_TICKET : GRID_BASE} items-center gap-2 border-t border-outline-variant px-3 py-1.5 hover:bg-surface-container-low md:grid`,
           isDragging ? "opacity-40" : "",
         ].join(" ")}
       >
@@ -917,6 +966,12 @@ function TaskRow({
           {epic && <EpicChip epic={epic} compact className="shrink-0" />}
         </span>
 
+        {ticketCtx && (
+          <span className="min-w-0" onClick={(e) => e.stopPropagation()}>
+            <RowTicketCell task={task} canEdit={canEdit} ctx={ticketCtx} />
+          </span>
+        )}
+
         <span onClick={(e) => e.stopPropagation()}>
           <AssigneeSelect
             canEdit={canEdit}
@@ -957,7 +1012,14 @@ function TaskRow({
         </span>
 
         <span onClick={(e) => e.stopPropagation()}>
-          <StatusSelect canEdit={canEdit} value={task.status} onChange={(s) => onSetStatus(task, s)} />
+          <StatusSelect
+            variant="chip"
+            value={task.statusId}
+            fallback={task.statusDef}
+            disabled={!canEdit}
+            ariaLabel={`Status of ${task.title}`}
+            onChange={(def) => onSetStatus(task, def.id)}
+          />
         </span>
       </div>
 
@@ -1003,19 +1065,17 @@ function TaskRow({
             <EpicChip epic={epic} compact />
           </div>
         )}
+        {ticketCtx && (canEdit || task.itopTicketRef) && (
+          <div className="flex items-center pl-0">
+            <RowTicketCell task={task} canEdit={canEdit} ctx={ticketCtx} />
+          </div>
+        )}
         <div className="flex items-center justify-between gap-2 pl-0">
           <span className="flex items-center gap-1.5">
             <AssigneeAvatar user={task.assignedTo} size="xs" />
             <span className="text-meta text-on-surface-variant">{fmt(task.dueDate, task.status === "DONE")}</span>
           </span>
-          <span
-            className={[
-              "rounded-full px-2 py-0.5 font-display text-meta font-semibold",
-              TASK_STATUS_TONE_CLASS[task.status],
-            ].join(" ")}
-          >
-            {TASK_STATUS_LABEL[task.status]}
-          </span>
+          <TaskStatusChip status={task.status} def={task.statusDef} />
         </div>
       </div>
 
@@ -1028,9 +1088,13 @@ function TaskRow({
             <SubtaskRow
               key={s.id}
               task={s}
+              parentTitle={task.title}
               canEdit={canEdit}
+              users={users}
+              ticketCtx={ticketCtx}
               onOpenTask={onOpenTask}
               onToggleDone={onToggleDone}
+              onSetAssignee={onSetAssignee}
             />
           ))}
         </SortableContext>
@@ -1051,14 +1115,22 @@ function TaskRow({
 
 function SubtaskRow({
   task,
+  parentTitle,
   canEdit,
+  users,
+  ticketCtx,
   onOpenTask,
   onToggleDone,
+  onSetAssignee,
 }: {
   task: Task;
+  parentTitle: string;
   canEdit: boolean;
+  users: { id: number; username: string }[];
+  ticketCtx: RowTicketContext | null;
   onOpenTask: (id: number) => void;
   onToggleDone: (t: Task) => void;
+  onSetAssignee: (t: Task, assignedToId: number | null) => void;
 }) {
   const done = task.status === "DONE";
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
@@ -1070,10 +1142,11 @@ function SubtaskRow({
       style={style}
       onClick={() => onOpenTask(task.id)}
       className={[
-        "flex cursor-pointer items-center gap-2 border-t border-outline-variant bg-surface-container-low/40 py-1 pl-[34px] pr-3 text-[12.5px] hover:bg-surface-container-low",
+        `flex cursor-pointer items-center gap-2 border-t border-outline-variant bg-surface-container-low/40 px-3 py-1 text-[12.5px] hover:bg-surface-container-low md:grid ${ticketCtx ? MD_GRID_TICKET : MD_GRID_BASE}`,
         isDragging ? "opacity-40" : "",
       ].join(" ")}
     >
+      <span className="flex min-w-0 flex-1 items-center gap-2 pl-[22px] md:col-span-2">
       <span
         ref={setActivatorNodeRef}
         {...attributes}
@@ -1097,7 +1170,7 @@ function SubtaskRow({
         aria-label={done ? "Mark not done" : "Mark done"}
         className={[
           "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border transition-colors",
-          done ? "border-emerald-500 bg-emerald-500 text-white" : "border-outline-variant hover:border-primary",
+          done ? "border-primary bg-primary text-on-primary" : "border-outline-variant hover:border-primary",
           canEdit ? "cursor-pointer" : "cursor-default",
         ].join(" ")}
       >
@@ -1114,6 +1187,24 @@ function SubtaskRow({
           {task.title}
         </button>
         {task.isCriticalPath && <CriticalPathMark variant="glyph" className="shrink-0" />}
+      </span>
+      </span>
+      {ticketCtx && (
+        <span
+          className={`min-w-0 shrink-0 md:block md:shrink ${canEdit || task.itopTicketRef ? "" : "hidden"}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <RowTicketCell task={task} parentTitle={parentTitle} canEdit={canEdit} ctx={ticketCtx} />
+        </span>
+      )}
+      <span className="shrink-0 md:shrink" onClick={(e) => e.stopPropagation()}>
+        <AssigneeSelect
+          canEdit={canEdit}
+          users={users}
+          projectId={task.projectId}
+          value={task.assignedToId}
+          onChange={(id) => onSetAssignee(task, id)}
+        />
       </span>
     </div>
   );
@@ -1237,64 +1328,6 @@ function DueDateEditor({
       triggerLabel={fmt(dueISO, done)}
       aria-label={day ? `Due date, currently ${fmt(dueISO, done)}` : "Due date"}
     />
-  );
-}
-
-function StatusSelect({
-  canEdit,
-  value,
-  onChange,
-}: {
-  canEdit: boolean;
-  value: TaskStatus;
-  onChange: (s: TaskStatus) => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  const chip = (
-    <span
-      className={[
-        "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 font-display text-meta font-semibold",
-        TASK_STATUS_TONE_CLASS[value],
-        canEdit ? "cursor-pointer" : "",
-      ].join(" ")}
-    >
-      {TASK_STATUS_LABEL[value]}
-      {canEdit && <span aria-hidden="true" className="material-symbols-outlined text-meta">expand_more</span>}
-    </span>
-  );
-
-  if (!canEdit) return chip;
-
-  return (
-    <span className="relative inline-block">
-      <button type="button" onClick={() => setOpen((v) => !v)}>
-        {chip}
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-20 mt-1 w-28 rounded-lg border border-outline-variant bg-surface-container-lowest py-1 shadow-overlay">
-            {STATUSES.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => {
-                  onChange(s);
-                  setOpen(false);
-                }}
-                className={[
-                  "flex w-full items-center px-3 py-1.5 text-left text-xs hover:bg-surface-container",
-                  s === value ? "font-bold text-primary" : "text-on-surface",
-                ].join(" ")}
-              >
-                {TASK_STATUS_LABEL[s]}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </span>
   );
 }
 

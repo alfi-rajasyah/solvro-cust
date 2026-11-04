@@ -27,6 +27,7 @@ const ITOP_FIXTURE_EMAILS = [
   "dedi.p@example.co.id",
   "budi.h@example.co.id",
   "orphan.contact@example.co.id",
+  "Rina.S@Example.co.id",
 ];
 
 async function resetItopTestState(): Promise<void> {
@@ -264,18 +265,22 @@ describe("PUT /itop/me/token", () => {
     for (const cls of ["PersonalToken", "User"]) {
       it(`is refused by default when the ${cls} class isn't readable`, async () => {
         fakeState.disabledClasses.add(cls);
+        fakeState.currentContactUnsupported = true;
         const { userId, token } = await createUserWithEmail("rina.s@example.co.id");
 
         const res = await call("put", "/itop/me/token", token, { token: FAKE_ITOP_TOKENS.rina });
 
         expect(res.status).toBe(400);
         expect(res.body.code).toBe("itop_token_unverified");
+        expect(res.body.details).toEqual({ class: cls });
+        expect(res.body.error).toContain(`${cls} class`);
         const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
         expect(user.itopTokenEnc).toBeNull();
       });
 
       it(`is accepted when the deployment allows it and the ${cls} class isn't readable`, async () => {
         fakeState.disabledClasses.add(cls);
+        fakeState.currentContactUnsupported = true;
         const { token } = await createUserWithEmail("rina.s@example.co.id");
 
         const res = await withUnverifiedAllowed(true, () =>
@@ -291,6 +296,7 @@ describe("PUT /itop/me/token", () => {
     it("treats a readable User class with no row for this Person as unverified", async () => {
       // Real iTop can answer a class the profile may not see with an empty set.
       fakeState.users.delete(1);
+      fakeState.currentContactUnsupported = true;
       const { token } = await createUserWithEmail("rina.s@example.co.id");
 
       const refused = await call("put", "/itop/me/token", token, { token: FAKE_ITOP_TOKENS.rina });
@@ -305,12 +311,53 @@ describe("PUT /itop/me/token", () => {
 
     it("is still refused when the PersonalToken read shows the token is someone else's, even if allowed", async () => {
       // The allowance covers an unreadable class only, never a disproof.
+      fakeState.currentContactUnsupported = true;
       const { token } = await createUserWithEmail("rina.s@example.co.id");
       const res = await withUnverifiedAllowed(true, () =>
         call("put", "/itop/me/token", token, { token: FAKE_ITOP_TOKENS.app }),
       );
       expect(res.status).toBe(400);
       expect(res.body.code).toBe("itop_token_not_yours");
+    });
+  });
+
+  describe(":current_contact_id ownership proof", () => {
+    it("accepts the owner's token when the User and PersonalToken classes are refused", async () => {
+      fakeState.disabledClasses.add("User");
+      fakeState.disabledClasses.add("PersonalToken");
+      const { userId, token } = await createUserWithEmail("Rina.S@Example.co.id");
+
+      const res = await call("put", "/itop/me/token", token, { token: FAKE_ITOP_TOKENS.rina });
+
+      expect(res.status).toBe(200);
+      expect(res.body.set).toBe(true);
+      expect(res.body.expiresAt).toBeNull();
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+      expect(user.itopPersonId).toBe(1);
+      expect(user.itopTokenEnc).toBeTruthy();
+    });
+
+    it("refuses another person's token as itop_token_not_yours, even when User/PersonalToken are refused", async () => {
+      fakeState.disabledClasses.add("User");
+      fakeState.disabledClasses.add("PersonalToken");
+      const { userId, token } = await createUserWithEmail("rina.s@example.co.id");
+
+      const res = await call("put", "/itop/me/token", token, { token: FAKE_ITOP_TOKENS.dedi });
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe("itop_token_not_yours");
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+      expect(user.itopTokenEnc).toBeNull();
+    });
+
+    it("falls back to the existing rule when the binding is unsupported", async () => {
+      fakeState.currentContactUnsupported = true;
+      const { token } = await createUserWithEmail("rina.s@example.co.id");
+
+      const res = await call("put", "/itop/me/token", token, { token: FAKE_ITOP_TOKENS.rina });
+
+      expect(res.status).toBe(200);
+      expect(res.body.expiresAt).not.toBeNull();
     });
   });
 

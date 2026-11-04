@@ -17,13 +17,15 @@ export function ProjectServices() {
   const canMutate = hasPermission(user, "project:write");
 
   const update = useUpdateProjectServices(project.id);
-  const { data: customer, isLoading: customerLoading } = useCustomer(project.customerId);
+  const { data: customer, isLoading: customerLoading } = useCustomer(
+    hasPermission(user, "customer:read") ? (project.primaryCustomer?.id ?? null) : null,
+  );
   const [addAllError, setAddAllError] = useState<string | null>(null);
 
   const subscribedServiceIds = useMemo(() => {
-    if (!project.customerId || !customer) return undefined;
+    if (!project.primaryCustomer || !customer) return undefined;
     return new Set(customer.services.map((a) => a.serviceId));
-  }, [project.customerId, customer]);
+  }, [project.primaryCustomer, customer]);
 
   // Subscribed services not yet assigned at the project level — the set the
   // "Add all subscribed" bulk action fills in, carrying over the customer's
@@ -56,7 +58,7 @@ export function ProjectServices() {
     <div className="flex flex-col gap-4 md:min-h-0 md:flex-1">
       {showAddAll && (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="font-display text-[12px] font-bold uppercase tracking-wider text-on-surface-variant">
+          <p className="text-label-caps uppercase text-on-surface-variant">
             Bulk actions
           </p>
           <button

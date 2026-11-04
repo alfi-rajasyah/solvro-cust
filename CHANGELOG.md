@@ -15,6 +15,193 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-03 — Link a project to several customers
+
+- The project form lists the project's customers. You can add one, remove one, or choose the primary ("Set as primary"). The list is read-only for anyone who isn't the project's TAM or an owner of one of its customers (`frontend/src/components/ProjectFormModal.tsx`).
+- The project header lists every customer, with a Primary chip when there is more than one. The Projects page card shows the primary customer plus "+N".
+- Customer pages tag shared projects "Shared · primary: X" and count "N own · N shared" (`frontend/src/components/customer/AccountOverview.tsx`).
+- Deleting a customer names the shared projects that will lose it, and which customer becomes their primary.
+- The activity log describes customer changes, e.g. "changed the project customers from A, B to A, B, C".
+- On a project with two or more iTop-mapped customers, the New ticket sheet has an Organisation picker that defaults to the primary customer (`frontend/src/components/itop/NewTicketSheet.tsx`).
+
+### Changed — 2026-11-03 — Project responses drop the single customer fields
+
+- Project responses no longer include the single `customerId` and `customer` fields; use `customers` and `primaryCustomer`. Create and update still accept a `customerId` body field (`backend/src/lib/projectCustomers.ts`).
+
+### Changed — 2026-11-03 — A project can belong to several customers
+
+- A project can be linked to several customers, one of them primary. Anyone who can see any of its customers can see the project, and it appears under each linked customer on the customer page, in the Daily Review and in the Weekly Sync.
+- Breadcrumbs, guest share pages, portfolio rows, recent-notes labels and search labels use the primary customer. A shared project counts once in portfolio roll-ups.
+- Only the project's owner can change which customers it is linked to. Deleting a customer makes the project's oldest remaining customer its primary.
+- Project responses include `customers` and `primaryCustomer` next to the existing `customerId` and `customer` fields, which now mean the primary customer. Create and update accept `customers: [{ id, isPrimary }]`, and a single `customerId` still works. On update, a single `customerId` never removes other customers: it keeps the current primary, moves the primary to an already-linked customer, or adds a new customer as primary. Replacing the whole set takes `customers`.
+- The TAM and the owner of any linked customer can manage a shared project: delete it, change its TAM, change its customer links and create guest share links. A project appears under a customer you don't own, in your Daily Review, only if you are its TAM or a member. Owning one of a shared project's customers does not make you an owner of its other customers: you cannot delete them or change their owner.
+- The project activity log records the set of linked customers, and deleting a project records the deletion for each linked customer (`backend/src/lib/projectCustomers.ts`, `backend/src/lib/visibility.ts`, `backend/src/routes/projects.ts`, `backend/src/routes/customers.ts`, `backend/src/lib/dailyReviewScope.ts`).
+- A data migration moves every project's customer into the new `project_customers` table, which allows exactly one primary per project, and removes `projects.customer_id` (`backend/prisma/migrations/20261103150000_project_customers/`). The demo seed gains one project shared by two customers.
+
+### Added — 2026-11-03 — Customisable task statuses
+
+- **Admin → Task statuses**: admins can rename, recolour, add, reorder (drag within a category), set the default of, and delete task statuses, grouped under Not started, Active and Done.
+  - Deleting a status that still has tasks asks where to move them.
+  - "Reset to defaults" restores To do, In progress and Done.
+  - Unsaved edits are guarded when you leave the tab.
+  - `GET /admin/task-statuses` returns the list with a task count per status (`frontend/src/components/admin/TaskStatusesTab.tsx`, `backend/src/routes/admin.ts`).
+- **One status picker everywhere**: the task panel, task form, List, Timeline and Daily Review use one dropdown, which lists the workspace's statuses under Not started, Active and Done with a colour dot.
+- **Status chips** show each task's own status name and colour on the List, Timeline, Tasks page, Gantt tree and embedded task list. The status-change warning when two people edit a task names the status (`frontend/src/components/StatusSelect.tsx`, `frontend/src/components/StatusChip.tsx`).
+- **Tasks page**: the status filter lists statuses grouped by category and can filter on a whole category. The status column sorts by category, then by status order.
+- **Kanban**:
+  - The board shows one column per status, under a Not started, Active and Done band.
+  - A card dropped into a column takes that exact status, and "Add task here" creates in that status.
+  - Done-category columns can be collapsed, which is remembered per viewer.
+  - The project form's WIP limits list one field per status, and the mobile "Move to" sheet groups statuses by category (`frontend/src/components/kanban-v2/`, `frontend/src/components/ProjectFormModal.tsx`).
+- The Help pages describe the Admin → Task statuses tab, the Kanban board's status columns and the Timeline's status dropdown. Epic story lists show each task's own status.
+- The Gantt tree's status dot for To do tasks is a stronger gray, so it stays visible in dark mode.
+- Gantt bars, exports, epic statuses and guest share pages stay on the three categories.
+
+### Changed — 2026-11-03 — Kanban WIP pill turns amber at the limit
+
+- A column's WIP pill turns amber as soon as the column reaches its limit, not only when it goes over (`frontend/src/components/kanban-v2/SolvroKanban.tsx`).
+
+### Changed — 2026-11-03 — Task statuses are workspace-defined
+
+- Task statuses are now stored as workspace-defined statuses. Each belongs to To do, In progress or Done, which keep deciding overdue, progress and "done".
+- The existing three statuses are migrated as-is, so existing tasks keep their current look. Existing Kanban WIP limits are migrated to the new per-status format. The `wipLimits` body of `POST`/`PATCH /projects` is now keyed by status id, and the old category keys (`TODO`, `IN_PROGRESS`, `DONE`) are refused with a 400.
+- Task responses include a `statusDef` (id, name, colour, category, position). Tasks can be filtered with `?statusId=` alongside the existing `?status=`, which still filters by category.
+- Each status has a colour tone (gray, primary, emerald, amber or violet) that follows the light and dark themes. The three migrated statuses keep today's look.
+- The activity log now records the status name, including moves between two statuses of the same category (`backend/prisma/migrations/20261103120000_task_status_defs/`, `backend/src/lib/taskStatuses.ts`, `backend/src/routes/tasks.ts`, `backend/src/routes/projects.ts`).
+
+### Added — 2026-11-03 — Task status list API
+
+- `GET /task-statuses` lists the workspace's task statuses, and admins can replace the whole list with `PUT /admin/task-statuses`. The list must keep at least one status per category, exactly one default per category, and unique names. Removing a status that still has tasks requires choosing a status to move them to (`backend/src/routes/taskStatuses.ts`, `backend/src/routes/admin.ts`).
+
+### Added — 2026-11-03 — Subtask assignee on subtask rows
+
+- Subtask rows in the project List and in the task panel now show the subtask's assignee and let you change it. The panel's "Add subtask" field also takes an optional assignee, so a subtask can be assigned as it is created. Assigning someone who isn't on the project adds them to it, as for tasks (`frontend/src/pages/views/ProjectList.tsx`, `frontend/src/components/TaskPanel.tsx`, `e2e/tests/subtask-assignee.spec.ts`).
+
+### Added — 2026-11-03 — Overview filters by TAM and assignee
+
+- The Overview can be filtered by TAM and by assignee with two pickers in the header. The choice is kept in the URL, so it survives a reload and can be shared.
+- The task tiles, open risks, projects needing attention, the portfolio timeline and recent notes all narrow to the chosen people, and the tile hints and panel subtitles name the filter. With an assignee chosen, the counts include that person's subtasks.
+- The tile links carry the filter to the Tasks page, which shows removable filter chips and lists exactly the tasks the tile counted.
+- The pickers' lists open below the picker with a capped, scrolling height, so a long list of people never covers the top bar. Typing a name still jumps to it.
+- `GET /overview` accepts `tamId` and `assigneeId` and returns the TAMs and assignees found in the projects the caller can see. `GET /tasks` accepts `tamId` (`backend/src/routes/overview.ts`, `backend/src/routes/tasks.ts`, `frontend/src/pages/Overview.tsx`, `frontend/src/pages/Tasks.tsx`, `frontend/src/lib/queries.ts`).
+
+### Added — 2026-11-03 — iTop tickets on task and subtask rows
+
+- The project List has a Ticket column when iTop is connected. It shows each task's and subtask's pinned iTop ticket as a ref chip with a status dot. The row menu can pin an existing ticket or create one in iTop under your personal token; the new ref is pinned to that row. The task panel's subtask rows have the same control.
+- A ticket created from a row gets a context line in its description: "Solvro: project › task", or "Solvro: project › parent task › subtask". The New ticket sheet states that it creates the ticket as you, with your personal iTop token.
+- When "Create in iTop" is unavailable, the reason links to the place it's fixed: Settings for your token, Admin → iTop for actions and customer mapping (admins only). `/admin?tab=itop` opens the iTop tab directly.
+- A new read-only `GET /itop/tickets/by-refs` looks up many pinned tickets in one request, from the local snapshot only (`backend/src/routes/itop.ts`, `frontend/src/components/itop/`, `frontend/src/pages/views/ProjectList.tsx`, `frontend/src/components/TaskPanel.tsx`).
+
+### Added — 2026-11-03 — Start iTop work from the task form and panel
+
+- The New task and Edit task form has an iTop ticket field when iTop is connected. You can pin an existing ticket ref, or create one in iTop under your personal token, and a new task is saved with its ticket. `POST /projects/:id/tasks` accepts an optional `itopTicketRef`.
+- The task panel and the task form can act on a pinned iTop ticket: "Assign to me" and the ticket's next status actions (Pending, Resolve, Close, Reopen). These are written to iTop under your personal token.
+- A task created with a ticket pinned records it in the project activity feed ("pinned to iTop ticket R-…").
+- iTop ticket responses now include the ticket's linked `customerId` (read-only), and the task's ticket actions and timer use that customer.
+- The task panel shows the ticket's timer, so you can start and stop time logging without leaving the task. All of this works for tasks and subtasks (`frontend/src/components/itop/TicketQuickActions.tsx`, `frontend/src/components/TaskFormModal.tsx`, `frontend/src/components/TaskPanel.tsx`, `backend/src/routes/projects.ts`).
+
+### Fixed — 2026-11-03 — "Create in iTop" says why it is unavailable
+
+- "Create in iTop" used to disappear silently. It now shows a one-line reason, checked in this order:
+  1. the project has no customer;
+  2. you lack "Manage customers";
+  3. iTop actions are turned off;
+  4. you haven't added your personal iTop token;
+  5. you lack "View customers";
+  6. the customer isn't mapped to an iTop organisation. (`frontend/src/components/itop/useCanCreateItopTicket.ts`, `frontend/src/components/itop/TaskTicketField.tsx`).
+
+### Fixed — 2026-11-03 — Personal iTop tokens save on profiles that cannot read iTop user accounts
+
+- Saving a personal iTop token now proves ownership with iTop's own "current contact" lookup. The token is accepted when the person it belongs to has your Solvro email, and a token that belongs to someone else is refused.
+- Profiles that cannot read iTop's `User` and `PersonalToken` classes, which iTop's default profiles do not allow, can now save their own token. Those reads are still used, when allowed, to fill in the token's expiry.
+- When the lookup is unavailable, the previous rule applies, and its "could not confirm" error now names the iTop class it was refused (`backend/src/routes/itopUser.ts`).
+
+### Added — 2026-11-03 — Customer permissions
+
+- New role permissions mirror the project ones: "View customers" (`customer:read`), "Manage customers" (`customer:write`) and "See all customers" (`customer:view-all`). Admins tick them per role in Admin → Roles.
+- Customer pages and endpoints (list, detail, operations notes, weekly updates, services, Outline documents, iTop tickets and contacts) require "View customers", and customer edits require "Manage customers". So does creating an iTop ticket, since the ticket is filed for a customer.
+- "See all customers" shows every customer, and together with "Manage customers" lets you edit them. It does not show their projects, and deleting a customer or changing its owner still needs the customer's owner.
+- Without "View customers", these are hidden or emptied:
+  - the Customers page and nav entry;
+  - customers in search and recent notes;
+  - the Daily Review's operations notes, weekly updates and iTop strip;
+  - the project form's customer picker, which explains why.
+
+  Without "View customers", these also go:
+  - the Weekly Sync page and nav entry;
+  - the customer filter on the Tasks and Projects pages;
+  - pinned tickets' iTop status, since a ticket's data belongs to its customer;
+  - the Services tab's customer-subscription lookup.
+
+  Without "Manage customers", the Daily Review operations notes are read-only, and the New customer and New ticket controls (including the ⌘K action) are hidden.
+- Help → "Who can do what" explains the three customer permissions, and the Help topics for Customers and Weekly Sync appear only to holders of "View customers" (`frontend/src/lib/helpContent.ts`) (`backend/src/lib/visibility.ts`, `backend/src/routes/customers.ts`, `frontend/src/lib/auth.tsx`, `frontend/src/App.tsx`).
+
+### Changed — 2026-11-03 — Existing roles keep customer access
+
+- A data migration gives "View customers" to every role that has "View projects", and "Manage customers" to every role that has "Manage projects", so no one loses access on upgrade. The full-access role is untouched.
+- The built-in TAM role includes both; the built-in Stakeholder role includes "View customers". "See all customers" is never granted automatically (`backend/prisma/migrations/20261103090000_customer_permissions/`, `backend/prisma/builtInRoles.ts`).
+
+### Fixed — 2026-11-02 — Keyboard focus is visible on every bordered control
+
+- Bordered buttons, inputs, selects and the switch that showed only a faint 30% green ring on keyboard focus now also turn their border green, like the app's form fields already did. The faint ring alone falls below the 3:1 contrast a focus indicator needs; the green border meets it. Applies across the daily review and weekly sync screens, Utilization, the admin iTop and Outline settings, the Outline docs tab and dialog, the Embed-in-Outline dialog, iTop ticket panels, cards and filter pills, the customer header, the project actions, members and share controls, project activity, the notifications popover, the top bar, the right sidebar, Help, public share and embed buttons, and the error screen. The Settings theme options, which had no keyboard focus indicator at all, now get the same border and ring (`frontend/src/components/**`, `frontend/src/pages/**`, `frontend/src/components/ui/switch.tsx`).
+
+### Changed — 2026-11-02 — Page titles use the H1 type role
+
+- Page titles on Overview, Projects, Customers, Daily Review, Weekly Sync, Tasks, Utilization, Executive, Help, Settings and Admin, and the customer name on the customer detail page, now use the design system's `text-h1` role (32px, semibold) instead of an ad-hoc 25px bold size (`frontend/src/pages/*.tsx`, `frontend/src/components/customer/AccountHeader.tsx`). The Projects and Customers headers keep their create button on one line on narrow screens.
+
+### Fixed — 2026-11-02 — Settings and Admin follow the design system's type and colour styles
+
+- On Settings (`frontend/src/pages/Settings.tsx`) the card headings and the theme options are now sentence case instead of wide-tracked capitals, the field label uses the caps-label style, and the "password updated" message uses the theme's emerald colours instead of fixed Tailwind shades.
+- On Admin (`frontend/src/pages/Admin.tsx`) the pending-users and custom-roles icons use the theme's amber and emerald colours, the add-user role select and the "How to get a Client ID" disclosure are sentence case, and the temporary-password note uses the caps-label style.
+
+### Fixed — 2026-11-02 — Labels and headings use the design system's type styles
+
+- Field labels on the project and customer forms and the iTop action and new-ticket sheets (`frontend/src/components/ProjectFormModal.tsx`, `CustomerFormModal.tsx`, `itop/ActionSheet.tsx`, `itop/NewTicketSheet.tsx`) now use the shared caps-label style instead of hand-rolled bold, wide-tracked capitals, with a slightly larger gap above the input.
+- Card and section headings on the customer account overview, the Outline connection card and the service mapping list (`frontend/src/components/customer/AccountOverview.tsx`, `outline/OutlineConnectCard.tsx`, `services/ServiceMappingList.tsx`) are now sentence case, like the other panel headings in the app. The week label on the account overview and the "Bulk actions" label on a project's Services tab (`frontend/src/pages/views/ProjectServices.tsx`) use the caps-label style.
+
+### Changed — 2026-11-02 — Subtask done check uses the brand green
+
+- The done checkbox on subtasks in the project List, on Kanban cards and in the task panel (`frontend/src/pages/views/ProjectList.tsx`, `components/kanban-v2/cards.tsx`, `components/TaskPanel.tsx`) used a fixed Tailwind emerald; it now uses the app's primary green, which also adapts to the light theme.
+
+### Fixed — 2026-11-02 — Portfolio planning bars are visible in light mode
+
+- The "Planning · On-hold" bars and legend dot in the portfolio calendar on Overview and Executive (`frontend/src/components/portfolio/PortfolioCalendar.tsx`) used the pale amber chip background, which nearly disappeared on the light panel. Light mode now draws them in amber text colour at 60%; dark mode is unchanged.
+
+### Fixed — 2026-11-02 — Project Risks colours follow the theme
+
+- The Mitigated and Closed risk statuses and the Medium and Low risk counters on the project Risks tab (`frontend/src/pages/views/ProjectRisks.tsx`) used fixed Tailwind amber and emerald shades that rendered as pale pastel boxes in dark mode. They now use the theme's amber and emerald chip colours, and the counters follow the same pattern as the High counter. The editable status dropdown no longer carries a competing background, so its status colour always shows.
+- The Mitigation, Contingency and filter labels and the counter labels on the same tab now use the shared caps-label style instead of hand-rolled bold, wide-tracked capitals; the status dropdown, a control, now reads in sentence case.
+
+### Fixed — 2026-11-02 — Project Overview chart and accents
+
+- The S-curve on the project Overview tab (`frontend/src/pages/views/ProjectOverview.tsx`) drew its axis labels, tooltip title and "Today" marker in 11px text; they are now 12px, the design system's minimum.
+- The S-curve legend swatch, the on-track slip text and the green KPI accent on the same tab now use the theme's emerald colour instead of fixed Tailwind emerald shades, so they follow light and dark mode.
+
+### Fixed — 2026-11-02 — No text below 12px on the sign-in page and Gantt toolbar
+
+- The sign-in page (`frontend/src/pages/Login.tsx`) set its eyebrow, feature pills, version tag and footer in 10px text; they are now 12px. The page stays dark in both themes.
+- The Gantt toolbar (`frontend/src/components/gantt-v2/SolvroGantt.tsx`) used an off-scale 11.5px size for its buttons, title and menus; it now uses the 12px `text-meta` role, keeping each control's own weight. Two stale code comments in the Gantt were corrected, one of which wrongly described the section colour picker's shadow.
+
+### Fixed — 2026-11-02 — Flaky frame-ancestors check in CI
+
+- `ci/check-frame-ancestors.sh` starts the frontend image once per case. When a `docker run` failed transiently, its output was empty and the case reported a wrong framing header: on the first `staging` run, "path in origin" failed on 2 of 8 e2e shards while the same image passed on the other 6. An empty result is now retried once before it is judged, and a case that still comes back empty prints the raw `nginx -T` output so the real cause shows in the log. The check verifies the image, not the test suite, so `.github/workflows/ci.yml` now runs it only in the first desktop e2e shard instead of in every shard.
+
+### Changed — 2026-11-02 — e2e runs in four parallel shards
+
+- The e2e job in `.github/workflows/ci.yml` splits each Playwright project into four shards (`--shard=N/4`), each on its own stack and database, so a run waits about 9 minutes instead of about 21. Only the first desktop shard writes the Docker layer cache; the other shards read it. The e2e timeout drops to 20 minutes per shard.
+
+### Changed — 2026-11-02 — CI uses fewer GitHub Actions minutes
+
+- `.github/workflows/ci.yml` no longer runs on pushes to `develop`: every change reaches it through a PR that already ran CI, and nothing publishes from `develop`. Draft PRs wait until they are marked ready, and changes that touch only Markdown, `docs/`, `.claude/`, `notes/` or the licence don't run CI at all. Feature PRs into `develop` run desktop e2e only; PRs into `staging` or `main` run typecheck and backend tests; pushes to `staging` and `main`, which gate image publishing, still run the full suite with desktop and mobile e2e. A `workflow_dispatch` trigger allows a full run on demand.
+
+### Added — 2026-11-02 — Staging branch and automatic staging deploys
+
+- CI (`.github/workflows/ci.yml`) now also runs on the new `staging` branch, the release-candidate branch between `develop` and `main`. A green `staging` build publishes `:staging` and `:sha-<commit>` images (`.github/workflows/docker-publish.yml`). A new `deploy-staging` job then calls the staging server's Openship deploy webhook, and Openship restarts only the services whose image changed. The webhook address and its token come from the repository secrets `OPENSHIP_STAGING_HOOK_URL` and `OPENSHIP_STAGING_HOOK_TOKEN`; without them the job skips. `main` and release tags publish exactly as before and never deploy to staging.
+
+### Fixed — 2026-10-26 — Help deep links
+
+- A `/help#<topic>` link now stays on its topic (`frontend/src/pages/Help.tsx`). The page scrolled to the topic only once, right after it rendered; if the web fonts swapped in afterwards, or permission-gated topics above it appeared once the server confirmed the user, the page reflowed and the topic could end up out of view. The page now scrolls again after the fonts load and after the user is confirmed. Regression test: `frontend/src/pages/Help.test.tsx`.
+
 ## [1.1.0] — 2026-10-26
 
 ### Changed — 2026-10-26 — Version 1.1.0

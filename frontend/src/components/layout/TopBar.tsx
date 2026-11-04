@@ -30,7 +30,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
   const { data: customer } = useCustomer(route.customerId);
   const crumbs = buildCrumbs(location.pathname, {
     projectName: project?.name,
-    projectCustomer: project?.customer,
+    projectCustomer: project?.primaryCustomer,
     customerName: customer?.name,
   });
 
@@ -112,7 +112,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
             to={`/customers/${runningTimer.timer.customerId}?tab=tickets&ticket=${runningTimer.timer.ticketId}`}
             aria-label={`Timer running on ${runningTimer.timer.ref}`}
             title={`Timer running on ${runningTimer.timer.ref}`}
-            className="hidden items-center gap-1 rounded-sm border border-outline-variant px-2 py-1 font-mono text-meta text-on-surface-variant hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:flex"
+            className="hidden items-center gap-1 rounded-sm border border-outline-variant px-2 py-1 font-mono text-meta text-on-surface-variant hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 md:flex"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-[14px]">timer</span>
             {formatElapsed(runningTimer.elapsedSeconds)}

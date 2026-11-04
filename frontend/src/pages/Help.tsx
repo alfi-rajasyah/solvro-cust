@@ -9,22 +9,35 @@ import { filterHelpTopics, type HelpTopic } from "@/lib/helpContent";
 // Admin) are hidden with the same rule the sidebar uses. Reached from the
 // TopBar's help button only (no sidebar or ⌘K entry, by user decision).
 export function Help() {
-  const { user } = useAuth();
+  const { user, userVerified } = useAuth();
   const { hash } = useLocation();
   const [query, setQuery] = useState("");
   const topics = filterHelpTopics((p) => hasPermission(user, p), query);
 
   // /help#<topic> deep link: the sections render after the route mounts, so
   // the browser's own hash scroll finds nothing — scroll once they exist.
+  // Scroll again when anything above the target can still move it: the web
+  // fonts swap in after first paint (display=swap) and reflow the whole page,
+  // and permission-gated topics can appear only once the server confirms the
+  // user.
   useEffect(() => {
-    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView();
-  }, [hash]);
+    if (!hash) return;
+    const scroll = () => document.getElementById(hash.slice(1))?.scrollIntoView();
+    scroll();
+    let cancelled = false;
+    void document.fonts?.ready.then(() => {
+      if (!cancelled) scroll();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [hash, userVerified]);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <header className="space-y-3">
         <div>
-          <h1 className="font-display text-2xl font-bold text-on-surface">Help</h1>
+          <h1 className="font-display text-h1 text-on-surface">Help</h1>
           <p className="text-sm text-on-surface-variant">
             How to use Solvro — every page and feature available to you.
           </p>
@@ -35,7 +48,7 @@ export function Help() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search help…"
           aria-label="Search help"
-          className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-sm text-on-surface placeholder:text-on-surface-variant focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 sm:w-80"
+          className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-sm text-on-surface placeholder:text-on-surface-variant focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 sm:w-80"
         />
       </header>
 

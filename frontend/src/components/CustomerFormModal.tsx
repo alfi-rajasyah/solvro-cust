@@ -334,7 +334,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[12px] font-bold uppercase tracking-wider text-on-surface-variant">
+      <span className="mb-1.5 block text-label-caps uppercase text-on-surface-variant">
         {label}
         {required && <span className="ml-1 text-error">*</span>}
       </span>

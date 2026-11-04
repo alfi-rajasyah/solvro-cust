@@ -31,7 +31,7 @@ export function WeekStrip({ days, today, coverage, onDayClick }: WeekStripProps)
             onClick={() => onDayClick(day)}
             aria-label={`Go to ${label} — ${cov.withNote} of ${cov.total} customers noted`}
             className={[
-              "flex flex-col items-center gap-0.5 rounded-sm border px-2 py-2 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+              "flex flex-col items-center gap-0.5 rounded-sm border px-2 py-2 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30",
               isToday
                 ? "border-primary bg-primary/5"
                 : "border-outline-variant bg-surface-container-lowest hover:bg-surface-container",

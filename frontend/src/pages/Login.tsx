@@ -150,7 +150,7 @@ export function Login() {
           <div
             className="mb-3 font-semibold text-primary"
             style={{
-              fontSize: 10,
+              fontSize: 12,
               textTransform: "uppercase",
               letterSpacing: "0.1em",
             }}
@@ -187,7 +187,7 @@ export function Login() {
                   key={label}
                   className="rounded-full border border-primary/30 text-primary"
                   style={{
-                    fontSize: 10,
+                    fontSize: 12,
                     padding: "3px 10px",
                   }}
                 >
@@ -201,7 +201,7 @@ export function Login() {
         {/* Footer version/build */}
         <div
           className="relative z-10 text-on-surface-variant/75"
-          style={{ fontSize: 10 }}
+          style={{ fontSize: 12 }}
         >
           v{__APP_VERSION__}
         </div>
@@ -325,7 +325,7 @@ export function Login() {
           {/* Footer */}
           <p
             className="mt-6 text-center text-on-surface-variant/75"
-            style={{ fontSize: 10 }}
+            style={{ fontSize: 12 }}
           >
             Internal use only · Elitery © 2026
           </p>

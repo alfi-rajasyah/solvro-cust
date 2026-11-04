@@ -150,7 +150,7 @@ test.describe("Daily Review v2", () => {
     const projectRes = await fetch(`${base}/api/projects/${projectId}`, {
       method: "PATCH",
       headers: H,
-      body: JSON.stringify({ status: "ACTIVE", customerId: customer.id }),
+      body: JSON.stringify({ status: "ACTIVE", customers: [{ id: customer.id, isPrimary: true }] }),
     });
     expect(projectRes.ok, `patch project: ${projectRes.status}`).toBeTruthy();
     const project = (await projectRes.json()) as { name: string };

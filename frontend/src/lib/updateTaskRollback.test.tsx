@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ApiError } from "./api";
-import { queryKeys, useUpdateTask, type Task } from "./queries";
+import { queryKeys, useUpdateTask, type Task, type TaskStatusDef } from "./queries";
 
 const fetchMock = vi.fn();
 const PROJECT = 7;
@@ -119,5 +119,58 @@ describe("useUpdateTask optimistic update", () => {
       await result.current.mutateAsync({ id: 1, patch: { priority: "HIGH" } }).catch(() => undefined);
     });
     expect(cached()).toEqual(before);
+  });
+});
+
+describe("useUpdateTask status merge (statusId / statusDef follow the patch)", () => {
+  const DEFS: TaskStatusDef[] = [
+    { id: 1, name: "To do", category: "TODO", color: "gray", position: 0, isDefault: true },
+    { id: 2, name: "In progress", category: "IN_PROGRESS", color: "primary", position: 1, isDefault: true },
+    { id: 3, name: "QA / UAT", category: "IN_PROGRESS", color: "violet", position: 2, isDefault: false },
+    { id: 4, name: "Done", category: "DONE", color: "emerald", position: 3, isDefault: true },
+  ];
+  const onQa = () =>
+    task(1, {
+      status: "IN_PROGRESS",
+      statusId: 3,
+      statusDef: { id: 3, name: "QA / UAT", color: "violet", category: "IN_PROGRESS", position: 2 },
+    });
+
+  async function patch(initial: Task[], body: Record<string, unknown>, withDefs = true) {
+    fetchMock.mockReturnValue(new Promise(() => undefined)); // never settles: observe the optimistic write
+    const h = setup(initial);
+    if (withDefs) h.qc.setQueryData(queryKeys.taskStatuses, DEFS);
+    act(() => {
+      void h.result.current.mutateAsync({ id: 1, patch: body });
+    });
+    await waitFor(() => expect(h.cached()?.[0]).not.toBe(initial[0]));
+    return h.cached()![0];
+  }
+
+  it("statusId wins: the task takes that status's category, id and display fields", async () => {
+    const t = await patch([task(1)], { statusId: 3 });
+    expect(t.status).toBe("IN_PROGRESS");
+    expect(t.statusId).toBe(3);
+    expect(t.statusDef).toMatchObject({ id: 3, name: "QA / UAT", color: "violet" });
+  });
+
+  it("a bare category different from the current one maps to that category's default status", async () => {
+    const t = await patch([onQa()], { status: "DONE" });
+    expect(t.statusId).toBe(4);
+    expect(t.statusDef?.name).toBe("Done");
+  });
+
+  it("a bare category equal to the current one is a no-op (a custom status stays)", async () => {
+    const t = await patch([onQa(), task(2)], { status: "IN_PROGRESS", title: "Edited" });
+    expect(t.title).toBe("Edited");
+    expect(t.statusId).toBe(3);
+    expect(t.statusDef?.name).toBe("QA / UAT");
+  });
+
+  it("without cached defs only the status field changes", async () => {
+    const t = await patch([onQa()], { status: "DONE" }, false);
+    expect(t.status).toBe("DONE");
+    expect(t.statusId).toBe(3);
+    expect(t.statusDef?.name).toBe("QA / UAT");
   });
 });

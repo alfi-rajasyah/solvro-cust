@@ -35,7 +35,7 @@ async function createCustomer(tamId: number | null) {
 
 async function createProject(customerId: number | null, tamId: number, excludeFromPortfolio = false) {
   return prisma.project.create({
-    data: { name: uniq("Project"), tamId, customerId, status: "ACTIVE", excludeFromPortfolio },
+    data: { name: uniq("Project"), tamId, ...(customerId != null ? { customers: { create: { customerId, isPrimary: true } } } : {}), status: "ACTIVE", excludeFromPortfolio },
   });
 }
 

@@ -118,9 +118,9 @@ test.describe("task conflict warning", () => {
     const panel = await openTaskPanel(page, projectId, task.id);
 
     await patchBehindBack(base, token, task.id, { status: "DONE" });
-    // Header status chip opens a menu; pick "In progress".
-    await panel.getByRole("button", { name: /To do/ }).first().click();
-    await panel.getByRole("button", { name: "In progress" }).click();
+    // Header status chip opens the grouped picker; pick "In progress".
+    await panel.getByRole("combobox", { name: "Status" }).click();
+    await page.getByRole("option", { name: "In progress", exact: true }).click();
 
     const dialog = page.getByRole("dialog", { name: "Someone changed this task after you opened it" });
     await expect(dialog).toBeVisible();

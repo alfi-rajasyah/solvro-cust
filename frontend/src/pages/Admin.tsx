@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import {
   getCoreRowModel,
@@ -13,6 +14,7 @@ import { ProjectStatusChip } from "@/components/StatusChip";
 import { Tabs } from "@/components/Tabs";
 import { ItopTab } from "@/components/admin/ItopTab";
 import { OutlineTab } from "@/components/admin/OutlineTab";
+import { TaskStatusesTab } from "@/components/admin/TaskStatusesTab";
 import { ApiError } from "@/lib/api";
 import {
   type AdminProject,
@@ -44,13 +46,14 @@ import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll
 import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type Tab = "users" | "roles" | "signin" | "projects" | "itop" | "outline";
+type Tab = "users" | "roles" | "signin" | "projects" | "statuses" | "itop" | "outline";
 
 const TAB_ITEMS: ReadonlyArray<{ key: Tab; label: string }> = [
   { key: "users", label: "Users" },
   { key: "roles", label: "Roles" },
   { key: "signin", label: "Sign-in" },
   { key: "projects", label: "Project Override" },
+  { key: "statuses", label: "Task statuses" },
   { key: "itop", label: "iTop" },
   { key: "outline", label: "Outline" },
 ];
@@ -69,19 +72,34 @@ const EMPTY_ROLES: AdminRole[] = [];
 const EMPTY_PROJECTS: AdminProject[] = [];
 
 export function Admin() {
-  const [tab, setTab] = useState<Tab>("users");
+  // `?tab=` deep-links a tab (e.g. the iTop hints link to /admin?tab=itop).
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const [tab, setTab] = useState<Tab>(
+    TAB_ITEMS.some((t) => t.key === requestedTab) ? (requestedTab as Tab) : "users",
+  );
+  // The Task statuses tab edits a draft; leaving it with unsaved changes asks
+  // first. This only covers switching tabs here (plus beforeunload inside the
+  // tab): react-router's BrowserRouter cannot block a sidebar/link navigation,
+  // so leaving the page that way still discards the draft.
+  const [statusesDirty, setStatusesDirty] = useState(false);
+  const [pendingTab, setPendingTab] = useState<Tab | null>(null);
+  function changeTab(next: Tab) {
+    if (tab === "statuses" && statusesDirty && next !== tab) setPendingTab(next);
+    else setTab(next);
+  }
 
   return (
     <div className="flex h-full flex-col">
       <header className="border-b border-outline-variant px-4 py-4 md:px-6">
-        <h1 className="font-display text-2xl font-bold tracking-tight text-on-surface">
+        <h1 className="font-display text-h1 text-on-surface">
           Admin
         </h1>
         <p className="mt-1 text-sm text-on-surface-variant">
           Manage users and force-reassign project ownership.
         </p>
         <div className="mt-4 overflow-x-auto">
-          <Tabs items={TAB_ITEMS} active={tab} onChange={setTab} />
+          <Tabs items={TAB_ITEMS} active={tab} onChange={changeTab} />
         </div>
       </header>
       <div className="flex-1 overflow-auto p-4 md:p-6">
@@ -89,9 +107,22 @@ export function Admin() {
         {tab === "roles" && <RolesTab />}
         {tab === "signin" && <SignInTab />}
         {tab === "projects" && <ProjectsTab />}
+        {tab === "statuses" && <TaskStatusesTab onDirtyChange={setStatusesDirty} />}
         {tab === "itop" && <ItopTab />}
         {tab === "outline" && <OutlineTab />}
       </div>
+      <ConfirmModal
+        open={pendingTab !== null}
+        onClose={() => setPendingTab(null)}
+        onConfirm={() => {
+          if (pendingTab) setTab(pendingTab);
+          setPendingTab(null);
+        }}
+        title="Discard unsaved changes?"
+        body="Your edits to the task statuses have not been saved. Leaving this tab discards them."
+        confirmLabel="Discard changes"
+        confirmTone="danger"
+      />
     </div>
   );
 }
@@ -475,7 +506,7 @@ function UsersTab() {
       )}
       {resetResult && (
         <div className="rounded-sm border border-tertiary/40 bg-tertiary/10 px-3 py-3 text-sm text-on-surface">
-          <p className="font-display text-[12px] font-bold uppercase tracking-wider text-tertiary">
+          <p className="font-display text-label-caps uppercase text-tertiary">
             Temporary password generated
           </p>
           <p className="mt-1">
@@ -544,7 +575,7 @@ function UsersTab() {
           <select
             value={newRole}
             onChange={(e) => setNewRole(e.target.value as Role)}
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-display text-sm text-on-surface focus:border-primary focus:outline-hidden"
           >
             {assignableRoles.map((r) => (
               <option key={r} value={r}>
@@ -666,9 +697,9 @@ function AdminKpi({
     tone === "primary"
       ? "text-primary"
       : tone === "emerald"
-        ? "text-emerald-600"
+        ? "text-chip-emerald-text"
         : tone === "amber"
-          ? "text-amber-600"
+          ? "text-chip-amber-text"
           : "text-on-surface-variant";
   return (
     <div className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
@@ -1435,7 +1466,7 @@ function SignInModal({
     >
       <div className="space-y-5">
         <details className="rounded-sm border border-outline-variant bg-surface-container text-sm">
-          <summary className="cursor-pointer px-3 py-2 font-display text-[12px] font-bold uppercase tracking-wider text-on-surface-variant">
+          <summary className="cursor-pointer px-3 py-2 font-display text-sm font-semibold text-on-surface-variant">
             How to get a Client ID
           </summary>
           <ol className="list-decimal space-y-1 border-t border-outline-variant px-6 py-3 text-on-surface-variant">
@@ -1619,7 +1650,7 @@ function ProjectsTab() {
       // "" fallback (not null) so the column's cell values stay string —
       // required for the "alphanumeric" comparator, and sorts projects
       // without a linked customer first ascending.
-      accessorFn: (row) => row.customer?.name ?? "",
+      accessorFn: (row) => row.primaryCustomer?.name ?? "",
       header: ({ column }) => <DataGridColumnHeader column={column} title="Customer" />,
       // Customer names are entity/company names, not person names — same
       // "alphanumeric" bucket as the "project" column above, not
@@ -1628,7 +1659,7 @@ function ProjectsTab() {
       sortingFn: "alphanumeric",
       cell: ({ row }) => (
         <span className="text-on-surface-variant">
-          {row.original.customer?.name ?? "—"}
+          {row.original.primaryCustomer?.name ?? "—"}
         </span>
       ),
       meta: { skeleton: <Skeleton className="h-3.5 w-28" /> },

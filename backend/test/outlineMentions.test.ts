@@ -24,6 +24,7 @@ import {
   outlineUnavailable,
 } from "../src/lib/outline/errors.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
@@ -66,7 +67,7 @@ async function fixture(opts: { connected?: boolean } = {}) {
   if (opts.connected !== false) await connect(tam.userId);
   const project = await prisma.project.create({ data: { name: uniq("P"), tamId: tam.userId, status: "ACTIVE" } });
   const task = await prisma.task.create({
-    data: { projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
+    data: { statusId: SID.TODO, projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
   });
   return { tam, project, task };
 }
@@ -199,7 +200,7 @@ describe("project-level read", () => {
   it("includes project-level and task-level mentions, one entry per page", async () => {
     const { tam, project, task } = await fixture();
     const otherTask = await prisma.task.create({
-      data: { projectId: project.id, title: "T2", status: "TODO", priority: "MEDIUM", position: 1 },
+      data: { statusId: SID.TODO, projectId: project.id, title: "T2", status: "TODO", priority: "MEDIUM", position: 1 },
     });
     const elsewhere = await prisma.project.create({ data: { name: uniq("Q"), tamId: tam.userId, status: "ACTIVE" } });
     await mention("d-project", { projectId: project.id });

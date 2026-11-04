@@ -22,7 +22,7 @@ import {
 const ACTION_BUTTON =
   "inline-flex items-center gap-1.5 rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-60";
 const GHOST_BUTTON =
-  "inline-flex h-8 items-center gap-1.5 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 font-display text-xs font-bold text-on-surface outline-hidden hover:bg-surface-container focus-visible:ring-2 focus-visible:ring-primary/30";
+  "inline-flex h-8 items-center gap-1.5 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 font-display text-xs font-bold text-on-surface outline-hidden hover:bg-surface-container focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
 
 export function OutlineDocsTab({
   scope,

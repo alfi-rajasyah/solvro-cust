@@ -10,6 +10,7 @@ import { insertManyAfter, type SiblingKey } from "../lib/taskOrdering.js";
 import { lockProjectOrder } from "../lib/orderLock.js";
 import { duplicateTaskTree } from "../lib/duplicate.js";
 import { recordActivity } from "../lib/activity.js";
+import { lockStatusListShared } from "../lib/taskStatuses.js";
 
 // Resolve the section's owning project and 404 if the caller can't see it.
 // Permission alone (`project:write`) doesn't scope the caller to a project, so
@@ -178,6 +179,8 @@ sectionsRouter.post(
     const { projectId } = await ensureSectionVisible(req.user!, id);
 
     const result = await prisma.$transaction(async (tx) => {
+      // Copies start in the TODO default status (lib/duplicate.ts).
+      await lockStatusListShared(tx);
       const source = await tx.section.findUniqueOrThrow({
         where: { id },
         select: { name: true, color: true },

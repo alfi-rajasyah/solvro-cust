@@ -80,7 +80,10 @@ export function dayString(d: Date | null): string | null {
 export interface TaskSnapshot {
   title: string;
   description: string | null;
+  /** The status category; kept for callers, not diffed (see statusId). */
   status: string;
+  statusId: number;
+  statusDef: { name: string };
   priority: string;
   startDate: Date | null;
   dueDate: Date | null;
@@ -106,7 +109,6 @@ export function diffTaskChanges(before: TaskSnapshot, after: TaskSnapshot): Acti
   const changes: ActivityChanges = {};
   const scalars = [
     "title",
-    "status",
     "priority",
     "isMilestone",
     "isCriticalPath",
@@ -117,6 +119,12 @@ export function diffTaskChanges(before: TaskSnapshot, after: TaskSnapshot): Acti
   ] as const;
   for (const field of scalars) {
     if (before[field] !== after[field]) changes[field] = fromTo(before[field], after[field]);
+  }
+  // Diffed on the status id, logged as the status NAMES, so a move between two
+  // statuses of the same category is recorded too
+  // (docs/archive/plans/custom-task-statuses.md §2). The key stays "status".
+  if (before.statusId !== after.statusId) {
+    changes.status = fromTo(before.statusDef.name, after.statusDef.name);
   }
   for (const field of ["startDate", "dueDate"] as const) {
     const from = dayString(before[field]);
@@ -137,10 +145,16 @@ export function diffTaskChanges(before: TaskSnapshot, after: TaskSnapshot): Acti
 }
 
 /** Changes recorded for a freshly created task: only who it was assigned to. */
-export function taskCreatedChanges(after: Pick<TaskSnapshot, "assignedTo">): ActivityChanges {
-  return after.assignedTo
-    ? { assignee: fromTo(null, { id: after.assignedTo.id, username: after.assignedTo.username }) }
-    : {};
+export function taskCreatedChanges(
+  after: Pick<TaskSnapshot, "assignedTo"> & Partial<Pick<TaskSnapshot, "itopTicketRef">>,
+): ActivityChanges {
+  const changes: ActivityChanges = {};
+  if (after.assignedTo) {
+    changes.assignee = fromTo(null, { id: after.assignedTo.id, username: after.assignedTo.username });
+  }
+  // A task created with an iTop ticket pinned logs it, like a later pin does.
+  if (after.itopTicketRef) changes.itopTicketRef = fromTo(null, after.itopTicketRef);
+  return changes;
 }
 
 export interface RiskSnapshot {
@@ -168,14 +182,18 @@ export function diffRiskChanges(before: RiskSnapshot, after: RiskSnapshot): Acti
 export interface ProjectSnapshot {
   name: string;
   status: string;
-  customerId: number | null;
+  /** Names of every linked customer, sorted (docs/archive/plans/multi-customer-projects.md). */
+  customers: string[];
 }
 
-/** Only the fields the log tracks: name, status, customer. */
+/** Only the fields the log tracks: name, status, the linked customer set. */
 export function diffProjectChanges(before: ProjectSnapshot, after: ProjectSnapshot): ActivityChanges {
   const changes: ActivityChanges = {};
-  for (const field of ["name", "status", "customerId"] as const) {
+  for (const field of ["name", "status"] as const) {
     if (before[field] !== after[field]) changes[field] = fromTo(before[field], after[field]);
+  }
+  if (JSON.stringify(before.customers) !== JSON.stringify(after.customers)) {
+    changes.customers = fromTo(before.customers, after.customers);
   }
   return changes;
 }

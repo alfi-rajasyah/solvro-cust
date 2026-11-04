@@ -146,6 +146,20 @@ describe("access control", () => {
   });
 });
 
+describe("GET /itop/daily — customer:read", () => {
+  it("answers 200 with no customers for a caller without customer:read", async () => {
+    await configureItop();
+    await createCustomer({ itopOrgId: 7, itopOrgName: "Org 7" });
+    const roleName = "TEST_PROJECT_READ_ONLY_NO_CUSTOMER";
+    const permissions = ["project:read"];
+    await prisma.role.upsert({ where: { roleName }, update: { permissions }, create: { roleName, permissions } });
+    const user = await createUserWithRole(roleName);
+    const res = await call("get", "/itop/daily?date=2026-09-22", user.token);
+    expect(res.status).toBe(200);
+    expect(res.body.customers).toEqual([]);
+  });
+});
+
 describe("GET /itop/daily — unconfigured", () => {
   it("returns configured:false with no customers when iTop isn't connected", async () => {
     const { token } = await createUserWithRole("TAM");
@@ -553,5 +567,27 @@ describe("GET /itop/daily — syncedAt", () => {
     expect(res.status).toBe(200);
     const row = res.body.customers.find((c: { customerId: number }) => c.customerId === customer.id);
     expect(row.syncedAt).toBe(lastSyncAt.toISOString());
+  });
+});
+
+describe("GET /itop/daily — customer:view-all scope", () => {
+  it("a view-all holder gets strips only for customers in their Daily Review scope", async () => {
+    await configureItop();
+    const roleName = "TEST_CUSTOMER_VIEW_ALL_DAILY";
+    const permissions = ["project:read", "customer:read", "customer:view-all"];
+    await prisma.role.upsert({ where: { roleName }, update: { permissions }, create: { roleName, permissions } });
+    const holder = await createUserWithRole(roleName);
+    const other = await createUserWithRole("TAM");
+    const mine = await createCustomer({ tamId: holder.userId, itopOrgId: 11, itopOrgName: "Mine" });
+    const theirs = await createCustomer({ tamId: other.userId, itopOrgId: 12, itopOrgName: "Theirs" });
+    const unowned = await createCustomer({ tamId: null, itopOrgId: 13, itopOrgName: "Unowned" });
+    await prisma.project.create({ data: { name: uniq("P"), tamId: holder.userId, customers: { create: { customerId: mine.id, isPrimary: true } }, status: "ACTIVE" } });
+
+    const res = await call("get", "/itop/daily?date=2026-09-22", holder.token);
+    expect(res.status).toBe(200);
+    const ids = res.body.customers.map((c: any) => c.customerId);
+    expect(ids).toContain(mine.id);
+    expect(ids).not.toContain(theirs.id);
+    expect(ids).not.toContain(unowned.id);
   });
 });

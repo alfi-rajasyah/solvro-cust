@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { usePanelFocus } from "@/hooks/usePanelFocus";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { ConfirmModal } from "./ConfirmModal";
@@ -12,9 +12,12 @@ import { EpicChip } from "./EpicChip";
 import { InlineDateRangeEditor } from "./InlineDateRangeEditor";
 import { LabelPicker } from "./LabelPicker";
 import { OutlineMentions } from "./OutlineMentions";
-import { TASK_STATUS_TONE_CLASS } from "./StatusChip";
+import { StatusSelect } from "./StatusSelect";
 import { TaskConflictDialog } from "./TaskConflictDialog";
+import { RowTicketCell, type RowTicketContext } from "@/components/itop/RowTicketCell";
 import { TaskTicketField } from "@/components/itop/TaskTicketField";
+import { useCanCreateItopTicket } from "@/components/itop/useCanCreateItopTicket";
+import { useItopOrgChoice } from "@/components/itop/useItopOrgChoice";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { Sortable, SortableItem, SortableItemHandle } from "@/components/reui/sortable";
 import { ApiError } from "@/lib/api";
@@ -22,7 +25,7 @@ import { hasPermission, useAuth } from "@/lib/auth";
 import { CommentBody, CommentComposer } from "@/components/CommentMentions";
 import { fmtAgo, fmtRange } from "@/lib/formatDate";
 import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
-import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
+import { PRIORITY_LABEL } from "@/lib/labels";
 import {
   buildExpected,
   datePatchFromEdit,
@@ -35,7 +38,6 @@ import {
 import {
   type Priority,
   type Task,
-  type TaskStatus,
   type UpdateTaskInput,
   useAddComment,
   useComments,
@@ -43,6 +45,7 @@ import {
   useDeleteTask,
   useDuplicateTask,
   useItopStatus,
+  useItopTicketsByRefs,
   useProject,
   useProjectEpics,
   useProjectLabels,
@@ -50,10 +53,10 @@ import {
   useProjectSections,
   useProjectTasks,
   useUpdateTask,
+  useTaskStatuses,
   useUsers,
 } from "@/lib/queries";
 
-const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 
 const PRIORITY_ORDER: Priority[] = ["LOW", "MEDIUM", "HIGH"];
 const PRIORITY_ICON_CLASS: Record<Priority, string> = {
@@ -100,11 +103,15 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   // task itself has no customer of its own, so this is the one extra fetch
   // this panel needs for that field.
   const { data: project } = useProject(projectId);
+  const itopOrg = useItopOrgChoice(project?.customers ?? []);
+  const { data: itopStatusData } = useItopStatus();
+  const subtaskCreateGate = useCanCreateItopTicket(itopOrg.customerId, itopOrg.customerName);
 
   const { data: tasks } = useProjectTasks(projectId);
   const { data: sections } = useProjectSections(projectId);
   const { data: epics, isLoading: epicsLoading } = useProjectEpics(projectId);
   const { data: users } = useUsers();
+  const { data: statusDefs } = useTaskStatuses();
   const { data: labels } = useProjectLabels(projectId);
   const assigneeAddsMember = useAssigneeMembership(projectId);
   const updateTask = useUpdateTask(projectId);
@@ -121,6 +128,23 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     // global (position asc, id asc) sort surviving the filter() above.
     .sort((a, b) => a.position - b.position || a.id - b.id);
   const subtasksDone = subtasks.filter((s) => s.status === "DONE").length;
+  const { data: subtaskTickets } = useItopTicketsByRefs(
+    subtasks.flatMap((s) => (s.itopTicketRef ? [s.itopTicketRef] : [])),
+    { enabled: itopConfigured && hasPermission(user, "customer:read") },
+  );
+  const subtaskTicketCtx: RowTicketContext | null =
+    itopConfigured && project
+      ? {
+          projectId,
+          projectName: project.name,
+          customerId: itopOrg.customerId,
+          organisations: itopOrg.organisations,
+          organisationLabel: itopOrg.organisationLabel,
+          baseUrl: itopStatusData?.baseUrl ?? null,
+          gate: subtaskCreateGate,
+          byRef: subtaskTickets,
+        }
+      : null;
 
   // Max depth is 1 (backend/src/lib/taskOrdering.ts's assertValidParent), so a
   // task with a parent can never have subtasks of its own — `isSubtask` is what
@@ -145,7 +169,6 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const taskEpicPending = task !== null && task.epicId !== null && epicsLoading;
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [editingDates, setEditingDates] = useState(false);
@@ -153,6 +176,8 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const [editingSection, setEditingSection] = useState(false);
   const [editingEpic, setEditingEpic] = useState(false);
   const [newSubtask, setNewSubtask] = useState("");
+  // Remembered across quick-adds while the panel stays open.
+  const [newSubtaskAssigneeId, setNewSubtaskAssigneeId] = useState<number | null>(null);
   const [editingSubtaskId, setEditingSubtaskId] = useState<number | null>(null);
   const [subtaskTitleDraft, setSubtaskTitleDraft] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -190,9 +215,15 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   // sheet) is showing: Escape belongs to that sheet, and closing the panel
   // under a pending create would unmount the field that pins the new ref.
   const [nestedSheetOpen, setNestedSheetOpen] = useState(false);
+  // Row ticket cells report balanced open/close; a count keeps one cell's close from clearing another's.
+  const [rowOverlayCount, setRowOverlayCount] = useState(0);
+  const onRowOverlayChange = useCallback(
+    (open: boolean) => setRowOverlayCount((c) => Math.max(0, c + (open ? 1 : -1))),
+    [],
+  );
   // The conflict dialog and the delete confirm are modals with their own
   // Escape handling — the same keypress must not also close the panel.
-  const modalOpen = conflict !== null || confirmDelete || nestedSheetOpen;
+  const modalOpen = conflict !== null || confirmDelete || nestedSheetOpen || rowOverlayCount > 0;
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" && !modalOpen) onClose();
@@ -209,7 +240,6 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     setEditingEpic(false);
     setEditingSubtaskId(null);
     setMenuOpen(false);
-    setStatusMenuOpen(false);
     setError(null);
     setConflict(null);
   }, [taskId]);
@@ -314,6 +344,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
         parentTaskId: task.id,
         sectionId: task.sectionId,
         status: "TODO",
+        ...(newSubtaskAssigneeId !== null ? { assignedToId: newSubtaskAssigneeId } : {}),
       });
       setNewSubtask("");
     } catch (err) {
@@ -325,6 +356,10 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
 
   function toggleSubtask(s: Task) {
     updateTask.mutate({ id: s.id, patch: { status: s.status === "DONE" ? "TODO" : "DONE" } });
+  }
+
+  function setSubtaskAssignee(s: Task, assignedToId: number | null) {
+    updateTask.mutate({ id: s.id, patch: { assignedToId } });
   }
 
   function startSubtaskRename(s: Task) {
@@ -407,46 +442,14 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
       >
         {/* Header */}
         <div className="flex items-center gap-2 border-b border-outline-variant px-4 py-3">
-          <div className="relative">
-            <button
-              type="button"
-              disabled={!canEdit}
-              onClick={() => setStatusMenuOpen((v) => !v)}
-              className={[
-                "inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-display text-meta font-semibold",
-                TASK_STATUS_TONE_CLASS[task.status],
-                canEdit ? "cursor-pointer" : "cursor-default",
-              ].join(" ")}
-            >
-              {TASK_STATUS_LABEL[task.status]}
-              {canEdit && (
-                <span aria-hidden="true" className="material-symbols-outlined text-[13px]">expand_more</span>
-              )}
-            </button>
-            {statusMenuOpen && canEdit && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setStatusMenuOpen(false)} />
-                <div className="absolute left-0 z-20 mt-1 w-36 rounded-lg border border-outline-variant bg-surface-container-lowest py-1 shadow-overlay">
-                  {STATUSES.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => {
-                        patch({ status: s });
-                        setStatusMenuOpen(false);
-                      }}
-                      className={[
-                        "flex w-full items-center px-3 py-1.5 text-left text-xs hover:bg-surface-container",
-                        s === task.status ? "font-bold text-primary" : "text-on-surface",
-                      ].join(" ")}
-                    >
-                      {TASK_STATUS_LABEL[s]}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+          <StatusSelect
+            variant="chip"
+            value={task.statusId}
+            fallback={task.statusDef}
+            disabled={!canEdit}
+            onChange={(def) => patch({ statusId: def.id })}
+            className="px-2.5 py-1"
+          />
           <span className="flex-1" />
           <CopyLinkButton
             label="Copy task link"
@@ -797,11 +800,17 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                 <TaskTicketField
                   itopTicketRef={task.itopTicketRef}
                   canEdit={canEdit}
-                  customerId={project?.customerId ?? null}
+                  customerId={itopOrg.customerId}
+                  customerName={itopOrg.customerName}
+                  organisations={itopOrg.organisations}
+                  organisationLabel={itopOrg.organisationLabel}
                   taskTitle={task.title}
                   taskDescription={task.description}
+                  projectName={project?.name ?? null}
+                  parentTitle={(tasks ?? []).find((t) => t.id === task.parentTaskId)?.title ?? null}
                   onSave={(ref) => patch({ itopTicketRef: ref })}
                   onCreateSheetOpenChange={setNestedSheetOpen}
+                  showTimer
                 />
               </>
             )}
@@ -865,7 +874,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                       className={[
                         "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors",
                         s.status === "DONE"
-                          ? "border-emerald-500 bg-emerald-500 text-white"
+                          ? "border-primary bg-primary text-on-primary"
                           : "border-outline-variant hover:border-primary",
                         canEdit ? "cursor-pointer" : "cursor-default",
                       ].join(" ")}
@@ -912,6 +921,24 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         {s.title}
                       </button>
                     )}
+                    {subtaskTicketCtx && (canEdit || s.itopTicketRef) && (
+                      <RowTicketCell
+                        task={s}
+                        parentTitle={task.title}
+                        canEdit={canEdit}
+                        ctx={subtaskTicketCtx}
+                        onOverlayOpenChange={onRowOverlayChange}
+                      />
+                    )}
+                    <SubtaskAssigneePicker
+                      canEdit={canEdit}
+                      users={users ?? []}
+                      assignee={s.assignedTo}
+                      value={s.assignedToId}
+                      addsMember={assigneeAddsMember}
+                      label={`Assignee for ${s.title}`}
+                      onChange={(id) => setSubtaskAssignee(s, id)}
+                    />
                     {canEdit && editingSubtaskId !== s.id && (
                       // A single direct button, not the Gantt tree's "…" row menu
                       // (ui/context-menu.tsx): rename is the only action this row
@@ -971,7 +998,16 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     placeholder="Add subtask"
                     maxLength={200}
                     readOnly={createTask.isPending}
-                    className="flex-1 border-none bg-transparent text-[13px] text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden"
+                    className="min-w-0 flex-1 border-none bg-transparent text-[13px] text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden"
+                  />
+                  <SubtaskAssigneePicker
+                    canEdit={canEdit}
+                    users={users ?? []}
+                    assignee={(users ?? []).find((u) => u.id === newSubtaskAssigneeId) ?? null}
+                    value={newSubtaskAssigneeId}
+                    addsMember={assigneeAddsMember}
+                    label="Assignee for new subtask"
+                    onChange={setNewSubtaskAssigneeId}
                   />
                 </form>
               )}
@@ -1008,6 +1044,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     epics,
                     labels,
                     tasks,
+                    statuses: statusDefs,
                   },
                   conflict.stale.task,
                 ),
@@ -1117,5 +1154,66 @@ function PanelComments({ taskId, projectId }: { taskId: number; projectId: numbe
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Avatar-only assignee control for the panel's narrow subtask rows: the avatar
+ * is the trigger, and picking swaps in a native select (same pattern as the
+ * panel's own Assignee row) until a choice is made or focus leaves.
+ */
+function SubtaskAssigneePicker({
+  canEdit,
+  users,
+  assignee,
+  value,
+  addsMember,
+  label,
+  onChange,
+}: {
+  canEdit: boolean;
+  users: { id: number; username: string }[];
+  assignee: { id: number; username: string } | null | undefined;
+  value: number | null;
+  addsMember: (id: number | null | undefined) => boolean;
+  label: string;
+  onChange: (id: number | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing && canEdit) {
+    return (
+      <select
+        autoFocus
+        aria-label={label}
+        value={value ?? ""}
+        onChange={(e) => {
+          onChange(e.target.value === "" ? null : Number(e.target.value));
+          setEditing(false);
+        }}
+        onBlur={() => setEditing(false)}
+        className="w-28 shrink-0 rounded-sm border border-outline-variant bg-surface-container-lowest px-1 py-0.5 text-xs text-on-surface focus:border-primary focus:outline-hidden"
+      >
+        <option value="">Unassigned</option>
+        {users.map((u) => (
+          <option key={u.id} value={u.id}>
+            {`${u.username}${addsMember(u.id) ? " (not on project)" : ""}`}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={!canEdit}
+      onClick={() => setEditing(true)}
+      aria-label={label}
+      title={assignee ? assignee.username : "Unassigned"}
+      className="shrink-0 rounded-full outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
+    >
+      <AssigneeAvatar user={assignee ?? null} size="xs" />
+    </button>
   );
 }

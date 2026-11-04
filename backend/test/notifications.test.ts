@@ -12,6 +12,7 @@ import { projectVisibilityFilter } from "../src/lib/visibility.js";
 import { PrismaClient } from "@prisma/client";
 import { deleteExpiredActivityEvents } from "../src/lib/activityCleanup.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 
@@ -30,14 +31,14 @@ async function fixture() {
     data: { name: uniq("Customer"), description: "d", tamId: tam.userId },
   });
   const project = await prisma.project.create({
-    data: { name: uniq("Project"), tamId: tam.userId, customerId: customer.id, status: "ACTIVE" },
+    data: { name: uniq("Project"), tamId: tam.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE" },
   });
   return { tam, other, third, customer, project };
 }
 
 async function makeTask(projectId: number, extra: Record<string, unknown> = {}) {
   return prisma.task.create({
-    data: { projectId, title: uniq("Task"), status: "TODO", priority: "MEDIUM", position: 0, ...extra },
+    data: { statusId: SID.TODO, projectId, title: uniq("Task"), status: "TODO", priority: "MEDIUM", position: 0, ...extra },
   });
 }
 
@@ -423,7 +424,7 @@ describe("visibility arms for recipients", () => {
       data: { name: uniq("OwnedCustomer"), description: "d", tamId: third.userId },
     });
     const owned = await prisma.project.create({
-      data: { name: uniq("P"), tamId: tam.userId, customerId: customer.id, status: "ACTIVE" },
+      data: { name: uniq("P"), tamId: tam.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE" },
     });
     expect(project.id).not.toBe(owned.id);
     const task = await makeTask(owned.id, { assignedToId: third.userId });
@@ -441,8 +442,25 @@ describe("visibility arms for recipients", () => {
     const customer = await prisma.customer.create({
       data: { name: uniq("C"), description: "d", tamId: owner.userId },
     });
+    // A SECOND (non-primary) customer with its own owner: a shared project is
+    // visible to the owner of any linked customer
+    // (docs/archive/plans/multi-customer-projects.md).
+    const secondOwner = await createUserWithRole("TAM");
+    const secondCustomer = await prisma.customer.create({
+      data: { name: uniq("C2"), description: "d", tamId: secondOwner.userId },
+    });
     const p = await prisma.project.create({
-      data: { name: uniq("P"), tamId: tam.userId, customerId: customer.id, status: "ACTIVE" },
+      data: {
+        name: uniq("P"),
+        tamId: tam.userId,
+        customers: {
+          create: [
+            { customerId: customer.id, isPrimary: true },
+            { customerId: secondCustomer.id, isPrimary: false },
+          ],
+        },
+        status: "ACTIVE",
+      },
     });
     await prisma.projectMember.createMany({
       data: [
@@ -451,7 +469,7 @@ describe("visibility arms for recipients", () => {
       ],
     });
     await prisma.user.update({ where: { id: inactiveMember.userId }, data: { active: false } });
-    const everyone = [tam, other, third, stakeholder, admin, stranger, inactiveMember, owner].map(
+    const everyone = [tam, other, third, stakeholder, admin, stranger, inactiveMember, owner, secondOwner].map(
       (u) => u.userId,
     );
     const batch = await filterActiveUsersWhoCanSeeProject(prisma, p.id, [...everyone, 999_999_999]);
@@ -459,7 +477,7 @@ describe("visibility arms for recipients", () => {
       expect(batch.has(uid), `user ${uid}`).toBe(await isActiveUserWhoCanSeeProject(uid, p.id));
     }
     expect([...batch].sort()).toEqual(
-      [tam, other, stakeholder, admin, owner].map((u) => u.userId).sort(),
+      [tam, other, stakeholder, admin, owner, secondOwner].map((u) => u.userId).sort(),
     );
     expect(batch.has(999_999_999)).toBe(false);
     expect(project.id).toBeGreaterThan(0);

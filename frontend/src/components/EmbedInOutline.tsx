@@ -94,7 +94,7 @@ export function EmbedInOutlineDialog({
                 <label
                   key={v.id}
                   className={[
-                    "flex cursor-pointer flex-col gap-1 rounded-sm border p-3 has-focus-visible:ring-2 has-focus-visible:ring-primary/30",
+                    "flex cursor-pointer flex-col gap-1 rounded-sm border p-3 has-focus-visible:border-primary has-focus-visible:ring-2 has-focus-visible:ring-primary/30",
                     checked
                       ? "border-primary bg-primary/5"
                       : "border-outline-variant bg-surface-container-lowest hover:bg-surface-container",
@@ -135,7 +135,7 @@ export function EmbedInOutlineDialog({
               value={epicId ?? ""}
               onChange={(e) => setEpicId(e.target.value ? Number(e.target.value) : null)}
               aria-label="Filter by epic"
-              className={`rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface ${FOCUS_RING}`}
+              className={`rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING}`}
             >
               <option value="">All tasks</option>
               {(epics.data ?? []).map((e) => (
@@ -260,7 +260,7 @@ function LinkField({ url, label, testId }: { url: string; label: string; testId:
           aria-label={label}
           data-testid={testId}
           onFocus={(e) => e.currentTarget.select()}
-          className={`min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 font-mono text-xs text-on-surface ${FOCUS_RING}`}
+          className={`min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 font-mono text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING}`}
         />
         <button
           type="button"

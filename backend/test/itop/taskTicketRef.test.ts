@@ -11,10 +11,11 @@ import request from "supertest";
 import { createApp } from "../../src/app.js";
 import { prisma } from "../../src/prisma.js";
 import { seedRoles, createUserWithRole } from "../testAuth.js";
+import { SID } from "../statusFixtures.js";
 
 const app = createApp();
 
-function call(method: "get" | "patch", path: string, token: string) {
+function call(method: "get" | "patch" | "post", path: string, token: string) {
   return request(app)[method](path).set("Authorization", `Bearer ${token}`);
 }
 
@@ -30,7 +31,7 @@ async function createProject(tamId: number) {
 
 async function createTask(projectId: number) {
   return prisma.task.create({
-    data: { projectId, title: "Task with a possible iTop ref" },
+    data: { statusId: SID.TODO, projectId, title: "Task with a possible iTop ref" },
   });
 }
 
@@ -140,6 +141,8 @@ describe("GET /itop/tickets/by-ref/:ref", () => {
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(ticket.id);
     expect(res.body.ref).toBe(ticket.ref);
+    // Read-only: the ticket's own customer, for the task panel's actions/timer.
+    expect(res.body.customerId).toBe(customer.id);
   });
 
   it("404s for a ticket whose customer is hidden from the caller", async () => {
@@ -169,6 +172,50 @@ describe("GET /itop/tickets/by-ref/:ref", () => {
   });
 });
 
+describe("GET /itop/tickets/by-refs", () => {
+  it("returns visible tickets and null for hidden, unmapped and unknown refs in one call", async () => {
+    const owner = await createUserWithRole("TAM");
+    const other = await createUserWithRole("TAM");
+    const mine = await prisma.customer.create({
+      data: { name: `by-refs mine ${Date.now()}-${Math.random()}`, description: "d", tamId: owner.userId },
+    });
+    const theirs = await prisma.customer.create({
+      data: { name: `by-refs theirs ${Date.now()}-${Math.random()}`, description: "d", tamId: other.userId },
+    });
+    const visible = await createTicket({ customerId: mine.id });
+    const hidden = await createTicket({ customerId: theirs.id });
+    const unmapped = await createTicket({ customerId: null });
+
+    const res = await call("get", `/itop/tickets/by-refs?refs=${visible.ref},${hidden.ref},${unmapped.ref},NOPE-999999`, owner.token);
+    expect(res.status).toBe(200);
+    expect(res.body[visible.ref].id).toBe(visible.id);
+    expect(res.body[visible.ref].ref).toBe(visible.ref);
+    expect(res.body[hidden.ref]).toBeNull();
+    expect(res.body[unmapped.ref]).toBeNull();
+    expect(res.body["NOPE-999999"]).toBeNull();
+    expect(Object.keys(res.body)).toHaveLength(4);
+  });
+
+  it("answers an empty object for an empty refs list", async () => {
+    const { token } = await createUserWithRole("TAM");
+    const res = await call("get", "/itop/tickets/by-refs?refs=", token);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({});
+  });
+
+  it("400s more than 200 refs and accepts exactly 200", async () => {
+    const { token } = await createUserWithRole("TAM");
+    const refs = (n: number) => Array.from({ length: n }, (_, i) => `X-${100000 + i}`).join(",");
+    expect((await call("get", `/itop/tickets/by-refs?refs=${refs(201)}`, token)).status).toBe(400);
+    expect((await call("get", `/itop/tickets/by-refs?refs=${refs(200)}`, token)).status).toBe(200);
+  });
+
+  it("403s a user without ticket read permission", async () => {
+    const { token } = await createUserWithRole("PENDING");
+    expect((await call("get", "/itop/tickets/by-refs?refs=R-000001", token)).status).toBe(403);
+  });
+});
+
 describe("PATCH /tasks/:id itopTicketRef + GET /itop/tickets/by-ref/:ref — end to end", () => {
   it("a ref pinned to a task that also exists in the snapshot resolves via by-ref", async () => {
     const owner = await createUserWithRole("TAM");
@@ -187,5 +234,53 @@ describe("PATCH /tasks/:id itopTicketRef + GET /itop/tickets/by-ref/:ref — end
     expect(byRefRes.status).toBe(200);
     expect(byRefRes.body.id).toBe(ticket.id);
     expect(byRefRes.body.ref).toBe(ticket.ref);
+  });
+});
+
+describe("POST /projects/:id/tasks — itopTicketRef", () => {
+  let token: string;
+  let projectId: number;
+
+  beforeEach(async () => {
+    const owner = await createUserWithRole("TAM");
+    token = owner.token;
+    projectId = (await createProject(owner.userId)).id;
+  });
+
+  it("creates the task with the pinned ref", async () => {
+    const res = await call("post", `/projects/${projectId}/tasks`, token).send({
+      title: "Pinned at creation",
+      itopTicketRef: "TST-100200",
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.itopTicketRef).toBe("TST-100200");
+    const row = await prisma.task.findUniqueOrThrow({ where: { id: res.body.id } });
+    expect(row.itopTicketRef).toBe("TST-100200");
+  });
+
+  it("logs the pinned ref on the created event", async () => {
+    const res = await call("post", `/projects/${projectId}/tasks`, token).send({
+      title: "Logged pin",
+      itopTicketRef: "TST-100201",
+    });
+    expect(res.status).toBe(201);
+    const ev = await prisma.activityEvent.findFirstOrThrow({
+      where: { projectId, entityType: "task", entityId: res.body.id, action: "created" },
+    });
+    expect(ev.changes).toEqual({ itopTicketRef: { from: null, to: "TST-100201" } });
+  });
+
+  it("leaves the ref null when omitted", async () => {
+    const res = await call("post", `/projects/${projectId}/tasks`, token).send({ title: "No ref" });
+    expect(res.status).toBe(201);
+    expect(res.body.itopTicketRef).toBeNull();
+  });
+
+  it("400s a malformed ref", async () => {
+    const res = await call("post", `/projects/${projectId}/tasks`, token).send({
+      title: "Bad ref",
+      itopTicketRef: "nonsense",
+    });
+    expect(res.status).toBe(400);
   });
 });

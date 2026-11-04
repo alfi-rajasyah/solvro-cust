@@ -24,18 +24,35 @@ render() { # args: extra `docker run` args
     | sed -E 's/^[[:space:]]*"~[^"]*"[[:space:]]+//'
 }
 
+# A transient `docker run` failure leaves nothing that survives render()'s
+# filter, which would read as a wrong header. Every valid case renders two
+# lines, so an empty result is retried once before it is judged.
+render_retry() {
+  local out
+  out=$(render "$@")
+  if [[ -z "$out" ]]; then
+    sleep 2
+    out=$(render "$@")
+  fi
+  printf '%s' "$out"
+}
+
 # check <label> <expected CSP value> <expected XFO value> [docker run args...]
 check() {
   local label="$1" csp="$2" xfo="$3"; shift 3
   local want got
   want=$(printf '"%s";\n"%s";' "$csp" "$xfo")
-  got=$(render "$@" | sed 's/^[[:space:]]*//')
+  got=$(render_retry "$@" | sed 's/^[[:space:]]*//')
   if [[ "$got" == "$want" ]]; then
     echo "ok   $label"
   else
     echo "FAIL $label"
     echo "  want: $(printf '%s' "$want" | tr '\n' '|')"
     echo "  got:  $(printf '%s' "$got" | tr '\n' '|')"
+    if [[ -z "$got" ]]; then
+      echo "  raw \`nginx -T\` output (last lines):"
+      docker run --rm --add-host backend:127.0.0.1 "$@" "$IMAGE" nginx -T 2>&1 | tail -n 8 | sed 's/^/    /'
+    fi
     FAILED=1
   fi
 }

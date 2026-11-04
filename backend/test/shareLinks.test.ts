@@ -9,6 +9,7 @@ import { prisma } from "../src/prisma.js";
 import { publicShareRateLimiter, PUBLIC_SHARE_RATE_LIMIT } from "../src/routes/publicShare.js";
 import { derivePhase, generateShareToken, hashShareToken } from "../src/lib/shareLinks.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 
@@ -36,7 +37,7 @@ async function fixture() {
     data: { name: uniq("Customer"), description: "d", tamId: tam.userId },
   });
   const project = await prisma.project.create({
-    data: { name: uniq("Project"), tamId: tam.userId, customerId: customer.id, status: "ACTIVE" },
+    data: { name: uniq("Project"), tamId: tam.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE" },
   });
   await prisma.projectMember.create({ data: { projectId: project.id, userId: member.userId } });
   return { tam, member, outsider, customer, project };
@@ -72,7 +73,7 @@ function makeTask(
 ) {
   taskPos += 1;
   return prisma.task.create({
-    data: {
+    data: { statusId: SID[data.status ?? "TODO"],
       projectId,
       title: data.title ?? uniq("Task"),
       description: data.description,

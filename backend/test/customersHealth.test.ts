@@ -4,6 +4,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 // `health` on GET /customers: overdue tasks and open risks rolled up over the
 // caller's VISIBLE projects of each customer, plus that ISO week's weekly
@@ -23,7 +24,7 @@ const day = (s: string) => new Date(`${s}T00:00:00.000Z`);
 
 async function addTask(projectId: number, o: { status?: "TODO" | "DONE"; dueDate: string }) {
   await prisma.task.create({
-    data: { projectId, title: "T", status: o.status ?? "TODO", dueDate: day(o.dueDate) },
+    data: { statusId: SID[o.status ?? "TODO"], projectId, title: "T", status: o.status ?? "TODO", dueDate: day(o.dueDate) },
   });
 }
 
@@ -58,10 +59,10 @@ describe("GET /customers health", () => {
       data: { name: uniq("Attached"), description: "d", tamId: other.userId },
     });
     const visible = await prisma.project.create({
-      data: { name: uniq("Vis"), tamId: tam.userId, customerId: attached.id, status: "ACTIVE" },
+      data: { name: uniq("Vis"), tamId: tam.userId, customers: { create: { customerId: attached.id, isPrimary: true } }, status: "ACTIVE" },
     });
     const hidden = await prisma.project.create({
-      data: { name: uniq("Hid"), tamId: other.userId, customerId: attached.id, status: "ACTIVE" },
+      data: { name: uniq("Hid"), tamId: other.userId, customers: { create: { customerId: attached.id, isPrimary: true } }, status: "ACTIVE" },
     });
 
     await addTask(visible.id, { dueDate: "2026-09-20" }); // overdue
@@ -78,7 +79,7 @@ describe("GET /customers health", () => {
 
     // A second visible project of the same customer adds to the roll-up.
     const visible2 = await prisma.project.create({
-      data: { name: uniq("Vis2"), tamId: tam.userId, customerId: attached.id, status: "ACTIVE" },
+      data: { name: uniq("Vis2"), tamId: tam.userId, customers: { create: { customerId: attached.id, isPrimary: true } }, status: "ACTIVE" },
     });
     await addTask(visible2.id, { dueDate: "2026-09-10" });
     await addRisk(visible2.id, "OPEN");
@@ -94,7 +95,7 @@ describe("GET /customers health", () => {
       data: { name: uniq("Boundary"), description: "d", tamId: tam.userId },
     });
     const project = await prisma.project.create({
-      data: { name: uniq("P"), tamId: tam.userId, customerId: customer.id, status: "ACTIVE" },
+      data: { name: uniq("P"), tamId: tam.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE" },
     });
     await addTask(project.id, { dueDate: "2026-09-30" });
 

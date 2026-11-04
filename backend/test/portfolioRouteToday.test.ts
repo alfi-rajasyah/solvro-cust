@@ -4,6 +4,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { seedRoles, createAdminAndToken } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 // routes/overview.ts and routes/reports.ts's executive report both thread an
 // optional `?today=` (the caller's client calendar day) into
@@ -28,7 +29,7 @@ async function createProjectWithDueTask(dueDate: Date): Promise<number> {
     },
   });
   await prisma.task.create({
-    data: { projectId: project.id, title: "Task", status: "TODO", dueDate },
+    data: { statusId: SID.TODO, projectId: project.id, title: "Task", status: "TODO", dueDate },
   });
   return project.id;
 }

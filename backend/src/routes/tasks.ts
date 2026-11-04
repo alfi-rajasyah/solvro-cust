@@ -25,6 +25,7 @@ import {
 import { lockProjectOrder } from "../lib/orderLock.js";
 import { assertEpicNotOnSubtask, assertValidEpic } from "../lib/epics.js";
 import { duplicateTaskTree } from "../lib/duplicate.js";
+import { lockStatusListShared, resolveStatusWrite, statusDefInclude } from "../lib/taskStatuses.js";
 import { ensureAssigneeIsMember } from "../lib/projectMembers.js";
 import { diffTaskChanges, recordActivity } from "../lib/activity.js";
 import { filterActiveUsersWhoCanSeeProject, notifyForEvent } from "../lib/notifications.js";
@@ -38,6 +39,7 @@ const expectedTaskSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
   status: z.nativeEnum(TaskStatus).optional(),
+  statusId: z.number().int().positive().optional(),
   priority: z.nativeEnum(Priority).optional(),
   // Compared, never written, and echoed back from the stored row — so no year
   // window (a row may predate it), only the shape check.
@@ -60,13 +62,18 @@ const taskResponseInclude = {
   labels: true,
   section: { select: { id: true, name: true, position: true, color: true } },
   _count: { select: { subtasks: true, comments: true } },
+  ...statusDefInclude,
 } satisfies Prisma.TaskInclude;
 
 const updateTaskSchema = z
   .object({
     title: z.string().min(1).max(200).optional(),
     description: z.string().max(2000).nullable().optional(),
+    // Either names the new status: `statusId` (a workspace status) or the
+    // legacy category-only `status`, which maps to that category's default
+    // status. The server derives and writes BOTH columns (lib/taskStatuses.ts).
     status: z.nativeEnum(TaskStatus).optional(),
+    statusId: z.number().int().positive().optional(),
     priority: z.nativeEnum(Priority).optional(),
     startDate: dateInput.nullable().optional(),
     dueDate: dateInput.nullable().optional(),
@@ -108,11 +115,16 @@ const dayString = z
 
 const tasksListQuerySchema = z
   .object({
+    // Category semantics (To do / In progress / Done), as before custom
+    // statuses; `statusId` narrows to one workspace status.
     status: z.nativeEnum(TaskStatus).optional(),
+    statusId: z.coerce.number().int().positive().optional(),
     priority: z.nativeEnum(Priority).optional(),
     assignedToId: z.coerce.number().int().positive().optional(),
     labelId: z.coerce.number().int().positive().optional(),
     customerId: z.coerce.number().int().positive().optional(),
+    // Tasks on projects whose TAM is this user (Overview TAM filter).
+    tamId: z.coerce.number().int().positive().optional(),
     overdue: z
       .union([z.literal("true"), z.literal("false")])
       .transform((v) => v === "true")
@@ -177,6 +189,7 @@ function findStaleFields(
     "title",
     "description",
     "status",
+    "statusId",
     "priority",
     "assignedToId",
     "sectionId",
@@ -225,10 +238,12 @@ tasksRouter.use(requireAuth, requirePermission("project:read"));
 tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) => {
   const {
     status,
+    statusId,
     priority,
     assignedToId,
     labelId,
     customerId,
+    tamId,
     overdue,
     open,
     topLevel,
@@ -250,10 +265,18 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
   if (assignedToId) where.assignedToId = assignedToId;
   if (labelId) where.labels = { some: { id: labelId } };
   if (customerId) {
-    where.project = { ...(where.project as object | undefined), customerId };
+    // Any linked customer (docs/archive/plans/multi-customer-projects.md).
+    where.project = {
+      ...(where.project as object | undefined),
+      customers: { some: { customerId } },
+    };
+  }
+  if (tamId) {
+    where.project = { ...(where.project as object | undefined), tamId };
   }
   if (topLevel) where.parentTaskId = null;
   if (status) and.push({ status });
+  if (statusId) and.push({ statusId });
   if (open) and.push({ status: { not: "DONE" } });
   if (overdue) {
     // Overdue = due before the CALLER's calendar day (param `today`),
@@ -293,10 +316,16 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
           select: {
             id: true,
             name: true,
-            customer: { select: { id: true, name: true } },
+            // The row's customer is the project's primary.
+            customers: {
+              where: { isPrimary: true },
+              take: 1,
+              select: { customer: { select: { id: true, name: true } } },
+            },
           },
         },
         _count: { select: { subtasks: true, comments: true } },
+        ...statusDefInclude,
       },
       skip: offset ?? 0,
       take: 200,
@@ -305,7 +334,12 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
     prisma.task.count({ where }),
   ]);
   res.setHeader("X-Total-Count", String(total));
-  res.json(tasks);
+  res.json(
+    tasks.map((t) => {
+      const { customers, ...project } = t.project;
+      return { ...t, project: { ...project, customer: customers[0]?.customer ?? null } };
+    }),
+  );
 });
 
 tasksRouter.patch(
@@ -344,7 +378,6 @@ tasksRouter.patch(
       const newKey: SiblingKey = { projectId: cur.projectId, parentTaskId: nextParentTaskId };
       return {
         cur,
-        nextStatus: body.status ?? cur.status,
         nextParentTaskId,
         oldKey,
         newKey,
@@ -361,6 +394,10 @@ tasksRouter.patch(
     };
 
     const updated = await prisma.$transaction(async (tx) => {
+      // A write that names a status shares the status-list lock before any
+      // other lock (see lib/taskStatuses.ts), so an admin category change or
+      // delete cannot interleave with it.
+      if (body.status !== undefined || body.statusId !== undefined) await lockStatusListShared(tx);
       // A reorder or re-parent re-packs the project's task order: take that
       // lock before the row lock below (see lib/orderLock.ts for why the order
       // matters). The project id is read without a lock; it never changes.
@@ -415,7 +452,17 @@ tasksRouter.patch(
         await notifyForEvent(tx, event);
         return after;
       };
-      const { cur, nextStatus, nextParentTaskId, oldKey, newKey, touchesOrdering } = state;
+      const { cur, nextParentTaskId, oldKey, newKey, touchesOrdering } = state;
+
+      // The status this patch writes (statusId, or a bare category mapped to
+      // its default status) — null when the patch leaves the status alone.
+      // A bare category equal to the task's CURRENT one is "no change" (the
+      // Kanban sends it with every within-column reorder), so a task on a
+      // custom status keeps it instead of falling back to the category default.
+      const nextStatus =
+        body.statusId === undefined && body.status === cur.status
+          ? null
+          : await resolveStatusWrite(tx, body);
 
       // A milestone needs a due date. The body schema only catches
       // `isMilestone: true` with `dueDate: null` in the same request; the
@@ -534,7 +581,10 @@ tasksRouter.patch(
         // status and position together (e.g. drag a card to a new column at
         // a specific row), and that combined write must land in the same
         // update as the position/parent change.
-        data.status = nextStatus;
+        if (nextStatus) {
+          data.status = nextStatus.status;
+          data.statusDef = { connect: { id: nextStatus.statusId } };
+        }
 
         // Apply the non-ordering fields (and the parent/status change) first,
         // then compute the new dense position for this row and every sibling
@@ -557,7 +607,10 @@ tasksRouter.patch(
         );
       }
 
-      if (body.status !== undefined) data.status = body.status;
+      if (nextStatus) {
+        data.status = nextStatus.status;
+        data.statusDef = { connect: { id: nextStatus.statusId } };
+      }
       return finish(
         await tx.task.update({
           where: { id },
@@ -613,6 +666,7 @@ tasksRouter.post(
     await ensureTaskVisible(req.user!, id);
 
     const newTask = await prisma.$transaction(async (tx) => {
+      await lockStatusListShared(tx);
       const source = await tx.task.findUniqueOrThrow({
         where: { id },
         select: { projectId: true, parentTaskId: true },
@@ -642,6 +696,7 @@ tasksRouter.post(
           labels: true,
           section: { select: { id: true, name: true, position: true, color: true } },
           _count: { select: { subtasks: true, comments: true } },
+          ...statusDefInclude,
         },
       });
       // One event for the copy itself (its subtasks ride along unlogged).
