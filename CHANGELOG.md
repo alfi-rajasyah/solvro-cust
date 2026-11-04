@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-11-04
+
+### Changed — 2026-11-04 — Version 1.2.0
+
+- The release version is `1.2.0` in `VERSION`, `backend/package.json`, `frontend/package.json` and the image tag in `setup.sh` (`SOLVRO_IMAGE_TAG="v1.2.0"`), so the login page and new installs show and pull 1.2.0, and the `stable` image tag that `solvro update` follows reports it. **Upgrade notes for this release:** servers on an earlier release upgrade once with `git pull` and `bash setup.sh` in their repository checkout, which installs the `solvro` command; later upgrades are `solvro update` (`INSTALL.md`, Upgrade).
+
 ### Changed — 2026-11-04 — Simpler fresh install
 
 - **No repository clone needed** (`INSTALL.md`, `README.md`): the installer is fetched from the newest release's backend image (`docker run --rm --entrypoint cat ghcr.io/alfi-rajasyah/solvro-cust-backend:stable /opt/solvro/setup.sh > setup.sh && bash setup.sh`). The registry token only needs `read:packages`.
