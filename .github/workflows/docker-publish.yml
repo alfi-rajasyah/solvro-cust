@@ -24,7 +24,13 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    # Publish only after a green CI run for a push (a merge into staging or
+    # main). A pull request from staging also runs CI on the `staging`
+    # branch, but its read-only token cannot push images or write the cache,
+    # so such a run would only fail.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     permissions:
       contents: read
       packages: write
