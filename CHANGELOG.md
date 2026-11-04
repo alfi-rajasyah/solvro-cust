@@ -32,7 +32,7 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 - **The backend image carries the installer** at `/opt/solvro/setup.sh` (`backend/Dockerfile`, `backend/release/`): the publish workflow copies `setup.sh` in before building. Local and CI builds carry only a placeholder.
 - **Safer update path in `setup.sh`**: the new `IMAGE_TAG` is saved to `~/solvro/.env` only after its images are pulled, so a failed pull leaves the server pinned to the release it runs. `solvro update` also says so when the installed release is not the one running.
 - **`ci/check-update-cli.sh`** (run in `ci.yml`): checks that the installer writes the command and that `solvro update` runs a release's installer only when it is newer, fully published, confirmed and names the same version, after a backup — including a release whose command is longer than the running one.
-- Servers installed before this release upgrade once with `git pull` and `bash setup.sh` to get the command. `INSTALL.md`, `OPERATIONS.md` and `README.md` describe the new upgrade path.
+- Servers installed before this release upgrade once with `git pull` and `bash setup.sh` to get the command. `INSTALL.md`, `OPERATIONS.md` and `README.md` describe the new upgrade path and `solvro config`.
 
 ### Added — 2026-11-03 — Link a project to several customers
 

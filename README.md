@@ -175,7 +175,7 @@ The backend is a JSON REST API. Routers mount without an `/api` prefix; the fron
 | Database | PostgreSQL 15 |
 | Testing | Vitest — backend with supertest against a real `_test` database, frontend pure-logic modules; Playwright — end-to-end on desktop (1440×900) and mobile (iPhone 13 viewport) |
 | CI/CD | GitHub Actions — typecheck of all three packages (the frontend suite runs twice, once under `TZ=Asia/Jakarta`), the backend suite on a Postgres service, Playwright desktop and mobile on a built production-shaped stack; GHCR images publish from `main` only after CI passes, and on `v*` tags |
-| Deployment | Docker Compose, prebuilt GHCR images (`solvro-cust-backend`, `solvro-cust-frontend`), one-shot `setup.sh` installer |
+| Deployment | Docker Compose, prebuilt GHCR images (`solvro-cust-backend`, `solvro-cust-frontend`), one-shot `setup.sh` installer, `solvro` server command (`update`, `config`, `backup`) |
 
 ## Getting Started
 
@@ -197,7 +197,7 @@ ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=change-me APP_URL=https://solvro.exam
   bash setup.sh
 ```
 
-To upgrade, run `solvro update` on the server (the installer adds the command): it backs up the database, moves the server to the newest release and restarts it, after asking.
+To upgrade, run `solvro update` on the server (the installer adds the command): it backs up the database, moves the server to the newest release and restarts it, after asking. To change a setting later, such as the public address or a port, run `solvro config set KEY=VALUE` (for example `solvro config set APP_URL=https://solvro.example.com`); `solvro config` shows the current settings.
 
 The full install and upgrade guide, with every `solvro` and `setup.sh` command and option, is [INSTALL.md](INSTALL.md). To run iTop or Outline on the same server, see [Server setup](docs/guides/server-setup.md).
 
@@ -268,7 +268,7 @@ All guides: [docs/guides/](docs/guides/index.md).
 | `ci/` | The production-shaped compose stack GitHub Actions builds and tests |
 | `.github/workflows/` | `ci.yml` (merge gate) and `docker-publish.yml` (GHCR release) |
 | `docs/guides/` | Step-by-step guides: server setup, iTop, Outline |
-| `setup.sh` | One-shot production installer and updater |
+| `setup.sh` | Production installer and updater; installs the `solvro` server command |
 | `CHANGELOG.md` | Running record of every change, Keep a Changelog style |
 
 ## Branches and releases
