@@ -62,14 +62,14 @@ Each Solvro user who will use Outline needs an Outline account with **the same e
 
 ## 2. Set Solvro's public address
 
-After sign-in, Outline sends the user back to Solvro, so Solvro must know the address users open it on. Set these in `~/solvro/.env` (`setup.sh` asks for both on a fresh install):
+After sign-in, Outline sends the user back to Solvro, so Solvro must know the address users open it on. Set these with `solvro config set` (`setup.sh` asks for `APP_URL` on a fresh install; `EMBED_FRAME_ANCESTORS` only with `bash setup.sh --advanced` or as an environment variable):
 
 | Variable | Value | Notes |
 |---|---|---|
 | `APP_URL` | `https://solvro.example.com` | Must be `https`: Outline refuses `http` return addresses, except on `localhost`. Without `APP_URL`, Outline sign-in and mentions stay off. |
 | `EMBED_FRAME_ANCESTORS` | `https://docs.example.com` | The Outline address allowed to embed Solvro pages. Empty means embedding is off. |
 
-Apply the change with `docker compose up -d` in `~/solvro`.
+For example `solvro config set APP_URL=https://solvro.example.com EMBED_FRAME_ANCESTORS=https://docs.example.com`. The command checks the values, saves them and restarts what changed. See the [Command reference](../../INSTALL.md#command-reference).
 
 ## 3. Connect Solvro
 
@@ -105,8 +105,8 @@ Signed-in embeds work only when Solvro and Outline share a parent domain, for ex
 | Symptom | Cause and fix |
 |---|---|
 | The Outline card in Settings or the Docs tab is missing. | No Outline address is set in Admin > Outline. |
-| The sign-in redirect shows a plain "Not found" page. | `APP_URL` is not set. Set it and run `docker compose up -d`. |
-| Connecting fails, and Admin > Outline warns about `APP_URL`. | `APP_URL` is unset or uses `http`. Set an `https` `APP_URL` and run `docker compose up -d`. |
+| The sign-in redirect shows a plain "Not found" page. | `APP_URL` is not set. Run `solvro config set APP_URL=https://…`. |
+| Connecting fails, and Admin > Outline warns about `APP_URL`. | `APP_URL` is unset or uses `http`. Run `solvro config set APP_URL=https://…` with an `https` address. |
 | Connecting fails with an email message. | The Outline account's email differs from the Solvro email. Sign in to Outline with the matching account, or correct the email. |
 | Outline shows a redirect error before its consent screen. | The redirect URL in the Outline application differs from the one in the API access card. Copy it again. |
 | "Mentioned in Outline" stays empty. | Check **last delivery** in Admin > Outline. If nothing arrives: the webhook is missing, the secret is wrong, or Outline refuses a private address — set `ALLOWED_PRIVATE_IP_ADDRESSES` on Outline (see [Server setup](server-setup.md#traffic-between-the-applications)). |

@@ -41,7 +41,7 @@ Bind every application to `127.0.0.1` on its own port. Only the reverse proxy li
 
 | Application | Bind to | How |
 |---|---|---|
-| Solvro website | `127.0.0.1:8090` | `FRONTEND_PORT=8090` when you run `setup.sh`. The default `80` collides with the proxy. |
+| Solvro website | `127.0.0.1:8090` | Answer the installer's address question with your `https://` address and it picks `8090` itself. The default `80` for a `http://localhost` install collides with the proxy. |
 | Solvro API | `127.0.0.1:3000` | `BACKEND_PORT`, default `3000`. The website reaches the API by itself, so the proxy does not need this port. |
 | iTop | `127.0.0.1:8000` | Its compose file or web server. |
 | Outline | `127.0.0.1:3100` | `PORT=3100` and a `127.0.0.1:3100:3100` port mapping. |
@@ -62,7 +62,7 @@ Then tell each application its public address:
 
 | Application | Setting |
 |---|---|
-| Solvro | In `~/solvro/.env`: `APP_URL=https://solvro.example.com`, `EMBED_FRAME_ANCESTORS=https://docs.example.com`, and `TRUST_PROXY="loopback, uniquelocal"`. Run `docker compose up -d` in `~/solvro`. |
+| Solvro | Run `solvro config set APP_URL=https://solvro.example.com EMBED_FRAME_ANCESTORS=https://docs.example.com TRUST_PROXY="loopback, uniquelocal"` ([Command reference](../../INSTALL.md#command-reference)). |
 | iTop | In iTop's configuration file: `app_root_url` = `https://itop.example.com/` and `behind_reverse_proxy` = `true`. |
 | Outline | `URL=https://docs.example.com`. |
 
@@ -88,8 +88,8 @@ Back up all three applications:
 
 | Symptom | Cause and fix |
 |---|---|
-| `setup.sh` fails to start the website on port 80. | The proxy already uses port 80. Re-run with `FRONTEND_PORT=8090`. |
-| Every guest-link visitor hits the rate limit together. | `TRUST_PROXY` is still `1` behind a second proxy. Set `TRUST_PROXY="loopback, uniquelocal"`. |
+| `setup.sh` fails to start the website on port 80. | The proxy already uses port 80. On a fresh install, re-run with `FRONTEND_PORT=8090` or an `https://` address as the answer to the address question. On an existing install, run `solvro config set FRONTEND_PORT=8090`. |
+| Every guest-link visitor hits the rate limit together. | `TRUST_PROXY` is still `1` behind a second proxy. Run `solvro config set TRUST_PROXY="loopback, uniquelocal"`. |
 | iTop pages load without styles or redirect to the wrong address. | iTop does not know its public address. Set `app_root_url` and `behind_reverse_proxy`. |
 | Outline webhook deliveries never arrive. | Solvro resolves to a private address from Outline. Set `ALLOWED_PRIVATE_IP_ADDRESSES` on Outline. |
 | The server runs out of memory. | iTop is the largest of the three. Check its ticket and user volume against the sizing above, and add RAM. |

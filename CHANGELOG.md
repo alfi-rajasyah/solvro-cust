@@ -15,6 +15,31 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-11-04
+
+### Changed — 2026-11-04 — Version 1.2.0
+
+- The release version is `1.2.0` in `VERSION`, `backend/package.json`, `frontend/package.json` and the image tag in `setup.sh` (`SOLVRO_IMAGE_TAG="v1.2.0"`), so the login page and new installs show and pull 1.2.0, and the `stable` image tag that `solvro update` follows reports it. **Upgrade notes for this release:** servers on an earlier release upgrade once with `git pull` and `bash setup.sh` in their repository checkout, which installs the `solvro` command; later upgrades are `solvro update` (`INSTALL.md`, Upgrade).
+
+### Changed — 2026-11-04 — Simpler fresh install
+
+- **No repository clone needed** (`INSTALL.md`, `README.md`): the installer is fetched from the newest release's backend image (`docker run --rm --entrypoint cat ghcr.io/alfi-rajasyah/solvro-cust-backend:stable /opt/solvro/setup.sh > setup.sh && bash setup.sh`). The registry token only needs `read:packages`.
+- **Three questions instead of eight** (`setup.sh`): a fresh install asks for the admin email, the password, and the address people will open Solvro at. The website port and bind address follow from that address: `https://…` means a TLS proxy or tunnel on the same server, so Solvro listens on `127.0.0.1:8090`; `http://localhost` keeps the old default (`127.0.0.1:80`); any other `http://` address listens on `0.0.0.0` at that address's port. `bash setup.sh --advanced` asks for every setting as before, and a setting given as an environment variable still always wins. `bash setup.sh --help` lists the options.
+- **Prompts no longer fail without a terminal** (`setup.sh`): the installer checked only that `/dev/tty` existed, so under cron, CI or `setsid` its first prompt failed. It now checks that a terminal can be opened and otherwise takes the defaults, as intended.
+- **`ci/check-setup-install.sh`** (run in `ci.yml`) checks the settings a fresh install derives from the address.
+- **Shorter install summary** (`setup.sh`): the closing summary no longer repeats the Google sign-in steps, the backup command or the TLS set-up pointer; they stay in `INSTALL.md` (After install) and `OPERATIONS.md`.
+- `INSTALL.md` gains a command reference for `solvro` and `setup.sh`, with the environment variables the installer reads.
+
+### Added — 2026-11-04 — `solvro update` upgrades a server in one command
+
+- **`setup.sh`** now installs a `solvro` command on the server (`~/solvro/bin/solvro`, linked into `/usr/local/bin` when writable, else `~/.local/bin`), rewritten on every install and update. `solvro update` checks for the newest release, shows the installed and the new version with a link to the release notes, and asks before changing anything (`--yes` skips the question; with no terminal and no `--yes` it stops). It then backs up the database to `~/solvro/backups/` (`--no-backup` skips this), checks that both images of the release are published, and runs the installer that release ships, so compose and `.env` changes are applied the same way as before. It refuses to move a server to an older release. `solvro version` and `solvro backup` are included. Upgrading previously meant `git pull` plus `bash setup.sh` in the repository checkout, and `docker compose pull` looked like an upgrade but did nothing.
+- **`solvro config`** shows the server settings and changes them: `solvro config set APP_URL=https://solvro.acme.com` checks the value with the installer's own checks, saves it to `~/solvro/.env`, regenerates the compose file and restarts only what changed. It covers the address, ports, bind address, published Postgres port, trusted proxies and Outline embedding; `solvro config unset` removes an optional one. Secrets are never shown or changed. If the restart fails (for example, the new port is already taken), the previous settings are restored and started again. Previously this meant editing `.env` by hand, and publishing Postgres meant re-running `setup.sh`.
+- **`stable` image tag** (`.github/workflows/docker-publish.yml`): pushing a final `vX.Y.Z` tag that is the highest release so far now also tags both images `stable` (a backport tag never moves it back); `solvro update` follows it. `latest` still tracks `main`. Servers stay pinned to an exact release in `IMAGE_TAG`.
+- **The backend image carries the installer** at `/opt/solvro/setup.sh` (`backend/Dockerfile`, `backend/release/`): the publish workflow copies `setup.sh` in before building. Local and CI builds carry only a placeholder.
+- **Safer update path in `setup.sh`**: the new `IMAGE_TAG` is saved to `~/solvro/.env` only after its images are pulled, so a failed pull leaves the server pinned to the release it runs. `solvro update` also says so when the installed release is not the one running.
+- **`ci/check-update-cli.sh`** (run in `ci.yml`): checks that the installer writes the command and that `solvro update` runs a release's installer only when it is newer, fully published, confirmed and names the same version, after a backup — including a release whose command is longer than the running one.
+- Servers installed before this release upgrade once with `git pull` and `bash setup.sh` to get the command. `INSTALL.md`, `OPERATIONS.md` and `README.md` describe the new upgrade path and `solvro config`.
+
 ### Added — 2026-11-03 — Link a project to several customers
 
 - The project form lists the project's customers. You can add one, remove one, or choose the primary ("Set as primary"). The list is read-only for anyone who isn't the project's TAM or an owner of one of its customers (`frontend/src/components/ProjectFormModal.tsx`).
