@@ -27,7 +27,8 @@
 // own `setNodeRef`, breaking that column as a drop target) and React 18's
 // lack of ref-as-prop for non-forwardRef function components (rules out
 // refing `<KanbanBoard>` directly too).
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
   Kanban,
@@ -49,14 +50,19 @@ import {
   type ProjectDetail,
   type Task,
   type TaskStatus,
+  type TaskStatusDef,
+  queryKeys,
   useProjectEpics,
   useProjectTasks,
+  useTaskStatuses,
   useUpdateTask,
   useUsers,
 } from "@/lib/queries";
-import { priorityOptions, TASK_STATUS_LABEL } from "@/lib/labels";
+import { priorityOptions, TASK_CATEGORY_GROUP_LABEL } from "@/lib/labels";
+import { STATUS_CATEGORY_ICON } from "@/lib/taskStatuses";
+import { STATUS_TONE_DOT_CLASS } from "@/components/StatusChip";
 import { BoardSkeleton } from "@/components/skeletons";
-import { KANBAN_STATUSES, projectToColumns, sortTasksCanonical } from "./adapter";
+import { columnIdOf, projectToColumns, sortStatusDefsForBoard, sortTasksCanonical } from "./adapter";
 import { TaskCard } from "./cards";
 import { mapCommitToPatch, type KanbanCommitMetaLike } from "./commitMapper";
 import { MobileMoveSheet } from "./MobileMoveSheet";
@@ -70,44 +76,69 @@ import { MobileMoveSheet } from "./MobileMoveSheet";
  * Both `committedValue` and `meta` are fed into the SAME `mapCommitToPatch`
  * the drag path calls (below), so MS-1..MS-3 (scenarios.md section 5) share
  * their position math with CC-2/CC-3 exactly — no hand-rolled position
- * arithmetic here, only a hand-rolled commit *shape*. `meta.appendToStatus`
- * (M2 fix, Phase 2 review) is set to the same `targetStatus` the drag path
+ * arithmetic here, only a hand-rolled commit *shape*. `meta.appendToColumn`
+ * (M2 fix, Phase 2 review) is set to the same target column the drag path
  * derives from `meta.event.over?.id` — the move sheet has no dnd-kit event
  * to read it from, but the semantics are identical: this IS a column-append,
  * so the mapper must anchor on the column's TRUE unfiltered last member, not
  * infer from `committedValue`'s (possibly filtered) visible neighbors.
  */
 function buildColumnAppendCommit(
-  columns: Record<TaskStatus, Task[]>,
+  columns: Record<string, Task[]>,
   task: Task,
-  targetStatus: TaskStatus,
-): { committedValue: Record<TaskStatus, Task[]>; meta: KanbanCommitMetaLike } {
-  const sourceStatus = task.status;
-  const sourceColumn = columns[sourceStatus] ?? [];
+  targetColumnId: string,
+): { committedValue: Record<string, Task[]>; meta: KanbanCommitMetaLike } {
+  const sourceColumnId = columnIdOf({ id: task.statusId });
+  const sourceColumn = columns[sourceColumnId] ?? [];
   const activeIndex = sourceColumn.findIndex((t) => t.id === task.id);
-  const targetColumn = columns[targetStatus] ?? [];
+  const targetColumn = columns[targetColumnId] ?? [];
 
-  const committedValue: Record<TaskStatus, Task[]> = {
+  const committedValue: Record<string, Task[]> = {
     ...columns,
-    [sourceStatus]: sourceColumn.filter((t) => t.id !== task.id),
-    [targetStatus]: [...targetColumn, task],
+    [targetColumnId]: [...targetColumn, task],
   };
+  // The source column may be a collapsed one that isn't on the board at all.
+  if (sourceColumnId in columns) {
+    committedValue[sourceColumnId] = sourceColumn.filter((t) => t.id !== task.id);
+  }
 
   const meta: KanbanCommitMetaLike = {
     kind: "item",
-    activeContainer: sourceStatus,
+    activeContainer: sourceColumnId,
     activeIndex: activeIndex === -1 ? 0 : activeIndex,
-    overContainer: targetStatus,
+    overContainer: targetColumnId,
     overIndex: targetColumn.length,
     previousValue: columns,
-    appendToStatus: targetStatus,
+    appendToColumn: targetColumnId,
   };
 
   return { committedValue, meta };
 }
 
+const COLLAPSED_KEY = "solvro.kanban.collapsedStatuses";
+
+// Per-viewer convenience only (docs/archive/plans/custom-task-statuses.md §3 B3):
+// the board must render the same with storage empty or blocked.
+function readCollapsedIds(): number[] {
+  try {
+    const raw = window.localStorage.getItem(COLLAPSED_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((v): v is number => Number.isInteger(v)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCollapsedIds(ids: number[]): void {
+  try {
+    window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify(ids));
+  } catch {
+    // storage unavailable — the fold just doesn't persist
+  }
+}
+
 /** Per-column "..." menu — copied from ProjectKanban.tsx's `Column` (lines
- * 769-796). Its own component (rather than inline JSX in the KANBAN_STATUSES
+ * 769-796). Its own component (rather than inline JSX in the column
  * map below) so `menuOpen` can be a real `useState` call, not one made from
  * inside an array-map callback. */
 function ColumnMenu({ onAdd }: { onAdd: () => void }) {
@@ -117,7 +148,7 @@ function ColumnMenu({ onAdd }: { onAdd: () => void }) {
       <button
         type="button"
         onClick={() => setMenuOpen((v) => !v)}
-        className="material-symbols-outlined cursor-pointer text-base text-on-surface-variant hover:text-on-surface"
+        className="material-symbols-outlined cursor-pointer rounded text-base text-on-surface-variant hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
         aria-label="Column options"
       >
         more_horiz
@@ -158,9 +189,15 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   const { data: tasks, isLoading, isError, error } = useProjectTasks(project.id);
   const { data: users } = useUsers();
   const { data: epics } = useProjectEpics(project.id);
+  // One board column per workspace status; WIP limits are keyed by status id.
+  const { data: statusDefs, isLoading: defsLoading, isError: defsError } = useTaskStatuses();
+  const allDefs = useMemo(() => sortStatusDefsForBoard(statusDefs ?? []), [statusDefs]);
   const updateTask = useUpdateTask(project.id);
   const [, setSearchParams] = useSearchParams();
-  const [createStatus, setCreateStatus] = useState<TaskStatus | null>(null);
+  const [createDef, setCreateDef] = useState<TaskStatusDef | null>(null);
+  // Done-category columns can be folded away (per viewer, not per project:
+  // the status list is workspace-wide). Stored as def ids.
+  const [collapsedIds, setCollapsedIds] = useState<number[]>(readCollapsedIds);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAssigneeId, setFilterAssigneeId] = useState<number | "">("");
   const [filterPriority, setFilterPriority] = useState<Priority | "">("");
@@ -193,7 +230,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   const columnRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   function scrollToColumn(idx: number) {
-    const clamped = Math.max(0, Math.min(KANBAN_STATUSES.length - 1, idx));
+    const clamped = Math.max(0, Math.min(visibleDefs.length - 1, idx));
     columnRefs.current[clamped]?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
   }
 
@@ -210,7 +247,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   // dragging (columns derive from query data below); during a live drag this
   // holds the vendor's own live-preview arrangement, set by onValueChange,
   // and query-derived updates are ignored until the drag settles.
-  const [liveColumns, setLiveColumns] = useState<Record<TaskStatus, Task[]> | null>(null);
+  const [liveColumns, setLiveColumns] = useState<Record<string, Task[]> | null>(null);
   // B1 fix (Phase 2 review, blocker): true only for the duration of a real
   // drag gesture (set in handleDragStart, cleared in handleDragEnd AND
   // handleDragCancel). A ref, not state, so the write is synchronous within
@@ -220,7 +257,40 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   // releases it on unmount mid-drag (docs/archive/plans/collaboration-and-sharing.md).
   const dragActivity = useDragActivityGuard();
 
+  // Collapsed columns leave the board; only Done-category ones can be collapsed.
+  const collapsedDefs = useMemo(
+    () => allDefs.filter((d) => d.category === "DONE" && collapsedIds.includes(d.id)),
+    [allDefs, collapsedIds],
+  );
+  const visibleDefs = useMemo(
+    () => allDefs.filter((d) => !collapsedDefs.includes(d)),
+    [allDefs, collapsedDefs],
+  );
+  function setCollapsed(defId: number, collapsed: boolean) {
+    setCollapsedIds((prev) => {
+      const next = collapsed ? [...new Set([...prev, defId])] : prev.filter((id) => id !== defId);
+      writeCollapsedIds(next);
+      return next;
+    });
+  }
+
   const topLevelAll = useMemo(() => (tasks ?? []).filter((t) => t.parentTaskId === null), [tasks]);
+
+  // The status list is cached for minutes, so a status an admin added meanwhile
+  // can already be on a task here; its card would have no column and vanish.
+  // Refetch the list once per distinct set of unknown ids (no refetch loop if
+  // the id stays unknown).
+  const qc = useQueryClient();
+  const requestedUnknown = useRef("");
+  useEffect(() => {
+    if (!statusDefs) return;
+    const known = new Set(statusDefs.map((d) => d.id));
+    const unknown = [...new Set(topLevelAll.filter((t) => !known.has(t.statusId)).map((t) => t.statusId))].sort();
+    const sig = unknown.join(",");
+    if (!sig || sig === requestedUnknown.current) return;
+    requestedUnknown.current = sig;
+    void qc.invalidateQueries({ queryKey: queryKeys.taskStatuses });
+  }, [statusDefs, topLevelAll, qc]);
   const subtaskMapAll = useMemo(() => {
     const map = new Map<number, Task[]>();
     for (const t of tasks ?? []) {
@@ -259,9 +329,17 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   const filterActive = filterAssigneeId !== "" || filterPriority !== "" || filterEpicId !== "";
 
   const derivedColumns = useMemo(
-    () => projectToColumns(topLevelAll, isTaskVisible),
-    [topLevelAll, isTaskVisible],
+    () => projectToColumns(topLevelAll, visibleDefs, isTaskVisible),
+    [topLevelAll, visibleDefs, isTaskVisible],
   );
+  // Cards parked in collapsed columns (shown in the "(hidden)" notes).
+  const collapsedCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const t of topLevelAll) {
+      if (isTaskVisible(t)) counts.set(t.statusId, (counts.get(t.statusId) ?? 0) + 1);
+    }
+    return counts;
+  }, [topLevelAll, isTaskVisible]);
   // Authoritative board value: the live projection while dragging, else the
   // query-derived projection (Architecture Decision 5 — "sync resumes at
   // rest" once `liveColumns` is cleared on drag end/cancel below).
@@ -278,7 +356,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   // time this body runs (state changes in an effect's deps always follow the
   // render+commit that produced them).
   useEffect(() => {
-    if (isLoading || isError) return;
+    if (isLoading || isError || defsLoading || defsError) return;
     const root = boardScrollRef.current;
     if (!root) return;
     const observer = new IntersectionObserver(
@@ -296,7 +374,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
       if (el) observer.observe(el);
     }
     return () => observer.disconnect();
-  }, [isLoading, isError]);
+  }, [isLoading, isError, defsLoading, defsError, visibleDefs.map((d) => d.id).join(",")]);
 
   // Vendor's live-preview reshuffles during a drag (dragOver) call this —
   // authoritative while `liveColumns` is non-null.
@@ -319,7 +397,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   // `liveColumns` state itself hasn't re-rendered yet) fixes it: this
   // function only ever writes `liveColumns` for as long as a gesture is
   // actually live.
-  function handleValueChange(next: Record<TaskStatus, Task[]>) {
+  function handleValueChange(next: Record<string, Task[]>) {
     if (!isDraggingRef.current) return;
     setLiveColumns(next);
   }
@@ -382,24 +460,24 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   // wrong-POSITION bug T8 found but left unfixed (a partially-filtered
   // TARGET column whose true last member is hidden anchoring a column-body
   // append on the wrong, visible predecessor) is FIXED below — M2, Phase 2
-  // review — via the explicit `appendToStatus` signal.
+  // review — via the explicit `appendToColumn` signal.
   function handleValueCommit(committedValue: Record<string, Task[]>, meta: KanbanCommitMeta<Task>) {
     const unfilteredGlobalOrder = sortTasksCanonical(topLevelAll);
     // M2 fix: a column-body drop (pointer released on the column's own
     // droppable, not on a card) is only distinguishable from a card-to-card
     // drop by inspecting the raw dnd-kit event — `meta.event.over?.id`
-    // resolves to the column's own id (a KANBAN_STATUSES member) rather than
+    // resolves to the column's own id (a key of `committedValue`) rather than
     // an item id in that case. Passing that through as an explicit
-    // `appendToStatus` signal lets the mapper anchor on the column's TRUE
+    // `appendToColumn` signal lets the mapper anchor on the column's TRUE
     // unfiltered last member instead of inferring (possibly wrongly, under a
     // filter) from the committed arrangement's visible neighbors — see
-    // commitMapper.ts's `KanbanCommitMetaLike.appendToStatus` doc.
+    // commitMapper.ts's `KanbanCommitMetaLike.appendToColumn` doc.
     const overId = meta.event.over?.id;
-    const appendToStatus =
-      overId !== undefined && (KANBAN_STATUSES as readonly string[]).includes(String(overId))
-        ? (String(overId) as TaskStatus)
+    const appendToColumn =
+      overId !== undefined && Object.prototype.hasOwnProperty.call(committedValue, String(overId))
+        ? String(overId)
         : undefined;
-    const result = mapCommitToPatch(unfilteredGlobalOrder, committedValue, { ...meta, appendToStatus });
+    const result = mapCommitToPatch(unfilteredGlobalOrder, committedValue, { ...meta, appendToColumn });
     if (!result) return;
     setActionError(null);
     updateTask.mutate({ id: result.taskId, patch: result.patch }, { onError: onActionError });
@@ -418,9 +496,9 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   // drop, routed through the SAME mapper call the drag path uses above
   // (buildColumnAppendCommit only builds the commit *shape*; mapCommitToPatch
   // still does all the position math), so MS-1..MS-3 match CC-2/CC-3 exactly.
-  function handleMobileMove(task: Task, targetStatus: TaskStatus) {
-    if (targetStatus !== task.status) {
-      const { committedValue, meta } = buildColumnAppendCommit(columns, task, targetStatus);
+  function handleMobileMove(task: Task, target: TaskStatusDef) {
+    if (target.id !== task.statusId) {
+      const { committedValue, meta } = buildColumnAppendCommit(columns, task, columnIdOf(target));
       const unfilteredGlobalOrder = sortTasksCanonical(topLevelAll);
       const result = mapCommitToPatch(unfilteredGlobalOrder, committedValue, meta);
       if (result) {
@@ -450,17 +528,37 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
     );
   }
 
-  if (isLoading) {
-    return <BoardSkeleton columns={KANBAN_STATUSES.length} />;
+  if (isLoading || defsLoading) {
+    return <BoardSkeleton columns={visibleDefs.length || 3} />;
   }
 
-  if (isError) {
+  if (isError || defsError) {
     return (
       <Alert variant="destructive">
-        <AlertDescription>Could not load tasks: {(error as Error).message}</AlertDescription>
+        <AlertDescription>
+          Could not load tasks: {isError ? (error as Error).message : "the status list is unavailable."}
+        </AlertDescription>
       </Alert>
     );
   }
+
+  // Category band above the columns: consecutive visible columns of one
+  // category share a cell spanning them.
+  const bandCells: { category: TaskStatus; span: number; count: number }[] = [];
+  for (const def of visibleDefs) {
+    const count = columns[columnIdOf(def)]?.length ?? 0;
+    const last = bandCells[bandCells.length - 1];
+    if (last && last.category === def.category) {
+      last.span += 1;
+      last.count += count;
+    } else {
+      bandCells.push({ category: def.category, span: 1, count });
+    }
+  }
+  const colCount = visibleDefs.length;
+  const gridCols = `repeat(${colCount}, minmax(${colCount > 3 ? "13rem" : "0"}, 1fr))`;
+  const defaultTodoDef = allDefs.find((d) => d.category === "TODO" && d.isDefault) ?? allDefs[0];
+  const activeDef = visibleDefs[Math.min(activeColIdx, colCount - 1)];
 
   return (
     <>
@@ -471,6 +569,22 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
       )}
       {/* Toolbar row: filter + add task (ProjectKanban.tsx:479-565) */}
       <div className="mb-3 flex items-center justify-end gap-2">
+        {collapsedDefs.length > 0 && (
+          <div className="mr-auto flex min-w-0 flex-wrap items-center gap-2">
+            {collapsedDefs.map((def) => (
+              <button
+                key={def.id}
+                type="button"
+                onClick={() => setCollapsed(def.id, false)}
+                aria-label={`Show ${def.name} column`}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                <span aria-hidden="true" className="material-symbols-outlined text-sm">unfold_more</span>
+                {def.name} · {collapsedCounts.get(def.id) ?? 0} (hidden)
+              </button>
+            ))}
+          </div>
+        )}
         <div className="relative">
           <button
             type="button"
@@ -570,10 +684,10 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
             </>
           )}
         </div>
-        {dragEnabled && (
+        {dragEnabled && defaultTodoDef && (
           <button
             type="button"
-            onClick={() => setCreateStatus("TODO")}
+            onClick={() => setCreateDef(defaultTodoDef)}
             className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 font-display text-xs font-bold text-on-primary hover:bg-primary/90"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
@@ -596,14 +710,14 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
         >
           chevron_left
         </button>
-        <span className="text-sm font-semibold text-on-surface">{TASK_STATUS_LABEL[KANBAN_STATUSES[activeColIdx]]}</span>
+        <span className="text-sm font-semibold text-on-surface">{activeDef?.name}</span>
         <span className="rounded-full bg-surface-container-high px-2 py-0.5 text-meta font-medium text-on-surface-variant">
-          {columns[KANBAN_STATUSES[activeColIdx]].length}
+          {activeDef ? (columns[columnIdOf(activeDef)]?.length ?? 0) : 0}
         </span>
         <button
           type="button"
           onClick={() => scrollToColumn(activeColIdx + 1)}
-          disabled={activeColIdx === KANBAN_STATUSES.length - 1}
+          disabled={activeColIdx >= colCount - 1}
           aria-label="Next column"
           className="material-symbols-outlined text-on-surface-variant disabled:opacity-30"
         >
@@ -611,12 +725,12 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
         </button>
       </div>
       <div className="mb-3 flex items-center justify-center gap-1.5 md:hidden">
-        {KANBAN_STATUSES.map((status, idx) => (
+        {visibleDefs.map((def, idx) => (
           <button
-            key={status}
+            key={def.id}
             type="button"
             onClick={() => scrollToColumn(idx)}
-            aria-label={`Go to ${TASK_STATUS_LABEL[status]} column`}
+            aria-label={`Go to ${def.name} column`}
             className={`h-1.5 w-1.5 rounded-full transition-colors ${
               idx === activeColIdx ? "bg-primary" : "bg-outline-variant"
             }`}
@@ -646,24 +760,47 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
             624-634. */}
         <div
           ref={boardScrollRef}
-          className="flex h-full snap-x snap-mandatory gap-4 overflow-x-auto md:grid md:min-h-0 md:flex-1 md:grid-cols-3 md:overflow-visible md:snap-none"
+          style={{ "--kanban-grid-cols": gridCols } as CSSProperties}
+          className={[
+            "flex h-full snap-x snap-mandatory gap-4 overflow-x-auto md:grid md:min-h-0 md:flex-1 md:snap-none",
+            "md:[grid-template-columns:var(--kanban-grid-cols)] md:grid-rows-[auto_minmax(0,1fr)]",
+            // 4+ columns keep a readable minimum width and scroll sideways.
+            colCount > 3 ? "md:overflow-x-auto" : "md:overflow-visible",
+          ].join(" ")}
         >
+          {/* Category band (md:+ only; below md the pager header names the column). */}
+          {bandCells.map((cell, i) => (
+            <div
+              key={`${cell.category}-${i}`}
+              data-testid="kanban-category-band"
+              data-category={cell.category}
+              style={{ gridColumn: `span ${cell.span}`, gridRow: 1 }}
+              className="mb-2 hidden items-center gap-1.5 border-b border-outline-variant px-1 pb-1.5 text-label-caps uppercase text-on-surface-variant md:flex"
+            >
+              <span aria-hidden="true" className="material-symbols-outlined text-base">
+                {STATUS_CATEGORY_ICON[cell.category]}
+              </span>
+              {TASK_CATEGORY_GROUP_LABEL[cell.category]} · {cell.count}
+            </div>
+          ))}
           <KanbanBoard className="contents">
-            {KANBAN_STATUSES.map((status, idx) => {
-              const columnTasks = columns[status];
-              const wipLimit = project.wipLimits?.[status] ?? null;
-              const overLimit = wipLimit !== null && columnTasks.length > wipLimit;
+            {visibleDefs.map((def, idx) => {
+              const columnId = columnIdOf(def);
+              const columnTasks = columns[columnId] ?? [];
+              const wipLimit = project.wipLimits?.[String(def.id)] ?? null;
+              // Design: amber when the column is at or over its limit.
+              const overLimit = wipLimit !== null && columnTasks.length >= wipLimit;
 
               return (
                 <div
-                  key={status}
+                  key={def.id}
                   ref={(el) => {
                     columnRefs.current[idx] = el;
                   }}
-                  className="w-full shrink-0 snap-center md:w-auto md:shrink md:min-h-0 md:snap-align-none"
+                  className="w-full shrink-0 snap-center md:row-start-2 md:w-auto md:shrink md:min-h-0 md:snap-align-none"
                 >
                   <KanbanColumn
-                    value={status}
+                    value={columnId}
                     // m3 (Phase 2 review): the old board's drop-target ring
                     // highlight had no `transition-all` counterpart to
                     // restore it onto — investigated whether the vendored
@@ -685,7 +822,11 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                   >
                     {/* Column header — stays pinned; the card list below scrolls on its own (md:+) */}
                     <div className="flex items-center gap-2 px-1 pb-1">
-                      <h3 className="text-sm font-bold text-on-surface">{TASK_STATUS_LABEL[status]}</h3>
+                      <span
+                        aria-hidden="true"
+                        className={`h-2 w-2 shrink-0 rounded-full ${STATUS_TONE_DOT_CLASS[def.color]}`}
+                      />
+                      <h3 className="min-w-0 truncate text-sm font-bold text-on-surface">{def.name}</h3>
                       <span
                         className={[
                           "rounded-full px-2 py-0.5 text-meta font-medium",
@@ -698,11 +839,21 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                         {overLimit ? `${columnTasks.length} / ${wipLimit}` : columnTasks.length}
                       </span>
                       <span className="flex-1" />
-                      <ColumnMenu onAdd={() => setCreateStatus(status)} />
+                      {def.category === "DONE" && (
+                        <button
+                          type="button"
+                          onClick={() => setCollapsed(def.id, true)}
+                          aria-label={`Collapse ${def.name} column`}
+                          className="material-symbols-outlined cursor-pointer rounded text-base text-on-surface-variant hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+                        >
+                          unfold_less
+                        </button>
+                      )}
+                      <ColumnMenu onAdd={() => setCreateDef(def)} />
                     </div>
 
                     <KanbanColumnContent
-                      value={status}
+                      value={columnId}
                       className="flex flex-col gap-2.5 md:min-h-0 md:flex-1 md:overflow-y-auto"
                     >
                       {columnTasks.map((task) => (
@@ -790,21 +941,23 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
         </KanbanOverlay>
       </Kanban>
 
-      {createStatus && (
+      {createDef && (
         <TaskFormModal
           mode="create"
-          open={createStatus !== null}
-          onClose={() => setCreateStatus(null)}
+          open={createDef !== null}
+          onClose={() => setCreateDef(null)}
           projectId={project.id}
-          initialStatus={createStatus}
+          initialStatus={createDef.category}
+          initialStatusId={createDef.id}
         />
       )}
 
       {mobileSheetTask && (
         <MobileMoveSheet
           task={mobileSheetTask}
+          defs={allDefs}
           onClose={() => setMobileSheetTask(null)}
-          onMove={(status) => handleMobileMove(mobileSheetTask, status)}
+          onMove={(def) => handleMobileMove(mobileSheetTask, def)}
         />
       )}
     </>

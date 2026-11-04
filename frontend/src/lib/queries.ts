@@ -158,12 +158,39 @@ export interface CustomerDetail extends CustomerSummary {
   services: CustomerServiceAssignment[];
 }
 
-// Per-status-column WIP cap. null (or an absent key) means "no limit".
-// Visual only — see ProjectKanban's amber count-pill logic.
-export interface WipLimits {
-  TODO?: number | null;
-  IN_PROGRESS?: number | null;
-  DONE?: number | null;
+// Per-status WIP cap, keyed by TaskStatusDef id (as a string). null (or an
+// absent key) means "no limit". Visual only — see SolvroKanban's amber
+// count-pill logic. Until the board has a column per status, the three
+// category columns read the limit of their category's default status
+// (`defaultStatusIds`).
+export type WipLimits = Record<string, number | null>;
+
+export type StatusTone = "gray" | "primary" | "emerald" | "amber" | "violet";
+
+// A workspace task status (docs/archive/plans/custom-task-statuses.md §1):
+// one of the three fixed categories plus a name and colour. `GET /task-statuses`.
+export interface TaskStatusDef {
+  id: number;
+  name: string;
+  category: TaskStatus;
+  /**
+   * Tone key (not a hex), so the chip keeps its theme-aware bg/text pair:
+   * gray | primary | emerald | amber | violet. "primary" is the tint
+   * StatusChip calls its "blue" tone. Never a red (a status must not read as an error).
+   */
+  color: StatusTone;
+  position: number;
+  isDefault: boolean;
+}
+
+/** The slice of a status every task payload carries (display only). */
+export type TaskStatusRef = Pick<TaskStatusDef, "id" | "name" | "color" | "category" | "position">;
+
+/** category -> the id of that category's default status (WIP limits key on it). */
+export function defaultStatusIds(defs: readonly TaskStatusDef[] | undefined): Partial<Record<TaskStatus, number>> {
+  const out: Partial<Record<TaskStatus, number>> = {};
+  for (const d of defs ?? []) if (d.isDefault) out[d.category] = d.id;
+  return out;
 }
 
 // Server-computed health block on GET /projects, GET /projects/:id and the
@@ -180,6 +207,14 @@ export interface ProjectHealth {
   endDate: string | null;
 }
 
+/** One customer a project belongs to (docs/archive/plans/multi-customer-projects.md). */
+export interface ProjectCustomerLink {
+  id: number;
+  name: string;
+  tamId?: number | null;
+  isPrimary: boolean;
+}
+
 export interface ProjectSummary {
   id: number;
   name: string;
@@ -188,7 +223,6 @@ export interface ProjectSummary {
   outlineUrl: string | null;
   status: ProjectStatus;
   tamId: number;
-  customerId: number | null;
   wipLimits: WipLimits | null;
   /** Administrative container (e.g. Opty Timelines) — hidden from portfolio roll-ups. */
   excludeFromPortfolio: boolean;
@@ -197,7 +231,13 @@ export interface ProjectSummary {
   createdAt: string;
   updatedAt: string;
   tam: { id: number; username: string };
-  customer: { id: number; name: string } | null;
+  /** Every linked customer, primary first (docs/archive/plans/multi-customer-projects.md). */
+  customers: ProjectCustomerLink[];
+  /** The primary link, or null when the project has no customer. */
+  primaryCustomer: ProjectCustomerLink | null;
+  /** On a customer's project list only: is THIS customer the project's primary, and is it shared. */
+  isPrimary?: boolean;
+  isShared?: boolean;
   _count: { tasks: number };
   /** Optional so hand-built fixtures and mutation responses (bare rows) still type-check. */
   health?: ProjectHealth;
@@ -207,8 +247,6 @@ export interface ProjectDetail extends ProjectSummary {
   /** Present on GET /projects/:id; adds the baseline slip (whole days, null without a baseline). */
   health?: ProjectHealth & { slipDays: number | null };
   tam: { id: number; username: string; email: string; avatarUrl?: string | null };
-  /** `tamId` is the customer's owner (null = unowned). */
-  customer: { id: number; name: string; tamId?: number | null } | null;
   baselineLockedBy: { id: number; username: string } | null;
   services: ProjectServiceAssignment[];
 }
@@ -311,7 +349,10 @@ export interface Task {
   projectId: number;
   title: string;
   description: string | null;
+  /** The status CATEGORY — always equals `statusDef.category`. */
   status: TaskStatus;
+  statusId: number;
+  statusDef: TaskStatusRef;
   priority: Priority;
   startDate: string | null;
   dueDate: string | null;
@@ -361,6 +402,7 @@ export interface SearchTaskHit {
   id: number;
   title: string;
   status: TaskStatus;
+  statusDef: TaskStatusRef;
   projectId: number;
   projectName: string;
 }
@@ -417,6 +459,25 @@ export interface OverviewResponse {
   // OPEN risks on projects in scope. Same visibility scope as the rest of
   // the response (backend/src/routes/overview.ts).
   workCounts: WorkCounts;
+  // Picker options for the Overview's TAM / Assignee filters: the distinct
+  // TAMs and open-task assignees inside the caller's visible scope.
+  people: OverviewPeople;
+}
+
+export interface OverviewPerson {
+  id: number;
+  username: string;
+}
+
+export interface OverviewPeople {
+  tams: OverviewPerson[];
+  assignees: OverviewPerson[];
+}
+
+/** Person filters of GET /overview; both optional, AND-composed server-side. */
+export interface OverviewFilters {
+  tamId?: number;
+  assigneeId?: number;
 }
 
 export interface WorkCounts {
@@ -496,11 +557,16 @@ export interface Risk {
 }
 
 export interface TasksFilter {
+  /** A whole category (`?status=`). */
   status?: TaskStatus;
+  /** One workspace status (`?statusId=`). */
+  statusId?: number;
   priority?: Priority;
   assignedToId?: number;
   labelId?: number;
   customerId?: number;
+  /** Tasks on projects whose TAM is this user. */
+  tamId?: number;
   overdue?: boolean;
   /** true = hide DONE tasks (open work only). */
   open?: boolean;
@@ -652,7 +718,13 @@ export interface DailyReviewProject {
   // The backend filters to `dueDate !== null` before building this list
   // (routes/dailyReview.ts) — always present here, unlike Task.dueDate
   // elsewhere in this file.
-  overdueTasks: { id: number; title: string; dueDate: string; status: TaskStatus }[];
+  overdueTasks: {
+    id: number;
+    title: string;
+    dueDate: string;
+    status: TaskStatus;
+    statusDef: TaskStatusRef;
+  }[];
   openRisks: {
     id: number;
     description: string;
@@ -703,6 +775,7 @@ export interface ProjectNotesWindow {
 }
 
 export const queryKeys = {
+  taskStatuses: ["task-statuses"] as const,
   // Outline base URL for every signed-in user (sidebar link); the admin
   // settings live under adminQueryKeys.outlineSettings.
   outlineConfig: ["outline", "config"] as const,
@@ -851,7 +924,7 @@ export const queryKeys = {
   itopContacts: (customerId: number) => ["itop", "customers", customerId, "contacts"] as const,
 };
 
-export function useOverview() {
+export function useOverview(filters: OverviewFilters = {}) {
   // The portfolio block's isOverdue/daysOverdue are badged against the
   // CALLER's local calendar day (backend/src/lib/dateBoundary.ts) — sent on
   // every request since the block is always present in the response. `today`
@@ -864,9 +937,13 @@ export function useOverview() {
   // not a background timer nobody asked for.)
   const today = dateToDay(new Date())!;
   return useQuery({
-    queryKey: [...queryKeys.overview, today],
-    queryFn: ({ signal }) =>
-      apiRequest<OverviewResponse>(`/overview?today=${today}`, { signal }),
+    queryKey: [...queryKeys.overview, today, filters.tamId ?? null, filters.assigneeId ?? null],
+    queryFn: ({ signal }) => {
+      const params = new URLSearchParams({ today });
+      if (filters.tamId) params.set("tamId", String(filters.tamId));
+      if (filters.assigneeId) params.set("assigneeId", String(filters.assigneeId));
+      return apiRequest<OverviewResponse>(`/overview?${params.toString()}`, { signal });
+    },
     // The day-boundary key change (above) shouldn't flash a loading
     // skeleton on every render after midnight — keep showing the previous
     // day's data while the new key's request resolves in the background.
@@ -930,6 +1007,16 @@ export function useUsers(enabled = true) {
     queryFn: ({ signal }) => apiRequest<UserSummary[]>("/users", { signal }),
     staleTime: 60_000,
     enabled,
+  });
+}
+
+// The workspace-wide status list. Changes only through an admin save, so a long
+// stale time is fine.
+export function useTaskStatuses() {
+  return useQuery({
+    queryKey: queryKeys.taskStatuses,
+    queryFn: ({ signal }) => apiRequest<TaskStatusDef[]>("/task-statuses", { signal }),
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -1380,10 +1467,12 @@ function invalidateProjectHealth(qc: QueryClient, projectId: number) {
 function tasksQueryString(filter: TasksFilter, offset = 0): string {
   const params = new URLSearchParams();
   if (filter.status) params.set("status", filter.status);
+  if (filter.statusId) params.set("statusId", String(filter.statusId));
   if (filter.priority) params.set("priority", filter.priority);
   if (filter.assignedToId) params.set("assignedToId", String(filter.assignedToId));
   if (filter.labelId) params.set("labelId", String(filter.labelId));
   if (filter.customerId) params.set("customerId", String(filter.customerId));
+  if (filter.tamId) params.set("tamId", String(filter.tamId));
   if (filter.overdue) {
     params.set("overdue", "true");
     // The server badges "overdue" against the CALLER's local calendar day,
@@ -1437,7 +1526,8 @@ export interface CreateProjectInput {
   /** Optional http(s) link to the project's Outline page; null for none. Validated server-side. */
   outlineUrl?: string | null;
   tamId?: number;
-  customerId: number;
+  /** At least one link, exactly one primary. */
+  customers?: { id: number; isPrimary: boolean }[];
   status?: ProjectStatus;
   wipLimits?: WipLimits | null;
   excludeFromPortfolio?: boolean;
@@ -1451,7 +1541,7 @@ export interface CreateProjectInput {
 // never surfaced as a runtime bug, but a caller trusting the type to read
 // e.g. `.tam.username` off a freshly-created project would silently get
 // `undefined` with no type error to catch it.
-export type CreatedProject = Omit<ProjectSummary, "tam" | "customer" | "_count">;
+export type CreatedProject = Omit<ProjectSummary, "tam" | "_count">;
 
 export function useCreateProject() {
   const qc = useQueryClient();
@@ -1481,7 +1571,8 @@ export interface UpdateProjectInput {
   outlineUrl?: string | null;
   status?: ProjectStatus;
   tamId?: number;
-  customerId?: number;
+  /** Owner-only: replaces the link set (at least one, exactly one primary). */
+  customers?: { id: number; isPrimary: boolean }[];
   wipLimits?: WipLimits | null;
   excludeFromPortfolio?: boolean;
 }
@@ -1669,7 +1760,10 @@ export function useUpdateProjectServices(projectId: number) {
 export interface UpdateTaskInput {
   title?: string;
   description?: string | null;
+  /** A bare category: maps to that category's default status (or no change if it is the current one). */
   status?: TaskStatus;
+  /** A workspace status; the server derives `status` from it. */
+  statusId?: number;
   priority?: Priority;
   startDate?: string | null;
   dueDate?: string | null;
@@ -1911,7 +2005,34 @@ export function useUpdateTask(projectId: number) {
                     }
                   : t,
               );
-        qc.setQueryData<Task[]>(queryKeys.projectTasks(projectId), withLabels);
+        // Keep `statusId` / `statusDef` consistent with the status the patch
+        // names, like the server does: `statusId` wins; a bare category that is
+        // not the current one maps to that category's default status.
+        const defs = qc.getQueryData<TaskStatusDef[]>(queryKeys.taskStatuses);
+        const withStatusDef = withLabels.map((t) => {
+          if (t.id !== id || !defs) return t;
+          const def =
+            patch.statusId !== undefined
+              ? defs.find((d) => d.id === patch.statusId)
+              : patch.status !== undefined && patch.status !== current?.status
+                ? defs.find((d) => d.isDefault && d.category === patch.status)
+                : undefined;
+          return def
+            ? {
+                ...t,
+                status: def.category,
+                statusId: def.id,
+                statusDef: {
+                  id: def.id,
+                  name: def.name,
+                  color: def.color,
+                  category: def.category,
+                  position: def.position,
+                },
+              }
+            : t;
+        });
+        qc.setQueryData<Task[]>(queryKeys.projectTasks(projectId), withStatusDef);
       }
       return { prev, prevEpicId: current?.epicId ?? null };
     },
@@ -2020,6 +2141,8 @@ export interface CreateTaskInput {
   title: string;
   description?: string;
   status?: TaskStatus;
+  /** A workspace status; wins over `status` (the server derives the category from it). */
+  statusId?: number;
   priority?: Priority;
   startDate?: string | null;
   dueDate?: string | null;
@@ -2032,6 +2155,8 @@ export interface CreateTaskInput {
   // Epics (docs/archive/plans/epics-spec.md §4/§5) — only meaningful for a
   // top-level task; the backend rejects it alongside `parentTaskId`.
   epicId?: number | null;
+  // Pins an iTop ticket at creation (docs/archive/plans/subtask-itop-tickets.md Task 5).
+  itopTicketRef?: string | null;
 }
 
 export function useCreateTask(projectId: number) {
@@ -3114,6 +3239,8 @@ export interface ItopTicketRow {
   slaTtoPassed: boolean;
   slaTtrPassed: boolean;
   resolutionDate: string | null;
+  /** The Solvro customer the ticket is linked to (null when unlinked). */
+  customerId: number | null;
   isMine: boolean;
 }
 
@@ -3197,6 +3324,20 @@ export function useRemoveMyItopToken() {
   });
 }
 
+function fetchCustomerTickets(
+  customerId: number,
+  scope: ItopTicketScope,
+  cls: ItopTicketClass | undefined,
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams({ scope });
+  if (cls) params.set("class", cls);
+  return apiRequest<CustomerTicketsResponse>(
+    `/itop/customers/${customerId}/tickets?${params.toString()}`,
+    { signal },
+  );
+}
+
 export function useCustomerTickets(
   customerId: number,
   {
@@ -3208,14 +3349,7 @@ export function useCustomerTickets(
 ) {
   return useQuery({
     queryKey: queryKeys.customerTickets(customerId, scope, cls),
-    queryFn: ({ signal }) => {
-      const params = new URLSearchParams({ scope });
-      if (cls) params.set("class", cls);
-      return apiRequest<CustomerTicketsResponse>(
-        `/itop/customers/${customerId}/tickets?${params.toString()}`,
-        { signal },
-      );
-    },
+    queryFn: ({ signal }) => fetchCustomerTickets(customerId, scope, cls, signal),
     enabled,
     staleTime: 30_000,
     // The first `refetchInterval` in the app (frontend/CLAUDE.md's Task 1.8
@@ -3241,13 +3375,38 @@ export function useCustomerTickets(
 export function useItopCustomerMapped(
   customerId: number | null,
   { enabled = true }: { enabled?: boolean } = {},
-): boolean {
+): { mapped: boolean; known: boolean; isError: boolean } {
   const query = useCustomerTickets(customerId ?? -1, {
     scope: "ongoing",
     enabled: enabled && customerId !== null,
     poll: false,
   });
-  return query.data?.mapped === true;
+  return { mapped: query.data?.mapped === true, known: query.data !== undefined, isError: query.isError };
+}
+
+// Which of a project's linked customers are mapped to an iTop organisation
+// (docs/archive/plans/multi-customer-projects.md, 7.3). Shares the exact query
+// key of `useCustomerTickets(id, { scope: "ongoing" })`, so it reuses that
+// cache. `ids` empty = no lookups (single-customer projects never call this
+// with more than one id).
+export function useItopMappedCustomerIds(
+  ids: readonly number[],
+  { enabled = true }: { enabled?: boolean } = {},
+): { mappedIds: Set<number>; known: boolean } {
+  const results = useQueries({
+    queries: ids.map((customerId) => ({
+      queryKey: queryKeys.customerTickets(customerId, "ongoing", undefined),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        fetchCustomerTickets(customerId, "ongoing", undefined, signal),
+      enabled,
+      staleTime: 30_000,
+    })),
+  });
+  const mappedIds = new Set<number>();
+  results.forEach((r, i) => {
+    if (r.data?.mapped === true) mappedIds.add(ids[i]);
+  });
+  return { mappedIds, known: results.every((r) => r.data !== undefined || r.isError) };
 }
 
 export function useRequestItopRefresh() {
@@ -3288,14 +3447,36 @@ export function useRequestItopRefresh() {
 // (`not_found`, covering unknown/hidden/unmapped alike per
 // routes/itop.ts) is an expected steady state (the ref hasn't synced yet, or
 // never will), not a transient failure worth retrying.
-export function useItopTicketByRef(ref: string | null) {
+export function useItopTicketByRef(ref: string | null, { enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.itopTicketByRef(ref ?? ""),
     queryFn: ({ signal }) =>
       apiRequest<ItopTicketRow>(`/itop/tickets/by-ref/${encodeURIComponent(ref ?? "")}`, {
         signal,
       }),
-    enabled: !!ref,
+    enabled: !!ref && enabled,
+    retry: false,
+    staleTime: 60_000,
+  });
+}
+
+// Batched twin of `useItopTicketByRef` for the project List's Ticket column:
+// one request resolves every pinned ref on screen (GET /itop/tickets/by-refs,
+// snapshot-only, max 200). A ref whose ticket is unknown or hidden maps to
+// null. The ref set is sorted+joined into the key so a reorder doesn't refetch;
+// it shares the `itopTicketByRefRoot` prefix so a refresh invalidates it too.
+export const ITOP_BY_REFS_MAX = 200;
+
+export function useItopTicketsByRefs(refs: readonly string[], { enabled = true }: { enabled?: boolean } = {}) {
+  const unique = [...new Set(refs)].sort().slice(0, ITOP_BY_REFS_MAX);
+  return useQuery({
+    queryKey: [...queryKeys.itopTicketByRefRoot, "batch", unique.join(",")] as const,
+    queryFn: ({ signal }) =>
+      apiRequest<Record<string, ItopTicketRow | null>>(
+        `/itop/tickets/by-refs?refs=${encodeURIComponent(unique.join(","))}`,
+        { signal },
+      ),
+    enabled: enabled && unique.length > 0,
     retry: false,
     staleTime: 60_000,
   });
@@ -3800,11 +3981,11 @@ export interface AdminProject {
   description: string | null;
   status: ProjectStatus;
   tamId: number;
-  customerId: number | null;
   createdAt: string;
   updatedAt: string;
   tam: { id: number; username: string };
-  customer: { id: number; name: string } | null;
+  primaryCustomer: { id: number; name: string } | null;
+  customers: { id: number; name: string; isPrimary: boolean }[];
   _count: { tasks: number };
 }
 
@@ -3818,6 +3999,7 @@ export const adminQueryKeys = {
   itopCustomers: ["admin", "itop", "customers"] as const,
   itopPersons: ["admin", "itop", "persons"] as const,
   outlineSettings: ["admin", "settings", "outline"] as const,
+  taskStatuses: ["admin", "task-statuses"] as const,
 };
 
 export interface AdminRole {
@@ -3826,6 +4008,52 @@ export interface AdminRole {
   permissions: string[];
   userCount: number;
   builtIn: boolean;
+}
+
+// Admin → Task statuses (docs/archive/plans/custom-task-statuses.md §3 B1):
+// the workspace list plus how many tasks sit on each status.
+export type AdminTaskStatusDef = TaskStatusDef & { taskCount: number };
+
+export function useAdminTaskStatuses() {
+  return useQuery({
+    queryKey: adminQueryKeys.taskStatuses,
+    queryFn: ({ signal }) =>
+      apiRequest<AdminTaskStatusDef[]>("/admin/task-statuses", { signal }),
+  });
+}
+
+export interface SaveTaskStatusesInput {
+  statuses: Array<{
+    id?: number;
+    name: string;
+    category: TaskStatus;
+    color: StatusTone;
+    isDefault: boolean;
+  }>;
+  /** removed status id -> kept status id its tasks move to. */
+  moveTo?: Record<string, number>;
+}
+
+// Whole-list save. A rename, recolour, category move or delete changes what
+// every task payload shows, so the task-carrying caches are refreshed too.
+export function useSaveTaskStatuses() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SaveTaskStatusesInput) =>
+      apiRequest<TaskStatusDef[]>("/admin/task-statuses", { method: "PUT", body: input }),
+    onSuccess: async () => {
+      qc.invalidateQueries({ queryKey: queryKeys.taskStatuses });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["epics"] }); // epic stories carry statusDef
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: queryKeys.overview });
+      qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.customers });
+      qc.invalidateQueries({ queryKey: queryKeys.executiveReport() });
+      qc.invalidateQueries({ queryKey: ["search"] }); // every search(q) key
+      await qc.invalidateQueries({ queryKey: adminQueryKeys.taskStatuses });
+    },
+  });
 }
 
 export function useAdminRoles() {

@@ -8,6 +8,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 
@@ -23,7 +24,7 @@ async function projectWithTasks(count: number) {
   const tasks: number[] = [];
   for (let i = 0; i < count; i++) {
     const t = await prisma.task.create({
-      data: { projectId: project.id, title: `T${i}`, status: "TODO", priority: "MEDIUM", position: i },
+      data: { statusId: SID.TODO, projectId: project.id, title: `T${i}`, status: "TODO", priority: "MEDIUM", position: i },
     });
     tasks.push(t.id);
   }

@@ -146,7 +146,7 @@ export function NewOutlineDocDialog({
 
   const busy = create.isPending;
   const inputClass =
-    "w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+    "w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
   const labelClass =
     "mb-1 block font-display text-label-caps uppercase text-on-surface-variant";
 

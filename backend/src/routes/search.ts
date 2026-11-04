@@ -1,9 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth, requirePermission } from "../http/auth.js";
+import { hasPermission, requireAuth, requirePermission } from "../http/auth.js";
 import { validate } from "../http/validate.js";
 import { customerVisibilityFilter, projectVisibilityFilter } from "../lib/visibility.js";
+import { STATUS_DEF_SELECT } from "../lib/taskStatuses.js";
 
 const searchQuerySchema = z.object({
   q: z
@@ -38,7 +39,8 @@ searchRouter.get("/", validate("query", searchQuerySchema), async (req, res) => 
         id: true,
         name: true,
         status: true,
-        customer: { select: { name: true } },
+        // Hit label = the primary customer.
+        customers: { where: { isPrimary: true }, take: 1, select: { customer: { select: { name: true } } } },
       },
       orderBy: { name: "asc" },
       take: GROUP_LIMIT,
@@ -56,13 +58,14 @@ searchRouter.get("/", validate("query", searchQuerySchema), async (req, res) => 
         id: true,
         title: true,
         status: true,
+        statusDef: { select: STATUS_DEF_SELECT },
         projectId: true,
         project: { select: { name: true } },
       },
       orderBy: { title: "asc" },
       take: GROUP_LIMIT,
     }),
-    prisma.customer.findMany({
+    !hasPermission(req.user!, "customer:read") ? Promise.resolve([]) : prisma.customer.findMany({
       // Customer Visibility (docs/plans/customer-visibility-spec.md §5.4,
       // Decision 11): a search hit must obey the same rule as every other
       // customer read — a customer owned by another TAM with no project of
@@ -79,12 +82,13 @@ searchRouter.get("/", validate("query", searchQuerySchema), async (req, res) => 
       id: p.id,
       name: p.name,
       status: p.status,
-      customerName: p.customer?.name ?? null,
+      customerName: p.customers[0]?.customer.name ?? null,
     })),
     tasks: tasks.map((t) => ({
       id: t.id,
       title: t.title,
       status: t.status,
+      statusDef: t.statusDef,
       projectId: t.projectId,
       projectName: t.project.name,
     })),

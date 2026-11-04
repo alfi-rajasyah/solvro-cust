@@ -4,6 +4,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { seedRoles, createAdminAndToken, createUserWithRole } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 
@@ -64,10 +65,10 @@ describe("GET /search", () => {
       data: { name: `${n} Corp`, description: "d" },
     });
     const project = await prisma.project.create({
-      data: { name: `${n} Project`, tamId: userId, customerId: customer.id },
+      data: { name: `${n} Project`, tamId: userId, customers: { create: { customerId: customer.id, isPrimary: true } }},
     });
     const task = await prisma.task.create({
-      data: { title: `${n} Task`, projectId: project.id, position: 0 },
+      data: { statusId: SID.TODO, title: `${n} Task`, projectId: project.id, position: 0 },
     });
 
     const res = await request(app)
@@ -89,6 +90,7 @@ describe("GET /search", () => {
         id: task.id,
         title: `${n} Task`,
         status: "TODO",
+        statusDef: { id: SID.TODO, name: "To do", color: "gray", category: "TODO", position: 0 },
         projectId: project.id,
         projectName: `${n} Project`,
       },
@@ -141,10 +143,10 @@ describe("GET /search", () => {
       data: { name: `${n} other`, tamId: otherTam.userId },
     });
     await prisma.task.create({
-      data: { title: `${n} mine-task`, projectId: mine.id, position: 0 },
+      data: { statusId: SID.TODO, title: `${n} mine-task`, projectId: mine.id, position: 0 },
     });
     await prisma.task.create({
-      data: { title: `${n} other-task`, projectId: other.id, position: 0 },
+      data: { statusId: SID.TODO, title: `${n} other-task`, projectId: other.id, position: 0 },
     });
 
     const tamRes = await request(app)
@@ -232,10 +234,10 @@ describe("GET /search", () => {
       data: { name: `${n} Parent Project`, tamId: userId },
     });
     const topLevel = await prisma.task.create({
-      data: { title: `${n} top-level`, projectId: project.id, position: 0 },
+      data: { statusId: SID.TODO, title: `${n} top-level`, projectId: project.id, position: 0 },
     });
     await prisma.task.create({
-      data: {
+      data: { statusId: SID.TODO,
         title: `${n} sub-task`,
         projectId: project.id,
         position: 0,

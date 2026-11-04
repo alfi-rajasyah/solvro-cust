@@ -5,6 +5,7 @@ import { prisma } from "../src/prisma.js";
 import { computePortfolioRows } from "../src/lib/portfolio.js";
 import { utcStartOfToday } from "../src/lib/dateBoundary.js";
 import { seedRoles, createAdminAndToken } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 // lib/portfolio.ts's isOverdue/daysOverdue. Real contract (2026-08-02 user
 // ruling): overdue = due before the CALLER's calendar day (an optional
@@ -39,7 +40,7 @@ async function createProjectWithDueTask(
     },
   });
   await prisma.task.create({
-    data: {
+    data: { statusId: SID[taskStatus],
       projectId: project.id,
       title: "Task",
       status: taskStatus,

@@ -467,7 +467,7 @@ function NoteEditorForm({
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-sm border border-outline-variant px-3 py-1.5 font-display text-[12px] font-semibold text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="rounded-sm border border-outline-variant px-3 py-1.5 font-display text-[12px] font-semibold text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
             >
               Cancel
             </button>

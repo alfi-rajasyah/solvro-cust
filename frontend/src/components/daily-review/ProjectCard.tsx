@@ -20,15 +20,15 @@ import { Alert, AlertDescription } from "@/components/reui/alert";
 import { ApiError } from "@/lib/api";
 import { scoreClass, scoreLevel } from "@/components/RiskFormModal";
 import { ProjectStatusChip } from "@/components/StatusChip";
+import { StatusSelect } from "@/components/StatusSelect";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { dueDateLabel } from "@/lib/dailyReviewStats";
 import { dayFromIso } from "@/lib/dateField";
 import { fmtTime } from "@/lib/formatDate";
-import { riskStatusOptions, taskStatusOptions } from "@/lib/labels";
+import { riskStatusOptions } from "@/lib/labels";
 import {
   type DailyReviewProject,
   type RiskStatus,
-  type TaskStatus,
   useAddProjectNote,
   useDeleteProjectNote,
   useMarkProjectReviewed,
@@ -186,7 +186,7 @@ export function ProjectCard({
               type="button"
               onClick={() => markReviewed.mutate({ reviewDate: today })}
               disabled={markReviewed.isPending}
-              className="rounded-sm border border-outline-variant px-2.5 py-1 text-meta font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="rounded-sm border border-outline-variant px-2.5 py-1 text-meta font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
             >
               Mark reviewed
             </button>
@@ -248,33 +248,21 @@ export function ProjectCard({
                                   due {dueDateLabel(t.dueDate)}
                                 </span>
                               )}
-                              <Select
-                                items={taskStatusOptions}
-                                value={t.status}
-                                onValueChange={(v) => {
+                              <StatusSelect
+                                value={t.statusDef.id}
+                                fallback={t.statusDef}
+                                onChange={(def) => {
                                   setActionError(null);
                                   updateTask.mutate(
-                                    { id: t.id, patch: { status: v as TaskStatus } },
+                                    { id: t.id, patch: { statusId: def.id } },
                                     { onError: onActionError },
                                   );
                                 }}
                                 disabled={pending}
-                              >
-                                <SelectTrigger
-                                  size="sm"
-                                  className="w-auto shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                                  aria-label="Task status"
-                                >
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent align="end">
-                                  {taskStatusOptions.map((o) => (
-                                    <SelectItem key={o.value} value={o.value}>
-                                      {o.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                ariaLabel="Task status"
+                                className="w-auto shrink-0"
+                                align="end"
+                              />
                             </li>
                           );
                         })}
@@ -306,7 +294,7 @@ export function ProjectCard({
                               >
                                 <SelectTrigger
                                   size="sm"
-                                  className="w-auto shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                                  className="w-auto shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
                                   aria-label="Risk status"
                                 >
                                   <SelectValue />

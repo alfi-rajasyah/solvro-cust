@@ -364,6 +364,26 @@ describe("describeActivity - project TAM", () => {
     );
   });
 
+  it("customers change reads as a from/to name list", () => {
+    const project = (changes: Record<string, unknown>) =>
+      ev({ entityType: "project", entityLabel: "Acme rollout", action: "updated", changes });
+    expect(
+      text(project({ customers: { from: ["Bank Sinar", "Telkomsel"], to: ["Bank Sinar", "Telkomsel", "Zeta"] } })),
+    ).toBe("maya.putri changed the project customers from Bank Sinar, Telkomsel to Bank Sinar, Telkomsel, Zeta");
+    expect(text(project({ customers: { from: ["Acme"], to: ["Acme", "Beta"] }, status: { from: "ACTIVE", to: "ON_HOLD" } }))).toBe(
+      "maya.putri updated the project: customers from Acme to Acme, Beta, status from Active to On hold",
+    );
+  });
+
+  it("a shared project's creation names its customers", () => {
+    const created = (customers: unknown) =>
+      ev({ entityType: "project", entityLabel: "DC2 Interconnect", changes: { tam: { id: 1, username: "ana" }, customers } });
+    expect(text(created(["Bank Sinar", "Telkomsel"]))).toBe(
+      "maya.putri created the project DC2 Interconnect with customers Bank Sinar and Telkomsel",
+    );
+    expect(text(created(["A", "B", "C"]))).toBe("maya.putri created the project DC2 Interconnect with customers A, B and C");
+  });
+
   it("project created with its TAM and customer still reads as a plain creation", () => {
     const created = ev({
       entityType: "project",

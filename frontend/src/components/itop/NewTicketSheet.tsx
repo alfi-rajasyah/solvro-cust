@@ -15,7 +15,7 @@ import {
   type ItopTicketClass,
 } from "@/lib/queries";
 
-const LABEL_CLASS = "mb-1 block text-[12px] font-bold uppercase tracking-wider text-on-surface-variant";
+const LABEL_CLASS = "mb-1.5 block text-label-caps uppercase text-on-surface-variant";
 const FIELD_CLASS =
   "w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden";
 
@@ -31,6 +31,9 @@ export function NewTicketSheet({
   onCreated,
   initialTitle,
   initialDescription,
+  pinTarget = false,
+  organisations = [],
+  organisationLabel = null,
 }: {
   open: boolean;
   onClose: () => void;
@@ -48,11 +51,24 @@ export function NewTicketSheet({
    * `useState`'s initial value, not a `useEffect` sync. */
   initialTitle?: string;
   initialDescription?: string;
+  /** True when the caller pins the new ref to a task/row, so the stale-create notice tells the user to pin it after the next sync. */
+  pinTarget?: boolean;
+  /**
+   * A project linked to several iTop-mapped customers: the organisations the
+   * ticket can be created under. `customerId` is the default pick; with fewer
+   * than two entries no picker is shown and the sheet behaves as before
+   * (docs/archive/plans/multi-customer-projects.md, 7.3).
+   */
+  organisations?: ReadonlyArray<{ id: number; name: string }>;
+  /** Read-only "Organisation: X" line when the default org is not the primary and no picker is shown. */
+  organisationLabel?: string | null;
 }) {
+  // Fresh instance per open (see the prop notes above), so `customerId` only seeds the pick.
+  const [orgId, setOrgId] = useState(customerId);
   const { data: myToken } = useMyItopToken();
-  const { data: contacts, isLoading: contactsLoading } = useItopContacts(customerId);
+  const { data: contacts, isLoading: contactsLoading } = useItopContacts(orgId);
   const { data: services } = useItopServices();
-  const createTicket = useCreateTicket(customerId);
+  const createTicket = useCreateTicket(orgId);
 
   const [ticketClass, setTicketClass] = useState<ItopTicketClass>("UserRequest");
   const [title, setTitle] = useState(initialTitle ?? "");
@@ -67,6 +83,7 @@ export function NewTicketSheet({
   function reset() {
     setTicketClass("UserRequest");
     setTitle(initialTitle ?? "");
+    setOrgId(customerId);
     setCallerId("");
     setServiceId("");
     setDescription(initialDescription ?? "");
@@ -90,7 +107,7 @@ export function NewTicketSheet({
     setStaleNotice(null);
     createTicket.mutate(
       {
-        customerId,
+        customerId: orgId,
         class: ticketClass,
         title: title.trim(),
         description: description.trim(),
@@ -100,7 +117,9 @@ export function NewTicketSheet({
       {
         onSuccess: (result) => {
           if (isStaleTicketCreate(result)) {
-            setStaleNotice(`Created in iTop as #${result.id} — it appears after the next sync.`);
+            setStaleNotice(pinTarget
+              ? `Created in iTop as #${result.id}, pin it after the next sync.`
+              : `Created in iTop as #${result.id} — it appears after the next sync.`);
             return;
           }
           const created = { id: result.id, ref: result.ref };
@@ -148,6 +167,38 @@ export function NewTicketSheet({
       }
     >
       <div className="space-y-3">
+        {myToken?.personName && (
+          <p className="text-meta text-on-surface-variant">
+            Created as {myToken.personName} with your personal iTop token
+          </p>
+        )}
+        {organisations.length > 1 && (
+          <label className="block">
+            <span className={LABEL_CLASS}>Organisation</span>
+            <select
+              value={orgId}
+              onChange={(e) => {
+                setOrgId(Number(e.target.value));
+                // Contacts belong to the organisation: the old caller is not valid for the new one.
+                setCallerId("");
+              }}
+              className={FIELD_CLASS}
+            >
+              {organisations.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {organisations.length <= 1 && organisationLabel && (
+          <p className="text-meta text-on-surface-variant">
+            Organisation: <span className="font-semibold text-on-surface">{organisationLabel}</span>
+          </p>
+        )}
+
         <label className="block">
           <span className={LABEL_CLASS}>Type</span>
           <select
@@ -241,9 +292,6 @@ export function NewTicketSheet({
         </p>
       )}
 
-      {myToken?.personName && (
-        <p className="mt-3 text-[12px] text-on-surface-variant">Created in iTop as {myToken.personName}</p>
-      )}
     </Modal>
   );
 }

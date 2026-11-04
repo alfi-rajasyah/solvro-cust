@@ -18,6 +18,7 @@ import {
 import { requireAppUrl } from "../src/lib/outline/requireAppUrl.js";
 import { purgeExpiredOutlineStates } from "../src/lib/outline/oauthState.js";
 import { createAdminAndToken, createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
@@ -133,8 +134,8 @@ describe("OutlineMention", () => {
     const project = await prisma.project.create({
       data: { name: uniq("Proj"), tamId: tam.userId, status: "ACTIVE" },
     });
-    const task = await prisma.task.create({ data: { projectId: project.id, title: "T" } });
-    const task2 = await prisma.task.create({ data: { projectId: project.id, title: "T2" } });
+    const task = await prisma.task.create({ data: { statusId: SID.TODO, projectId: project.id, title: "T" } });
+    const task2 = await prisma.task.create({ data: { statusId: SID.TODO, projectId: project.id, title: "T2" } });
     return { project, task, task2 };
   }
   const mention = (outlineDocId: string, rest: { projectId?: number | null; taskId?: number | null }) => ({

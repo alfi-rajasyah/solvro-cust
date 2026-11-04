@@ -126,6 +126,8 @@ export interface FakeItopState {
   personalTokens: Map<number, PersonalTokenRecord>;
   /** Classes `core/get` refuses, to simulate a missing extension (e.g. Time Tracking). */
   disabledClasses: Set<string>;
+  /** When true the `:current_contact_id` OQL binding is refused (code 100), like an iTop that doesn't support it. */
+  currentContactUnsupported: boolean;
   /** Every write attempt (core/create|update|apply_stimulus), in order — asserts a route never writes with the application token, and (via `comment`) that every write sends one, per a real iTop 3.2.2 install's refusal of core/update and core/apply_stimulus with no comment at all. Recorded regardless of outcome (including a refusal), keyed by the raw Auth-Token header value. `comment` is whatever the request sent, `undefined` when it sent none at all. */
   writeLog: Array<{ token: string; operation: string; comment?: string }>;
   /**
@@ -156,6 +158,7 @@ export function createEmptyState(): FakeItopState {
     lnkPersonToTeam: new Map(),
     personalTokens: new Map(),
     disabledClasses: new Set(),
+    currentContactUnsupported: false,
     failNextGetForToken: null,
     writeLog: [],
     nextId: 1,
@@ -744,7 +747,17 @@ export function createFakeItop(seed: FakeItopState = createEmptyState()): FakeIt
         matched = collection.filter((entry) => entry.id === id);
       } else {
         try {
-          const { conditions } = parseOql(String(key));
+          let oqlKey = String(key);
+          if (oqlKey.includes(":current_contact_id")) {
+            // Real iTop binds this to the Person behind the asking token —
+            // exactly the token owner, whatever the profile can read.
+            if (state.currentContactUnsupported) {
+              sendEnvelope(res, { code: 100, message: "Invalid query: unknown placeholder :current_contact_id" });
+              return;
+            }
+            oqlKey = oqlKey.replace(":current_contact_id", String(token.personId ?? 0));
+          }
+          const { conditions } = parseOql(oqlKey);
           matched = collection.filter((entry) => matchesConditions(entry.fields, conditions));
         } catch (err) {
           sendEnvelope(res, { code: 100, message: err instanceof Error ? err.message : String(err) });

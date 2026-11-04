@@ -3,7 +3,8 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
-import { seedRoles, createUserWithRole } from "./testAuth.js";
+import { seedRoles, createUserWithRole, createAdminAndToken } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 // GET /tasks filters added for the work views: open, dueFrom/dueTo (inclusive
 // day range), sort=due and the X-Total-Count header. A TAM token scopes the
@@ -21,7 +22,7 @@ async function createTask(overrides: {
   dueDate?: Date | null;
 }): Promise<number> {
   const task = await prisma.task.create({
-    data: {
+    data: { statusId: SID[overrides.status ?? "TODO"],
       projectId,
       title: overrides.title ?? "Task",
       status: overrides.status ?? "TODO",
@@ -171,10 +172,11 @@ describe("GET /tasks — X-Total-Count", () => {
         projectId,
         title: `Bulk ${i}`,
         status: "TODO" as const,
+        statusId: SID.TODO,
         position: i,
       })),
     });
-    await prisma.task.create({ data: { projectId, title: "Done one", status: "DONE" } });
+    await prisma.task.create({ data: { statusId: SID.DONE, projectId, title: "Done one", status: "DONE" } });
 
     const all = await get("");
     expect(all.status).toBe(200);
@@ -190,5 +192,46 @@ describe("GET /tasks — X-Total-Count", () => {
     const res = await get("?open=true");
     expect(res.body).toEqual([]);
     expect(res.headers["x-total-count"]).toBe("0");
+  });
+});
+
+describe("GET /tasks?tamId", () => {
+  it("narrows to tasks on projects whose TAM is that user, and never widens visibility", async () => {
+    const mine = await createTask({ title: "Mine" });
+    const other = await createUserWithRole("TAM");
+    const foreign = await prisma.project.create({
+      data: { name: `Foreign ${Date.now()}-${Math.random()}`, tamId: other.userId, status: "ACTIVE" },
+    });
+    const foreignTask = await prisma.task.create({
+      data: { statusId: SID.TODO, projectId: foreign.id, title: "Foreign", status: "TODO" },
+    });
+
+    const { token: adminToken } = await createAdminAndToken();
+    const asAdmin = await request(app)
+      .get(`/tasks?tamId=${other.userId}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect((asAdmin.body as Array<{ id: number }>).map((t) => t.id)).toEqual([foreignTask.id]);
+
+    // The TAM caller cannot see the other TAM's project even when naming them.
+    expect(await ids(`?tamId=${other.userId}`)).toEqual([]);
+    expect(await ids("")).toEqual([mine]);
+  });
+
+  it("assignedToId without topLevel includes subtasks", async () => {
+    const worker = await createUserWithRole("TAM");
+    const parent = await prisma.task.create({
+      data: { statusId: SID.TODO, projectId, title: "P", status: "TODO", assignedToId: worker.userId },
+    });
+    const sub = await prisma.task.create({
+      data: { statusId: SID.TODO,
+        projectId,
+        title: "S",
+        status: "TODO",
+        parentTaskId: parent.id,
+        assignedToId: worker.userId,
+      },
+    });
+    expect((await ids(`?assignedToId=${worker.userId}`)).sort()).toEqual([parent.id, sub.id].sort());
+    expect(await ids(`?assignedToId=${worker.userId}&topLevel=true`)).toEqual([parent.id]);
   });
 });

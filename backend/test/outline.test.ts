@@ -218,7 +218,7 @@ describe("Project.outlineUrl", () => {
       data: { name: uniq("Cust"), description: "d", tamId: tam.userId, outlineUrl: "https://docs.example.com/cust" },
     });
     const project = await prisma.project.create({
-      data: { name: uniq("Proj"), tamId: tam.userId, customerId: customer.id, status: "ACTIVE" },
+      data: { name: uniq("Proj"), tamId: tam.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE" },
     });
     await prisma.projectMember.create({ data: { projectId: project.id, userId: member.userId } });
     return { tam, member, stranger, pending, customer, project };

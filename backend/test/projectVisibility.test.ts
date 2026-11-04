@@ -10,6 +10,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 
@@ -29,7 +30,7 @@ async function createCustomer(tamId: number | null) {
 
 async function createProject(customerId: number, tamId: number) {
   return prisma.project.create({
-    data: { name: uniq("Project"), tamId, customerId, status: "ACTIVE" },
+    data: { name: uniq("Project"), tamId, ...(customerId != null ? { customers: { create: { customerId, isPrimary: true } } } : {}), status: "ACTIVE" },
   });
 }
 
@@ -94,7 +95,7 @@ describe("projectVisibilityFilter — owned-customer arm (Decision 14)", () => {
   it("the customer's owner can change a task's status on that project (the silent-rollback symptom)", async () => {
     const { owner, p } = await fixture();
     const task = await prisma.task.create({
-      data: { projectId: p.id, title: "Kickoff", status: "TODO" },
+      data: { statusId: SID.TODO, projectId: p.id, title: "Kickoff", status: "TODO" },
     });
     const res = await request(app)
       .patch(`/tasks/${task.id}`)

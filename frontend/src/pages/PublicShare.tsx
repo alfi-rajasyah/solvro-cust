@@ -138,7 +138,7 @@ function GuestError({ error, onRetry }: { error: unknown; onRetry: () => void })
         <button
           type="button"
           onClick={onRetry}
-          className="mt-3 rounded-lg border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface outline-hidden hover:bg-surface-container focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="mt-3 rounded-lg border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface outline-hidden hover:bg-surface-container focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           Try again
         </button>

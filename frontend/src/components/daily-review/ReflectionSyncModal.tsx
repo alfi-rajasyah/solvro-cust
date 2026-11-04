@@ -461,7 +461,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
                 type="button"
                 onClick={addAchievement}
                 disabled={state.achievements.length >= MAX_ACHIEVEMENTS}
-                className="flex items-center gap-1.5 rounded-sm border border-outline-variant px-2.5 py-1.5 text-[12px] font-semibold text-on-surface-variant hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="flex items-center gap-1.5 rounded-sm border border-outline-variant px-2.5 py-1.5 text-[12px] font-semibold text-on-surface-variant hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
               >
                 <span className="material-symbols-outlined text-[16px]" aria-hidden="true">
                   add

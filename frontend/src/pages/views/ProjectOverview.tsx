@@ -146,10 +146,10 @@ export function ProjectOverview() {
           <div className="mt-4 flex flex-wrap gap-4 border-t border-outline-variant pt-3 text-xs text-on-surface-variant">
             <Legend2 swatch="bg-on-surface-variant/40" label="Baseline (planned)" />
             <Legend2 swatch="bg-primary" label="Current (re-planned)" />
-            <Legend2 swatch="bg-emerald-500" label={`Completed today: ${stats.done}/${stats.total}`} />
+            <Legend2 swatch="bg-chip-emerald-text" label={`Completed today: ${stats.done}/${stats.total}`} />
             <span className="ml-auto font-mono">
               Slip:{" "}
-              <span className={sCurve.slipDays > 0 ? "text-error" : "text-emerald-600"}>
+              <span className={sCurve.slipDays > 0 ? "text-error" : "text-chip-emerald-text"}>
                 {sCurve.slipDays > 0 ? `+${sCurve.slipDays}` : sCurve.slipDays} days
               </span>
             </span>
@@ -431,7 +431,7 @@ function Kpi({
 }) {
   const accentClass =
     accent === "emerald"
-      ? "text-emerald-600"
+      ? "text-chip-emerald-text"
       : accent === "error"
         ? "text-error"
         : accent === "primary"
@@ -441,7 +441,7 @@ function Kpi({
     <div className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
       <div className="flex items-center justify-between">
         <span className="text-label-caps uppercase text-on-surface-variant">{label}</span>
-        <span aria-hidden="true" className={`material-symbols-outlined text-base ${accent === "primary" ? "text-primary" : accent === "emerald" ? "text-emerald-600" : accent === "error" ? "text-error" : "text-on-surface-variant"}`}>{icon}</span>
+        <span aria-hidden="true" className={`material-symbols-outlined text-base ${accent === "primary" ? "text-primary" : accent === "emerald" ? "text-chip-emerald-text" : accent === "error" ? "text-error" : "text-on-surface-variant"}`}>{icon}</span>
       </div>
       <div className={`mt-2 font-body text-3xl font-bold tabular-nums ${accentClass}`}>{value}</div>
       {progress !== undefined && (
@@ -505,14 +505,14 @@ function SCurveChart({
           <CartesianGrid stroke="rgb(var(--outline-variant))" strokeDasharray="3 3" vertical={false} />
           <XAxis
             dataKey="label"
-            tick={{ fontSize: 11, fill: "rgb(var(--on-surface-variant))" }}
+            tick={{ fontSize: 12, fill: "rgb(var(--on-surface-variant))" }}
             tickLine={false}
             axisLine={{ stroke: "rgb(var(--outline-variant))" }}
             interval="preserveStartEnd"
             minTickGap={32}
           />
           <YAxis
-            tick={{ fontSize: 11, fill: "rgb(var(--on-surface-variant))" }}
+            tick={{ fontSize: 12, fill: "rgb(var(--on-surface-variant))" }}
             tickLine={false}
             axisLine={{ stroke: "rgb(var(--outline-variant))" }}
             allowDecimals={false}
@@ -527,7 +527,7 @@ function SCurveChart({
               color: "rgb(var(--on-surface))",
               fontSize: 12,
             }}
-            labelStyle={{ fontSize: 11, color: "rgb(var(--on-surface-variant))" }}
+            labelStyle={{ fontSize: 12, color: "rgb(var(--on-surface-variant))" }}
           />
           <Legend wrapperStyle={{ display: "none" }} />
           {todayIndex !== null && (
@@ -539,7 +539,7 @@ function SCurveChart({
                 value: "Today",
                 position: "insideTopRight",
                 fill: "rgb(var(--on-surface-variant))",
-                fontSize: 11,
+                fontSize: 12,
               }}
             />
           )}

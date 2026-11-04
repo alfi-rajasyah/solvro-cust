@@ -1,15 +1,16 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../prisma.js";
-import { requireAuth, requirePermission } from "../http/auth.js";
+import { hasPermission, requireAuth, requirePermission } from "../http/auth.js";
 import { validate } from "../http/validate.js";
-import { resolveDailyReviewScope } from "../lib/dailyReviewScope.js";
+import { groupCustomerIds, resolveDailyReviewScope } from "../lib/dailyReviewScope.js";
 import {
   isValidDayString,
   overdueBoundary,
   utcMidnightOfDayString,
 } from "../lib/dateBoundary.js";
 import { parseWeekKey } from "../lib/isoWeek.js";
+import { STATUS_DEF_SELECT } from "../lib/taskStatuses.js";
 import { computeSlipDays } from "../lib/projectHealth.js";
 
 // One-request payload for the Daily Review page (spec §5.1). Every
@@ -92,7 +93,7 @@ dailyReviewRouter.get(
 
     // Customer-first scope (Decisions 8-10) — shared with GET /overview/badges;
     // see lib/dailyReviewScope.ts.
-    const { customers, projects } = await resolveDailyReviewScope(user);
+    const { customers, projects, ownedCustomerIds } = await resolveDailyReviewScope(user);
     const projectIds = projects.map((p) => p.id);
     const customerIds = customers.map((c) => c.id);
 
@@ -117,7 +118,15 @@ dailyReviewRouter.get(
           dueDate: { lt: overdueBoundaryDate },
         },
         orderBy: { id: "asc" },
-        select: { id: true, projectId: true, title: true, status: true, dueDate: true },
+        select: {
+          id: true,
+          projectId: true,
+          title: true,
+          status: true,
+          dueDate: true,
+          // Display only: the overdue row names its workspace status.
+          statusDef: { select: STATUS_DEF_SELECT },
+        },
       }),
       prisma.section.findMany({
         where: { projectId: { in: projectIds } },
@@ -159,10 +168,12 @@ dailyReviewRouter.get(
       }),
     ]);
 
+    // Operations notes and weekly updates follow `customer:read`.
+    const noteCustomerIds = hasPermission(user, "customer:read") ? customerIds : [];
     const [customerNotes, weeklyUpdates, previousWeeklyUpdates] = await Promise.all([
       prisma.customerNote.findMany({
         where: {
-          customerId: { in: customerIds },
+          customerId: { in: noteCustomerIds },
           noteDate: { gte: weekStartDate, lte: weekEndDate },
         },
         orderBy: [{ noteDate: "asc" }, { id: "asc" }],
@@ -181,7 +192,7 @@ dailyReviewRouter.get(
       // second `SELECT ... WHERE weekly_update_id IN (...)`), not one per
       // row — the per-request call count stays fixed regardless of page size.
       prisma.weeklyUpdate.findMany({
-        where: { customerId: { in: customerIds }, weekStart: weekStartDate },
+        where: { customerId: { in: noteCustomerIds }, weekStart: weekStartDate },
         select: {
           id: true,
           customerId: true,
@@ -220,7 +231,7 @@ dailyReviewRouter.get(
       // the same customerIds, keeping the per-request query count fixed
       // regardless of page size.
       prisma.weeklyUpdate.findMany({
-        where: { customerId: { in: customerIds }, weekStart: previousWeekStartDate },
+        where: { customerId: { in: noteCustomerIds }, weekStart: previousWeekStartDate },
         select: {
           customerId: true,
           weekStart: true,
@@ -275,7 +286,9 @@ dailyReviewRouter.get(
         id: p.id,
         name: p.name,
         status: p.status,
-        customerId: p.customerId,
+        // Legacy single-customer field (= primary link) kept for one release;
+        // grouping below uses every link (docs/archive/plans/multi-customer-projects.md).
+        customerId: p.customers.find((l) => l.isPrimary)?.customerId ?? null,
         baselineLockedAt: p.baselineLockedAt,
         phase: phaseOf(bySection),
         progress: { done, total },
@@ -283,7 +296,13 @@ dailyReviewRouter.get(
           { dueDate: maxes?.dueDate ?? null, baselineDueDate: maxes?.baselineDueDate ?? null },
         ]),
         overdueTasks: (overdueByProject.get(p.id) ?? [])
-          .map((t) => ({ id: t.id, title: t.title, dueDate: t.dueDate, status: t.status })),
+          .map((t) => ({
+            id: t.id,
+            title: t.title,
+            dueDate: t.dueDate,
+            status: t.status,
+            statusDef: t.statusDef,
+          })),
         openRisks: projectRisks.map((r) => ({
           id: r.id,
           description: r.description,
@@ -305,11 +324,18 @@ dailyReviewRouter.get(
       };
     });
 
-    const projectsByCustomerId = groupBy(
-      projectDtos.filter((p) => p.customerId !== null),
-      (p) => p.customerId as number,
-    );
-    const unassignedProjects = projectDtos.filter((p) => p.customerId === null);
+    // A shared project appears under EVERY in-scope customer it is linked to
+    // (one Weekly Sync highlight per customer); "unassigned" = no links at all.
+    const inScopeCustomerIds = new Set(customerIds);
+    const projectsByCustomerId = new Map<number, typeof projectDtos>();
+    projectDtos.forEach((dto, i) => {
+      for (const cid of groupCustomerIds(projects[i], inScopeCustomerIds, ownedCustomerIds)) {
+        const list = projectsByCustomerId.get(cid) ?? [];
+        list.push(dto);
+        projectsByCustomerId.set(cid, list);
+      }
+    });
+    const unassignedProjects = projectDtos.filter((_, i) => projects[i].customers.length === 0);
 
     const customerNotesByCustomer = groupBy(customerNotes, (n) => n.customerId);
     const weeklyUpdateByCustomer = new Map(weeklyUpdates.map((wu) => [wu.customerId, wu]));

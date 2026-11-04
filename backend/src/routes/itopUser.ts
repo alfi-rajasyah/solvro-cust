@@ -141,12 +141,44 @@ itopUserRouter.put(
     const client = makeItopClient(config.baseUrl, token);
     const notYoursMessage = `This token does not belong to an iTop person with your email (${user.email}).`;
 
-    let personResult: ItopGetResult<ItopPersonFields>;
+    // Ownership proof, preferred: `:current_contact_id` is iTop's own binding
+    // for the Person behind the token that is asking, so it resolves to the
+    // token's owner even when the profile cannot read the User or
+    // PersonalToken classes. Accepted only when that Person's email is the
+    // Solvro user's. A refusal/unsupported binding (or zero rows) is
+    // inconclusive and falls back to the email lookup + User/PersonalToken
+    // corroboration below; a transport failure is a 502 either way.
+    let provenByContact = false;
+    let personResult: ItopGetResult<ItopPersonFields> | null = null;
     try {
-      const oql = `SELECT Person WHERE email = '${escapeOqlString(user.email)}'`;
-      personResult = await client.get<ItopPersonFields>("Person", oql, ITOP_PERSON_OUTPUT_FIELDS);
+      const own = await client.get<ItopPersonFields>(
+        "Person",
+        "SELECT Person WHERE id = :current_contact_id",
+        ITOP_PERSON_OUTPUT_FIELDS,
+      );
+      if (own.objects.length === 1) {
+        const ownEmail = (own.objects[0].fields.email ?? "").trim().toLowerCase();
+        if (ownEmail !== user.email.trim().toLowerCase()) {
+          throw new HttpError(400, "itop_token_not_yours", notYoursMessage);
+        }
+        personResult = own;
+        provenByContact = true;
+      }
     } catch (err) {
-      mapTokenCheckError(err);
+      if (err instanceof HttpError) throw err;
+      if (err instanceof ItopError && TRANSPORT_CODES.has(err.code)) {
+        throw new HttpError(502, "itop_unreachable", err.message);
+      }
+      logger.debug({ err: errorMessage(err) }, "iTop :current_contact_id lookup unavailable while saving a personal token; falling back");
+    }
+
+    if (!personResult) {
+      try {
+        const oql = `SELECT Person WHERE email = '${escapeOqlString(user.email)}'`;
+        personResult = await client.get<ItopPersonFields>("Person", oql, ITOP_PERSON_OUTPUT_FIELDS);
+      } catch (err) {
+        mapTokenCheckError(err);
+      }
     }
 
     if (personResult.objects.length !== 1) {
@@ -179,20 +211,25 @@ itopUserRouter.put(
       logger.debug({ err: errorMessage(err) }, "iTop list_operations probe failed while saving a personal token; skipping");
     }
 
-    // Ownership proof — resolved with the user's OWN token, never the
-    // application token. The Person lookup above matches on email, which any
-    // token that can read Person passes, so it does not prove whose token
-    // this is. The proof is the iTop User of that Person and that user's own
-    // PersonalToken (below). When either cannot be read the token is
-    // unverified: refused, unless the deployment opts in with
-    // ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS (src/env.ts) for iTop profiles
-    // that cannot read those classes.
-    const unverifiedMessage =
-      "Solvro could not confirm this token is yours: it cannot read your iTop user account or its personal tokens. " +
-      "Ask your iTop administrator to allow that, or ask your Solvro admin to allow tokens Solvro cannot verify.";
-    const unverified = (reason: string): void => {
+    // Fallback ownership proof — resolved with the user's OWN token, never
+    // the application token. The Person lookup by email matches any token that
+    // can read Person, so on its own it does not prove whose token this is;
+    // the iTop User of that Person and that user's own PersonalToken do. When
+    // `:current_contact_id` already proved ownership (above), these two reads
+    // only supply the expiry and the iTop user id, and a refusal is not fatal.
+    // Otherwise a class that cannot be read leaves the token unverified:
+    // refused, unless the deployment opts in with
+    // ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS (src/env.ts).
+    const unverified = (cls: string, reason: string): void => {
+      if (provenByContact) return;
       if (!env.ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS) {
-        throw new HttpError(400, "itop_token_unverified", unverifiedMessage);
+        throw new HttpError(
+          400,
+          "itop_token_unverified",
+          `Your iTop profile can't read the ${cls} class, so Solvro cannot confirm this token is yours. ` +
+            "Ask your iTop admin to grant read access to User and PersonalToken, or ask your Solvro admin to allow tokens Solvro cannot verify.",
+          { class: cls },
+        );
       }
       logger.info({ email: user.email, reason }, "Accepting an unverified personal iTop token (ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS)");
     };
@@ -208,18 +245,13 @@ itopUserRouter.put(
     } catch (err) {
       logger.debug({ err: errorMessage(err) }, "iTop User lookup failed while saving a personal token");
     }
-    if (resolvedItopUserId === null) unverified("the iTop User of this Person could not be read");
+    if (resolvedItopUserId === null) unverified("User", "the iTop User of this Person could not be read");
 
-    // Ownership corroboration + best-effort expiry, from the SAME
-    // PersonalToken query. Real iTop scopes a personal token's visibility
-    // of this class to its OWN user (see the fake's matching rule in
-    // test/itop/fakeItop.ts), so a token that resolved a Person by email
-    // (which ignores which token asked) but ISN'T actually that person's
-    // own token comes back with ZERO rows here — a signal
-    // list_operations can't give us, since it reports every operation the
-    // server supports regardless of profile. A class that isn't readable at
-    // all (rights, missing extension, ...) is inconclusive, not disproof: the
-    // token is unverified (see above), and if accepted, expiresAt stays null.
+    // Real iTop scopes a personal token's visibility of PersonalToken to its
+    // OWN user (see the fake's matching rule in test/itop/fakeItop.ts), so
+    // a token that resolved a Person by email but isn't that person's own
+    // comes back with ZERO rows — disproof when `:current_contact_id` did not
+    // already settle it. A class that can't be read at all is inconclusive.
     let expiresAt: Date | null = null;
     if (resolvedItopUserId !== null) {
       try {
@@ -229,16 +261,15 @@ itopUserRouter.put(
           ITOP_PERSONAL_TOKEN_OUTPUT_FIELDS,
         );
         if (tokenResult.objects.length === 0) {
-          throw new HttpError(400, "itop_token_not_yours", notYoursMessage);
+          if (!provenByContact) throw new HttpError(400, "itop_token_not_yours", notYoursMessage);
+        } else {
+          const raw = tokenResult.objects[0]?.fields.expiration_date;
+          expiresAt = raw ? parseItopDate(raw, config.timezone) : null;
         }
-        const raw = tokenResult.objects[0]?.fields.expiration_date;
-        // The server's own zone (`config.timezone`), same contract as every
-        // other iTop datetime this integration reads.
-        expiresAt = raw ? parseItopDate(raw, config.timezone) : null;
       } catch (err) {
         if (err instanceof HttpError) throw err;
         logger.debug({ err: errorMessage(err) }, "iTop PersonalToken read failed while saving a personal token");
-        unverified("the PersonalToken class could not be read");
+        unverified("PersonalToken", "the PersonalToken class could not be read");
       }
     }
 

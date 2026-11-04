@@ -358,7 +358,7 @@ function ConnectionCard() {
           <select
             value={form.timezone}
             onChange={(e) => setForm((f) => (f ? { ...f, timezone: e.target.value } : f))}
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           >
             {timezoneGroups.map((group) => (
               <optgroup key={group.region} label={group.region}>

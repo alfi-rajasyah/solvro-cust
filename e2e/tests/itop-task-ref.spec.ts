@@ -251,7 +251,7 @@ test.describe("TaskPanel Create in iTop", () => {
       `${base}/api/projects/${projectId}?today=${new Date().toISOString().slice(0, 10)}`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
-    const customerId = ((await projectRes.json()) as { customer: { id: number } | null }).customer?.id;
+    const customerId = ((await projectRes.json()) as { primaryCustomer: { id: number } | null }).primaryCustomer?.id;
     expect(customerId, "the fixture project has a customer").toBeDefined();
     const taskTitle = `Create ticket ${stamp()}`;
     // `createTask`'s `CreateTaskInput` has no `description` field (nothing
@@ -315,7 +315,7 @@ test.describe("TaskPanel Create in iTop", () => {
     await expect(sheet).toBeVisible();
     // Prefilled from the task (Task 7.2's acceptance: title + description).
     await expect(sheet.locator("input[type='text']")).toHaveValue(taskTitle);
-    await expect(sheet.locator("textarea")).toHaveValue("Repro steps for the ticket.");
+    await expect(sheet.locator("textarea")).toHaveValue(new RegExp(`^Repro steps for the ticket\\.\\n\\nSolvro: .* › ${taskTitle}$`));
 
     // Caller is required (`canSubmit` in NewTicketSheet.tsx) — the mocked
     // contacts list has exactly one option.

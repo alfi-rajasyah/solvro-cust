@@ -34,7 +34,7 @@ async function createProject(customerId: number | null): Promise<number> {
       name: `Portfolio customer ${Date.now()}-${Math.random()}`,
       tamId: ownerId,
       status: "ACTIVE",
-      customerId,
+      ...(customerId != null ? { customers: { create: { customerId, isPrimary: true } } } : {}),
     },
   });
   return project.id;

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildTasksSheet } from "./exportExcel";
 import type { Row } from "./geometry";
 import type { Epic, Task } from "@/lib/queries";
+import { withStatus } from "../taskStatusFixture";
 
 // Critical Path mark (plan critical-path-mark.md §3): the Tasks sheet gains
 // a "Critical Path" column only when at least one exported row is marked
@@ -40,7 +41,7 @@ function taskRow(id: string, isCriticalPath = false): Row {
 // Minimal-but-valid Task fixture (Task carries a lot of required fields
 // irrelevant to the Epic column) — only `epicId` and `status` vary per test.
 function taskFixture(overrides: Partial<Task> = {}): Task {
-  return {
+  return withStatus({
     id: 1,
     projectId: 1,
     title: "Task",
@@ -64,7 +65,7 @@ function taskFixture(overrides: Partial<Task> = {}): Task {
     _count: { subtasks: 0, comments: 0 },
     itopTicketRef: null,
     ...overrides,
-  };
+  });
 }
 
 function epicFixture(id: number, title: string): Epic {

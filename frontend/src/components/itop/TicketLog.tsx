@@ -18,7 +18,7 @@ function pillClass(active: boolean): string {
     PILL_BASE,
     active
       ? "bg-primary text-on-primary"
-      : "border border-outline-variant text-on-surface-variant hover:text-on-surface",
+      : "border border-outline-variant focus-visible:border-primary text-on-surface-variant hover:text-on-surface",
   ].join(" ");
 }
 

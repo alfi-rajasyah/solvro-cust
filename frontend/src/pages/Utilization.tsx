@@ -109,7 +109,7 @@ export function Utilization() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-bold text-on-surface">Utilization</h1>
+          <h1 className="font-display text-h1 text-on-surface">Utilization</h1>
           <p className="text-sm text-on-surface-variant">
             Hours per customer per day, from iTop's Time Tracking extension.
           </p>
@@ -120,7 +120,7 @@ export function Utilization() {
             type="button"
             onClick={() => goToWeek(shiftWeek(week, -1))}
             aria-label="Previous week"
-            className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_left</span>
           </button>
@@ -134,7 +134,7 @@ export function Utilization() {
             type="button"
             onClick={() => goToWeek(shiftWeek(week, 1))}
             aria-label="Next week"
-            className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_right</span>
           </button>

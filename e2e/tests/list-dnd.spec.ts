@@ -155,13 +155,12 @@ test.describe("list & gantt drag & drop — desktop (mouse)", () => {
 
     await openList(page, seededProject.projectId);
 
-    // StatusSelect (ProjectList.tsx): the chip is a <button> whose visible
-    // text is the current STATUS_LABEL ("To do"/"In progress"/"Done"); clicking
-    // it opens a dropdown of the same three labels as sibling <button>s
-    // inside the same row.
+    // StatusSelect: the chip is the combobox trigger whose text is the current
+    // status ("To do"/"In progress"/"Done" by default); it opens a grouped
+    // listbox (portalled) of the workspace statuses.
     const row = desktopRow(page, "Beta");
-    await row.locator("button").filter({ hasText: fromLabel }).click();
-    await row.locator("button").filter({ hasText: toLabel }).click();
+    await row.getByRole("combobox", { name: "Status" }).filter({ hasText: fromLabel }).click();
+    await page.getByRole("option", { name: toLabel, exact: true }).click();
 
     // Poll the API until the PATCH has actually landed, instead of a fixed
     // sleep — the click fires an optimistic mutation; asserting immediately

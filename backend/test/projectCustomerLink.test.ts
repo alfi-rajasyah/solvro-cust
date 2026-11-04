@@ -63,7 +63,7 @@ describe("POST /projects — customer visibility (Decision 7)", () => {
       customerId: ownedCustomerId,
     });
     expect(res.status).toBe(201);
-    expect(res.body.customerId).toBe(ownedCustomerId);
+    expect(res.body.primaryCustomer.id).toBe(ownedCustomerId);
   });
 
   it("201s when the customer is unowned (tamId: null)", async () => {
@@ -75,7 +75,7 @@ describe("POST /projects — customer visibility (Decision 7)", () => {
       customerId: unownedCustomerId,
     });
     expect(res.status).toBe(201);
-    expect(res.body.customerId).toBe(unownedCustomerId);
+    expect(res.body.primaryCustomer.id).toBe(unownedCustomerId);
   });
 
   it("ADMIN can link any customer, including one owned by another TAM", async () => {
@@ -88,7 +88,7 @@ describe("POST /projects — customer visibility (Decision 7)", () => {
       customerId,
     });
     expect(res.status).toBe(201);
-    expect(res.body.customerId).toBe(customerId);
+    expect(res.body.primaryCustomer.id).toBe(customerId);
   });
 });
 
@@ -115,6 +115,6 @@ describe("PATCH /projects/:id — customer visibility (Decision 7)", () => {
     const unchanged = await request(app)
       .get(`/projects/${created.body.id}`)
       .set("Authorization", `Bearer ${caller.token}`);
-    expect(unchanged.body.customerId).toBe(ownedCustomerId);
+    expect(unchanged.body.primaryCustomer.id).toBe(ownedCustomerId);
   });
 });

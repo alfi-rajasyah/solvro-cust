@@ -12,6 +12,7 @@ import { createApp } from "../src/app.js";
 import { errorHandler } from "../src/http/errors.js";
 import { prisma } from "../src/prisma.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 
@@ -31,7 +32,7 @@ async function fixture() {
     data: { name: uniq("Customer"), description: "d", tamId: tam.userId },
   });
   const project = await prisma.project.create({
-    data: { name: uniq("Project"), tamId: tam.userId, customerId: customer.id, status: "ACTIVE" },
+    data: { name: uniq("Project"), tamId: tam.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE" },
   });
   return { tam, customer, project };
 }
@@ -70,7 +71,7 @@ describe("date fields refuse values Postgres cannot store", () => {
   it("PATCH /tasks/:id dueDate out of range → 400, task unchanged", async () => {
     const { tam, project } = await fixture();
     const task = await prisma.task.create({
-      data: { projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
+      data: { statusId: SID.TODO, projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
     });
     const res = await request(app)
       .patch(`/tasks/${task.id}`)
@@ -85,7 +86,7 @@ describe("date fields refuse values Postgres cannot store", () => {
   it("PATCH /tasks/:id with a malformed expected date → 400", async () => {
     const { tam, project } = await fixture();
     const task = await prisma.task.create({
-      data: { projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
+      data: { statusId: SID.TODO, projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
     });
     const res = await request(app)
       .patch(`/tasks/${task.id}`)
@@ -98,7 +99,7 @@ describe("date fields refuse values Postgres cannot store", () => {
     const { tam, project } = await fixture();
     const stored = new Date("2230-01-01T00:00:00.000Z");
     const task = await prisma.task.create({
-      data: { projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0, startDate: stored },
+      data: { statusId: SID.TODO, projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0, startDate: stored },
     });
     const res = await request(app)
       .patch(`/tasks/${task.id}`)

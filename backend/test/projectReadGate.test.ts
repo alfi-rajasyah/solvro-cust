@@ -9,6 +9,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { createUserWithRole, seedRoles } from "./testAuth.js";
+import { SID } from "./statusFixtures.js";
 
 const app = createApp();
 
@@ -23,7 +24,7 @@ async function projectWithMember(roleName: string) {
     data: { name: `Gate ${Date.now()}-${Math.random()}`, tamId: tam.userId, status: "ACTIVE" },
   });
   const task = await prisma.task.create({
-    data: { projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
+    data: { statusId: SID.TODO, projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
   });
   await prisma.projectMember.create({ data: { projectId: project.id, userId: member.userId, addedById: tam.userId } });
   const epic = await prisma.epic.create({ data: { projectId: project.id, title: "E", position: 0 } });

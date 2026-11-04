@@ -34,7 +34,7 @@ async function createCustomer(tamId: number | null = null): Promise<number> {
 
 async function createProject(customerId: number, tamId: number): Promise<number> {
   const project = await prisma.project.create({
-    data: { name: uniq("Project"), tamId, customerId, status: "ACTIVE" },
+    data: { name: uniq("Project"), tamId, ...(customerId != null ? { customers: { create: { customerId, isPrimary: true } } } : {}), status: "ACTIVE" },
   });
   return project.id;
 }
@@ -92,7 +92,7 @@ describe("DELETE /projects/:id", () => {
       const call = info.mock.calls.find(
         (c) => (c[0] as { event?: string } | undefined)?.event === "project.deleted",
       );
-      expect(call?.[0]).toMatchObject({ projectId, projectName: name, customerId, actorId: admin.userId });
+      expect(call?.[0]).toMatchObject({ projectId, projectName: name, customerIds: [customerId], actorId: admin.userId });
     } finally {
       info.mockRestore();
     }
