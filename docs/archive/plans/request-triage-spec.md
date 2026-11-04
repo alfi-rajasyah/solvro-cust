@@ -1,6 +1,6 @@
 # Spec: Request triage — Nov 2026 (five capabilities)
 
-**Status:** draft for approval · **Date:** 2026-11-03 · **Owner:** alfi-rajasyah
+**Status:** shipped — PRs #54, #55, #56 (merged into develop, 2026-11-04) · **Date:** 2026-11-03 · **Owner:** alfi-rajasyah
 **Approved designs:** Doop canvas `wIbMMkOajZ`, page "07 · Request triage — Nov 2026" (frames Triage 00–07).
 **Detailed module plans:**
 - [`subtask-assignee-rows.md`](subtask-assignee-rows.md)
