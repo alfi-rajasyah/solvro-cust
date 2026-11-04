@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-04 — No failing image publish on pull requests from `staging`
+
+- **`.github/workflows/docker-publish.yml`**: images are now published only after a green CI run for a push (a merge into `staging` or `main`), plus tag pushes and manual runs as before. A pull request from `staging` (such as a release PR into `main`) also ran CI on the `staging` branch and started the publish workflow, which then failed because a pull request's token cannot push images or write the build cache. Nothing was published by those runs; they only showed as failures in Actions.
+
 ## [1.2.0] — 2026-11-04
 
 ### Changed — 2026-11-04 — Version 1.2.0
