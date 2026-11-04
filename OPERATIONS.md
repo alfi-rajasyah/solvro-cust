@@ -20,8 +20,10 @@ Data lives in one Docker volume, `solvro_pgdata`.
 
 | File | Written by | Edit it? |
 |---|---|---|
-| `~/solvro/.env` | The installer, on first install | Yes. Ports and bind address live here. Secrets too; keep the file at mode `600`. |
+| `~/solvro/.env` | The installer, on first install | Change ports, bind address and the other settings with `solvro config set` ([Command reference](INSTALL.md#command-reference)), not by hand. Edit it by hand only for the secrets and `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS`; keep the file at mode `600`. |
 | `~/solvro/docker-compose.yml` | The installer, on every run | No. It is regenerated from `.env` each time `setup.sh` runs. |
+| `~/solvro/bin/solvro` | The installer, on every run | No. The `solvro` command (`solvro update`, `version`, `backup`); linked into `/usr/local/bin` or `~/.local/bin`. |
+| `~/solvro/backups/` | `solvro update` and `solvro backup` | Delete old dumps yourself; nothing is pruned automatically. |
 
 `~/solvro/.env` holds:
 
@@ -30,12 +32,12 @@ Data lives in one Docker volume, `solvro_pgdata`.
 | `POSTGRES_PASSWORD` | generated | Database password. Changing it after install breaks the database login. |
 | `JWT_SECRET` | generated | Signs login sessions. Changing it signs everyone out. |
 | `SECRETS_KEY` | generated | Encrypts integration tokens at rest (currently the iTop connection token). Changing it invalidates every stored token — they must be re-entered. |
-| `BIND_ADDR` | prompt | Interface the website and API bind to. `127.0.0.1` local only, `0.0.0.0` all interfaces, or one LAN IP. |
-| `FRONTEND_PORT` | prompt | Website port. Default `80`. |
-| `BACKEND_PORT` | prompt | API port. Default `3000`. |
-| `POSTGRES_PORT` | prompt, optional | Host port for the database. Absent = not published. |
+| `BIND_ADDR` | derived from the address; `--advanced` prompt | Interface the website and API bind to. `127.0.0.1` local only, `0.0.0.0` all interfaces, or one LAN IP. |
+| `FRONTEND_PORT` | derived from the address; `--advanced` prompt | Website port. `8090` for an `https://` address, otherwise the address's port (default `80`). |
+| `BACKEND_PORT` | default; `--advanced` prompt | API port. Default `3000`. |
+| `POSTGRES_PORT` | `--advanced` prompt, optional | Host port for the database. Absent = not published. |
 
-To apply a change to `BIND_ADDR`, `FRONTEND_PORT`, or `BACKEND_PORT`: edit `.env`, then `docker compose up -d` from `~/solvro`. To apply a change to `POSTGRES_PORT`: edit `.env`, then run `bash setup.sh` again (the compose file must be regenerated).
+To change `BIND_ADDR`, `FRONTEND_PORT`, `BACKEND_PORT` or `POSTGRES_PORT`, run `solvro config set KEY=VALUE`, for example `solvro config set FRONTEND_PORT=8090`. It checks the value, saves it to `.env`, regenerates the compose file and restarts what the change affects. `solvro config unset POSTGRES_PORT` stops publishing the database. All options are in the INSTALL.md [Command reference](INSTALL.md#command-reference).
 
 ## 3. Backend environment
 
@@ -50,7 +52,7 @@ The compose file sets these on the backend container. They are not meant to be e
 | `SECRETS_KEY` | from `.env` | AES-256-GCM key for secrets at rest (iTop token). |
 | `JWT_EXPIRES_IN` | `8h` | Session length. A signed-in user can extend a session shortly before it ends, up to 24 hours after the original sign-in. |
 | `CORS_ORIGIN` | `APP_URL` (or `*` when unset) | Which other browser origins may call the API. The app itself is same-origin and never needs it. |
-| `TRUST_PROXY` | `loopback, uniquelocal` | Which proxies the API believes for the client address: the bundled nginx and a TLS front or tunnel on this host. `.env` can override it. |
+| `TRUST_PROXY` | `loopback, uniquelocal` | Which proxies the API believes for the client address: the bundled nginx and a TLS front or tunnel on this host. `solvro config set TRUST_PROXY=…` overrides it. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
 
 Google sign-in is **not** configured by environment variables. See section 6.
@@ -172,7 +174,7 @@ solvro.example.com {
 }
 ```
 
-Set `FRONTEND_PORT=8090` (so Caddy can own 80/443), `APP_URL=https://solvro.example.com`, run `bash setup.sh` again. The compose default `TRUST_PROXY=loopback, uniquelocal` already trusts a proxy on this host.
+Answering the installer's address question with `https://solvro.example.com` already makes Solvro listen on port 8090 (so Caddy can own 80/443). On an existing install, run `solvro config set FRONTEND_PORT=8090 APP_URL=https://solvro.example.com`. The compose default `TRUST_PROXY=loopback, uniquelocal` already trusts a proxy on this host.
 
 **Cloudflare Tunnel** (no inbound port at all; Cloudflare terminates TLS):
 
@@ -183,7 +185,7 @@ cloudflared tunnel route dns solvro solvro.example.com
 cloudflared tunnel run solvro
 ```
 
-Set `APP_URL=https://solvro.example.com`. The tunnel makes Solvro reachable from the whole internet: put a Cloudflare Access policy (allowed emails or groups) on the hostname, because only the in-app login protects it otherwise. `TRUST_PROXY=loopback, uniquelocal` is right here too (the tunnel connects from this host).
+Run `solvro config set APP_URL=https://solvro.example.com`. The tunnel makes Solvro reachable from the whole internet: put a Cloudflare Access policy (allowed emails or groups) on the hostname, because only the in-app login protects it otherwise. `TRUST_PROXY=loopback, uniquelocal` is right here too (the tunnel connects from this host).
 
 Either way, Google sign-in needs the `https://` address added as an Authorized JavaScript origin (section 6).
 

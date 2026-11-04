@@ -64,3 +64,6 @@ New UI/
 
 # --- Large local-only QA screenshots from the UI pass; the report and notes beside them are tracked ---
 docs/archive/plans/ui-ux-qa-run/shots/
+
+# --- Publish-time copy of setup.sh baked into the backend image ---
+backend/release/setup.sh

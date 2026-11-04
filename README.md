@@ -184,23 +184,22 @@ The backend is a JSON REST API. Routers mount without an `/api` prefix; the fron
 On a server with Docker Engine and the Docker Compose plugin, logged in to `ghcr.io` (see `INSTALL.md`):
 
 ```bash
-git clone https://github.com/alfi-rajasyah/solvro-cust.git
-cd solvro-cust
-bash setup.sh
+docker run --rm --entrypoint cat ghcr.io/alfi-rajasyah/solvro-cust-backend:stable /opt/solvro/setup.sh > setup.sh \
+  && bash setup.sh
 ```
 
-The script prompts for an admin email and password and for the host ports (website `80`, API `3000`, both bound to `127.0.0.1` unless you choose otherwise; Postgres stays private). It generates `POSTGRES_PASSWORD`, `JWT_SECRET`, and `SECRETS_KEY` (the secrets-at-rest key for integration tokens — rotating it invalidates every stored token), writes `~/solvro/docker-compose.yml` and `~/solvro/.env`, pulls the GHCR images, starts the stack, and creates the admin. The backend container runs `prisma migrate deploy` and the seed on every start.
+The installer ships inside the backend image, so no clone is needed. It asks for an admin email and password and the address people will open Solvro at, and derives the ports and bind address from that address (`bash setup.sh --advanced` asks for each one instead; Postgres stays private either way). It generates `POSTGRES_PASSWORD`, `JWT_SECRET`, and `SECRETS_KEY` (the secrets-at-rest key for integration tokens — rotating it invalidates every stored token), writes `~/solvro/docker-compose.yml` and `~/solvro/.env`, pulls the GHCR images, starts the stack, and creates the admin. The backend container runs `prisma migrate deploy` and the seed on every start.
 
 Every input can come from the environment instead of a prompt:
 
 ```bash
-ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=change-me BIND_ADDR=0.0.0.0 FRONTEND_PORT=8090 \
+ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=change-me APP_URL=https://solvro.example.com \
   bash setup.sh
 ```
 
-To upgrade, run `git pull` and then `bash setup.sh` again: the script detects the existing install, pulls new images, and restarts without prompting.
+To upgrade, run `solvro update` on the server (the installer adds the command): it backs up the database, moves the server to the newest release and restarts it, after asking.
 
-The full install and upgrade guide is [INSTALL.md](INSTALL.md). To run iTop or Outline on the same server, see [Server setup](docs/guides/server-setup.md).
+The full install and upgrade guide, with every `solvro` and `setup.sh` command and option, is [INSTALL.md](INSTALL.md). To run iTop or Outline on the same server, see [Server setup](docs/guides/server-setup.md).
 
 ### Local development
 
@@ -274,4 +273,4 @@ All guides: [docs/guides/](docs/guides/index.md).
 
 ## Branches and releases
 
-Work branches off `develop` and merges back by pull request; `develop` is the integration branch. `main` is the release branch: a merge into `main` runs CI, and only a green run publishes the `latest` images that `setup.sh` pulls. `v*` tags publish versioned images directly.
+Work branches off `develop` and merges back by pull request; `develop` is the integration branch. `main` is the release branch: a merge into `main` runs CI, and only a green run publishes the `latest` images. `v*` tags publish versioned images directly, and a final `vX.Y.Z` tag also moves `stable`, the tag `solvro update` follows.
