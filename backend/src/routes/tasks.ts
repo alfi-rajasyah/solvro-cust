@@ -265,7 +265,11 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
   if (assignedToId) where.assignedToId = assignedToId;
   if (labelId) where.labels = { some: { id: labelId } };
   if (customerId) {
-    where.project = { ...(where.project as object | undefined), customerId };
+    // Any linked customer (docs/archive/plans/multi-customer-projects.md).
+    where.project = {
+      ...(where.project as object | undefined),
+      customers: { some: { customerId } },
+    };
   }
   if (tamId) {
     where.project = { ...(where.project as object | undefined), tamId };
@@ -312,7 +316,12 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
           select: {
             id: true,
             name: true,
-            customer: { select: { id: true, name: true } },
+            // The row's customer is the project's primary.
+            customers: {
+              where: { isPrimary: true },
+              take: 1,
+              select: { customer: { select: { id: true, name: true } } },
+            },
           },
         },
         _count: { select: { subtasks: true, comments: true } },
@@ -325,7 +334,12 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
     prisma.task.count({ where }),
   ]);
   res.setHeader("X-Total-Count", String(total));
-  res.json(tasks);
+  res.json(
+    tasks.map((t) => {
+      const { customers, ...project } = t.project;
+      return { ...t, project: { ...project, customer: customers[0]?.customer ?? null } };
+    }),
+  );
 });
 
 tasksRouter.patch(

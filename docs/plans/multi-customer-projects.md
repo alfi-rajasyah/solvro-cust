@@ -68,8 +68,15 @@ release, so the frontend can move over in Phase B.
    - If the deleted customer was primary, the oldest remaining link (`addedAt`) becomes primary.
    - If no link remains, the project is unlinked, as today's `SetNull` leaves it.
    - The delete confirmation (`CustomerDetail.tsx`) names the shared projects that will lose this customer.
-4. **Changing links is owner-only.** Adding or removing a customer, or changing the primary, uses `ensureProjectOwnerAccess` (members can't), the same as today's customer change. Each added customer must pass `isCustomerVisible` (400 `customer_not_found`).
-5. **Activity:** the project log records the link set as a sorted name list, so "added Telkomsel Enterprise" is visible. `CustomerActivityEvent` on project delete writes **one row per linked customer**, so each customer's feed shows it.
+4. **Ownership: the owner of ANY linked customer** (user decision 2026-11-03, after the Phase A review). The project's TAM and the owner of any linked customer can each:
+   - delete the project;
+   - change its TAM;
+   - change its customer links, including removing the primary;
+   - mint guest links.
+
+   `ensureProjectOwnerAccess` keeps matching any link.
+5. **Changing links is owner-only.** Adding or removing a customer, or changing the primary, uses `ensureProjectOwnerAccess` (members can't), the same as today's customer change. Each added customer must pass `isCustomerVisible` (400 `customer_not_found`).
+6. **Activity:** the project log records the link set as a sorted name list, so "added Telkomsel Enterprise" is visible. `CustomerActivityEvent` on project delete writes **one row per linked customer**, so each customer's feed shows it.
 
 ## 3. Phase A: data, visibility, API
 

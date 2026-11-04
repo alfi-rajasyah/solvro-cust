@@ -99,9 +99,9 @@ async function projectCustomerId(base: string, token: string, projectId: number)
   const res = await fetch(`${base}/api/projects/${projectId}?today=${new Date().toISOString().slice(0, 10)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const body = (await res.json()) as { customer: { id: number } | null };
-  expect(body.customer, "the fixture project has a customer").not.toBeNull();
-  return body.customer!.id;
+  const body = (await res.json()) as { primaryCustomer: { id: number } | null };
+  expect(body.primaryCustomer, "the fixture project has a customer").not.toBeNull();
+  return body.primaryCustomer!.id;
 }
 
 test.describe("Project List iTop ticket column", () => {

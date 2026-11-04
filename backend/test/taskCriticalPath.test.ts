@@ -34,7 +34,7 @@ async function createCustomer(): Promise<number> {
 
 async function createProject(customerId: number): Promise<number> {
   const project = await prisma.project.create({
-    data: { name: uniq("Project"), tamId: admin.userId, customerId, status: "ACTIVE" },
+    data: { name: uniq("Project"), tamId: admin.userId, ...(customerId != null ? { customers: { create: { customerId, isPrimary: true } } } : {}), status: "ACTIVE" },
   });
   return project.id;
 }

@@ -40,8 +40,8 @@ function StatusView({ project }: { project: ProjectDetail }) {
       <div className="space-y-3 px-3 py-3" data-testid="embed-status">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <ProjectStatusChip status={project.status} />
-          {project.customer && (
-            <span className="text-meta text-on-surface-variant">{project.customer.name}</span>
+          {project.primaryCustomer && (
+            <span className="text-meta text-on-surface-variant">{project.primaryCustomer.name}</span>
           )}
           {hasDates && (
             <span className="text-meta text-on-surface-variant">

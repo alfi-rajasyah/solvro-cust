@@ -200,9 +200,11 @@ async function reassignableCustomerIds(
     else if (c.tamId === null) unownedIds.push(c.id);
   }
   if (unownedIds.length > 0) {
-    const foreign = await prisma.project.groupBy({
+    // Projects linked through the join: a shared project counts for each of
+    // its customers (docs/archive/plans/multi-customer-projects.md).
+    const foreign = await prisma.projectCustomer.groupBy({
       by: ["customerId"],
-      where: { customerId: { in: unownedIds }, tamId: { not: user.sub } },
+      where: { customerId: { in: unownedIds }, project: { tamId: { not: user.sub } } },
       _count: { _all: true },
     });
     const blocked = new Set(foreign.map((f) => f.customerId));
@@ -239,7 +241,7 @@ customersRouter.get("/", customerReadGate, validate("query", customersListQueryS
       // (that's exactly how "attached" visibility works — Decision 1's
       // third arm) — the count must match what /:id will actually show
       // them, not every project the customer has.
-      _count: { select: { projects: { where: projectVisibilityFilter(user) } } },
+      _count: { select: { projects: { where: { project: projectVisibilityFilter(user) } } } },
     },
   });
   if (customers.length === 0) {
@@ -256,8 +258,10 @@ customersRouter.get("/", customerReadGate, validate("query", customersListQueryS
   const weekStartDay =
     parseWeekKey(weekKeyOf(today ?? boundary.toISOString().slice(0, 10)))!.start;
   const visibleProjects = await prisma.project.findMany({
-    where: { AND: [projectVisibilityFilter(user), { customerId: { in: customerIds } }] },
-    select: { id: true, customerId: true },
+    where: {
+      AND: [projectVisibilityFilter(user), { customers: { some: { customerId: { in: customerIds } } } }],
+    },
+    select: { id: true, customers: { select: { customerId: true } } },
   });
   const projectIds = visibleProjects.map((p) => p.id);
   const [overdueRows, riskRows, weeklyRows] = await Promise.all([
@@ -288,19 +292,27 @@ customersRouter.get("/", customerReadGate, validate("query", customersListQueryS
     }),
   ]);
 
-  const customerOfProject = new Map<number, number>();
+  // A shared project's overdue tasks and open risks count under EVERY
+  // customer it is linked to (each customer's health shows them).
+  const customerIdSet = new Set(customerIds);
+  const customersOfProject = new Map<number, number[]>();
   for (const p of visibleProjects) {
-    if (p.customerId != null) customerOfProject.set(p.id, p.customerId);
+    customersOfProject.set(
+      p.id,
+      p.customers.map((l) => l.customerId).filter((cid) => customerIdSet.has(cid)),
+    );
   }
   const overdueByCustomer = new Map<number, number>();
   for (const row of overdueRows) {
-    const cid = customerOfProject.get(row.projectId);
-    if (cid != null) overdueByCustomer.set(cid, (overdueByCustomer.get(cid) ?? 0) + row._count._all);
+    for (const cid of customersOfProject.get(row.projectId) ?? []) {
+      overdueByCustomer.set(cid, (overdueByCustomer.get(cid) ?? 0) + row._count._all);
+    }
   }
   const risksByCustomer = new Map<number, number>();
   for (const row of riskRows) {
-    const cid = customerOfProject.get(row.projectId);
-    if (cid != null) risksByCustomer.set(cid, (risksByCustomer.get(cid) ?? 0) + row._count._all);
+    for (const cid of customersOfProject.get(row.projectId) ?? []) {
+      risksByCustomer.set(cid, (risksByCustomer.get(cid) ?? 0) + row._count._all);
+    }
   }
   const weeklyByCustomer = new Map(weeklyRows.map((w) => [w.customerId, w]));
 
@@ -329,12 +341,22 @@ customersRouter.get("/", customerReadGate, validate("query", customersListQueryS
 // arm) never leaks the rest of that customer's projects.
 function customerInclude(user: JwtPayload) {
   return {
+    // Through the ProjectCustomer join; flattened by flattenCustomerProjects.
     projects: {
-      where: projectVisibilityFilter(user),
-      orderBy: { updatedAt: "desc" } as const,
-      include: {
-        tam: { select: { id: true, username: true } },
-        _count: { select: { tasks: true } },
+      where: { project: projectVisibilityFilter(user) },
+      orderBy: { project: { updatedAt: "desc" } } as const,
+      select: {
+        isPrimary: true,
+        project: {
+          include: {
+            tam: { select: { id: true, username: true } },
+            _count: { select: { tasks: true } },
+            // Every linked customer, so the UI can tag a shared project.
+            customers: {
+              select: { isPrimary: true, addedAt: true, customer: { select: { id: true, name: true } } },
+            },
+          },
+        },
       },
     },
     services: {
@@ -342,8 +364,33 @@ function customerInclude(user: JwtPayload) {
       include: { service: true },
     },
     tam: { select: { id: true, username: true } },
-    _count: { select: { projects: { where: projectVisibilityFilter(user) } } },
+    _count: { select: { projects: { where: { project: projectVisibilityFilter(user) } } } },
   } as const;
+}
+
+type LinkedProject = {
+  customers: { isPrimary: boolean; addedAt: Date; customer: { id: number; name: string } }[];
+};
+
+/**
+ * Flattens the customer's ProjectCustomer rows back into project rows, adding
+ * `isPrimary` (is THIS customer the project's primary), `isShared` (more than
+ * one customer) and `primaryCustomer`, so the UI can say "Shared · primary: X".
+ */
+function flattenCustomerProjects<P extends LinkedProject>(links: { isPrimary: boolean; project: P }[]) {
+  return links.map((l) => {
+    const ordered = [...l.project.customers].sort(
+      (a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.addedAt.getTime() - b.addedAt.getTime(),
+    );
+    const primary = ordered.find((c) => c.isPrimary)?.customer ?? null;
+    return {
+      ...l.project,
+      customers: ordered.map((c) => ({ id: c.customer.id, name: c.customer.name, isPrimary: c.isPrimary })),
+      isPrimary: l.isPrimary,
+      isShared: ordered.length > 1,
+      primaryCustomer: primary ? { ...primary, isPrimary: true } : null,
+    };
+  });
 }
 
 const customerDetailQuerySchema = z.object({
@@ -365,15 +412,16 @@ customersRouter.get("/:id", customerReadGate, validate("params", idParamSchema),
   }
   // The nested projects are already visibility-scoped by customerInclude, so
   // their ids are safe to hand to the (scope-free) health helper.
+  const projects = flattenCustomerProjects(customer.projects);
   const health = await computeProjectHealth(
-    customer.projects.map((p) => p.id),
+    projects.map((p) => p.id),
     today,
   );
   const reassignable = await reassignableCustomerIds(req.user!, [customer]);
   res.json({
     ...customer,
     canChangeOwner: reassignable.has(customer.id),
-    projects: customer.projects.map((p) => ({ ...p, health: health.get(p.id) })),
+    projects: projects.map((p) => ({ ...p, health: health.get(p.id) })),
   });
 });
 
@@ -429,7 +477,7 @@ customersRouter.put(
       where: { id },
       include: customerInclude(req.user!),
     });
-    res.json(updated);
+    res.json({ ...updated, projects: flattenCustomerProjects(updated.projects) });
   },
 );
 
@@ -576,8 +624,34 @@ customersRouter.delete(
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
     await ensureCustomerOwnerAccess(req.user!, id);
-    // onDelete: SetNull on Project.customerId — projects survive, customer link clears.
-    await prisma.customer.delete({ where: { id } });
+    // The ProjectCustomer links cascade; projects survive. Where this customer
+    // was a project's primary, the oldest remaining link (addedAt) becomes the
+    // primary; a project left with no link is simply unlinked
+    // (docs/archive/plans/multi-customer-projects.md). The old primary is
+    // deleted first so the one-primary-per-project index never sees two.
+    await prisma.$transaction(async (tx) => {
+      const primaryLinks = await tx.projectCustomer.findMany({
+        where: { customerId: id, isPrimary: true },
+        select: { projectId: true },
+      });
+      // One query for every affected project's remaining links, oldest first;
+      // the first row seen per project is its heir.
+      const remaining = await tx.projectCustomer.findMany({
+        where: { projectId: { in: primaryLinks.map((l) => l.projectId) }, customerId: { not: id } },
+        orderBy: [{ addedAt: "asc" }, { customerId: "asc" }],
+        select: { projectId: true, customerId: true },
+      });
+      const heirByProject = new Map<number, number>();
+      for (const r of remaining) if (!heirByProject.has(r.projectId)) heirByProject.set(r.projectId, r.customerId);
+      const heirs = [...heirByProject].map(([projectId, customerId]) => ({ projectId, customerId }));
+      await tx.customer.delete({ where: { id } });
+      for (const h of heirs) {
+        await tx.projectCustomer.update({
+          where: { projectId_customerId: h },
+          data: { isPrimary: true },
+        });
+      }
+    });
     res.status(204).end();
   },
 );

@@ -7,6 +7,7 @@ import {
   type ColumnDef,
   type SortingState,
 } from "@tanstack/react-table";
+import { CustomerDeleteBody, sharedProjectsOf } from "@/components/customer/CustomerDeleteBody";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { CustomerFormModal } from "@/components/CustomerFormModal";
 import { EmptyState } from "@/components/EmptyState";
@@ -51,8 +52,8 @@ export function Customers() {
   const projectTamIdsByCustomer = useMemo(() => {
     const map = new Map<number, number[]>();
     for (const p of projects ?? []) {
-      if (p.customerId === null) continue;
-      map.set(p.customerId, [...(map.get(p.customerId) ?? []), p.tamId]);
+      // A shared project counts toward EVERY linked customer.
+      for (const c of p.customers) map.set(c.id, [...(map.get(c.id) ?? []), p.tamId]);
     }
     return map;
   }, [projects]);
@@ -159,7 +160,12 @@ export function Customers() {
         onClose={() => setDeleting(null)}
         onConfirm={() => deleting && void handleDelete(deleting)}
         title="Delete customer"
-        body={`Delete customer "${deleting?.name ?? ""}"? Linked projects keep their tasks but lose the customer link.`}
+        body={
+          <CustomerDeleteBody
+            name={deleting?.name ?? ""}
+            shared={deleting ? sharedProjectsOf(deleting.id, projects ?? []) : []}
+          />
+        }
         confirmLabel="Delete"
         confirmTone="danger"
         busy={deleteCustomer.isPending}

@@ -125,7 +125,7 @@ describe("session revocation", () => {
     const u = await passwordUser("TAM");
     const customer = await prisma.customer.create({ data: { name: `rev-c-${Date.now()}`, description: "d", tamId: u.userId } });
     const project = await prisma.project.create({
-      data: { name: `rev-p-${Date.now()}`, tamId: u.userId, customerId: customer.id, status: "ACTIVE" },
+      data: { name: `rev-p-${Date.now()}`, tamId: u.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE" },
     });
     expect(
       (await request(app).patch(`/projects/${project.id}`).set(auth(u.token)).send({ description: "before" })).status,
@@ -160,7 +160,7 @@ describe("session revocation", () => {
     const u = await createUserWithRole("TAM");
     const customer = await prisma.customer.create({ data: { name: `rev-s-${Date.now()}`, description: "d", tamId: u.userId } });
     const project = await prisma.project.create({
-      data: { name: `rev-sp-${Date.now()}`, tamId: u.userId, customerId: customer.id, status: "ACTIVE" },
+      data: { name: `rev-sp-${Date.now()}`, tamId: u.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE" },
     });
     const original = prisma.user.findUnique.bind(prisma.user);
     let lookups = 0;

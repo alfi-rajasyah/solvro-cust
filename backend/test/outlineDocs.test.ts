@@ -113,7 +113,7 @@ async function fixture(opts: { projectUrl?: string | null; customerUrl?: string 
     data: { name: uniq("Cust"), description: "d", tamId: tam.userId, outlineUrl: opts.customerUrl ?? null },
   });
   const project = await prisma.project.create({
-    data: { name: uniq("Proj"), tamId: tam.userId, customerId: customer.id, status: "ACTIVE", outlineUrl: opts.projectUrl ?? null },
+    data: { name: uniq("Proj"), tamId: tam.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE", outlineUrl: opts.projectUrl ?? null },
   });
   return { tam, customer, project };
 }

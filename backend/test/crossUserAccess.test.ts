@@ -37,7 +37,7 @@ beforeAll(async () => {
     data: { name: `Cross-user customer ${stamp}`, description: "d", tamId: owner.userId },
   });
   const project = await prisma.project.create({
-    data: { name: `Cross-user project ${stamp}`, tamId: owner.userId, customerId: customer.id, status: "ACTIVE" },
+    data: { name: `Cross-user project ${stamp}`, tamId: owner.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE" },
   });
   const [a, b, c] = await Promise.all(
     ["A", "B", "C"].map((title, position) => prisma.task.create({ data: { statusId: SID.TODO, projectId: project.id, title, position } })),

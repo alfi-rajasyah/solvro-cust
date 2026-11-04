@@ -124,6 +124,8 @@ interface ProjectSpec {
   name: string;
   description: string;
   customer: string;
+  /** Further customers this project is shared with (the `customer` above stays the primary). */
+  alsoFor?: string[];
   tam: UserKey;
   /** Who created the project, when not its TAM — an admin creating it for a TAM notifies that TAM. */
   createdBy?: UserKey;
@@ -677,6 +679,24 @@ const PROJECTS: ProjectSpec[] = [
       ["docs", "done"],
     ],
   },
+  {
+    // One project shared by two customers: Bank Arta is the primary, and
+    // Nusantara's TAM sees it too (docs/archive/plans/multi-customer-projects.md).
+    name: "DC2 Interconnect — Bank Arta × Nusantara",
+    description: "Private link between the Bank Arta and Nusantara Logistik second data-centre racks, delivered once for both customers.",
+    customer: "Bank Arta Sejahtera",
+    alsoFor: ["PT Nusantara Logistik"],
+    tam: "rizky",
+    status: "ACTIVE",
+    service: ["Managed Network", ["Cisco"]],
+    sections: [["Design", "#60a5fa"], ["Delivery", "#34d399"]],
+    tasks: [
+      { key: "design", title: "Agree the link design with both customers", section: "Design", status: "DONE", start: -14, due: -8, assignee: "rizky" },
+      { key: "order", title: "Order the cross-connect", section: "Delivery", status: "IN_PROGRESS", start: -6, due: 4, assignee: "rizky" },
+      { key: "live", title: "Interconnect live", section: "Delivery", status: "TODO", start: 10, due: 10, assignee: "rizky", milestone: true },
+    ],
+    deps: [["design", "order"], ["order", "live"]],
+  },
 ];
 
 const CUSTOMER_NOTES: Array<[string, UserKey, number, string, string]> = [
@@ -957,7 +977,12 @@ async function main() {
         description: p.description,
         status: p.status,
         tamId: users[p.tam],
-        customerId: customers.get(p.customer)!,
+        customers: {
+          create: [
+            { customerId: customers.get(p.customer)!, isPrimary: true },
+            ...(p.alsoFor ?? []).map((name) => ({ customerId: customers.get(name)!, isPrimary: false })),
+          ],
+        },
         baselineLockedAt: p.baselineLocked !== undefined ? day(p.baselineLocked) : null,
         baselineLockedById: p.baselineLocked !== undefined ? users[p.tam] : null,
         services: { create: { serviceId: services.get(p.service[0])!, tools: p.service[1] } },

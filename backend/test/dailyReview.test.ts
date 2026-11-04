@@ -53,7 +53,9 @@ async function createProject(overrides: {
     data: {
       name: overrides.name ?? uniq("Project"),
       tamId: overrides.tamId,
-      customerId: overrides.customerId ?? null,
+      ...(overrides.customerId != null
+        ? { customers: { create: { customerId: overrides.customerId, isPrimary: true } } }
+        : {}),
       status: overrides.status ?? "ACTIVE",
       baselineLockedAt: overrides.baselineLockedAt ?? null,
     },

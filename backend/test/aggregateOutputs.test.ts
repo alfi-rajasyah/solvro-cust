@@ -72,7 +72,7 @@ describe("task roll-ups", () => {
       data: {
         name: `AggDR ${Date.now()}-${Math.random()}`,
         tamId: userId,
-        customerId: customer.id,
+        customers: { create: { customerId: customer.id, isPrimary: true } },
         status: "ACTIVE",
         baselineLockedAt: new Date("2026-01-01T00:00:00.000Z"),
       },

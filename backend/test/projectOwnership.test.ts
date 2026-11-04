@@ -28,7 +28,7 @@ async function fixture() {
     data: { name: uniq("Customer"), description: "d", tamId: owner.userId },
   });
   const project = await prisma.project.create({
-    data: { name: uniq("Project"), tamId: owner.userId, customerId: customer.id, status: "ACTIVE" },
+    data: { name: uniq("Project"), tamId: owner.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE" },
   });
   await prisma.projectMember.create({ data: { projectId: project.id, userId: member.userId } });
   return { owner, member, outsider, customer, project };
@@ -57,7 +57,9 @@ describe("member-only access is refused owner actions (403 owner_only)", () => {
       .send({ customerId: target.id });
     expect(res.status).toBe(403);
     expect(res.body.code).toBe("owner_only");
-    expect((await prisma.project.findUniqueOrThrow({ where: { id: project.id } })).customerId).toBe(customer.id);
+    expect(
+      (await prisma.projectCustomer.findMany({ where: { projectId: project.id } })).map((l) => l.customerId),
+    ).toEqual([customer.id]);
   });
 
   it("PATCH /projects/:id — other fields, and re-sending the current tamId/customerId, still work", async () => {
@@ -144,7 +146,7 @@ describe("owners keep their access", () => {
       data: { name: uniq("Cust"), description: "d", tamId: owner.userId },
     });
     const project = await prisma.project.create({
-      data: { name: uniq("P"), tamId: tam.userId, customerId: customer.id, status: "ACTIVE" },
+      data: { name: uniq("P"), tamId: tam.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE" },
     });
     // Same as before members existed: the project's TAM sees the customer via
     // their project, so owner-level customer actions were already open to them.

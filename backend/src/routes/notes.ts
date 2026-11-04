@@ -77,7 +77,16 @@ notesRouter.get(
           updatedAt: true,
           author: { select: { id: true, username: true } },
           project: {
-            select: { id: true, name: true, customer: { select: { id: true, name: true } } },
+            select: {
+              id: true,
+              name: true,
+              // The label is the project's primary customer.
+              customers: {
+                where: { isPrimary: true },
+                take: 1,
+                select: { customer: { select: { id: true, name: true } } },
+              },
+            },
           },
         },
       }),
@@ -107,7 +116,7 @@ notesRouter.get(
         title: null,
         author: n.author,
         project: { id: n.project.id, name: n.project.name },
-        customer: n.project.customer,
+        customer: n.project.customers[0]?.customer ?? null,
         updatedAt: n.updatedAt,
       })),
       ...customerNotes.map((n) => ({

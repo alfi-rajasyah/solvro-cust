@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { PrimaryChip } from "@/components/customer/PrimaryChip";
 import { ProjectStatusChip } from "@/components/StatusChip";
 import { fmtRange } from "@/lib/formatDate";
 import type { ProjectDetail } from "@/lib/queries";
@@ -53,14 +54,24 @@ export function ProjectHeaderFacts({ project }: { project: ProjectDetail }) {
           <ProjectStatusChip status={project.status} />
         </Fact>
 
-        <Fact label="Customer" className="md:max-w-64 md:shrink-0">
-          {project.customer ? (
-            <Link
-              to={`/customers/${project.customer.id}`}
-              className="block truncate text-primary hover:underline"
-            >
-              {project.customer.name}
-            </Link>
+        <Fact
+          label={project.customers.length > 1 ? "Customers" : "Customer"}
+          className="md:max-w-96 md:shrink-0"
+        >
+          {project.customers.length > 0 ? (
+            <ul className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+              {project.customers.map((c) => (
+                <li key={c.id} className="flex min-w-0 items-center gap-1.5">
+                  <Link
+                    to={`/customers/${c.id}`}
+                    className="block truncate text-primary hover:underline"
+                  >
+                    {c.name}
+                  </Link>
+                  {c.isPrimary && project.customers.length > 1 && <PrimaryChip />}
+                </li>
+              ))}
+            </ul>
           ) : (
             <span className="text-on-surface-variant">No customer</span>
           )}

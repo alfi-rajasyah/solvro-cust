@@ -22,12 +22,16 @@ async function createProject(
   ownerId: number,
   extra: { customerId?: number; baselineLockedAt?: Date } = {},
 ): Promise<number> {
+  const { customerId, ...rest } = extra;
   const project = await prisma.project.create({
     data: {
       name: `Health ${Date.now()}-${Math.random()}`,
       tamId: ownerId,
       status: "ACTIVE",
-      ...extra,
+      ...rest,
+      ...(customerId !== undefined
+        ? { customers: { create: { customerId, isPrimary: true } } }
+        : {}),
     },
   });
   return project.id;

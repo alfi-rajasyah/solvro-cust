@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, type FormEvent } from "react";
+import { useItopOrgChoice } from "@/components/itop/useItopOrgChoice";
 import {
   DndContext,
   KeyboardSensor,
@@ -135,7 +136,8 @@ export function ProjectList() {
   // ref (tasks and subtasks); the column exists only when iTop is configured.
   const { data: itopStatus } = useItopStatus();
   const itopOn = itopStatus?.configured ?? false;
-  const createGate = useCanCreateItopTicket(project.customerId, project.customer?.name ?? null);
+  const itopOrg = useItopOrgChoice(project.customers);
+  const createGate = useCanCreateItopTicket(itopOrg.customerId, itopOrg.customerName);
   const pinnedRefs = useMemo(
     () => (tasks ?? []).flatMap((t) => (t.itopTicketRef ? [t.itopTicketRef] : [])),
     [tasks],
@@ -149,13 +151,15 @@ export function ProjectList() {
         ? {
             projectId: project.id,
             projectName: project.name,
-            customerId: project.customerId,
+            customerId: itopOrg.customerId,
+            organisations: itopOrg.organisations,
+            organisationLabel: itopOrg.organisationLabel,
             baseUrl: itopStatus?.baseUrl ?? null,
             gate: createGate,
             byRef: ticketsByRef,
           }
         : null,
-    [itopOn, project.id, project.name, project.customerId, itopStatus?.baseUrl, createGate, ticketsByRef],
+    [itopOn, project.id, project.name, itopOrg, itopStatus?.baseUrl, createGate, ticketsByRef],
   );
   const createSection = useCreateSection(project.id);
   const updateSection = useUpdateSection(project.id);

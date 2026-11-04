@@ -35,7 +35,7 @@ async function fixture() {
     data: { name: uniq("Customer"), description: "d", tamId: tam.userId },
   });
   const project = await prisma.project.create({
-    data: { name: uniq("Project"), tamId: tam.userId, customerId: customer.id, status: "ACTIVE" },
+    data: { name: uniq("Project"), tamId: tam.userId, customers: { create: { customerId: customer.id, isPrimary: true } }, status: "ACTIVE" },
   });
   return { tam, member, outsider, customer, project };
 }
@@ -405,7 +405,8 @@ describe("GET /projects/:id — detail payload", () => {
     const res = await request(app).get(`/projects/${project.id}`).set(auth(member.token));
     expect(res.status).toBe(200);
     expect(res.body.tam.avatarUrl).toBe("https://example.com/a.png");
-    expect(res.body.customer.tamId).toBe(tam.userId);
-    expect(res.body.customer.id).toBe(customer.id);
+    expect(res.body.primaryCustomer.tamId).toBe(tam.userId);
+    expect(res.body.primaryCustomer.id).toBe(customer.id);
+    expect(res.body.customers[0].tamId).toBe(tam.userId);
   });
 });

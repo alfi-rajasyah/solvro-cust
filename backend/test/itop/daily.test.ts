@@ -581,7 +581,7 @@ describe("GET /itop/daily — customer:view-all scope", () => {
     const mine = await createCustomer({ tamId: holder.userId, itopOrgId: 11, itopOrgName: "Mine" });
     const theirs = await createCustomer({ tamId: other.userId, itopOrgId: 12, itopOrgName: "Theirs" });
     const unowned = await createCustomer({ tamId: null, itopOrgId: 13, itopOrgName: "Unowned" });
-    await prisma.project.create({ data: { name: uniq("P"), tamId: holder.userId, customerId: mine.id, status: "ACTIVE" } });
+    await prisma.project.create({ data: { name: uniq("P"), tamId: holder.userId, customers: { create: { customerId: mine.id, isPrimary: true } }, status: "ACTIVE" } });
 
     const res = await call("get", "/itop/daily?date=2026-09-22", holder.token);
     expect(res.status).toBe(200);

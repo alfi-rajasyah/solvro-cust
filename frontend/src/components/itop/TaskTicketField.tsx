@@ -43,6 +43,8 @@ export function TaskTicketField({
   canEdit,
   customerId,
   customerName = null,
+  organisations,
+  organisationLabel = null,
   projectName = null,
   parentTitle = null,
   taskTitle,
@@ -59,6 +61,9 @@ export function TaskTicketField({
   customerId: number | null;
   /** Names the customer in the "map it to iTop" hint. */
   customerName?: string | null;
+  /** 2+ iTop-mapped customers on the project: the sheet's Organisation picker (`customerId` is the default). */
+  organisations?: ReadonlyArray<{ id: number; name: string }>;
+  organisationLabel?: string | null;
   /** With `parentTitle`, feeds the same context line the row menus add (buildTicketPrefill). */
   projectName?: string | null;
   parentTitle?: string | null;
@@ -216,6 +221,8 @@ export function TaskTicketField({
             open
             onClose={() => setCreateOpen(false)}
             customerId={customerId}
+            organisations={organisations}
+            organisationLabel={organisationLabel}
             initialTitle={prefill.title}
             initialDescription={prefill.description}
             pinTarget
