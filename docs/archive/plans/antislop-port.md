@@ -1,6 +1,6 @@
 # antislop port (2026-11-12)
 
-Status: implemented on `feat/antislop-port`, reviewed, awaiting owner approval to commit.
+Status: shipped 2026-11-12 (PR #65, merged into `develop`).
 
 Source: a live review of this app on 2026-11-12 (every top-level page and project tab, dark and light, 1440px and iPhone 13) compared with the sibling repository `alfi-rajasyah/solvro` at `f945750`, which ran antislop audit 001 on 2026-11-10 and fixed it. The two frontends differ in 286 files, so this is a port by pattern, never a file copy.
 

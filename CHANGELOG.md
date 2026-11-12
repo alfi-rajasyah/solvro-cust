@@ -24,6 +24,10 @@ Plan: `docs/archive/plans/stat-strip-project-header.md`.
 - **Project header** (`components/ProjectHeaderFacts.tsx`, `pages/ProjectDetail.tsx`): the facts sit on one line on desktop without uppercase labels: customer, dates, TAM, progress, then only what needs attention (past end date, overdue tasks, open risks, days behind baseline). "No baseline" and zero counts are no longer shown; the baseline stays in the context panel. "Edit project" and "Copy link" are the first items of the "More project actions" menu at every width, and the menu is shown to every member.
 - **Gantt** (`components/gantt-v2/SolvroGantt.tsx`): the task tree's first column header reads "Task" (was "Resources").
 - **Help** (`lib/helpContent.ts`): the Overview, Utilization and Projects guides describe the summary row and the project actions menu.
+### Changed — 2026-11-12 — Two-branch flow: `develop` and `main`
+
+- **`.github/workflows/ci.yml`, `.github/workflows/docker-publish.yml`**: the `staging` branch is no longer part of the flow. CI runs on pull requests into `develop` (the merge gate) and `main` (a promotion: typecheck and backend tests), and in full, desktop and mobile, on a push to `main`; images publish only after that green run, plus release tags. The `deploy-staging` job and the `:staging` image tag are gone; images already published under `:staging` are left as they are.
+- **`CLAUDE.md`, `e2e/CLAUDE.md`, `docs/CONFIGURATION.md`**: describe the two-branch flow. `main` now takes pull requests from `develop`.
 
 ### Changed — 2026-11-12 — Interface pass against the antislop filter
 
