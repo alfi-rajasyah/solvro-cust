@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-11-12
+
+### Changed — 2026-11-12 — Version 1.2.1
+
+- The release version is `1.2.1` in `VERSION`, `backend/package.json`, `frontend/package.json` and the image tag in `setup.sh` (`SOLVRO_IMAGE_TAG="v1.2.1"`), so the login page and new installs show and pull this release.
+
 ### Changed — 2026-11-12 — One stat strip, a one-line project header
 
 Plan: `docs/archive/plans/stat-strip-project-header.md`.
