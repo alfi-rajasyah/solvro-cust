@@ -135,7 +135,7 @@ export function EmbedInOutlineDialog({
               value={epicId ?? ""}
               onChange={(e) => setEpicId(e.target.value ? Number(e.target.value) : null)}
               aria-label="Filter by epic"
-              className={`rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING}`}
+              className={`[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING}`}
             >
               <option value="">All tasks</option>
               {(epics.data ?? []).map((e) => (
@@ -156,7 +156,7 @@ export function EmbedInOutlineDialog({
                 ["guest", "Anyone with the link"],
               ] as const
             ).map(([value, label]) => (
-              <label key={value} className="flex cursor-pointer items-center gap-2 text-sm text-on-surface">
+              <label key={value} className="flex [@media(pointer:coarse)]:min-h-11 cursor-pointer items-center gap-2 text-sm text-on-surface">
                 <input
                   type="radio"
                   name={`${idBase}-audience`}
@@ -183,7 +183,7 @@ export function EmbedInOutlineDialog({
           ) : guestUrl ? (
             <>
               <LinkField url={guestUrl} label="Guest embed link" testId="embed-link-url" />
-              <p className="text-xs text-on-surface">You won't see this link again — copy it now.</p>
+              <p className="text-xs text-on-surface">You won't see this link again. Copy it now.</p>
             </>
           ) : canCreateGuestLink ? (
             <div className="space-y-2 rounded-sm border border-dashed border-outline-variant p-3">
@@ -196,7 +196,7 @@ export function EmbedInOutlineDialog({
                 data-testid="embed-create-guest"
                 onClick={() => void handleCreate()}
                 disabled={create.isPending}
-                className={`rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60 ${FOCUS_RING}`}
+                className={`[@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60 ${FOCUS_RING}`}
               >
                 {create.isPending ? "Creating…" : "Create guest link"}
               </button>
@@ -260,13 +260,13 @@ function LinkField({ url, label, testId }: { url: string; label: string; testId:
           aria-label={label}
           data-testid={testId}
           onFocus={(e) => e.currentTarget.select()}
-          className={`min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 font-mono text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING}`}
+          className={`[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 font-mono text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING}`}
         />
         <button
           type="button"
           data-testid="embed-copy"
           onClick={() => void handleCopy()}
-          className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 ${FOCUS_RING}`}
+          className={`[@media(pointer:coarse)]:min-h-11 inline-flex shrink-0 items-center justify-center gap-1.5 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 ${FOCUS_RING}`}
         >
           <span className="material-symbols-outlined text-base" aria-hidden="true">
             {state === "copied" ? "check" : "content_copy"}
@@ -278,7 +278,7 @@ function LinkField({ url, label, testId }: { url: string; label: string; testId:
         {state === "copied"
           ? "Link copied to clipboard."
           : state === "failed"
-            ? "Could not copy automatically — the link is selected, press Ctrl+C."
+            ? "Could not copy automatically. The link is selected: press Ctrl+C."
             : ""}
       </p>
     </div>

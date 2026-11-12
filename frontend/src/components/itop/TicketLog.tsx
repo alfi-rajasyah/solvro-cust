@@ -5,13 +5,14 @@
 import { useId, useRef, useState, type FormEvent } from "react";
 import { fmtDateTime } from "@/lib/formatDate";
 import type { ItopTicketLogEntry } from "@/lib/queries";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 
 type LogVisibility = "public" | "private";
 
 const LOG_MAX_LENGTH = 4000;
 
 const PILL_BASE =
-  "rounded-sm px-2.5 py-1 font-display text-meta font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "tap-target rounded-sm px-2.5 py-1 font-display text-meta font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
 function pillClass(active: boolean): string {
   return [
@@ -114,7 +115,7 @@ export function TicketLog({
         className="mt-3 space-y-2.5"
       >
         {entries.length === 0 && (
-          <li className="text-[13px] text-on-surface-variant">
+          <li className="text-xs text-on-surface-variant">
             No {activeTab} log entries yet.
           </li>
         )}
@@ -123,9 +124,9 @@ export function TicketLog({
             key={i}
             className="rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2"
           >
-            <div className="mb-0.5 flex items-center justify-between gap-2 text-[12px] text-on-surface-variant">
+            <div className="mb-0.5 flex items-center justify-between gap-2 text-meta text-on-surface-variant">
               <span className="min-w-0 truncate font-medium text-on-surface">
-                {entry.author ?? "—"}
+                {entry.author ?? EMPTY_VALUE}
               </span>
               <span className="shrink-0">
                 {fmtDateTime(entry.date)}
@@ -148,7 +149,7 @@ export function TicketLog({
             rows={2}
             maxLength={LOG_MAX_LENGTH}
             aria-label="New log entry"
-            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           />
           {remaining < 200 && (
             <p className="text-xs text-on-surface-variant">
@@ -179,12 +180,12 @@ export function TicketLog({
             <button
               type="submit"
               disabled={adding || !text.trim()}
-              className="rounded-sm bg-primary px-3 py-1 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-50"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-3 py-1 font-display text-xs font-semibold text-on-primary hover:bg-primary/90 disabled:opacity-50"
             >
               {adding ? "Adding…" : "Add entry"}
             </button>
           </div>
-          {error && <p className="text-[12px] text-error">{error}</p>}
+          {error && <p className="text-meta text-error">{error}</p>}
         </form>
       )}
     </div>

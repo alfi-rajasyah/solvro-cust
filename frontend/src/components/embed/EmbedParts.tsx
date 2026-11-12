@@ -7,7 +7,7 @@ import { BrandMark } from "@/components/BrandMark";
 // Solvro in a new top-level tab.
 
 const BUTTON =
-  "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-3 font-display text-xs font-bold outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
+  "inline-flex h-8 items-center justify-center gap-1.5 rounded-sm px-3 font-display text-xs font-bold outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
 export const EMBED_BUTTON_PRIMARY = `${BUTTON} bg-primary text-on-primary hover:opacity-90`;
 export const EMBED_BUTTON_SECONDARY = `${BUTTON} border border-outline-variant focus-visible:border-primary bg-surface-container-lowest text-on-surface hover:bg-surface-container`;
 

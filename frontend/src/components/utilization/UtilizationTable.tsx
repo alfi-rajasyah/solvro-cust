@@ -80,7 +80,7 @@ function TicketRefs({ refs }: { refs: string[] }) {
   const visible = refs.slice(0, MAX_VISIBLE_REFS);
   const overflow = refs.length - visible.length;
   return (
-    <span className="font-mono text-[12px] text-on-surface-variant">
+    <span className="font-mono text-meta text-on-surface-variant">
       {visible.join(" · ")}
       {overflow > 0 ? ` · +${overflow}` : ""}
     </span>
@@ -183,7 +183,7 @@ export function UtilizationTable({
       </div>
 
       {data.truncated && (
-        <p data-testid="utilization-truncated" className="mt-1.5 text-[12px] text-on-surface-variant">
+        <p data-testid="utilization-truncated" className="mt-1.5 text-meta text-on-surface-variant">
           Showing the first 10 000 entries of this week.
         </p>
       )}

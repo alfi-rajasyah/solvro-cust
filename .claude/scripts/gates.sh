@@ -188,7 +188,7 @@ else fail guardrail-filters-vendor "frontend/src/components/reui/filters.tsx mis
 
 # Same drift guards for the vendored Data Grid family (dir-total) and Badge
 # (vendored 2026-08-01; counts include comment-only markers).
-EXPECTED_DATAGRID_PATCHES=40
+EXPECTED_DATAGRID_PATCHES=41
 if [ -d frontend/src/components/reui/data-grid ]; then
   N="$(grep -rc 'SOLVRO PATCH' frontend/src/components/reui/data-grid/ | awk -F: '{s+=$2} END {print s}')"
   if [ "$N" -eq "$EXPECTED_DATAGRID_PATCHES" ]; then pass guardrail-datagrid-vendor
@@ -201,6 +201,48 @@ if [ -f frontend/src/components/reui/badge.tsx ]; then
   if [ "$N" -eq "$EXPECTED_BADGE_PATCHES" ]; then pass guardrail-badge-vendor
   else fail guardrail-badge-vendor "SOLVRO PATCH count $N != recorded $EXPECTED_BADGE_PATCHES"; fi
 else fail guardrail-badge-vendor "frontend/src/components/reui/badge.tsx missing"; fi
+
+# ---------- design guard checks (always) ----------
+# antislop guards (2026-11-12, docs/archive/plans/antislop-port.md). App code
+# only: vendored shadcn/ReUI (components/ui, components/reui) and tests are
+# excluded. Each prints the first offending lines on failure.
+design_grep() { # design_grep <ERE> [extra path-exclude ERE, relative to frontend/src/]
+  # Excludes are anchored to the path prefix of grep's "path:line:content"
+  # output, so a code line that merely mentions components/ui/ is still checked.
+  local ex='^frontend/src/(components/(ui|reui)/|[^:]*\.test\.tsx?:)'
+  [ -n "${2:-}" ] && ex="$ex|^frontend/src/$2"
+  local out rc
+  out="$(grep -rnE "$1" frontend/src --include='*.ts' --include='*.tsx')"; rc=$?
+  # grep exits 2 on a bad pattern or unreadable tree: report it, never pass silently.
+  if [ "$rc" -gt 1 ]; then echo "GREP-ERROR: grep exited $rc for pattern $1"; return; fi
+  echo "$out" | grep -vE "$ex" | sed '/^$/d' || true
+}
+design_check() { # design_check <gate> <reason> <hits>
+  if [ -n "$3" ]; then fail "$1" "$2: $(echo "$3" | head -3 | cut -c1-160 | tr '\n' ' ')"
+  else pass "$1"; fi
+}
+# 1. Text on a solid primary fill uses its token pair — white on dark-theme
+#    green is 2.86:1.
+design_check design-on-primary "text-white on bg-primary (use text-on-primary)" \
+  "$(design_grep "bg-primary([^/-]|\$)[^\"'\`]*text-white|text-white[^\"'\`]*bg-primary([^/-]|\$)")"
+# 2 and 3 read whole files (a tag or a comment can span lines), so they use
+# perl rather than the line grep above.
+design_perl() { # design_perl <perl -ne body run once per file, file in $_>
+  find frontend/src -type f \( -name '*.ts' -o -name '*.tsx' \) \
+    ! -path 'frontend/src/components/ui/*' ! -path 'frontend/src/components/reui/*' \
+    ! -name '*.test.ts' ! -name '*.test.tsx' -print0 \
+    | xargs -0 perl -CSD -Mutf8 -0777 -ne "$1" 2>&1
+}
+# 2. No em dash in text a user reads. Comments are blanked first, so prose in
+#    comments is free; the "no value" mark is EMPTY_VALUE (lib/emptyValue.ts).
+design_check design-no-em-dash "em dash in user-facing text (rewrite the sentence; an empty value is EMPTY_VALUE)" \
+  "$(design_perl 's{/\*.*?\*/}{ (my $c = $&) =~ s/[^\n]//g; $c }gse; s{(^|[^:"\x27`])//[^\n]*}{$1}gm; my $n = 0; for my $l (split /\n/) { $n++; print "$ARGV:$n: $l\n" if $l =~ /\x{2014}/ }')"
+# 3. Icon ligatures are text: a material-symbols element is hidden from
+#    assistive tech, or is itself a labelled control. Never both: aria-hidden
+#    on an element that is a control (or carries the only name) hides it from
+#    the people who need the name. The tag matcher steps over the ">" of "=>".
+design_check design-icon-hidden "material-symbols-outlined element without aria-hidden (aria-label when it is the control), or aria-hidden on a control" \
+  "$(design_perl 'while (/<(?:span|button|i)\b((?:[^>]|(?<==)>)*?material-symbols-outlined(?:[^>]|(?<==)>)*?)>/gs) { my $a = $1; my $n = (substr($_, 0, $-[0]) =~ tr/\n//) + 1; if ($a !~ /aria-hidden|aria-label/) { print "$ARGV:$n: icon element is neither hidden nor labelled\n" } elsif ($a =~ /aria-hidden/ && $a =~ /aria-label|\brole=|tabIndex|\{\.\.\.attributes\}|onClick/) { print "$ARGV:$n: aria-hidden on a control or a named icon\n" } }')"
 
 # ---------- spine check (always) ----------
 # Shared spine of the projects page + app-wide hot surfaces. Touching any of these

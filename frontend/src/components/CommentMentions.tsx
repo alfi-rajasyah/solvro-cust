@@ -138,7 +138,7 @@ export function CommentComposer({
     <>
       <form
         onSubmit={handleSubmit}
-        className="relative flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2"
+        className="relative flex [@media(pointer:coarse)]:min-h-11 items-center gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30"
       >
         <input
           ref={inputRef}
@@ -163,13 +163,13 @@ export function CommentComposer({
           onKeyDown={handleKeyDown}
           maxLength={5000}
           placeholder="Write a comment…"
-          className="min-w-0 flex-1 border-none bg-transparent text-xs text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden"
+          className="min-w-0 flex-1 border-none bg-transparent text-xs text-on-surface outline-hidden placeholder:text-on-surface-variant/80"
         />
         <button
           type="submit"
           disabled={isPending || !body.trim()}
           aria-label="Send comment"
-          className="flex shrink-0 items-center text-primary disabled:opacity-40"
+          className="tap-target flex shrink-0 items-center text-primary disabled:opacity-40"
         >
           <span aria-hidden="true" className="material-symbols-outlined text-[17px]">send</span>
         </button>

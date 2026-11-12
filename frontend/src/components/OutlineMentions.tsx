@@ -57,7 +57,7 @@ export function OutlineMentions({
       {total > 0 && !data.connected && (
         <p className="mt-1.5 text-xs text-on-surface-variant" data-testid="outline-mentions-unconnected">
           {unconnectedLead(total)}
-          <Link to="/settings" className="font-semibold text-primary hover:underline">
+          <Link to="/settings?tab=integrations" className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 font-semibold text-primary hover:underline">
             {unconnectedAction(total)}
           </Link>
         </p>
@@ -81,7 +81,7 @@ export function OutlineMentions({
                     href={href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 rounded-sm px-1.5 py-1 text-xs text-on-surface outline-hidden hover:bg-surface-container focus-visible:ring-2 focus-visible:ring-primary/30"
+                    className="[@media(pointer:coarse)]:min-h-11 flex items-center gap-2 rounded-sm px-1.5 py-1 text-xs text-on-surface outline-hidden hover:bg-surface-container focus-visible:ring-2 focus-visible:ring-primary/30"
                   >
                     {label}
                     <span className="material-symbols-outlined text-base text-on-surface-variant" aria-hidden="true">

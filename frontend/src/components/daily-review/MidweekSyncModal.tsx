@@ -172,7 +172,7 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
       return;
     }
     if (kept.length > MAX_HIGHLIGHTS) {
-      setError("20 highlights max — remove some before saving.");
+      setError("20 highlights max. Remove some before saving.");
       return;
     }
     save.mutate(
@@ -199,7 +199,7 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
 
   const fieldId = (name: string) => `midweek-${customer.id}-${name}`;
   const linkClass =
-    "text-[12px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+    "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
   // Modal.tsx registers one document-level Escape listener per open
   // instance with no stopPropagation, so a single Escape press would
@@ -210,7 +210,7 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
     <Modal
       open
       onClose={save.isPending || confirmRedraft ? () => {} : onClose}
-      title={`Mid-week sync — ${customer.name}, week ${weekNumber}`}
+      title={`Mid-week sync: ${customer.name}, week ${weekNumber}`}
       widthClass="max-w-3xl"
       footer={
         <>
@@ -218,7 +218,7 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
             type="button"
             onClick={onClose}
             disabled={save.isPending}
-            className="rounded-lg border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
           >
             Cancel
           </button>
@@ -226,7 +226,7 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
             type="button"
             onClick={submit}
             disabled={save.isPending}
-            className="rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60"
           >
             {save.isPending ? "Saving…" : "Save mid-week"}
           </button>
@@ -262,11 +262,11 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
                         : "flex flex-col gap-1"
                     }
                   >
-                    <p className="text-[13px] font-semibold text-on-surface">{a.title}</p>
+                    <p className="text-xs font-semibold text-on-surface">{a.title}</p>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-[150px_1fr]">
                       {a.outstandingIssue && (
                         <>
-                          <span className="text-[12px] font-semibold text-on-surface-variant">
+                          <span className="text-meta font-semibold text-on-surface-variant">
                             Outstanding issue
                           </span>
                           <span className="text-sm text-on-surface">{a.outstandingIssue}</span>
@@ -274,13 +274,13 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
                       )}
                       {a.nextWeekFocus && (
                         <>
-                          <span className="text-[12px] font-semibold text-on-surface-variant">Next week focus</span>
+                          <span className="text-meta font-semibold text-on-surface-variant">Next week focus</span>
                           <span className="text-sm text-on-surface">{a.nextWeekFocus}</span>
                         </>
                       )}
                       {a.managerDecision && (
                         <>
-                          <span className="text-[12px] font-semibold text-on-surface-variant">Manager decision</span>
+                          <span className="text-meta font-semibold text-on-surface-variant">Manager decision</span>
                           <span className="text-sm text-on-surface">{a.managerDecision}</span>
                         </>
                       )}
@@ -344,7 +344,7 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
                       type="button"
                       onClick={() => removeHighlight(h.key)}
                       aria-label={`Remove highlight ${n}`}
-                      className="text-[12px] font-semibold text-on-surface-variant hover:text-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                      className="tap-target text-meta font-semibold text-on-surface-variant hover:text-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                     >
                       Remove
                     </button>
@@ -412,7 +412,7 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
                 type="button"
                 onClick={addHighlight}
                 disabled={state.highlights.length >= MAX_HIGHLIGHTS}
-                className="flex items-center gap-1.5 rounded-sm border border-outline-variant px-2.5 py-1.5 text-[12px] font-semibold text-on-surface-variant hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
+                className="[@media(pointer:coarse)]:min-h-11 flex items-center gap-1.5 rounded-sm border border-outline-variant px-2.5 py-1.5 text-meta font-semibold text-on-surface-variant hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
               >
                 <span className="material-symbols-outlined text-[16px]" aria-hidden="true">
                   add

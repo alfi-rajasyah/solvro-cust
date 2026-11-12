@@ -18,9 +18,10 @@
 // list, with Customer/Health/Category repeating on every row (no `rowspan`
 // — D8/D12): a Mid-week row is a HIGHLIGHT (a customer with N highlights
 // produces N rows, one with a saved Mid-week but no highlight still gets
-// one row with "—" in Highlight/Risk/Action), a Reflection row is an
+// one row with "–" in Highlight/Risk/Action), a Reflection row is an
 // ACHIEVEMENT (a customer with N achievements produces N rows, one with no
-// achievement still gets one row with "—" in the five text cells).
+// achievement still gets one row with "–" in the five text cells).
+import { EMPTY_VALUE } from "./emptyValue";
 import { WEEKLY_HEALTH_LABEL } from "./labels";
 import type { DailyReviewCustomer, WeeklyHealth } from "./queries";
 
@@ -31,11 +32,10 @@ export interface SyncTable {
   rows: string[][];
 }
 
-const EM_DASH = "—";
 
 // Title-case health labels — shared with WeeklySync.tsx's on-page Health
 // cells (finding 2, phase review) so the page and the clipboard agree on
-// casing, even though the page still needs its own "—" wrapper for a null
+// casing, even though the page still needs its own "–" wrapper for a null
 // health (a plain pill, not a table cell).
 export const HEALTH_LABEL: Record<WeeklyHealth, string> = WEEKLY_HEALTH_LABEL;
 
@@ -44,7 +44,7 @@ export function hasManagerDecision(customer: DailyReviewCustomer): boolean {
   return customer.weeklyUpdate?.achievements.some((a) => hasText(a.managerDecision)) ?? false;
 }
 
-/** True when `value` has content after trim — the same test the page's "—" fallback uses. */
+/** True when `value` has content after trim — the same test the page's "–" fallback uses. */
 function hasText(value: string | null | undefined): boolean {
   return Boolean(value?.trim());
 }
@@ -87,12 +87,12 @@ export function orderForTab(
 
 /** Empty-dash fallback for a nullable/whitespace-only text field. Preserves the raw value (including internal newlines) when it has content. */
 function cellText(value: string | null | undefined): string {
-  if (value == null || value.trim().length === 0) return EM_DASH;
+  if (value == null || value.trim().length === 0) return EMPTY_VALUE;
   return value;
 }
 
 function cellHealth(health: WeeklyHealth | null | undefined): string {
-  return health ? HEALTH_LABEL[health] : EM_DASH;
+  return health ? HEALTH_LABEL[health] : EMPTY_VALUE;
 }
 
 /**
@@ -111,7 +111,7 @@ export function buildSyncTable(tab: WeeklySyncTab, customers: DailyReviewCustome
       const categoryCell = cellText(u?.category);
       const highlights = u?.highlights ?? [];
       if (highlights.length === 0) {
-        rows.push([c.name, healthCell, categoryCell, EM_DASH, EM_DASH, EM_DASH]);
+        rows.push([c.name, healthCell, categoryCell, EMPTY_VALUE, EMPTY_VALUE, EMPTY_VALUE]);
         continue;
       }
       for (const h of highlights) {
@@ -140,7 +140,7 @@ export function buildSyncTable(tab: WeeklySyncTab, customers: DailyReviewCustome
   for (const c of customers) {
     const achievements = c.weeklyUpdate?.achievements ?? [];
     if (achievements.length === 0) {
-      rows.push([c.name, EM_DASH, EM_DASH, EM_DASH, EM_DASH, EM_DASH]);
+      rows.push([c.name, EMPTY_VALUE, EMPTY_VALUE, EMPTY_VALUE, EMPTY_VALUE, EMPTY_VALUE]);
       continue;
     }
     for (const a of achievements) {

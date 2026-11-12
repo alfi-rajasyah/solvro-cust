@@ -20,6 +20,7 @@ import { GateReason } from "./GateReason";
 import { NewTicketSheet } from "./NewTicketSheet";
 import { buildTicketPrefill } from "./ticketPrefill";
 import { isItopRef, itopTicketUrl, statusLabel, statusTone, type TicketTone } from "./ticketPresentation";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 
 const DOT_CLASS: Record<TicketTone, string> = {
   emerald: "bg-chip-emerald-text",
@@ -45,7 +46,7 @@ export interface RowTicketContext {
 }
 
 const MENU_TRIGGER_CLASS =
-  "inline-flex max-w-full items-center gap-1.5 rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
+  "tap-target inline-flex max-w-full items-center gap-1.5 rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
 
 export function RowTicketCell({
   task,
@@ -176,7 +177,7 @@ export function RowTicketCell({
       </DropdownMenuTrigger>
     );
   } else {
-    return <span className="text-meta text-on-surface-variant">—</span>;
+    return <span className="text-meta text-on-surface-variant">{EMPTY_VALUE}</span>;
   }
 
   return (
@@ -242,14 +243,14 @@ export function RowTicketCell({
                 <button
                   type="button"
                   onClick={() => setPinOpen(false)}
-                  className="rounded-lg border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={submitPin}
-                  className="rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90"
+                  className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90"
                 >
                   Pin
                 </button>

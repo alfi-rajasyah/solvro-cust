@@ -16,6 +16,7 @@ import { TaskFormModal } from "@/components/TaskFormModal";
 import { STATUS_TONE_DOT_CLASS, TaskStatusChip } from "@/components/StatusChip";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { dateToDay, dayFromIso } from "@/lib/dateField";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 import { fmtDay, fmtDue } from "@/lib/formatDate";
 import { parseWeekKey, weekKeyOf } from "@/lib/isoWeek";
 import { TASK_CATEGORY_GROUP_LABEL, priorityOptions } from "@/lib/labels";
@@ -283,7 +284,7 @@ export function Tasks() {
           <Link
             to={`/projects/${row.original.project.id}`}
             onClick={(e) => e.stopPropagation()}
-            className="text-on-surface-variant hover:text-primary"
+            className="[@media(pointer:coarse)]:inline-block text-on-surface-variant hover:text-primary [@media(pointer:coarse)]:py-3"
           >
             {row.original.project.name}
           </Link>
@@ -338,8 +339,8 @@ export function Tasks() {
             <span
               className={
                 isOverdue
-                  ? "text-[12px] font-bold text-error"
-                  : "text-[12px] text-on-surface-variant"
+                  ? "text-meta font-bold text-error"
+                  : "text-meta text-on-surface-variant"
               }
             >
               {fmt(task.dueDate, task.status === "DONE")}
@@ -394,7 +395,7 @@ export function Tasks() {
           size="sm"
           allowMultiple={false}
         />
-        <label className="flex items-center gap-2 text-xs text-on-surface-variant">
+        <label className="flex items-center gap-2 text-xs text-on-surface-variant [@media(pointer:coarse)]:min-h-11">
           <input
             type="checkbox"
             checked={topLevel}
@@ -410,7 +411,7 @@ export function Tasks() {
             setTopLevel(true);
             setSearchParams({}, { replace: false });
           }}
-          className="ml-auto rounded-sm border border-outline-variant px-2 py-1 font-display text-sm text-on-surface-variant hover:border-primary hover:text-primary font-semibold"
+          className="ml-auto rounded-sm border border-outline-variant px-2 py-1 font-display text-sm text-on-surface-variant hover:border-primary hover:text-primary font-semibold [@media(pointer:coarse)]:min-h-11"
         >
           Reset
         </button>
@@ -519,7 +520,7 @@ export function Tasks() {
 
 // Done tasks show the plain date — "Nd late" would misreport a finished task.
 function fmt(iso: string | null, done: boolean) {
-  return (done ? fmtDay(iso) : fmtDue(iso)) || "—";
+  return (done ? fmtDay(iso) : fmtDue(iso)) || EMPTY_VALUE;
 }
 
 function startOfToday() {
@@ -534,13 +535,13 @@ export type { Task };
 // Removable chip for a person filter carried in the URL from the Overview.
 function PersonChip({ label, onClear }: { label: string; onClear: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-sm border border-primary bg-surface-container-lowest py-0.5 pl-2 pr-0.5 text-meta font-semibold text-on-surface">
+    <span className="inline-flex items-center gap-1 [@media(pointer:coarse)]:gap-3 rounded-sm border border-primary bg-surface-container-lowest py-0.5 pl-2 pr-0.5 [@media(pointer:coarse)]:pr-3 text-meta font-semibold text-on-surface">
       {label}
       <button
         type="button"
         aria-label={`Remove filter: ${label}`}
         onClick={onClear}
-        className="flex h-5 w-5 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:text-primary outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+        className="tap-target flex h-5 w-5 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:text-primary outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
       >
         <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
       </button>

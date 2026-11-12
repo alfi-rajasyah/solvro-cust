@@ -151,6 +151,10 @@ const SCALES: Array<{ mode: GanttScale; label: string }> = [
 // padding. An explicit height makes the box immune to all three.
 const TOOLBAR_ITEM_HEIGHT = "h-7";
 
+// The tree pane lists tasks, not people: override the engine's "Resources"
+// column header. Module-level so the prop keeps a stable identity.
+const GANTT_I18N = { labels: { resources: "Task" } };
+
 // Ported verbatim from GanttFrame.tsx:72 — same key, same values, so a user's
 // existing pick survives the engine swap.
 const COLOR_BY_STORAGE_KEY = "solvro.gantt.colorBy";
@@ -1110,7 +1114,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
           </>
         )}
 
-        <span className="ml-2 hidden font-mono text-[12px] text-on-surface-variant lg:inline">
+        <span className="ml-2 hidden font-mono text-meta text-on-surface-variant lg:inline">
           {tasks.filter((t) => t.startDate || t.dueDate).length} dated · {sections.length} sections
         </span>
 
@@ -1192,7 +1196,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
               title={
                 baselineLockedAt
                   ? `Baseline locked ${baselineLockedAtPretty}${baselineLockedBy ? ` by ${baselineLockedBy.username}` : ""}`
-                  : "No baseline locked yet — lock one from the Context panel"
+                  : "No baseline locked yet. Lock one from the Context panel"
               }
               className={cn(
                 TOOLBAR_ITEM_HEIGHT,
@@ -1262,7 +1266,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                 onValueChange={(v) => setColorBy(v as ColorByMode)}
               >
                 {COLOR_BY_MODES.map((mode) => (
-                  <DropdownMenuRadioItem key={mode} value={mode} className="text-[12px]">
+                  <DropdownMenuRadioItem key={mode} value={mode} className="text-meta">
                     {COLOR_BY_LABELS[mode]}
                   </DropdownMenuRadioItem>
                 ))}
@@ -1288,7 +1292,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                     <span
                       key={`${colorBy}-${i}-${label}`}
                       title={label}
-                      className="flex min-w-0 items-center gap-2 text-[12px] text-on-surface-variant"
+                      className="flex min-w-0 items-center gap-2 text-meta text-on-surface-variant"
                     >
                       <span
                         className="h-2 w-2 shrink-0 rounded-[2px]"
@@ -1305,7 +1309,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                       in the mode-specific list above. */}
                   <span
                     title={CRITICAL_PATH_LABEL}
-                    className="flex min-w-0 items-center gap-2 text-[12px] text-on-surface-variant"
+                    className="flex min-w-0 items-center gap-2 text-meta text-on-surface-variant"
                   >
                     {/* Phase review: a 2px ring on this 8px box left only a 4px
                         hole and read as a filled square. A 1px ring keeps a 6px
@@ -1355,14 +1359,14 @@ export function SolvroGantt(props: SolvroGanttProps) {
                 <button
                   type="button"
                   onClick={() => runExport("excel")}
-                  className="block w-full px-3 py-1.5 text-left text-[12px] text-on-surface hover:bg-surface-container-low"
+                  className="block w-full px-3 py-1.5 text-left text-meta text-on-surface hover:bg-surface-container-low"
                 >
                   Excel
                 </button>
                 <button
                   type="button"
                   onClick={() => runExport("pdf")}
-                  className="block w-full px-3 py-1.5 text-left text-[12px] text-on-surface hover:bg-surface-container-low"
+                  className="block w-full px-3 py-1.5 text-left text-meta text-on-surface hover:bg-surface-container-low"
                 >
                   PDF
                 </button>
@@ -1384,12 +1388,12 @@ export function SolvroGantt(props: SolvroGanttProps) {
             onChange={(e) => setNewSectionName(e.target.value)}
             placeholder="Section name"
             maxLength={100}
-            className="w-64 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-xs focus:border-primary focus:outline-hidden"
+            className="w-64 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-xs focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
           />
           <button
             type="submit"
             disabled={createSection.isPending || !newSectionName.trim()}
-            className="rounded-sm bg-primary px-2 py-1 font-display text-xs text-on-primary hover:bg-primary-container disabled:opacity-50 font-semibold"
+            className="rounded-sm bg-primary px-2 py-1 font-display text-xs text-on-primary hover:bg-primary/90 disabled:opacity-50 font-semibold"
           >
             Add
           </button>
@@ -1434,6 +1438,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
             apiRef={apiRef}
             events={events}
             resources={resources}
+            i18n={GANTT_I18N}
             scale={scale}
             onScaleChange={setScale}
             weekStartsOn={1}

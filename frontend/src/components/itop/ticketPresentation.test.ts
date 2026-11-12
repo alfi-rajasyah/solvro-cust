@@ -64,9 +64,9 @@ describe("ageLabel", () => {
     expect(ageLabel("2026-09-22T12:05:00.000Z", now)).toBe("0 min");
   });
 
-  it("renders — for a null or unparseable startDate, never a garbage duration", () => {
-    expect(ageLabel(null, now)).toBe("—");
-    expect(ageLabel("not-a-date", now)).toBe("—");
+  it("renders an en dash for a null or unparseable startDate, never a garbage duration", () => {
+    expect(ageLabel(null, now)).toBe("–");
+    expect(ageLabel("not-a-date", now)).toBe("–");
   });
 });
 
@@ -125,13 +125,13 @@ describe("slaLabel", () => {
     ).toBe("TTR 1 h 20 min left");
   });
 
-  it("renders — when ttr is null", () => {
+  it("renders an en dash when ttr is null", () => {
     expect(
       slaLabel({ status: "new", slaTtoPassed: false, slaTtrPassed: false, ttr: null }, now),
-    ).toBe("—");
+    ).toBe("–");
   });
 
-  it("renders — when ttr has already elapsed but the SLA flags haven't caught up", () => {
+  it("renders an en dash when ttr has already elapsed but the SLA flags haven't caught up", () => {
     expect(
       slaLabel(
         {
@@ -142,7 +142,7 @@ describe("slaLabel", () => {
         },
         now,
       ),
-    ).toBe("—");
+    ).toBe("–");
   });
 });
 

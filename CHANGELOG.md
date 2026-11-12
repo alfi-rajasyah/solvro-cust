@@ -15,6 +15,56 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-11-12
+
+### Changed — 2026-11-12 — Version 1.2.1
+
+- The release version is `1.2.1` in `VERSION`, `backend/package.json`, `frontend/package.json` and the image tag in `setup.sh` (`SOLVRO_IMAGE_TAG="v1.2.1"`), so the login page and new installs show and pull this release.
+
+### Changed — 2026-11-12 — One stat strip, a one-line project header
+
+Plan: `docs/archive/plans/stat-strip-project-header.md`.
+
+- **Stat strip** (`frontend/src/components/StatStrip.tsx`): Overview, Project Overview, Daily Review, Utilization and the Admin Users tab open with one bordered row of numbers (number, then a sentence-case label) in place of boxed tiles with corner icons and uppercase labels. Colour appears on a number only when it needs action and is above zero: overdue tasks, open risks on Daily Review, pending users, hours not tied to a customer, hours at or over capacity (the number as well as the bar). Stats that were links keep their destinations. On phones the strip is one compact grid, where three tiles used to fill the screen.
+- **Overview** (`pages/Overview.tsx`): "Projects needing attention" leads the page beside "Recent notes" on wide screens, one project per row, with the portfolio timeline below. The three summary links are named by their visible text ("3 overdue tasks").
+- **Project header** (`components/ProjectHeaderFacts.tsx`, `pages/ProjectDetail.tsx`): the facts sit on one line on desktop without uppercase labels: customer, dates, TAM, progress, then only what needs attention (past end date, overdue tasks, open risks, days behind baseline). "No baseline" and zero counts are no longer shown; the baseline stays in the context panel. "Edit project" and "Copy link" are the first items of the "More project actions" menu at every width, and the menu is shown to every member.
+- **Gantt** (`components/gantt-v2/SolvroGantt.tsx`): the task tree's first column header reads "Task" (was "Resources").
+- **Help** (`lib/helpContent.ts`): the Overview, Utilization and Projects guides describe the summary row and the project actions menu.
+### Changed — 2026-11-12 — Two-branch flow: `develop` and `main`
+
+- **`.github/workflows/ci.yml`, `.github/workflows/docker-publish.yml`**: the `staging` branch is no longer part of the flow. CI runs on pull requests into `develop` (the merge gate) and `main` (a promotion: typecheck and backend tests), and in full, desktop and mobile, on a push to `main`; images publish only after that green run, plus release tags. The `deploy-staging` job and the `:staging` image tag are gone; images already published under `:staging` are left as they are.
+- **`CLAUDE.md`, `e2e/CLAUDE.md`, `docs/CONFIGURATION.md`**: describe the two-branch flow. `main` now takes pull requests from `develop`.
+
+### Changed — 2026-11-12 — Interface pass against the antislop filter
+
+Plan: `docs/archive/plans/antislop-port.md`.
+
+- **Light-theme green** (`frontend/src/index.css`, `frontend/src/lib/gantt/exportPdf.ts`): `primary` is now `#1f7533` (was `#267937`), so green text holds 4.5:1 on every surface down to the hover tint, where it measured 4.25:1. The Gantt PDF uses the same value. `frontend/src/lib/tokenContrast.test.ts` pins the token pairs.
+- **Text on green**: avatar initials and checked marks use `text-on-primary`; white on the dark-theme green measured 2.86:1 (`TopBar.tsx`, `AssigneeAvatar.tsx`, `kanban-v2/MobileMoveSheet.tsx`).
+- **Login** (`pages/Login.tsx`): the body line reads "Workspace for project delivery", the third pill is "Weekly sync" (it named the removed Reports feature), the page is a `main` landmark with "Sign in" as its heading, and the Google button is pinned to English. The layout and look are unchanged.
+- **Settings** (`pages/Settings.tsx`): split into Account, Appearance, Integrations and Service catalogue tabs (`?tab=`), laid out as rows. The theme preview is drawn from the real tokens (`lib/themePreview.ts`). The Outline connection sits on the Integrations tab as a row like the other settings, and returning from Outline's consent screen opens that tab. Links that ask for an iTop token or an Outline connection open it too.
+- **Risks tab** (`pages/views/ProjectRisks.tsx`, `components/RiskScoreChip.tsx`): score and status are standard chips, shared with the project Overview and Daily Review; the four counters sit in the toolbar with the colour on the number only; the search box and selects have accessible names.
+- **Toolbars**: the main and secondary buttons on Projects, Customers, the project List, Kanban, Epics, Risks, Services and the customer iTop Tickets tab share one size and style (`TOOLBAR_*` in `lib/utils.ts`).
+- **Admin** (`pages/Admin.tsx`): inactive users are no longer dimmed; their status chip reads "Inactive". The column "Current TAM → Reassign" is "Reassign TAM".
+- **Overview** (`pages/Overview.tsx`): attention rows lose the coloured left stripe and wrap onto two lines on narrow screens; a project past its end date shows a "Past end date" chip.
+- **Daily Review**: note boxes have a visible label ("Note", "Operations note").
+- **Copy**: no em dashes in text a user reads. Sentences use a comma, colon or full stop (for example "Reflection sync: Customer, week 12"; Outline document titles "Meeting notes, 9 Oct"; the Gantt PDF title "Project: Tasks"). A missing value shows an en dash from one constant (`lib/emptyValue.ts`), including in the weekly sync table copied to the clipboard. Arrows are gone from link and button labels ("View all", "Open in iTop"). "Open in iTop" links carry an open-in-new-tab icon and a screen-reader note instead.
+- **Shape and type**: `rounded-lg`/`rounded-xl` became the small radius everywhere except board column wells; pixel type sizes on text moved to the named roles; status chips no longer wrap inside narrow columns.
+- **Overlays**: modals, the command palette, side panels and sheets no longer blur the page behind them. Scrims keep their tint and the project context panel is opaque.
+- **Install prompt** (`frontend/vite.config.ts`): the app description shown when installing reads "Solvro: project management for teams."
+- **Hover contrast**: solid green buttons no longer turn pale green under white text on hover in the light theme (Settings, Daily Review, Admin, the iTop and Outline panels, date range picker, label picker, List, Epics, Gantt).
+- **Focus**: inputs that hid their outline (task and subtask titles, the comment box, form fields) show the green focus ring.
+
+### Added — 2026-11-12 — Pointer, touch and motion basics
+
+- **`frontend/src/index.css`**: every button-like control, checkbox and radio shows a pointer cursor and disabled ones show not-allowed; tapped controls reach at least 44px on touch input only (desktop sizes are unchanged): buttons, links, selects, tabs, list rows and subtask controls get a larger minimum height or padding, tightly packed icon buttons get real padding or spacing, and isolated small controls get a `tap-target` hit-area utility. Table sort headers grow the same way (`components/reui/data-grid/data-grid-column-header.tsx`, a marked patch to the vendored grid). Status chips and pills keep their size and get the hit area instead; the Daily Review "Show lists" control sits in its own row on phones. Links inside running sentences keep their text size; people who ask the operating system for reduced motion get no transitions or entrance animations.
+- **antislop filter** (`docs/reference/antislop.md`, `CLAUDE.md`, `frontend/CLAUDE.md`, `.claude/agents/`, `docs/DESIGN.md`): adopted for all interface and copy work, applied after `docs/DESIGN.md`, with the dial ENERGY 1 / RHYTHM 1 / MOTION 1.
+- **`.claude/scripts/gates.sh`**: three design guards: no em dash in user-facing text, no `text-white` on `bg-primary`, no icon element that is neither hidden from assistive technology nor a labelled control.
+
+### Fixed — 2026-11-04 — No failing image publish on pull requests from `staging`
+
+- **`.github/workflows/docker-publish.yml`**: images are now published only after a green CI run for a push (a merge into `staging` or `main`), plus tag pushes and manual runs as before. A pull request from `staging` (such as a release PR into `main`) also ran CI on the `staging` branch and started the publish workflow, which then failed because a pull request's token cannot push images or write the build cache. Nothing was published by those runs; they only showed as failures in Actions.
+
 ## [1.2.0] — 2026-11-04
 
 ### Changed — 2026-11-04 — Version 1.2.0

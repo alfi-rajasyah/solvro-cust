@@ -113,7 +113,7 @@ export function Login() {
   // in dark mode regardless of the user's theme preference. Scoping the class
   // to this subtree makes every CSS-var token resolve to its `.dark` value.
   return (
-    <div className="dark grid h-screen grid-cols-1 overflow-hidden bg-background md:grid-cols-[44%_1fr]">
+    <main className="dark grid min-h-screen grid-cols-1 bg-background md:h-screen md:grid-cols-[44%_1fr] md:overflow-hidden">
       {/* Left brand panel. Wordmark pinned top, footer pinned bottom; the hero
           copy gets `my-auto` to vertically center it in the space between. */}
       <div className="relative hidden flex-col overflow-hidden bg-background p-10 md:flex">
@@ -145,19 +145,13 @@ export function Login() {
           </span>
         </div>
 
-        {/* Hero copy */}
+        {/* Hero copy. A paragraph, not a heading: the page's one h1 is
+            "Sign in", which exists at every width. */}
         <div className="relative z-10 my-auto">
-          <div
-            className="mb-3 font-semibold text-primary"
-            style={{
-              fontSize: 12,
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-            }}
-          >
+          <div className="mb-3 text-label-caps font-semibold uppercase text-primary">
             Project Operations
           </div>
-          <h1
+          <p
             className="text-white"
             style={{
               fontSize: 40,
@@ -169,27 +163,19 @@ export function Login() {
             Manage projects.
             <br />
             <span className="text-primary">Ship</span> on time.
-          </h1>
+          </p>
           <p
-            className="mt-3 text-on-surface-variant/75"
-            style={{
-              fontSize: 12,
-              maxWidth: 240,
-              lineHeight: 1.6,
-            }}
+            className="mt-3 text-meta text-on-surface-variant"
+            style={{ maxWidth: 240, lineHeight: 1.6 }}
           >
-            One place to track projects, log updates, and report to customers.
+            Workspace for project delivery
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
-            {["Project tracking", "Daily notes", "Customer reports"].map(
+            {["Project tracking", "Daily notes", "Weekly sync"].map(
               (label) => (
                 <span
                   key={label}
-                  className="rounded-full border border-primary/30 text-primary"
-                  style={{
-                    fontSize: 12,
-                    padding: "3px 10px",
-                  }}
+                  className="rounded-full border border-primary/30 px-2.5 py-[3px] text-meta text-primary"
                 >
                   {label}
                 </span>
@@ -199,10 +185,7 @@ export function Login() {
         </div>
 
         {/* Footer version/build */}
-        <div
-          className="relative z-10 text-on-surface-variant/75"
-          style={{ fontSize: 12 }}
-        >
+        <div className="relative z-10 text-meta text-on-surface-variant">
           v{__APP_VERSION__}
         </div>
       </div>
@@ -221,16 +204,13 @@ export function Login() {
             </span>
           </div>
 
-          <h2
+          <h1
             className="text-on-surface"
             style={{ fontSize: 20, fontWeight: 500, letterSpacing: "-0.3px" }}
           >
             Sign in
-          </h2>
-          <p
-            className="mb-8 mt-1 text-on-surface-variant"
-            style={{ fontSize: 12 }}
-          >
+          </h1>
+          <p className="mb-8 mt-1 text-meta text-on-surface-variant">
             {googleAvailable
               ? "Use your work Google account."
               : "Sign in with your Solvro credentials."}
@@ -239,7 +219,7 @@ export function Login() {
           {googleConfigLoading ? (
             <div className="h-10 animate-pulse rounded-sm bg-surface-container" />
           ) : googleAvailable ? (
-            <GoogleOAuthProvider clientId={googleConfig!.clientId!}>
+            <GoogleOAuthProvider clientId={googleConfig!.clientId!} locale="en">
               <div className="flex justify-center">
                 <GoogleLogin
                   onSuccess={handleGoogleCredential}
@@ -323,15 +303,12 @@ export function Login() {
           )}
 
           {/* Footer */}
-          <p
-            className="mt-6 text-center text-on-surface-variant/75"
-            style={{ fontSize: 12 }}
-          >
+          <p className="mt-6 text-center text-meta text-on-surface-variant">
             Internal use only · Elitery © 2026
           </p>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -373,7 +350,7 @@ function PasswordForm({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            className="flex-1 bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/80 focus:outline-hidden"
+            className="flex-1 bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-hidden"
           />
         </div>
       </label>
@@ -382,7 +359,7 @@ function PasswordForm({
         <span className="text-label-caps uppercase text-on-surface-variant">
           Password
         </span>
-        <div className="mt-1 flex items-center gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgba(58,174,81,0.15)]">
+        <div className="mt-1 flex items-center gap-2 [@media(pointer:coarse)]:gap-3.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgba(58,174,81,0.15)]">
           <span aria-hidden="true" className="material-symbols-outlined text-base text-on-surface-variant">
             lock
           </span>
@@ -393,13 +370,13 @@ function PasswordForm({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            className="flex-1 bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/80 focus:outline-hidden"
+            className="flex-1 bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-hidden"
           />
           <button
             type="button"
             onClick={() => setShowPassword((v) => !v)}
             aria-label={showPassword ? "Hide password" : "Show password"}
-            className="text-on-surface-variant hover:text-on-surface"
+            className="tap-target text-on-surface-variant hover:text-on-surface"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-base">
               {showPassword ? "visibility_off" : "visibility"}

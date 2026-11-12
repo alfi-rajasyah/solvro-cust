@@ -173,13 +173,13 @@ function DailyItopStripRow({
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="min-w-0 flex-1 truncate text-[12px] text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 truncate text-meta text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           title={ticket.title}
         >
           <span className="font-mono font-semibold">{ticket.ref}</span> {ticket.title}
         </a>
       ) : (
-        <span className="min-w-0 flex-1 truncate text-[12px] text-on-surface" title={ticket.title}>
+        <span className="min-w-0 flex-1 truncate text-meta text-on-surface" title={ticket.title}>
           <span className="font-mono font-semibold">{ticket.ref}</span> {ticket.title}
         </span>
       )}
@@ -189,7 +189,7 @@ function DailyItopStripRow({
           type="button"
           onClick={() => runAction("assign_to_me")}
           disabled={actionMutation.isPending}
-          className="shrink-0 text-meta font-semibold text-primary hover:underline disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 shrink-0 text-meta font-semibold text-primary hover:underline disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           Assign to me
         </button>
@@ -199,7 +199,7 @@ function DailyItopStripRow({
           type="button"
           onClick={() => setActionSheet({ mode: "resolve", action: "resolve" })}
           disabled={actionMutation.isPending}
-          className="shrink-0 text-meta font-semibold text-primary hover:underline disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 shrink-0 text-meta font-semibold text-primary hover:underline disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           Resolve
         </button>
@@ -209,7 +209,7 @@ function DailyItopStripRow({
           type="button"
           onClick={() => onAddToNote(`${ticket.ref} ${ticket.title}`)}
           aria-label={`Add ${ticket.ref} to note`}
-          className="shrink-0 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 shrink-0 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           Add to note
         </button>

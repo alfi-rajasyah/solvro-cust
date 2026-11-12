@@ -85,14 +85,14 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
           type="button"
           onClick={onClose}
           aria-label="Close project context"
-          className="fixed inset-0 z-30 bg-black/40 backdrop-blur-[1px] md:hidden"
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
         />
       )}
       <aside
       ref={asideRef}
       aria-hidden={!open}
       className={[
-        "fixed right-0 top-14 bottom-0 z-40 w-full transform border-l border-outline-variant bg-surface-container-low/95 font-display backdrop-blur-md transition-transform duration-200 ease-out md:z-30 md:w-context-panel",
+        "fixed right-0 top-14 bottom-0 z-40 w-full transform border-l border-outline-variant bg-surface-container-low font-display transition-transform duration-200 ease-out md:z-30 md:w-context-panel",
         open ? "translate-x-0" : "translate-x-full",
       ].join(" ")}
     >
@@ -104,7 +104,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
           type="button"
           onClick={onClose}
           aria-label="Close project context"
-          className="flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
+          className="tap-target flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
         >
           <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
         </button>
@@ -129,7 +129,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
           <h3 className="mb-2 font-display text-label-caps uppercase text-on-surface-variant">
             Stakeholders
           </h3>
-          <dl className="space-y-1.5 text-[13px]">
+          <dl className="space-y-1.5 text-xs">
             <div className="flex justify-between">
               <dt className="text-on-surface-variant">TAM</dt>
               <dd className="font-medium text-on-surface">{project.tam.username}</dd>
@@ -140,7 +140,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                 <dd>
                   <Link
                     to={`/customers/${project.primaryCustomer.id}`}
-                    className="font-medium text-primary hover:underline"
+                    className="font-medium text-primary hover:underline [@media(pointer:coarse)]:inline-block [@media(pointer:coarse)]:py-3"
                   >
                     {project.primaryCustomer.name}
                   </Link>
@@ -158,7 +158,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
           <h3 className="mb-2 font-display text-label-caps uppercase text-on-surface-variant">
             Baseline
           </h3>
-          <dl className="space-y-1.5 text-[13px]">
+          <dl className="space-y-1.5 text-xs">
             <div className="flex justify-between gap-3">
               <dt className="text-on-surface-variant">Locked</dt>
               <dd className="text-right font-medium text-on-surface">
@@ -173,7 +173,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
               type="button"
               onClick={() => setConfirmingBaseline(true)}
               disabled={lockBaseline.isPending}
-              className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 [@media(pointer:coarse)]:min-h-11 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="material-symbols-outlined text-[17px]" aria-hidden="true">
                 {project.baselineLockedAt ? "bookmark" : "bookmark_add"}
@@ -183,7 +183,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
           )}
           <p className="mt-2 text-xs text-on-surface-variant">
             {project.baselineLockedAt
-              ? "Ghost bars show the locked dates — toggle them from the Gantt toolbar's Baseline button."
+              ? "Ghost bars show the locked dates. Toggle them from the Gantt toolbar's Baseline button."
               : "Snapshot every task's dates so later slips can be measured against them."}
           </p>
           {baselineNotice && (
@@ -212,7 +212,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                 type="button"
                 onClick={() => runExport("excel")}
                 disabled={exporting !== null}
-                className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 [@media(pointer:coarse)]:min-h-11 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[17px]">
                   table_view
@@ -223,7 +223,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                 type="button"
                 onClick={() => runExport("pdf")}
                 disabled={exporting !== null}
-                className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 [@media(pointer:coarse)]:min-h-11 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[17px]">
                   picture_as_pdf
@@ -234,7 +234,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                 type="button"
                 onClick={() => runExport("pdfTab")}
                 disabled={exporting !== null}
-                className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 [@media(pointer:coarse)]:min-h-11 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[17px]">
                   open_in_new
@@ -303,7 +303,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
             const stamp = res.baselineLockedAt ? fmtDay(dateToDay(new Date(res.baselineLockedAt))) : "";
             setBaselineNotice(
               project.baselineLockedAt
-                ? `Baseline overwritten — now anchored to ${stamp}`
+                ? `Baseline overwritten, now anchored to ${stamp}`
                 : `Baseline locked as of ${stamp}`,
             );
           } catch (err) {
@@ -349,7 +349,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                 }
               />
               <span className="mt-1 block text-xs text-on-surface-variant">
-                Defaults to today. Use a different date to backdate the snapshot — e.g. "May 1
+                Defaults to today. Use a different date to backdate the snapshot, e.g. "May 1
                 baseline".
               </span>
             </label>
@@ -376,7 +376,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
                   Clear baseline instead
                 </button>
                 <span className="ml-1 text-xs text-on-surface-variant">
-                  — removes the snapshot entirely.
+                  This removes the snapshot entirely.
                 </span>
               </div>
             )}

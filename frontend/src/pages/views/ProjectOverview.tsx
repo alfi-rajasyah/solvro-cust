@@ -15,7 +15,8 @@ import {
 import { useProjectContext } from "../ProjectDetail";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { Alert, AlertDescription } from "@/components/reui/alert";
-import { scoreClass, scoreLevel } from "@/components/RiskFormModal";
+import { StatStrip, type StatItem } from "@/components/StatStrip";
+import { RiskScoreChip } from "@/components/RiskScoreChip";
 import { OutlineMentions } from "@/components/OutlineMentions";
 import { ProjectActivity } from "@/components/ProjectActivity";
 import { Chip } from "@/components/StatusChip";
@@ -23,6 +24,7 @@ import { dateToDay, dayFromIso } from "@/lib/dateField";
 import { fmtDay } from "@/lib/formatDate";
 import { TASK_STATUS_LABEL } from "@/lib/labels";
 import { type Task, useProjectNotes, useProjectRisks, useProjectTasks } from "@/lib/queries";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 
 export function ProjectOverview() {
   const { project, openContext } = useProjectContext();
@@ -35,16 +37,47 @@ export function ProjectOverview() {
 
   const stats = useMemo(() => computeStats(tasks ?? []), [tasks]);
   const sCurve = useMemo(() => buildSCurve(tasks ?? []), [tasks]);
+  const statItems = useMemo<StatItem[]>(
+    () => [
+      {
+        key: "tasks",
+        value: stats.total,
+        label: "tasks",
+        detail: `${stats.topLevel} top-level, ${stats.subtasks} subtasks`,
+      },
+      {
+        key: "complete",
+        value: `${stats.pct}%`,
+        label: "complete",
+        progress: stats.pct,
+      },
+      {
+        key: "overdue",
+        value: stats.overdue,
+        label: "overdue",
+        detail: stats.overdue > 0 ? "open tasks past due date" : undefined,
+        tone: stats.overdue > 0 ? "bad" : "neutral",
+      },
+      {
+        key: "baseline",
+        label: "Baseline",
+        detail: project.baselineLockedAt ? (
+          <span title={`Locked by ${project.baselineLockedBy?.username ?? EMPTY_VALUE}`}>
+            {`locked ${fmtDay(dateToDay(new Date(project.baselineLockedAt)))}`}
+          </span>
+        ) : (
+          "not locked"
+        ),
+      },
+    ],
+    [stats, project.baselineLockedAt, project.baselineLockedBy],
+  );
   const taskIds = useMemo(() => new Set((tasks ?? []).map((t) => t.id)), [tasks]);
 
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low" />
-          ))}
-        </div>
+        <div className="h-16 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low md:h-12" />
         <div className="h-72 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low" />
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="h-48 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low" />
@@ -70,41 +103,7 @@ export function ProjectOverview() {
         </p>
       )}
 
-      {/* KPI strip */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi
-          icon="checklist"
-          label="Total tasks"
-          value={String(stats.total)}
-          hint={`${stats.topLevel} top-level · ${stats.subtasks} subtasks`}
-        />
-        <Kpi
-          icon="task_alt"
-          label="Completion"
-          value={`${stats.pct}%`}
-          hint={`${stats.done} of ${stats.total} done`}
-          accent={stats.pct === 100 ? "emerald" : undefined}
-          progress={stats.pct}
-        />
-        <Kpi
-          icon="warning"
-          label="Overdue"
-          value={String(stats.overdue)}
-          hint={stats.overdue > 0 ? "open tasks past due date" : "nothing overdue"}
-          accent={stats.overdue > 0 ? "error" : "emerald"}
-        />
-        <Kpi
-          icon={project.baselineLockedAt ? "lock" : "lock_open"}
-          label="Baseline"
-          value={project.baselineLockedAt ? "Locked" : "Not set"}
-          hint={
-            project.baselineLockedAt
-              ? `by ${project.baselineLockedBy?.username ?? "—"} · ${fmtDay(dateToDay(new Date(project.baselineLockedAt)))}`
-              : "Lock to capture planned dates"
-          }
-          accent={project.baselineLockedAt ? "primary" : undefined}
-        />
-      </div>
+      <StatStrip label="Project summary" items={statItems} />
 
       {/* S-Curve segment */}
       <section className="rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
@@ -122,7 +121,7 @@ export function ProjectOverview() {
             <button
               type="button"
               onClick={openContext}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-xs font-semibold text-on-surface hover:border-primary hover:text-primary"
+              className="[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-xs font-semibold text-on-surface hover:border-primary hover:text-primary"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-base">lock</span>
               Lock baseline
@@ -201,7 +200,7 @@ function NeedsAttention({ tasks, projectId }: { tasks: Task[]; projectId: number
             <li key={task.id}>
               <Link
                 to={`?task=${task.id}`}
-                className="flex items-center justify-between gap-3 rounded-sm px-2 py-1.5 hover:bg-surface-container"
+                className="[@media(pointer:coarse)]:min-h-11 flex items-center justify-between gap-3 rounded-sm px-2 py-1.5 hover:bg-surface-container"
               >
                 <span className="min-w-0 truncate text-sm text-on-surface">
                   {task.title}
@@ -223,7 +222,7 @@ function NeedsAttention({ tasks, projectId }: { tasks: Task[]; projectId: number
       {rows.length > shown.length && (
         <Link
           to={`/projects/${projectId}/list`}
-          className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+          className="[@media(pointer:coarse)]:min-h-11 mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
         >
           {rows.length - shown.length} more in List
           <span aria-hidden="true" className="material-symbols-outlined text-[15px]">chevron_right</span>
@@ -296,7 +295,7 @@ function TopRisks({ projectId }: { projectId: number }) {
         <h3 className={PANEL_HEADING}>Top open risks</h3>
         <Link
           to={`/projects/${projectId}/risks`}
-          className="text-xs font-semibold text-primary hover:underline"
+          className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-xs font-semibold text-primary hover:underline"
         >
           View all
         </Link>
@@ -309,28 +308,14 @@ function TopRisks({ projectId }: { projectId: number }) {
         <PanelEmpty icon="shield" text="No open risks." />
       ) : (
         <ul className="space-y-2">
-          {top.map((risk) => {
-            const score = risk.probability * risk.impact;
-            return (
-              <li key={risk.id} className="flex items-center justify-between gap-3">
-                <span className="min-w-0 truncate text-sm text-on-surface">
-                  {risk.description}
-                </span>
-                <span
-                  className={[
-                    "flex shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0.5 text-xs font-bold tabular-nums",
-                    scoreClass(score),
-                  ].join(" ")}
-                  title={`${risk.probability} × ${risk.impact} = ${score}`}
-                >
-                  {score}
-                  <span className="font-display text-label-caps uppercase">
-                    {scoreLevel(score)}
-                  </span>
-                </span>
-              </li>
-            );
-          })}
+          {top.map((risk) => (
+            <li key={risk.id} className="flex items-center justify-between gap-3">
+              <span className="min-w-0 truncate text-sm text-on-surface">
+                {risk.description}
+              </span>
+              <RiskScoreChip probability={risk.probability} impact={risk.impact} />
+            </li>
+          ))}
         </ul>
       )}
     </section>
@@ -355,7 +340,7 @@ function ProjectNotesPanel({ projectId }: { projectId: number }) {
         <h3 className={PANEL_HEADING}>Notes</h3>
         <Link
           to="/daily-review"
-          className="text-xs font-semibold text-primary hover:underline"
+          className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-xs font-semibold text-primary hover:underline"
         >
           Log a note
         </Link>
@@ -412,49 +397,6 @@ function dayDelta(day: string, today: string): number {
   const ms =
     new Date(day + "T00:00:00").getTime() - new Date(today + "T00:00:00").getTime();
   return Math.round(ms / 86400000);
-}
-
-function Kpi({
-  icon,
-  label,
-  value,
-  hint,
-  accent,
-  progress,
-}: {
-  icon: string;
-  label: string;
-  value: string;
-  hint?: string;
-  accent?: "primary" | "emerald" | "error";
-  progress?: number;
-}) {
-  const accentClass =
-    accent === "emerald"
-      ? "text-chip-emerald-text"
-      : accent === "error"
-        ? "text-error"
-        : accent === "primary"
-          ? "text-primary"
-          : "text-on-surface";
-  return (
-    <div className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
-      <div className="flex items-center justify-between">
-        <span className="text-label-caps uppercase text-on-surface-variant">{label}</span>
-        <span aria-hidden="true" className={`material-symbols-outlined text-base ${accent === "primary" ? "text-primary" : accent === "emerald" ? "text-chip-emerald-text" : accent === "error" ? "text-error" : "text-on-surface-variant"}`}>{icon}</span>
-      </div>
-      <div className={`mt-2 font-body text-3xl font-bold tabular-nums ${accentClass}`}>{value}</div>
-      {progress !== undefined && (
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-surface-container-high">
-          <div
-            className="h-full rounded-full bg-primary"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      )}
-      {hint && <div className="mt-1 text-xs text-on-surface-variant">{hint}</div>}
-    </div>
-  );
 }
 
 function Legend2({ swatch, label }: { swatch: string; label: string }) {

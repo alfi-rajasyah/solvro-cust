@@ -42,7 +42,7 @@ import { createTask, isoDateOffset } from "../fixtures/seed";
 test.describe.configure({ mode: "serial" });
 
 async function readCount(page: Page, testId: string): Promise<number> {
-  const el = page.getByTestId(testId);
+  const el = page.getByTestId(`${testId}-value`);
   await expect(el).toBeVisible();
   const text = (await el.textContent())?.trim() ?? "";
   const n = Number(text);
@@ -56,10 +56,11 @@ interface Fraction {
 }
 
 async function readFraction(page: Page, testId: string): Promise<Fraction> {
+  // The strip cell holds the number (`<testId>-value`) and a small "of N".
   const el = page.getByTestId(testId);
   await expect(el).toBeVisible();
   const text = (await el.textContent())?.trim() ?? "";
-  const m = /^(\d+)\s+of\s+(\d+)$/.exec(text);
+  const m = /^(\d+)\s*of\s*(\d+)/.exec(text);
   if (!m) throw new Error(`stat "${testId}": expected "count of total", got "${text}"`);
   return { count: Number(m[1]), total: Number(m[2]) };
 }
@@ -205,7 +206,7 @@ test.describe("Daily Review v2", () => {
     const projectNoteBody = `Daily project note ${stamp}`;
     const projectNoteInput = page.getByLabel(`Note for ${projectName}`);
     await saveNote(projectCard, projectNoteInput, projectNoteBody);
-    await expect(page.getByTestId("stat-notes-this-week")).toHaveText(String(baseNotes + 1));
+    await expect(page.getByTestId("stat-notes-this-week-value")).toHaveText(String(baseNotes + 1));
 
     // ------------------------------------------------------------------
     // 3. Operations note — a required Title plus a body; the saved row
@@ -219,28 +220,31 @@ test.describe("Daily Review v2", () => {
     await saveNote(operationsCard, opsNoteInput, opsNoteBody);
     await expect(operationsCard.getByText(opsNoteTitle)).toBeVisible();
     await expect(operationsCard.getByText(opsNoteBody)).toBeVisible();
-    await expect(page.getByTestId("stat-notes-this-week")).toHaveText(String(baseNotes + 2));
+    await expect(page.getByTestId("stat-notes-this-week-value")).toHaveText(String(baseNotes + 2));
 
     // ------------------------------------------------------------------
-    // 4. Mark reviewed — "Reviewed HH:MM" badge; "Reviewed today" tile.
+    // 4. Mark reviewed — "Reviewed HH:MM" badge; "reviewed" stat.
     // ------------------------------------------------------------------
     await projectCard.getByRole("button", { name: "Mark reviewed" }).click();
     await expect(projectCard.getByText(/Reviewed \d{2}:\d{2}/)).toBeVisible();
-    await expect(page.getByTestId("stat-reviewed-today")).toHaveText(
-      `${baseReviewed.count + 1} of ${baseReviewed.total + 1}`,
+    await expect(page.getByTestId("stat-reviewed-today-value")).toHaveText(
+      String(baseReviewed.count + 1),
+    );
+    await expect(page.getByTestId("stat-reviewed-today")).toContainText(
+      `of ${baseReviewed.total + 1}`,
     );
 
     // ------------------------------------------------------------------
     // 5. Overdue task: flip its status to Done — the row disappears and
     //    "Overdue tasks" drops back to baseline.
     // ------------------------------------------------------------------
-    await expect(page.getByTestId("stat-overdue-tasks")).toHaveText(String(baseOverdue + 1));
+    await expect(page.getByTestId("stat-overdue-tasks-value")).toHaveText(String(baseOverdue + 1));
     const taskRow = projectCard.locator("li").filter({ hasText: overdueTitle });
     await taskRow.getByRole("combobox", { name: "Task status" }).click();
     await page.getByRole("option", { name: "Done", exact: true }).click();
     await expect(taskRow).toBeHidden();
     await expect(projectCard.getByText("Nothing overdue · no open risks")).toBeVisible();
-    await expect(page.getByTestId("stat-overdue-tasks")).toHaveText(String(baseOverdue));
+    await expect(page.getByTestId("stat-overdue-tasks-value")).toHaveText(String(baseOverdue));
 
     // ------------------------------------------------------------------
     // 6. Weekly update: open Reflection sync, draft from this week's
@@ -249,7 +253,7 @@ test.describe("Daily Review v2", () => {
     // ------------------------------------------------------------------
     await customerSection.getByRole("button", { name: "Reflection sync" }).click();
     const reflectionDialog = page.getByRole("dialog", {
-      name: new RegExp(`^Reflection sync — ${customerName}, week \\d+$`),
+      name: new RegExp(`^Reflection sync: ${customerName}, week \\d+$`),
     });
     await expect(reflectionDialog).toBeVisible();
     // The blank starter card holds no text, so "Draft from this week" applies
@@ -278,8 +282,11 @@ test.describe("Daily Review v2", () => {
     await reflectionDialog.getByRole("button", { name: "Mark done" }).click();
     await expect(reflectionDialog).toBeHidden();
 
-    await expect(page.getByTestId("stat-weekly-updates")).toHaveText(
-      `${baseWeekly.count + 1} of ${baseWeekly.total + 1}`,
+    await expect(page.getByTestId("stat-weekly-updates-value")).toHaveText(
+      String(baseWeekly.count + 1),
+    );
+    await expect(page.getByTestId("stat-weekly-updates")).toContainText(
+      `of ${baseWeekly.total + 1}`,
     );
     await waitForCollapsedDone(page, customerName);
 

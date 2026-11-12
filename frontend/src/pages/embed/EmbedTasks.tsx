@@ -21,6 +21,7 @@ import {
 } from "@/lib/embedViews";
 import { fmtDay, fmtDue, isTaskOverdue } from "@/lib/formatDate";
 import { type ProjectDetail, type Task, useProjectEpics, useProjectTasks } from "@/lib/queries";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 
 // /embed/projects/:id/tasks[?epic=<id>][&limit=<n>] — the compact task table an
 // Outline page shows: top N tasks (overdue first, then by due date), a
@@ -136,7 +137,7 @@ function TaskRow({
   todayDay: string | null;
 }) {
   const overdue = isTaskOverdue(task.status, task.dueDate, todayDay);
-  const due = !task.dueDate ? "—" : task.status === "DONE" ? fmtDay(task.dueDate) : fmtDue(task.dueDate, todayDay);
+  const due = !task.dueDate ? EMPTY_VALUE : task.status === "DONE" ? fmtDay(task.dueDate) : fmtDue(task.dueDate, todayDay);
   return (
     <tr
       data-testid="embed-task-row"

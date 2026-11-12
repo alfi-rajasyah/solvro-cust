@@ -78,15 +78,15 @@ export function InstallBanner() {
       <button
         type="button"
         onClick={handleInstallTap}
-        className="flex w-full items-center gap-1.5 bg-primary px-3 py-1.5 text-left text-meta font-semibold text-on-primary md:hidden"
+        className="[@media(pointer:coarse)]:min-h-11 flex w-full items-center gap-1.5 bg-primary px-3 py-1.5 text-left text-meta font-semibold text-on-primary md:hidden"
       >
         <span aria-hidden="true" className="material-symbols-outlined text-[14px]">download</span>
-        <span className="flex-1">Install Solvro — add to home screen</span>
+        <span className="flex-1">Install Solvro: add to home screen</span>
         <span
           role="button"
           aria-label="Dismiss install banner"
           onClick={handleDismiss}
-          className="material-symbols-outlined text-[16px]"
+          className="tap-target material-symbols-outlined text-[16px]"
         >
           close
         </span>
@@ -103,7 +103,7 @@ export function InstallBanner() {
           type="button"
           aria-label="Dismiss install hint"
           onClick={handleDismiss}
-          className="material-symbols-outlined text-[16px]"
+          className="tap-target material-symbols-outlined text-[16px]"
         >
           close
         </button>

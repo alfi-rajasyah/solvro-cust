@@ -17,7 +17,7 @@ const SCOPE_LABEL: Record<ItopTicketScope, string> = {
 };
 
 const PILL_BASE =
-  "rounded-sm px-3 py-1 font-display text-meta font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "tap-target rounded-sm px-3 py-1 font-display text-meta font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
 /** Exported (fix round, phase review) so other Tickets-tab toggle controls
  * (e.g. `TicketsTab.tsx`'s Table|Board `ViewSwitch`) share the exact same
@@ -82,7 +82,7 @@ export function TicketFilters({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Ticket filters">
+    <div className="flex flex-wrap items-center gap-1.5 [@media(pointer:coarse)]:gap-4" role="group" aria-label="Ticket filters">
       {showScope && (
         <>
           {scopeChip("ongoing", counts.ongoing)}

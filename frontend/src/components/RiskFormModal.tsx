@@ -100,7 +100,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="rounded-lg border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+            className="[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
           >
             Cancel
           </button>
@@ -108,7 +108,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
             type="button"
             onClick={onSubmit}
             disabled={busy}
-            className="rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60"
+            className="[@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60"
           >
             {busy ? "Saving…" : isEdit ? "Save changes" : "Create risk"}
           </button>
@@ -130,7 +130,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
-            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
             placeholder="What could go wrong?"
           />
         </div>
@@ -143,7 +143,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value as RiskCategory)}
-              className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden"
+              className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               {riskCategoryOptions.map((c) => (
                 <option key={c.value} value={c.value}>
@@ -159,7 +159,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as RiskStatus)}
-              className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden"
+              className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               {riskStatusOptions.map((s) => (
                 <option key={s.value} value={s.value}>
@@ -178,7 +178,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
             <select
               value={probability}
               onChange={(e) => setProbability(Number(e.target.value))}
-              className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden"
+              className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               {SCALE.map((n) => (
                 <option key={n} value={n}>
@@ -194,7 +194,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
             <select
               value={impact}
               onChange={(e) => setImpact(Number(e.target.value))}
-              className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden"
+              className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               {SCALE.map((n) => (
                 <option key={n} value={n}>
@@ -229,7 +229,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
             value={mitigationPlan}
             onChange={(e) => setMitigationPlan(e.target.value)}
             rows={3}
-            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
             placeholder="Steps to reduce probability or impact."
           />
         </div>
@@ -242,7 +242,7 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
             value={contingencyPlan}
             onChange={(e) => setContingencyPlan(e.target.value)}
             rows={3}
-            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
             placeholder="What to do if the risk materialises."
           />
         </div>
@@ -254,10 +254,6 @@ export function RiskFormModal({ open, onClose, projectId, risk }: Props) {
 function scaleLabel(n: number): string {
   return ["", "Very Low", "Low", "Medium", "High", "Very High"][n] ?? "";
 }
-
-// The level thresholds live in lib/labels.ts (riskLevel); re-exported here so
-// existing importers keep working.
-export { riskLevelFromScore as scoreLevel };
 
 export function scoreClass(score: number): string {
   if (score <= 8)

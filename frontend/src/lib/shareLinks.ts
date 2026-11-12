@@ -149,7 +149,7 @@ export function guestErrorCopy(error: unknown): GuestErrorCopy {
   if (status === 429) {
     return {
       icon: "hourglass_top",
-      title: "Too many requests — try again in a minute",
+      title: "Too many requests, try again in a minute",
       hint: "You have opened this page too many times in a short while.",
       final: false,
     };

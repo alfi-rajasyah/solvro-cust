@@ -69,13 +69,13 @@ export function StatusSelect({
           aria-label={ariaLabel}
           data-slot="status-select-trigger"
           title={shown?.name}
-          className={cn(chipClass, "cursor-pointer outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default", className)}
+          className={cn(chipClass, "tap-target cursor-pointer outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default", className)}
         >
           <span className="truncate">{shown?.name ?? "Status"}</span>
           <span aria-hidden="true" className="material-symbols-outlined shrink-0 text-meta">expand_more</span>
         </SelectPrimitive.Trigger>
       ) : (
-        <SelectTrigger size="sm" aria-label={ariaLabel} className={className}>
+        <SelectTrigger size="sm" aria-label={ariaLabel} className={cn("[@media(pointer:coarse)]:min-h-11", className)}>
           {current ? <SelectValue /> : <span>{shown?.name ?? "Status"}</span>}
         </SelectTrigger>
       )}

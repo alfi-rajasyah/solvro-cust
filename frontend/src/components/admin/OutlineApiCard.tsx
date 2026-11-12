@@ -174,7 +174,7 @@ export function OutlineApiCard({ settings }: { settings: OutlineAdminSettings })
           <button
             type="submit"
             disabled={!dirty || update.isPending}
-            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-50"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary/90 disabled:opacity-50"
           >
             {update.isPending ? "Saving…" : "Save"}
           </button>

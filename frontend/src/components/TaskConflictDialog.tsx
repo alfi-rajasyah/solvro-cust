@@ -36,7 +36,7 @@ export function TaskConflictDialog({
             data-autofocus
             onClick={onUseTheirs}
             disabled={busy}
-            className="rounded-lg border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+            className="[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
           >
             Use theirs
           </button>
@@ -44,7 +44,7 @@ export function TaskConflictDialog({
             type="button"
             onClick={onKeepMine}
             disabled={busy}
-            className="rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60"
+            className="[@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60"
           >
             {busy ? "Saving…" : "Keep mine"}
           </button>

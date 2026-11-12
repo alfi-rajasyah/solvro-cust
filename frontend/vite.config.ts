@@ -25,7 +25,7 @@ export default defineConfig({
       manifest: {
         name: "Solvro",
         short_name: "Solvro",
-        description: "Solvro — project management for teams.",
+        description: "Solvro: project management for teams.",
         theme_color: "#3aae51",
         background_color: "#1a1a18",
         display: "standalone",

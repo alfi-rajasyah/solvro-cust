@@ -31,6 +31,7 @@ import {
   useCustomerWeeklyUpdates,
 } from "@/lib/queries";
 import { personNameSortingFn } from "@/lib/tableSort";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 
 // Overview tab of the customer account page: projects with progress and
 // health, the latest weekly update, recent notes, then the profile (collapsed).
@@ -150,7 +151,7 @@ function ProgressCell({ project }: { project: ProjectSummary }) {
 
 function HealthCell({ project }: { project: ProjectSummary }) {
   const health = project.health;
-  if (!health) return <span className="text-meta text-on-surface-variant">—</span>;
+  if (!health) return <span className="text-meta text-on-surface-variant">{EMPTY_VALUE}</span>;
   if (health.overdueCount === 0 && health.openRiskCount === 0) {
     return <span className="text-meta text-on-surface-variant">No issues</span>;
   }
@@ -192,7 +193,7 @@ function ProjectsDataGrid({ projects }: { projects: ProjectSummary[] }) {
           <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <Link
               to={`/projects/${row.original.id}`}
-              className="font-medium text-on-surface hover:text-primary"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 font-medium text-on-surface hover:text-primary"
             >
               {row.original.name}
             </Link>
@@ -387,7 +388,7 @@ function ProfileSection({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={bodyId}
-        className="flex w-full items-center gap-2 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        className="[@media(pointer:coarse)]:min-h-11 flex w-full items-center gap-2 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
       >
         <span className="material-symbols-outlined text-[19px] text-primary" aria-hidden="true">
           {open ? "expand_more" : "chevron_right"}
@@ -528,7 +529,7 @@ function WeeklyUpdatesPanel({ customerId }: { customerId: number }) {
         <button
           type="button"
           onClick={() => setShowAll((v) => !v)}
-          className="mt-3 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 mt-3 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           {showAll ? "Show latest only" : "Show earlier weeks"}
         </button>
@@ -635,7 +636,7 @@ function WeeklyUpdateRow({ update }: { update: WeeklyUpdate }) {
             onClick={() => setMidweekOpen((v) => !v)}
             aria-expanded={midweekOpen}
             aria-controls={midweekFieldsId}
-            className="mt-2 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 mt-2 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
             {midweekOpen ? "Hide mid-week" : "Show mid-week"}
           </button>
@@ -719,7 +720,7 @@ function WeeklyUpdateField({
           value ? (isDone ? "text-on-surface" : "text-on-surface-variant") : "text-on-surface-variant",
         ].join(" ")}
       >
-        {value || "—"}
+        {value || EMPTY_VALUE}
       </p>
     </div>
   );

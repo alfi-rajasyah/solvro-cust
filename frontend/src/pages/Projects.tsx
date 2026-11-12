@@ -12,6 +12,7 @@ import {
 import { useNewParam } from "@/hooks/useNewParam";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { fmtRange } from "@/lib/formatDate";
+import { TOOLBAR_BUTTON_PRIMARY } from "@/lib/utils";
 import { type ProjectSummary, useCustomers, useProjects } from "@/lib/queries";
 
 const CUSTOMER_FILTER_FIELD = "customerId";
@@ -105,7 +106,7 @@ export function Projects() {
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 font-display text-sm text-on-primary transition-colors hover:bg-primary-container font-semibold"
+            className={`${TOOLBAR_BUTTON_PRIMARY} [@media(pointer:coarse)]:min-h-11`}
           >
             <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
             New project
@@ -123,7 +124,7 @@ export function Projects() {
           allowMultiple={false}
         />
         {projects && projects.length > 0 && (
-          <span className="ml-auto font-mono text-[12px] text-on-surface-variant">
+          <span className="ml-auto font-mono text-meta text-on-surface-variant">
             {projects.length} {projects.length === 1 ? "project" : "projects"}
           </span>
         )}
@@ -183,7 +184,7 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
       </h3>
 
       {/* Description */}
-      <p className="mb-3 line-clamp-2 min-h-[2.4rem] text-[12px] leading-snug text-on-surface-variant">
+      <p className="mb-3 line-clamp-2 min-h-[2.4rem] text-meta leading-snug text-on-surface-variant">
         {project.description ?? "No description."}
       </p>
 
@@ -266,7 +267,7 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
 
 function EmptyState({ onCreate }: { onCreate?: () => void }) {
   return (
-    <div className="rounded-xl border border-dashed border-outline-variant bg-surface-container-lowest p-12 text-center">
+    <div className="rounded-sm border border-dashed border-outline-variant bg-surface-container-lowest p-12 text-center">
       <span aria-hidden="true" className="material-symbols-outlined mb-2 text-4xl text-on-surface-variant">
         folder_open
       </span>
@@ -275,7 +276,7 @@ function EmptyState({ onCreate }: { onCreate?: () => void }) {
         <button
           type="button"
           onClick={onCreate}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-display text-xs font-bold text-on-primary hover:bg-primary-container"
+          className={`${TOOLBAR_BUTTON_PRIMARY} [@media(pointer:coarse)]:min-h-11`}
         >
           <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
           Create your first project
@@ -291,7 +292,7 @@ function SkeletonGrid() {
       {Array.from({ length: 3 }).map((_, i) => (
         <div
           key={i}
-          className="h-40 animate-pulse rounded-xl bg-surface-container-low"
+          className="h-40 animate-pulse rounded-sm bg-surface-container-low"
         />
       ))}
     </div>

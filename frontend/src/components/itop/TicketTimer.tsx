@@ -3,7 +3,7 @@
 // this week on this ticket`). Rendered by `TicketPanel.tsx` below the log
 // block. All state/mutation logic lives in `useTicketTimer` — this
 // component is presentation plus the two inline confirms the dispatch calls
-// for: a sub-minute Stop ("Less than a minute — discard instead?") and
+// for: a sub-minute Stop ("Less than a minute: discard instead?") and
 // starting here while another ticket's timer runs ("Stop the timer on
 // R-004512 first?").
 import { useState } from "react";
@@ -11,10 +11,10 @@ import { Link } from "react-router-dom";
 import { formatElapsed, useTicketTimer, type TimerTicketRef } from "./useTicketTimer";
 
 const BUTTON_CLASS =
-  "rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:opacity-50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
+  "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:opacity-50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
 
 const LINK_BUTTON_CLASS =
-  "font-display text-meta font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 font-display text-meta font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
 const LABEL_CLASS =
   "mb-1.5 font-display text-label-caps uppercase text-on-surface-variant";
@@ -58,7 +58,7 @@ export function TicketTimer({
     return (
       <div>
         <p className={LABEL_CLASS}>Time</p>
-        <p className="text-[13px] text-on-surface-variant">{weekLabel}</p>
+        <p className="text-xs text-on-surface-variant">{weekLabel}</p>
       </div>
     );
   }
@@ -80,7 +80,7 @@ export function TicketTimer({
           <button type="button" onClick={timer.start} className={BUTTON_CLASS}>
             Start timer
           </button>
-          <span className="text-[13px] text-on-surface-variant">{weekLabel}</span>
+          <span className="text-xs text-on-surface-variant">{weekLabel}</span>
         </div>
       )}
 
@@ -97,8 +97,8 @@ export function TicketTimer({
               // Past the backend's 24h ceiling on a loggable entry (fix
               // round, phase review) — Stop would only 400, so it isn't
               // offered at all here, only Discard.
-              <div className="flex flex-wrap items-center gap-2 text-[12px] text-error">
-                <span>Timer expired — discard</span>
+              <div className="flex flex-wrap items-center gap-2 text-meta text-error">
+                <span>Timer expired: discard</span>
                 <button type="button" onClick={timer.discard} className={LINK_BUTTON_CLASS}>
                   Discard
                 </button>
@@ -127,8 +127,8 @@ export function TicketTimer({
               // review): the API rejects a sub-minute entry outright, so
               // this offers Discard or backing out — never a "log it
               // anyway" path that would just 400.
-              <div className="flex flex-wrap items-center gap-2 text-[12px] text-on-surface-variant">
-                <span>Less than a minute — discard instead?</span>
+              <div className="flex flex-wrap items-center gap-2 text-meta text-on-surface-variant">
+                <span>Less than a minute: discard instead?</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -142,19 +142,19 @@ export function TicketTimer({
                 <button
                   type="button"
                   onClick={() => setConfirmingShortStop(false)}
-                  className="text-on-surface-variant underline hover:text-on-surface"
+                  className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-on-surface-variant underline hover:text-on-surface"
                 >
                   Keep running
                 </button>
               </div>
             )}
-            <span className="text-[13px] text-on-surface-variant">{weekLabel}</span>
+            <span className="text-xs text-on-surface-variant">{weekLabel}</span>
           </div>
         </div>
       )}
 
       {timer.status === "running-elsewhere" && timer.other && (
-        <div className="space-y-1.5 text-[13px] text-on-surface-variant">
+        <div className="space-y-1.5 text-xs text-on-surface-variant">
           <div className="flex flex-wrap items-center gap-2">
             <span>
               Timer running on{" "}
@@ -176,7 +176,7 @@ export function TicketTimer({
             )}
           </div>
           {confirmingSwitch && (
-            <div className="flex flex-wrap items-center gap-2 text-[12px]">
+            <div className="flex flex-wrap items-center gap-2 text-meta">
               <span>Stop the timer on {timer.other.ref} first?</span>
               <button
                 type="button"
@@ -202,7 +202,7 @@ export function TicketTimer({
               <button
                 type="button"
                 onClick={() => setConfirmingSwitch(false)}
-                className="text-on-surface-variant underline hover:text-on-surface"
+                className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-on-surface-variant underline hover:text-on-surface"
               >
                 Cancel
               </button>
@@ -212,9 +212,9 @@ export function TicketTimer({
         </div>
       )}
 
-      {timer.stopError && <p className="mt-1.5 text-[12px] text-error">{timer.stopError}</p>}
+      {timer.stopError && <p className="mt-1.5 text-meta text-error">{timer.stopError}</p>}
       {timer.staleNotice && (
-        <p className="mt-1.5 text-[12px] text-on-surface-variant">{timer.staleNotice}</p>
+        <p className="mt-1.5 text-meta text-on-surface-variant">{timer.staleNotice}</p>
       )}
     </div>
   );

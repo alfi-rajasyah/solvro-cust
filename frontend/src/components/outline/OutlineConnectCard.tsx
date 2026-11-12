@@ -4,7 +4,7 @@
 // theirs). Also shows the outcome of a return from Outline's consent screen
 // (`/settings?outline=connected|cancelled|error&reason=…`) and then strips
 // those parameters from the URL.
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -22,6 +22,7 @@ import {
 
 export function OutlineConnectCard() {
   const qc = useQueryClient();
+  const titleId = useId();
   const [searchParams, setSearchParams] = useSearchParams();
   const [notice, setNotice] = useState<OutlineNotice | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -71,21 +72,43 @@ export function OutlineConnectCard() {
 
   // No Outline address at all: the feature does not exist for this install.
   if (!addressSet) {
-    return noticeAlert ? <div className="space-y-3">{noticeAlert}</div> : null;
+    // Keep the Settings row layout so a returned-from-Outline notice sits where the card would.
+    return noticeAlert ? (
+      <section
+        aria-labelledby={titleId}
+        data-testid="outline-connect-card"
+        className="grid grid-cols-1 gap-x-10 gap-y-3 border-t border-outline-variant py-6 md:grid-cols-[220px_minmax(0,1fr)]"
+      >
+        <h2 id={titleId} className="font-display text-label-caps uppercase leading-5 text-on-surface">
+          Outline
+        </h2>
+        <div className="min-w-0 max-w-xl space-y-3">{noticeAlert}</div>
+      </section>
+    ) : null;
   }
 
   const connected = me?.connected === true;
   const configured = me?.configured === true;
 
   return (
+    // Same row structure as `SettingsRow` in pages/Settings.tsx: label column
+    // (title + description) and a content column, a hairline above, no box.
     <section
-      aria-label="Outline"
+      aria-labelledby={titleId}
       data-testid="outline-connect-card"
-      className="space-y-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-5"
+      className="grid grid-cols-1 gap-x-10 gap-y-3 border-t border-outline-variant py-6 md:grid-cols-[220px_minmax(0,1fr)]"
     >
-      <h2 className="font-display text-sm font-bold text-on-surface">
-        Outline
-      </h2>
+      <div>
+        <h2 id={titleId} className="font-display text-label-caps uppercase leading-5 text-on-surface">
+          Outline
+        </h2>
+        <p className="mt-1 text-meta text-on-surface-variant">
+          Solvro uses your own Outline account to list pages, search and create docs. You see only
+          what you can open in Outline. Disconnect at any time; Solvro then stops all Outline calls
+          for you.
+        </p>
+      </div>
+      <div className="min-w-0 max-w-xl space-y-3">
       {noticeAlert}
       {(connectError || disconnectError) && (
         <Alert variant="destructive">
@@ -118,13 +141,13 @@ export function OutlineConnectCard() {
           <button
             type="button"
             onClick={() => setConfirmOpen(true)}
-            className="rounded-sm border border-outline-variant px-4 py-1.5 font-display text-xs font-semibold text-on-surface hover:bg-surface-container"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-4 py-1.5 font-display text-xs font-semibold text-on-surface hover:bg-surface-container"
           >
             Disconnect
           </button>
         </div>
       ) : configured ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-dashed border-outline-variant p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div
               aria-hidden="true"
@@ -145,7 +168,7 @@ export function OutlineConnectCard() {
             type="button"
             onClick={() => void connect()}
             disabled={pending}
-            className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-60"
+            className="[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1.5 rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary/90 disabled:opacity-60"
           >
             {pending ? "Opening Outline…" : "Connect Outline"}
             <span className="material-symbols-outlined text-base" aria-hidden="true">
@@ -160,11 +183,7 @@ export function OutlineConnectCard() {
         </p>
       )}
 
-      <p className="text-xs text-on-surface-variant">
-        Solvro uses your own Outline account to list pages, search and create docs. You see only
-        what you can open in Outline. Disconnect at any time; Solvro then stops all Outline calls
-        for you.
-      </p>
+      </div>
 
       <ConfirmModal
         open={confirmOpen}

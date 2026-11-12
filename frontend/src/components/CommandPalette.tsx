@@ -231,9 +231,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       node: (
         <>
           <Link
-            to="/settings"
+            to="/settings?tab=integrations"
             onClick={onClose}
-            className="font-semibold text-primary hover:underline"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 font-semibold text-primary hover:underline"
           >
             Connect Outline
           </Link>{" "}
@@ -248,7 +248,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       icon: "cloud_off",
       node:
         outlineErrorCode === "outline_rate_limited"
-          ? "Outline is busy — try again in a moment."
+          ? "Outline is busy. Try again in a moment."
           : "Outline results are unavailable right now.",
     };
   }
@@ -257,7 +257,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
   return createPortal(
     <div
-      className="fixed inset-0 z-100 flex items-stretch justify-center bg-inverse-surface/40 p-0 backdrop-blur-sm md:items-start md:p-4 md:pt-[15vh]"
+      className="fixed inset-0 z-100 flex items-stretch justify-center bg-inverse-surface/40 p-0 md:items-start md:p-4 md:pt-[15vh]"
       onMouseDown={onClose}
     >
       <div
@@ -296,7 +296,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             <AutocompleteInput
               autoFocus
               placeholder="Search projects, tasks, customers…"
-              className="flex-1 border-none bg-transparent text-[13px] text-on-surface outline-hidden placeholder:text-on-surface-variant dark:bg-transparent rounded-none h-auto px-0 focus-visible:ring-0 focus-visible:border-transparent"
+              className="flex-1 border-none bg-transparent text-xs text-on-surface outline-hidden placeholder:text-on-surface-variant dark:bg-transparent rounded-none h-auto px-0 focus-visible:ring-0 focus-visible:border-transparent"
             />
             <span className="rounded-sm border border-outline-variant bg-surface-container-low px-1.5 py-0.5 font-mono text-meta text-on-surface-variant">
               esc
@@ -313,7 +313,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               children. The >=2-char gate below avoids a premature "no
               results" flash before the palette has a real query to report on.
             */}
-            <AutocompleteEmpty className="px-4 py-6 text-center text-[13px] text-on-surface-variant">
+            <AutocompleteEmpty className="px-4 py-6 text-center text-xs text-on-surface-variant">
               {hasQuery && !outlinePending
                 ? error
                   ? "Could not load results. Try again."
@@ -342,7 +342,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                         key={item.value}
                         value={item}
                         onClick={() => handleSelect(item)}
-                        className="flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-[13px] text-on-surface data-highlighted:bg-surface-container"
+                        className="flex [@media(pointer:coarse)]:min-h-11 cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-xs text-on-surface data-highlighted:bg-surface-container"
                       >
                         {item.outline ? (
                           <span

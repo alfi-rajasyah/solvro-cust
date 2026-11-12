@@ -65,7 +65,7 @@ export function ProjectServices() {
             type="button"
             onClick={handleAddAllSubscribed}
             disabled={update.isPending}
-            className="inline-flex items-center gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container disabled:opacity-60"
+            className="[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container disabled:opacity-60"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-base">playlist_add</span>
             Add all subscribed

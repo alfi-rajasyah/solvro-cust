@@ -63,7 +63,7 @@ export function LabelPicker({
               type="button"
               onClick={() => toggle(l)}
               className={[
-                "rounded-sm transition-opacity",
+                "[@media(pointer:coarse)]:min-h-11 rounded-sm transition-opacity",
                 active ? "ring-2 ring-primary ring-offset-1" : "opacity-60 hover:opacity-100",
               ].join(" ")}
             >
@@ -78,7 +78,7 @@ export function LabelPicker({
               createLabel.reset();
               setCreating(true);
             }}
-            className="rounded-sm border border-dashed border-outline-variant px-1.5 py-0.5 font-display text-meta text-on-surface-variant hover:border-primary hover:text-primary font-semibold"
+            className="[@media(pointer:coarse)]:py-2.5 rounded-sm border border-dashed border-outline-variant px-1.5 py-0.5 font-display text-meta text-on-surface-variant hover:border-primary hover:text-primary font-semibold"
           >
             Add label
           </button>
@@ -102,13 +102,13 @@ export function LabelPicker({
               }}
               placeholder="Label name"
               maxLength={50}
-              className="flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-xs focus:border-primary focus:outline-hidden"
+              className="[@media(pointer:coarse)]:min-h-11 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-xs focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
             />
             <button
               type="button"
               onClick={() => void handleCreate()}
               disabled={createLabel.isPending || !newName.trim()}
-              className="rounded-sm bg-primary px-2 py-1 font-display text-xs text-on-primary hover:bg-primary-container disabled:opacity-50 font-semibold"
+              className="[@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-2 py-1 font-display text-xs text-on-primary hover:bg-primary/90 disabled:opacity-50 font-semibold"
             >
               {createLabel.isPending ? "…" : "Add"}
             </button>
@@ -119,7 +119,7 @@ export function LabelPicker({
                 setCreating(false);
                 setNewName("");
               }}
-              className="rounded-sm px-2 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container"
+              className="rounded-sm px-2 py-1 [@media(pointer:coarse)]:py-3 text-xs font-semibold text-on-surface-variant hover:bg-surface-container"
             >
               Cancel
             </button>
