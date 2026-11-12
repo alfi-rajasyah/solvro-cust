@@ -37,6 +37,7 @@ import { SyncedAgo } from "./SyncedAgo";
 import { TicketBoard } from "./board/TicketBoard";
 import { pillClass, TicketFilters } from "./TicketFilters";
 import { TicketsTable } from "./TicketsTable";
+import { TOOLBAR_BUTTON_PRIMARY } from "@/lib/utils";
 
 export type TicketsTabView = "table" | "board";
 
@@ -131,7 +132,7 @@ export function TicketsTab({
             <button
               type="button"
               onClick={() => setNewTicketOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 font-display text-[12px] font-bold text-on-primary hover:bg-primary/90"
+              className={TOOLBAR_BUTTON_PRIMARY}
             >
               <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
               New ticket

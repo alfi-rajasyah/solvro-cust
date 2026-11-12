@@ -16,7 +16,7 @@ export interface CreateGateInput {
   canViewCustomers: boolean;
   /** The customer's iTop mapping; only meaningful once the cheap checks pass. */
   mapping: MappingState;
-  /** The viewer holds the wildcard permission (can reach Admin → iTop). */
+  /** The viewer holds the wildcard permission (can reach Admin › iTop). */
   isAdmin: boolean;
 }
 
@@ -44,11 +44,11 @@ export function resolveCreateGate(input: CreateGateInput): CreateGate {
   }
   if (!input.actionsEnabled) {
     return input.isAdmin
-      ? { canCreate: false, reason: "iTop actions are turned off (Admin → iTop)", fix: { label: "Admin → iTop", to: "/admin?tab=itop" } }
+      ? { canCreate: false, reason: "iTop actions are turned off (Admin › iTop)", fix: { label: "Admin › iTop", to: "/admin?tab=itop" } }
       : { canCreate: false, reason: "iTop actions are turned off. Ask an admin to turn them on", fix: null };
   }
   if (!input.hasToken) {
-    return { canCreate: false, reason: "Add your iTop token in Settings", fix: { label: "Settings", to: "/settings" } };
+    return { canCreate: false, reason: "Add your iTop token in Settings", fix: { label: "Settings", to: "/settings?tab=integrations" } };
   }
   if (!input.canViewCustomers) {
     return { canCreate: false, reason: "You need the 'View customers' permission to create iTop tickets", fix: null };
@@ -62,8 +62,8 @@ export function resolveCreateGate(input: CreateGateInput): CreateGate {
     return input.isAdmin
       ? {
           canCreate: false,
-          reason: `Map ${name} to an iTop organisation (Admin → iTop)`,
-          fix: { label: "Admin → iTop", to: "/admin?tab=itop" },
+          reason: `Map ${name} to an iTop organisation (Admin › iTop)`,
+          fix: { label: "Admin › iTop", to: "/admin?tab=itop" },
         }
       : { canCreate: false, reason: `Ask an admin to map ${name} to an iTop organisation`, fix: null };
   }

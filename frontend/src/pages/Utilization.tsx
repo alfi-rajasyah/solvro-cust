@@ -120,7 +120,7 @@ export function Utilization() {
             type="button"
             onClick={() => goToWeek(shiftWeek(week, -1))}
             aria-label="Previous week"
-            className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
+            className="tap-target flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_left</span>
           </button>
@@ -134,7 +134,7 @@ export function Utilization() {
             type="button"
             onClick={() => goToWeek(shiftWeek(week, 1))}
             aria-label="Next week"
-            className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
+            className="tap-target flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_right</span>
           </button>
@@ -150,7 +150,7 @@ export function Utilization() {
               data-testid={`utilization-tab-${t.scope}`}
               onClick={() => goToScope(t.scope)}
               className={[
-                "-mb-px border-b-2 px-1 pb-3 font-display text-sm transition-colors",
+                "tap-target -mb-px border-b-2 px-1 pb-3 font-display text-sm transition-colors",
                 scope === t.scope
                   ? "border-primary text-primary"
                   : "border-transparent text-on-surface-variant hover:text-on-surface",
@@ -161,7 +161,7 @@ export function Utilization() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2 text-[12px] text-on-surface-variant">
+        <div className="flex items-center gap-2 text-meta text-on-surface-variant">
           <span>Source · iTop Time Tracking</span>
           <span>· {formatSyncedAt(data?.syncedAt ?? null)}</span>
           <button
@@ -170,7 +170,7 @@ export function Utilization() {
             disabled={refresh.isPending}
             title="Refresh from iTop"
             aria-label="Refresh from iTop"
-            className="inline-flex items-center justify-center rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="tap-target inline-flex items-center justify-center rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-[17px]">refresh</span>
           </button>
@@ -200,9 +200,9 @@ export function Utilization() {
           message={
             isAdmin ? (
               <>
-                An admin connects it under Admin › iTop —{" "}
+                An admin connects it under Admin › iTop.{" "}
                 <Link to="/admin" className="text-primary hover:underline">
-                  go to Admin
+                  Go to Admin
                 </Link>
                 .
               </>
@@ -217,7 +217,7 @@ export function Utilization() {
         <>
           <UtilizationTiles tiles={data.tiles} scope={scope} />
           <UtilizationTable data={data} scope={scope} />
-          <p className="text-[13px] text-on-surface-variant">
+          <p className="text-xs text-on-surface-variant">
             Hours come from iTop TimeSpent entries. To change a number, edit the entry in iTop.
           </p>
         </>

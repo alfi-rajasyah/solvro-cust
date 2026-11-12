@@ -91,10 +91,10 @@ const THEME_HEX = {
   onSurfaceVariant: "#4a4a47",
   outline: "#9a9a97",
   outlineVariant: "#d0d0cc",
-  // index.css :root --primary: 45 144 66 (light theme) — DESIGN.md's
+  // index.css :root --primary: 31 117 51 (light theme) — DESIGN.md's
   // Behavioral Rules table: "Primary is Elitery Green — never blue: #3aae51
-  // dark / #2d9042 light." PDF is light-background, so the light value wins.
-  primary: "#2d9042",
+  // dark / #1f7533 light." PDF is light-background, so the light value wins.
+  primary: "#1f7533",
 } as const;
 
 // Ported from SolvroBar.tsx (itself ported from the old GanttBar.tsx:56-74)
@@ -906,7 +906,7 @@ export async function exportGanttToPdf(opts: ExportPdfOpts): Promise<void> {
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(13);
   pdf.setTextColor(onSurfaceRgb[0], onSurfaceRgb[1], onSurfaceRgb[2]);
-  pdf.text(`${projectName} — Tasks`, margin, margin + 14);
+  pdf.text(`${projectName}: Tasks`, margin, margin + 14);
 
   const { head, body: tableRows, hasCriticalPath } = buildTaskTable(rows);
   // Critical Path column (plan §3, empty-project rule): present only when
@@ -950,7 +950,7 @@ export async function exportGanttToPdf(opts: ExportPdfOpts): Promise<void> {
       const w = window.open(blobUrl, "_blank");
       if (!w) {
         throw new Error(
-          "Pop-up blocked — allow pop-ups for this site to view the PDF.",
+          "Pop-up blocked. Allow pop-ups for this site to view the PDF.",
         );
       }
     }

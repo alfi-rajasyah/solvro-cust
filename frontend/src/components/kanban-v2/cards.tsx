@@ -126,12 +126,12 @@ export function TaskCard({
           {onClick ? (
             <button
               type="button"
-              className="min-w-0 rounded-sm text-left text-[15px] font-bold leading-tight text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:min-h-11 min-w-0 [@media(pointer:coarse)]:min-w-11 rounded-sm text-left text-sm font-bold leading-tight text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <CardTitle task={task} />
             </button>
           ) : (
-            <p className="min-w-0 text-[15px] font-bold leading-tight text-on-surface">
+            <p className="min-w-0 text-sm font-bold leading-tight text-on-surface">
               <CardTitle task={task} />
             </p>
           )}
@@ -147,7 +147,7 @@ export function TaskCard({
               onMenuClick();
             }}
             onPointerDown={(e) => e.stopPropagation()}
-            className="material-symbols-outlined shrink-0 text-[17px] text-on-surface-variant hover:text-on-surface md:hidden"
+            className="material-symbols-outlined shrink-0 text-[17px] [@media(pointer:coarse)]:-my-3 [@media(pointer:coarse)]:-mr-3 [@media(pointer:coarse)]:p-3 text-on-surface-variant hover:text-on-surface md:hidden"
             aria-label="Card options"
           >
             more_horiz
@@ -171,7 +171,7 @@ export function TaskCard({
 
       {/* Description */}
       {task.description && (
-        <p className="mb-2 line-clamp-2 text-[13px] leading-snug text-on-surface-variant">
+        <p className="mb-2 line-clamp-2 text-xs leading-snug text-on-surface-variant">
           {task.description}
         </p>
       )}
@@ -251,7 +251,7 @@ export function SubtaskRow({
 }) {
   const done = task.status === "DONE";
   return (
-    <div className="flex touch-manipulation items-center gap-1.5 rounded-sm px-0.5 py-0.5 text-[12px]">
+    <div className="flex [@media(pointer:coarse)]:min-h-11 touch-manipulation items-center gap-1.5 rounded-sm px-0.5 py-0.5 text-meta">
       {/* Toggle only, DONE<->TODO, permission-gated the same way the old
           board gated it (`canMove` -> `task:write`, ProjectKanban.tsx:451-454,
           642-643). No drag surface — subtask dragging is retired. */}
@@ -265,14 +265,20 @@ export function SubtaskRow({
         }}
         aria-label={done ? "Mark not done" : "Mark done"}
         className={[
-          "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border transition-colors",
-          done
-            ? "border-primary bg-primary text-on-primary"
-            : "border-outline-variant hover:border-primary",
-          canToggle ? "cursor-pointer" : "cursor-default",
+          "group/tog flex h-3.5 w-3.5 shrink-0 items-center justify-center",
+          canToggle ? "cursor-pointer [@media(pointer:coarse)]:size-11" : "cursor-default",
         ].join(" ")}
       >
-        {done && <span aria-hidden="true" className="material-symbols-outlined text-meta leading-none">check</span>}
+        <span
+          className={[
+            "flex h-3.5 w-3.5 items-center justify-center rounded-full border transition-colors",
+            done
+              ? "border-primary bg-primary text-on-primary"
+              : "border-outline-variant group-hover/tog:border-primary",
+          ].join(" ")}
+        >
+          {done && <span aria-hidden="true" className="material-symbols-outlined text-meta leading-none">check</span>}
+        </span>
       </button>
       <span
         onPointerDown={(e) => e.stopPropagation()}

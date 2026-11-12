@@ -20,9 +20,9 @@ import {
 } from "@/lib/queries";
 
 const ACTION_BUTTON =
-  "inline-flex items-center gap-1.5 rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-60";
+  "[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1.5 rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary/90 disabled:opacity-60";
 const GHOST_BUTTON =
-  "inline-flex h-8 items-center gap-1.5 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 font-display text-xs font-bold text-on-surface outline-hidden hover:bg-surface-container focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
+  "[@media(pointer:coarse)]:min-h-11 inline-flex h-8 items-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 font-display text-xs font-bold text-on-surface outline-hidden hover:bg-surface-container focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
 
 export function OutlineDocsTab({
   scope,
@@ -247,7 +247,7 @@ function DocsTree({
             disabled={refreshing}
             aria-label="Refresh pages"
             title="Refresh pages"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-outline-variant text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+            className="tap-target inline-flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
           >
             <span className="material-symbols-outlined text-base" aria-hidden="true">
               refresh
@@ -326,7 +326,7 @@ function TreeRow({
     <li>
       <div
         data-testid="outline-doc-row"
-        className="flex min-w-0 items-center gap-1 border-t border-outline-variant px-3 py-2 first:border-t-0 hover:bg-surface-container-low"
+        className="flex min-w-0 items-center gap-1 border-t border-outline-variant px-3 py-2 first:border-t-0 hover:bg-surface-container-low [@media(pointer:coarse)]:min-h-11"
         style={{ paddingLeft: `${12 + depth * 20}px` }}
       >
         {hasChildren ? (
@@ -336,7 +336,7 @@ function TreeRow({
             aria-expanded={isOpen}
             aria-controls={childrenId}
             aria-label={`${isOpen ? "Collapse" : "Expand"} ${node.title}`}
-            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container-high"
+            className="tap-target inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container-high"
           >
             <span className="material-symbols-outlined text-base" aria-hidden="true">
               {isOpen ? "expand_more" : "chevron_right"}
@@ -353,7 +353,7 @@ function TreeRow({
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="min-w-0 flex-1 truncate rounded-sm text-sm text-on-surface outline-hidden hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 truncate rounded-sm text-sm text-on-surface outline-hidden hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-primary/30"
           >
             {node.title}
             <span className="sr-only"> (opens in a new tab)</span>

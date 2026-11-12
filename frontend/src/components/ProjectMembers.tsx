@@ -42,7 +42,7 @@ export function ProjectMembersButton({
         aria-label={`Project members (${count})`}
         title="Project members"
         data-testid="project-members-button"
-        className="flex h-8 items-center gap-1 rounded-lg border border-outline-variant bg-surface-container-lowest px-2 outline-hidden transition-colors hover:bg-surface-container focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+        className="tap-target flex h-8 items-center gap-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 outline-hidden transition-colors hover:bg-surface-container focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
       >
         <span className="flex items-center gap-0.5" data-testid="project-member-avatars">
           {/* TAM first. Side by side, not overlapped: two initials need the full disc. */}
@@ -208,7 +208,7 @@ function ProjectMembersDialog({
               aria-label="Person to add"
               value={pickedId}
               onChange={(e) => setPickedId(e.target.value)}
-              className="min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <option value="">
                 {candidates.length === 0 ? "Everyone is already on this project" : "Add a person…"}
@@ -223,7 +223,7 @@ function ProjectMembersDialog({
               type="button"
               onClick={() => void handleAdd()}
               disabled={pickedId === "" || add.isPending}
-              className="shrink-0 rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60 outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:min-h-11 shrink-0 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60 outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               {add.isPending ? "Adding…" : "Add"}
             </button>
@@ -274,7 +274,7 @@ function MemberRow({
           onClick={onRemove.run}
           disabled={onRemove.busy}
           aria-label={`Remove ${person.username}`}
-          className="shrink-0 rounded-lg border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container hover:text-error disabled:opacity-50 outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="tap-target shrink-0 rounded-sm border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container hover:text-error disabled:opacity-50 outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           Remove
         </button>
@@ -289,14 +289,14 @@ function MemberRow({
           <button
             type="button"
             onClick={confirm.onCancel}
-            className="rounded-lg border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={confirm.onConfirm}
-            className="rounded-lg bg-error px-3 py-1 text-xs font-bold text-on-error hover:bg-error/90 outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="[@media(pointer:coarse)]:min-h-11 rounded-sm bg-error px-3 py-1 text-xs font-bold text-on-error hover:bg-error/90 outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
           >
             Remove and unassign
           </button>

@@ -329,7 +329,7 @@ test.describe("Mentioned in Outline", () => {
     const section = page.getByTestId("outline-mentions");
     await expect(section).toContainText("Mentioned in Outline · 4");
     const note = section.getByTestId("outline-mentions-unconnected");
-    await expect(note).toHaveText("Mentioned in 4 Outline pages — connect Outline to see them");
+    await expect(note).toHaveText("Mentioned in 4 Outline pages: connect Outline to see them");
     await expect(section.getByTestId("outline-mentions-list")).toHaveCount(0);
     await note.getByRole("link", { name: /connect Outline/ }).click();
     await page.waitForURL(/\/settings/);

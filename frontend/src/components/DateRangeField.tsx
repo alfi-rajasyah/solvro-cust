@@ -9,6 +9,7 @@ import {
   normalizePair,
   rangeFromPair,
 } from "@/lib/dateField";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 import { cn } from "@/lib/utils";
 
 interface DateRangeFieldProps {
@@ -79,25 +80,25 @@ function useIsDesktopViewport(): boolean {
 }
 
 const triggerBaseClasses =
-  "cursor-pointer text-left focus:outline-hidden disabled:cursor-default";
+  "[@media(pointer:coarse)]:min-h-11 cursor-pointer text-left focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default";
 
 const variantClasses = {
   boxed:
-    "rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 font-mono text-[12px] text-on-surface focus:border-primary",
+    "rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 font-mono text-meta text-on-surface focus:border-primary",
   bare: "border-none bg-transparent text-xs font-semibold text-on-surface",
 } as const;
 
 const footerButtonClasses =
-  "rounded-sm px-1.5 py-0.5 font-display text-sm text-on-surface-variant hover:bg-surface-container font-semibold";
+  "[@media(pointer:coarse)]:min-h-11 rounded-sm px-1.5 py-0.5 font-display text-sm text-on-surface-variant hover:bg-surface-container font-semibold";
 
-/** `formatDisplay(start) – formatDisplay(end)`, em-dash placeholder per missing side. */
+/** `formatDisplay(start) – formatDisplay(end)`, en-dash placeholder per missing side. */
 function formatRangeDisplay(
   start: string | null,
   end: string | null,
-  emptyLabel = "—",
+  emptyLabel = EMPTY_VALUE,
 ): string {
   if (!start && !end) return emptyLabel;
-  return `${formatDisplay(start) || "—"} – ${formatDisplay(end) || "—"}`;
+  return `${formatDisplay(start) || EMPTY_VALUE} – ${formatDisplay(end) || EMPTY_VALUE}`;
 }
 
 /**
@@ -328,7 +329,7 @@ export function DateRangeField({
               <button
                 type="button"
                 onClick={handleApply}
-                className="rounded-sm bg-primary px-2 py-0.5 font-display text-sm text-on-primary hover:bg-primary-container font-semibold"
+                className="[@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-2 py-0.5 font-display text-sm text-on-primary hover:bg-primary/90 font-semibold"
               >
                 Apply
               </button>

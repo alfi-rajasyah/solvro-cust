@@ -14,6 +14,7 @@ import type {
   ProjectSummary,
   WeeklyUpdate,
 } from "@/lib/queries";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 
 // Header strip of the customer account page: name, who owns the account, and
 // one health line rolled up from the nested `projects[].health` blocks
@@ -117,9 +118,9 @@ export function AccountHeader({
         </div>
 
         <div className="mt-1.5 flex flex-wrap items-baseline gap-x-5 gap-y-1">
-          <Person label="AM">{customer.accountManager || "—"}</Person>
-          <Person label="SA">{customer.solutionArchitect || "—"}</Person>
-          <Person label="TAM">{customer.tam ? customer.tam.username : "—"}</Person>
+          <Person label="AM">{customer.accountManager || EMPTY_VALUE}</Person>
+          <Person label="SA">{customer.solutionArchitect || EMPTY_VALUE}</Person>
+          <Person label="TAM">{customer.tam ? customer.tam.username : EMPTY_VALUE}</Person>
           {itopOrgName !== null && <Person label="iTop org">{itopOrgName}</Person>}
         </div>
 
@@ -154,14 +155,14 @@ export function AccountHeader({
         <OutlineLinkButton url={customer.outlineUrl} />
         <CopyLinkButton
           label="Copy link"
-          className="h-8 w-8 rounded-lg border border-outline-variant bg-surface-container-lowest hover:bg-surface-container"
+          className="tap-target h-8 w-8 rounded-sm border border-outline-variant bg-surface-container-lowest hover:bg-surface-container"
         />
         {canMutate && (
           <>
           <button
             type="button"
             onClick={onEdit}
-            className="inline-flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container"
+            className="[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-base">edit</span>
             Edit
@@ -174,7 +175,7 @@ export function AccountHeader({
                   type="button"
                   aria-label="More customer actions"
                   title="More customer actions"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="tap-target inline-flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant bg-surface-container-lowest text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <span className="material-symbols-outlined text-base" aria-hidden="true">
                     more_horiz

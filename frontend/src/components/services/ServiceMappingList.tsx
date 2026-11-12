@@ -7,6 +7,7 @@ import {
   useCreateService,
   useServices,
 } from "@/lib/queries";
+import { TOOLBAR_BUTTON_PRIMARY } from "@/lib/utils";
 
 export interface ServiceMappingListProps {
   /** Current saved set for the entity being edited (customer or project). */
@@ -134,7 +135,7 @@ export function ServiceMappingList({
         <h2 className="font-display text-sm font-bold text-on-surface">
           {title}
         </h2>
-        <p className="text-[12px] text-on-surface-variant">{description}</p>
+        <p className="text-meta text-on-surface-variant">{description}</p>
       </div>
 
       {error && (
@@ -148,7 +149,7 @@ export function ServiceMappingList({
       ) : !catalogue || catalogue.length === 0 ? (
         <EmptyState
           icon="category"
-          message="No services yet — add the first one below."
+          message="No services yet. Add the first one below."
         />
       ) : (
         <div className="space-y-1.5">
@@ -173,7 +174,7 @@ export function ServiceMappingList({
                   onClick={() => toggle(s.id)}
                   aria-pressed={assigned}
                   className={[
-                    "flex w-full items-center justify-between gap-3 text-left text-sm",
+                    "[@media(pointer:coarse)]:min-h-11 flex w-full items-center justify-between gap-3 text-left text-sm",
                     canMutate ? "" : "cursor-default",
                   ].join(" ")}
                 >
@@ -201,7 +202,7 @@ export function ServiceMappingList({
                         )}
                       </p>
                       {s.description && (
-                        <p className="truncate text-[12px] text-on-surface-variant">
+                        <p className="truncate text-meta text-on-surface-variant">
                           {s.description}
                         </p>
                       )}
@@ -240,7 +241,7 @@ export function ServiceMappingList({
               onChange={(e) => setNewName(e.target.value)}
               maxLength={100}
               placeholder="e.g. Penetration Testing"
-              className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden"
+              className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
             />
           </label>
           <label className="w-full md:flex-2 md:min-w-[240px]">
@@ -253,13 +254,13 @@ export function ServiceMappingList({
               onChange={(e) => setNewDesc(e.target.value)}
               maxLength={1000}
               placeholder="Short blurb shown in the catalogue"
-              className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden"
+              className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
             />
           </label>
           <button
             type="submit"
             disabled={create.isPending || !newName.trim()}
-            className="w-full rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-bold text-on-primary hover:bg-primary-container disabled:opacity-60 md:w-auto"
+            className={`${TOOLBAR_BUTTON_PRIMARY} w-full justify-center md:w-auto`}
           >
             {create.isPending ? "Adding…" : "Add service"}
           </button>
@@ -315,7 +316,7 @@ function ToolsEditor({
         {tools.map((t, i) => (
           <span
             key={`${t}-${i}`}
-            className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[12px] text-primary"
+            className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-meta text-primary"
           >
             {t}
             {canMutate && (
@@ -324,7 +325,7 @@ function ToolsEditor({
                 onClick={() => remove(i)}
                 disabled={saving}
                 aria-label={`Remove ${t}`}
-                className="rounded-full text-primary/70 hover:text-primary disabled:opacity-50"
+                className="tap-target rounded-full text-primary/70 hover:text-primary disabled:opacity-50"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[13px]">close</span>
               </button>
@@ -340,11 +341,11 @@ function ToolsEditor({
             onBlur={() => commit(draft)}
             disabled={saving}
             placeholder={tools.length === 0 ? "e.g. Acronis, Crowdstrike" : "Add tool…"}
-            className="min-w-[140px] flex-1 rounded-sm border border-outline-variant bg-surface px-2 py-0.5 text-[12px] focus:border-primary focus:outline-hidden disabled:opacity-50"
+            className="min-w-[140px] flex-1 rounded-sm border border-outline-variant bg-surface px-2 py-0.5 text-meta focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
           />
         )}
         {!canMutate && tools.length === 0 && (
-          <span className="text-[12px] italic text-on-surface-variant">
+          <span className="text-meta italic text-on-surface-variant">
             No tools listed.
           </span>
         )}

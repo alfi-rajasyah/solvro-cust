@@ -112,7 +112,7 @@ export function Drawer({
             <button
               type="button"
               onClick={onClose}
-              className="flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
+              className="tap-target flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
               aria-label="Close"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>

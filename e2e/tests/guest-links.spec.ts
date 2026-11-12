@@ -201,7 +201,7 @@ test.describe("Guest links", () => {
 
     const panel = dialog.getByTestId("share-new-link");
     await expect(panel).toBeVisible();
-    await expect(panel).toContainText("You won't see this link again — copy it now.");
+    await expect(panel).toContainText("You won't see this link again. Copy it now.");
     const shownUrl = await panel.getByTestId("share-new-link-url").inputValue();
     expect(shownUrl).toMatch(/\/share\/[A-Za-z0-9_-]{20,}$/);
     expect(shownUrl.startsWith(new URL(baseURL).origin)).toBe(true);

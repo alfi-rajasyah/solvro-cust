@@ -30,8 +30,8 @@ describe("resolveCreateGate", () => {
   it("then actionsEnabled, with an admin link only for admins", () => {
     const base = { ...OK, actionsEnabled: false, hasToken: false, mapping: "unmapped" as const };
     expect(resolveCreateGate({ ...base, isAdmin: true })).toMatchObject({
-      reason: "iTop actions are turned off (Admin → iTop)",
-      fix: { label: "Admin → iTop", to: "/admin?tab=itop" },
+      reason: "iTop actions are turned off (Admin › iTop)",
+      fix: { label: "Admin › iTop", to: "/admin?tab=itop" },
     });
     expect(resolveCreateGate(base)).toMatchObject({ reason: "iTop actions are turned off. Ask an admin to turn them on", fix: null });
   });
@@ -39,7 +39,7 @@ describe("resolveCreateGate", () => {
   it("then the personal token, linking to Settings", () => {
     expect(resolveCreateGate({ ...OK, hasToken: false, mapping: "unmapped" })).toMatchObject({
       reason: "Add your iTop token in Settings",
-      fix: { label: "Settings", to: "/settings" },
+      fix: { label: "Settings", to: "/settings?tab=integrations" },
     });
   });
 
@@ -55,8 +55,8 @@ describe("resolveCreateGate", () => {
 
   it("last, the mapping, with admin vs non-admin wording", () => {
     expect(resolveCreateGate({ ...OK, mapping: "unmapped", isAdmin: true })).toMatchObject({
-      reason: "Map Northwind to an iTop organisation (Admin → iTop)",
-      fix: { label: "Admin → iTop" },
+      reason: "Map Northwind to an iTop organisation (Admin › iTop)",
+      fix: { label: "Admin › iTop" },
     });
     expect(resolveCreateGate({ ...OK, mapping: "unmapped" }).reason).toBe("Ask an admin to map Northwind to an iTop organisation");
   });

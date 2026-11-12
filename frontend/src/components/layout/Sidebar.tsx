@@ -37,8 +37,8 @@ function NavItem({
 }) {
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     [
-      "group relative flex items-center rounded-sm transition-colors duration-150",
-      expanded ? "gap-2.5 px-3 py-2 text-[13px]" : "h-10 w-10 justify-center",
+      "tap-target group relative flex items-center rounded-sm transition-colors duration-150",
+      expanded ? "gap-2.5 px-3 py-2 text-xs" : "h-10 w-10 justify-center",
       isActive ? "bg-primary/20 text-white" : "text-slate-400 hover:bg-white/5 hover:text-slate-100",
     ].join(" ");
 
@@ -120,8 +120,8 @@ function OutlineNavItem({
   onNavigate: () => void;
 }) {
   const linkClass = [
-    "group relative flex items-center rounded-sm transition-colors duration-150 text-slate-400 hover:bg-white/5 hover:text-slate-100",
-    expanded ? "gap-2.5 px-3 py-2 text-[13px]" : "h-10 w-10 justify-center",
+    "tap-target group relative flex items-center rounded-sm transition-colors duration-150 text-slate-400 hover:bg-white/5 hover:text-slate-100",
+    expanded ? "gap-2.5 px-3 py-2 text-xs" : "h-10 w-10 justify-center",
   ].join(" ");
 
   const content = (
@@ -204,7 +204,7 @@ export function Sidebar() {
           type="button"
           onClick={close}
           aria-label="Close sidebar"
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] md:hidden"
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
         />
       )}
 
@@ -236,7 +236,7 @@ export function Sidebar() {
             type="button"
             onClick={toggle}
             aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
-            className="flex h-8 w-8 items-center justify-center rounded-sm text-slate-400 hover:bg-white/5 hover:text-slate-100"
+            className="tap-target flex h-8 w-8 items-center justify-center rounded-sm text-slate-400 hover:bg-white/5 hover:text-slate-100"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-lg">
               {expanded ? "menu_open" : "menu"}
@@ -264,7 +264,7 @@ export function Sidebar() {
                 ) : (
                   gi > 0 && <div role="separator" className="mx-2 my-2 h-px bg-outline-variant" />
                 )}
-                <div role="group" aria-label={group} className="space-y-1">
+                <div role="group" aria-label={group} className="space-y-1 [@media(pointer:coarse)]:space-y-2.5">
                   {items.map((item) => (
                     <NavItem
                       key={item.to}

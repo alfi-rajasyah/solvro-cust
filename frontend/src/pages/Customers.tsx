@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useNewParam } from "@/hooks/useNewParam";
 import { hasPermission, useAuth } from "@/lib/auth";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
+import { TOOLBAR_BUTTON_PRIMARY } from "@/lib/utils";
 import { canChangeCustomerOwner, canOwnCustomer, saveErrorMessage } from "@/lib/ownerAccess";
 import { WEEKLY_STATUS_LABEL } from "@/lib/labels";
 import {
@@ -93,7 +95,7 @@ export function Customers() {
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 font-display text-sm text-on-primary transition-colors hover:bg-primary-container font-semibold"
+            className={`${TOOLBAR_BUTTON_PRIMARY} [@media(pointer:coarse)]:min-h-11`}
           >
             <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
             New customer
@@ -128,7 +130,7 @@ export function Customers() {
               <button
                 type="button"
                 onClick={() => setCreateOpen(true)}
-                className="inline-flex items-center gap-2 rounded-sm bg-primary px-4 py-2 font-display text-xs font-bold text-on-primary hover:bg-primary-container"
+                className={`${TOOLBAR_BUTTON_PRIMARY} [@media(pointer:coarse)]:min-h-11`}
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
                 Add your first customer
@@ -227,7 +229,7 @@ function CustomersTable({
               <Link
                 to={`/customers/${row.original.id}`}
                 onClick={(e) => e.stopPropagation()}
-                className="hover:text-primary hover:underline"
+                className="[@media(pointer:coarse)]:block [@media(pointer:coarse)]:truncate hover:text-primary hover:underline [@media(pointer:coarse)]:py-3"
               >
                 {row.original.name}
               </Link>
@@ -242,7 +244,7 @@ function CustomersTable({
         sortUndefined: "last",
         header: ({ column }) => <DataGridColumnHeader column={column} title="AM" />,
         cell: ({ row }) => (
-          <span className="text-on-surface-variant">{row.original.accountManager || "—"}</span>
+          <span className="text-on-surface-variant">{row.original.accountManager || EMPTY_VALUE}</span>
         ),
         meta: { skeleton: <Skeleton className="h-3.5 w-20" /> },
       },
@@ -252,7 +254,7 @@ function CustomersTable({
         sortUndefined: "last",
         header: ({ column }) => <DataGridColumnHeader column={column} title="TAM" />,
         cell: ({ row }) => (
-          <span className="text-on-surface-variant">{row.original.tam?.username ?? "—"}</span>
+          <span className="text-on-surface-variant">{row.original.tam?.username ?? EMPTY_VALUE}</span>
         ),
         meta: { skeleton: <Skeleton className="h-3.5 w-20" /> },
       },
@@ -265,7 +267,7 @@ function CustomersTable({
             to={`/projects?customerId=${row.original.id}`}
             onClick={(e) => e.stopPropagation()}
             title="View this customer's projects"
-            className="tabular-nums text-on-surface-variant hover:text-primary hover:underline"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:justify-center tabular-nums text-on-surface-variant hover:text-primary hover:underline [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11"
           >
             {row.original._count.projects}
           </Link>
@@ -340,7 +342,7 @@ function CustomersTable({
                     type="button"
                     aria-label={`Actions for ${row.original.name}`}
                     title="More customer actions"
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30"
+                    className="tap-target inline-flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30"
                   >
                     <span className="material-symbols-outlined text-base" aria-hidden="true">
                       more_horiz

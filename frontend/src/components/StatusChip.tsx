@@ -2,7 +2,7 @@ import { PROJECT_STATUS_LABEL, TASK_STATUS_LABEL } from "@/lib/labels";
 import { CATEGORY_DEFAULT_TONE } from "@/lib/taskStatuses";
 import type { ProjectStatus, StatusTone, TaskStatus } from "@/lib/queries";
 
-type Tone = "emerald" | "amber" | "rose" | "violet" | "blue" | "gray";
+export type Tone = "emerald" | "amber" | "rose" | "violet" | "blue" | "gray";
 
 const TONE_CLASS: Record<Tone, string> = {
   emerald: "bg-chip-emerald-bg text-chip-emerald-text",
@@ -73,7 +73,7 @@ export const STATUS_TONE_DOT_CLASS: Record<StatusTone, string> = {
 };
 
 export const CHIP_BASE =
-  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-display text-meta font-semibold leading-[18px]";
+  "inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 font-display text-meta font-semibold leading-[18px]";
 
 export function ProjectStatusChip({ status }: { status: ProjectStatus }) {
   return (

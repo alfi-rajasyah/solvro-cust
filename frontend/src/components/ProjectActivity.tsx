@@ -61,7 +61,7 @@ export function ProjectActivity({
         >
           <SelectTrigger
             size="sm"
-            className={`w-auto min-w-36 ${FOCUS_RING}`}
+            className={`[@media(pointer:coarse)]:min-h-11 w-auto min-w-36 ${FOCUS_RING}`}
             aria-label="Filter activity by person"
           >
             <SelectValue />
@@ -91,7 +91,7 @@ export function ProjectActivity({
           <button
             type="button"
             onClick={() => void refetch()}
-            className={`rounded-sm font-semibold text-primary hover:underline ${FOCUS_RING}`}
+            className={`tap-target rounded-sm font-semibold text-primary hover:underline ${FOCUS_RING}`}
           >
             Try again
           </button>
@@ -126,7 +126,7 @@ export function ProjectActivity({
                 type="button"
                 onClick={() => void fetchNextPage()}
                 disabled={isFetchingNextPage}
-                className={`inline-flex items-center gap-1.5 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 focus-visible:border-primary ${FOCUS_RING}`}
+                className={`[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 focus-visible:border-primary ${FOCUS_RING}`}
               >
                 {isFetchingNextPage ? "Loading…" : "Load more"}
               </button>
@@ -181,7 +181,7 @@ function ActivityRow({
               <Link
                 key={i}
                 to={`?task=${linkTaskId}`}
-                className={`rounded-sm font-semibold text-primary hover:underline ${FOCUS_RING}`}
+                className={`tap-target rounded-sm font-semibold text-primary hover:underline ${FOCUS_RING}`}
               >
                 {part.text}
               </Link>

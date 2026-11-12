@@ -19,7 +19,7 @@ export function OutlineLinkButton({
       rel="noopener noreferrer"
       data-testid="outline-link"
       className={[
-        "h-8 items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 font-display text-xs font-bold text-on-surface hover:bg-surface-container outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+        "[@media(pointer:coarse)]:min-h-11 h-8 items-center gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 font-display text-xs font-bold text-on-surface hover:bg-surface-container outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
         className || "inline-flex",
       ].join(" ")}
     >

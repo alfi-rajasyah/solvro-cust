@@ -1897,8 +1897,9 @@ export function Filters<T = unknown>({
     render: (trigger as React.ReactElement) ?? (
       // SOLVRO PATCH — the default trigger carried no `size`, so it rendered
       // h-9 next to h-8 chips at size="sm". Match the Filters size so the
-      // whole toolbar row shares one control height.
-      <Button variant="outline" size={size}>
+      // whole toolbar row shares one control height. `tap-target` gives it a
+      // 44px hit area on touch input only (docs/archive/plans/antislop-port.md).
+      <Button variant="outline" size={size} className="tap-target">
         <PlusIcon />
         {mergedI18n.addFilter}
       </Button>

@@ -213,7 +213,7 @@ describe("buildSyncTable", () => {
     ]);
     expect(table.rows).toEqual([
       ["Acme", "Amber", "Onboarding", "Server request", "Vendor delay", "Chase vendor"],
-      ["Acme", "Amber", "Onboarding", "Remote trading test", "—", "—"],
+      ["Acme", "Amber", "Onboarding", "Remote trading test", "–", "–"],
     ]);
   });
 
@@ -232,14 +232,14 @@ describe("buildSyncTable", () => {
         highlights: [highlight({ title: "Server request", detail: "   ", risk: "  ", action: "" })],
       }),
     ]);
-    expect(table.rows).toEqual([["Acme", "—", "—", "Server request", "—", "—"]]);
+    expect(table.rows).toEqual([["Acme", "–", "–", "Server request", "–", "–"]]);
   });
 
   it("a customer with a saved category but no highlight gets one row with dashes in the highlight cells", () => {
     const table = buildSyncTable("midweek", [
       customer("Acme", { category: "Onboarding", health: "GREEN", highlights: [] }),
     ]);
-    expect(table.rows).toEqual([["Acme", "Green", "Onboarding", "—", "—", "—"]]);
+    expect(table.rows).toEqual([["Acme", "Green", "Onboarding", "–", "–", "–"]]);
   });
 
   it("renders two rows for two achievements, with the customer repeated on each (D12)", () => {
@@ -261,7 +261,7 @@ describe("buildSyncTable", () => {
     ]);
     expect(table.rows).toEqual([
       ["Acme", "Shipped v1", "None", "Start earlier", "Phase 2", "Approve extra scope"],
-      ["Acme", "Shipped v2", "—", "—", "—", "—"],
+      ["Acme", "Shipped v2", "–", "–", "–", "–"],
     ]);
   });
 
@@ -283,8 +283,8 @@ describe("buildSyncTable", () => {
       customer("NoUpdate", null),
     ]);
     expect(table.rows).toEqual([
-      ["Acme", "—", "—", "—", "—", "—"],
-      ["NoUpdate", "—", "—", "—", "—", "—"],
+      ["Acme", "–", "–", "–", "–", "–"],
+      ["NoUpdate", "–", "–", "–", "–", "–"],
     ]);
   });
 
@@ -294,8 +294,8 @@ describe("buildSyncTable", () => {
       customer("NoUpdate", null),
     ]);
     expect(table.rows).toEqual([
-      ["Blank", "—", "—", "—", "—", "—"],
-      ["NoUpdate", "—", "—", "—", "—", "—"],
+      ["Blank", "–", "–", "–", "–", "–"],
+      ["NoUpdate", "–", "–", "–", "–", "–"],
     ]);
   });
 

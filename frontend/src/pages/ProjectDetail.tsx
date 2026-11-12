@@ -192,7 +192,7 @@ export function ProjectDetail() {
             the ⋯ menu; Edit and the Context toggle render as buttons from md up. The two copies never share a
             viewport (display:none leaves the accessibility tree), so the
             Context toggle's aria-labels stay unique. */}
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2 [@media(pointer:coarse)]:gap-3">
           <ProjectMembersButton project={project} canManage={canEdit} />
           {/* Guest links: owners only (TAM, customer owner, view-all) with
               project:write — the server answers 403 to anyone else. */}
@@ -201,13 +201,13 @@ export function ProjectDetail() {
           <OutlineLinkButton url={project.outlineUrl} className="hidden md:inline-flex" />
           <CopyLinkButton
             label="Copy link"
-            className="h-8 w-8 rounded-lg border border-outline-variant bg-surface-container-lowest hover:bg-surface-container"
+            className="tap-target h-8 w-8 rounded-sm border border-outline-variant bg-surface-container-lowest hover:bg-surface-container"
           />
           {canEdit && (
             <button
               type="button"
               onClick={() => setEditOpen(true)}
-              className="hidden items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container md:inline-flex"
+              className="hidden items-center gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container md:inline-flex [@media(pointer:coarse)]:min-h-11"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-base">edit</span>
               Edit
@@ -221,7 +221,7 @@ export function ProjectDetail() {
                   aria-label="More project actions"
                   title="More project actions"
                   className={[
-                    "h-8 w-8 items-center justify-center rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+                    "tap-target h-8 w-8 items-center justify-center rounded-sm border border-outline-variant bg-surface-container-lowest text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
                     // On desktop the menu only holds Delete and "Embed in Outline";
                     // with neither on offer, the trigger stays a phone-only control.
                     canDelete || embedAvailable ? "inline-flex" : "inline-flex md:hidden",
@@ -302,7 +302,7 @@ export function ProjectDetail() {
             aria-label={contextOpen ? "Hide project context" : "Show project context"}
             title={contextOpen ? "Hide project context" : "Show project context"}
             className={[
-              "hidden h-8 w-8 items-center justify-center rounded-lg border transition-colors md:inline-flex",
+              "tap-target hidden h-8 w-8 items-center justify-center rounded-sm border transition-colors md:inline-flex",
               contextOpen
                 ? "border-primary bg-primary/10 text-primary"
                 : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container hover:text-on-surface",
@@ -331,7 +331,7 @@ export function ProjectDetail() {
               to={tab.to}
               className={({ isActive }) =>
                 [
-                  "-mb-px border-b-2 px-1 pb-3 font-display text-sm transition-colors",
+                  "-mb-px border-b-2 px-1 pb-3 font-display text-sm transition-colors [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:text-center [@media(pointer:coarse)]:pt-2.5",
                   isActive
                     ? "border-primary text-primary"
                     : "border-transparent text-on-surface-variant hover:text-on-surface",

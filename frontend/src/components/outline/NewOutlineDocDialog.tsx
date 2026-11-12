@@ -146,7 +146,7 @@ export function NewOutlineDocDialog({
 
   const busy = create.isPending;
   const inputClass =
-    "w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
+    "[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
   const labelClass =
     "mb-1 block font-display text-label-caps uppercase text-on-surface-variant";
 
@@ -161,7 +161,7 @@ export function NewOutlineDocDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-sm border border-outline-variant px-4 py-1.5 font-display text-xs font-semibold text-on-surface hover:bg-surface-container"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm border border-outline-variant px-4 py-1.5 font-display text-xs font-semibold text-on-surface hover:bg-surface-container"
           >
             Close
           </button>
@@ -171,7 +171,7 @@ export function NewOutlineDocDialog({
               type="button"
               onClick={onClose}
               disabled={busy}
-              className="rounded-sm border border-outline-variant px-4 py-1.5 font-display text-xs font-semibold text-on-surface hover:bg-surface-container disabled:opacity-50"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm border border-outline-variant px-4 py-1.5 font-display text-xs font-semibold text-on-surface hover:bg-surface-container disabled:opacity-50"
             >
               Cancel
             </button>
@@ -180,7 +180,7 @@ export function NewOutlineDocDialog({
               form={formId}
               disabled={busy || title.trim() === ""}
               data-testid="new-outline-doc-submit"
-              className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-60"
+              className="[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1.5 rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary/90 disabled:opacity-60"
             >
               {busy ? "Creating…" : "Create and open"}
               <span className="material-symbols-outlined text-base" aria-hidden="true">
@@ -199,7 +199,7 @@ export function NewOutlineDocDialog({
             href={createdUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-primary hover:underline"
+            className="[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1 text-primary hover:underline"
           >
             Open it in Outline
             <span className="material-symbols-outlined text-base" aria-hidden="true">
@@ -220,7 +220,7 @@ export function NewOutlineDocDialog({
           )}
 
           <fieldset>
-            <legend className={labelClass}>Template — from your Outline</legend>
+            <legend className={labelClass}>Template from your Outline</legend>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <TemplateCard
                 checked={templateId === BLANK}
@@ -303,8 +303,7 @@ export function NewOutlineDocDialog({
               Created in Outline as{" "}
               <strong className="font-semibold text-on-surface" data-testid="new-outline-doc-as">
                 {me?.outlineEmail ?? "your Outline account"}
-              </strong>{" "}
-              — your own Outline account.
+              </strong>, your own Outline account.
             </span>
           </p>
         </form>

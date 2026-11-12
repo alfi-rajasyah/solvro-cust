@@ -92,12 +92,12 @@ export function defaultPlaceValue(anchor: { kind: "doc" | "collection" }, tree: 
 
 export const OUTLINE_DOC_TITLE_MAX = 255;
 
-/** "<template> — <date>" (e.g. "Meeting notes — 9 Oct"); a blank page gets "New page — <date>". */
+/** "<template>, <date>" (e.g. "Meeting notes, 9 Oct"); a blank page gets "New page, <date>". */
 export function defaultDocTitle(templateTitle: string | null, now: Date = new Date()): string {
   const base = (templateTitle ?? "").trim() || "New page";
   // The user's LOCAL day: formatting the ISO instant would show yesterday's date
   // in the early morning east of UTC.
-  return `${base} — ${fmtDay(dateToDay(now) ?? "", now)}`.slice(0, OUTLINE_DOC_TITLE_MAX);
+  return `${base}, ${fmtDay(dateToDay(now) ?? "", now)}`.slice(0, OUTLINE_DOC_TITLE_MAX);
 }
 
 /** Every page in the tree, parents first. */
@@ -137,4 +137,4 @@ export function webhookHealth(lastWebhookAt: string | null, now: Date = new Date
 }
 
 export const WEBHOOK_STALE_COPY =
-  "No delivery in 24 hours — check the webhook in Outline (Outline turns off webhooks that keep failing).";
+  "No delivery in 24 hours. Check the webhook in Outline (Outline turns off webhooks that keep failing).";

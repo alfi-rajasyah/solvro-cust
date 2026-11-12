@@ -13,6 +13,7 @@ import { ServiceMappingList } from "@/components/services/ServiceMappingList";
 import { Tabs } from "@/components/Tabs";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 import { canChangeCustomerOwner, canOwnCustomer, saveErrorMessage } from "@/lib/ownerAccess";
 import {
   type CustomerDetail as CustomerDetailType,
@@ -208,7 +209,7 @@ export function CustomerDetail() {
 
   const totals = sumProjectHealth(customer.projects);
   const itopOrgName =
-    ticketsAvailable && itopTicketsGate.data?.mapped ? (itopTicketsGate.data.orgName ?? "—") : null;
+    ticketsAvailable && itopTicketsGate.data?.mapped ? (itopTicketsGate.data.orgName ?? EMPTY_VALUE) : null;
 
   return (
     <div className="space-y-6">
@@ -311,7 +312,7 @@ function ServicesTab({
       saving={update.isPending}
       title="Service Catalogue Mapping"
       description={
-        'Select the services this customer subscribes to and list the tools used for each — e.g. "Backup & Restore" → Acronis, Veeam.'
+        'Select the services this customer subscribes to and list the tools used for each, e.g. "Backup & Restore": Acronis, Veeam.'
       }
     />
   );

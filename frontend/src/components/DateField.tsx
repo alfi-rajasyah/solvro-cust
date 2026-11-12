@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { dateToDay, dayToDate, formatDisplay } from "@/lib/dateField";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 import { cn } from "@/lib/utils";
 
 interface DateFieldProps {
@@ -43,11 +44,11 @@ interface DateFieldProps {
 }
 
 const triggerBaseClasses =
-  "cursor-pointer text-left focus:outline-hidden disabled:cursor-default";
+  "[@media(pointer:coarse)]:min-h-11 cursor-pointer text-left focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default";
 
 const variantClasses = {
   boxed:
-    "rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 font-mono text-[12px] text-on-surface focus:border-primary",
+    "rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 font-mono text-meta text-on-surface focus:border-primary",
   bare: "border-none bg-transparent text-xs font-semibold text-on-surface",
 } as const;
 
@@ -135,7 +136,7 @@ export function DateField({
         }
         className={cn(triggerBaseClasses, variantClasses[variant], className)}
       >
-        {triggerLabel !== undefined ? triggerLabel || "—" : formatDisplay(value) || "—"}
+        {triggerLabel !== undefined ? triggerLabel || EMPTY_VALUE : formatDisplay(value) || EMPTY_VALUE}
       </PopoverTrigger>
       <PopoverContent align="start" positionerClassName="z-101" className="w-auto p-0! shadow-overlay">
         <Calendar
@@ -150,7 +151,7 @@ export function DateField({
             <button
               type="button"
               onClick={handleClear}
-              className="rounded-sm px-1.5 py-0.5 font-display text-sm text-on-surface-variant hover:bg-surface-container font-semibold"
+              className="[@media(pointer:coarse)]:min-h-11 rounded-sm px-1.5 py-0.5 font-display text-sm text-on-surface-variant hover:bg-surface-container font-semibold"
             >
               Clear
             </button>

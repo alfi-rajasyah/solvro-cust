@@ -18,7 +18,7 @@ export type ActionSheetMode = "resolve" | "team" | "pending";
 
 const LABEL_CLASS = "mb-1.5 block text-label-caps uppercase text-on-surface-variant";
 const FIELD_CLASS =
-  "w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden";
+  "[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30";
 
 export function ActionSheet({
   open,
@@ -90,7 +90,7 @@ export function ActionSheet({
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="rounded-lg border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
           >
             Cancel
           </button>
@@ -98,7 +98,7 @@ export function ActionSheet({
             type="button"
             onClick={handleConfirm}
             disabled={busy || !canConfirm}
-            className="rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60"
           >
             {busy
               ? "Working…"
@@ -193,7 +193,7 @@ export function ActionSheet({
       )}
 
       {personName && (
-        <p className="mt-3 text-[12px] text-on-surface-variant">
+        <p className="mt-3 text-meta text-on-surface-variant">
           Written to iTop as {personName}
         </p>
       )}

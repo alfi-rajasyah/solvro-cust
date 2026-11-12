@@ -1,7 +1,7 @@
 // Ticket list for the Customer Tickets tab (Task 1.8): a desktop table and a
 // mobile card list in the same file (frontend/CLAUDE.md's "never a separate
 // mobile component tree" convention) toggled with `hidden md:table` /
-// `md:hidden`. Whole-row click opens the same "Open in iTop ↗" link the
+// `md:hidden`. Whole-row click opens the same "Open in iTop" link the
 // trailing action anchor exposes — the anchor stays the focusable element
 // (frontend/CLAUDE.md's app-wide focus ring), the row click is a mouse-only
 // convenience layered on top via `stopPropagation` on the anchor itself.
@@ -14,6 +14,7 @@ import { Chip } from "@/components/StatusChip";
 import type { ItopTicketRow, ItopTicketScope } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 import { ageLabel, itopTicketUrl, slaLabel, statusLabel, statusTone } from "./ticketPresentation";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 
 const CLASS_LABEL: Record<string, string> = {
   UserRequest: "User request",
@@ -31,7 +32,7 @@ const EMPTY_MESSAGE: Record<ItopTicketScope, string> = {
 };
 
 const OPEN_LINK_CLASS =
-  "font-display text-[12px] font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1 font-display text-meta font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
 // The ref cell/span is the keyboard-reachable control that opens the panel —
 // before this, the row/card's onClick (mouse-only) left the trailing "Open
@@ -39,7 +40,7 @@ const OPEN_LINK_CLASS =
 // never reach the panel at all. `stopPropagation` avoids a double `onOpen`
 // call when the row's own onClick also fires for a mouse click.
 const REF_BUTTON_CLASS =
-  "rounded-sm font-mono text-[13px] text-on-surface hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm font-mono text-xs text-on-surface hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
 export function TicketsTable({
   tickets,
@@ -126,10 +127,10 @@ export function TicketsTable({
                   <Chip tone={statusTone(t)}>{statusLabel(t.status)}</Chip>
                 </td>
                 <td className="py-2 pr-2 text-on-surface-variant">{t.agentName ?? "Unassigned"}</td>
-                <td className="py-2 pr-2 font-mono text-[12px] text-on-surface-variant">
+                <td className="py-2 pr-2 font-mono text-meta text-on-surface-variant">
                   {ageLabel(t.startDate)}
                 </td>
-                <td className="py-2 pr-2 text-[12px] text-on-surface-variant">{slaLabel(t)}</td>
+                <td className="py-2 pr-2 text-meta text-on-surface-variant">{slaLabel(t)}</td>
                 <td className="py-2 pr-3 text-right">
                   {url ? (
                     <a
@@ -140,10 +141,12 @@ export function TicketsTable({
                       onClick={(e) => e.stopPropagation()}
                       className={OPEN_LINK_CLASS}
                     >
-                      Open in iTop ↗
+                      Open in iTop
+                      <span aria-hidden="true" className="material-symbols-outlined text-sm">open_in_new</span>
+                      <span className="sr-only">(opens in a new tab)</span>
                     </a>
                   ) : (
-                    <span className="text-[12px] text-on-surface-variant">—</span>
+                    <span className="text-meta text-on-surface-variant">{EMPTY_VALUE}</span>
                   )}
                 </td>
               </tr>
@@ -192,7 +195,9 @@ export function TicketsTable({
                     onClick={(e) => e.stopPropagation()}
                     className={OPEN_LINK_CLASS}
                   >
-                    Open in iTop ↗
+                    Open in iTop
+                    <span aria-hidden="true" className="material-symbols-outlined text-sm">open_in_new</span>
+                    <span className="sr-only">(opens in a new tab)</span>
                   </a>
                 )}
               </div>

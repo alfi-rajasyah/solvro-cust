@@ -35,7 +35,7 @@ export function hiddenPagesCopy(n: number): string {
 
 /** The sentence before the "connect Outline" link for a viewer without a connection. */
 export function unconnectedLead(total: number): string {
-  return `Mentioned in ${total} Outline ${plural(total, "page", "pages")} — `;
+  return `Mentioned in ${total} Outline ${plural(total, "page", "pages")}: `;
 }
 
 /** The link text that finishes it: "connect Outline to see them". */

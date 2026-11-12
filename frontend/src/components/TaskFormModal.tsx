@@ -363,7 +363,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
       <button
         type="button"
         onClick={requestClose}
-        className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container"
+        className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container"
         aria-label="Close"
       >
         <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
@@ -396,7 +396,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
               type="button"
               onClick={() => setConfirmDeleteOpen(true)}
               disabled={submitting}
-              className="mr-auto rounded-lg border border-error/40 px-3 py-1.5 text-xs font-medium text-error hover:bg-error/10 disabled:opacity-50"
+              className="[@media(pointer:coarse)]:min-h-11 mr-auto rounded-sm border border-error/40 px-3 py-1.5 text-xs font-medium text-error hover:bg-error/10 disabled:opacity-50"
             >
               {remove.isPending ? "Deleting…" : "Delete task"}
             </button>
@@ -405,7 +405,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
             type="button"
             onClick={requestClose}
             disabled={submitting}
-            className="ml-auto rounded-lg border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+            className="[@media(pointer:coarse)]:min-h-11 ml-auto rounded-sm border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
           >
             Cancel
           </button>
@@ -413,7 +413,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
             type="submit"
             form="task-form"
             disabled={submitting}
-            className="rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60"
+            className="[@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60"
           >
             {submitting ? "Saving…" : isEdit ? "Save" : "Create task"}
           </button>
@@ -430,19 +430,19 @@ export function TaskFormModal(props: TaskFormModalProps) {
             maxLength={200}
             autoFocus
             placeholder="Task title"
-            className="flex-1 border-none bg-transparent text-lg font-bold text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden"
+            className="[@media(pointer:coarse)]:min-h-11 flex-1 border-none bg-transparent text-lg font-bold text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
           />
         </div>
 
         {/* Icon field rows */}
-        <div className="space-y-2 rounded-xl border border-outline-variant bg-surface-container-low p-3">
+        <div className="space-y-2 rounded-sm border border-outline-variant bg-surface-container-low p-3">
           {/* Priority */}
           <FieldRow icon="flag" label="Priority">
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value as Priority)}
               disabled={!canEdit}
-              className={`cursor-pointer border-none bg-transparent text-xs font-semibold focus:outline-hidden disabled:cursor-default ${PRIORITY_COLOR[priority]}`}
+              className={`[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default ${PRIORITY_COLOR[priority]}`}
             >
               {PRIORITIES.map((p) => (
                 <option key={p} value={p}>
@@ -485,7 +485,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                 setAssignedToId(e.target.value === "" ? "" : Number(e.target.value))
               }
               disabled={!canEdit}
-              className="cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden disabled:cursor-default"
+              className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
             >
               <option value="">Unassigned</option>
               {(users ?? []).map((u) => (
@@ -525,7 +525,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                 setParentTaskId(e.target.value === "" ? "" : Number(e.target.value))
               }
               disabled={!canEdit}
-              className="cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden disabled:cursor-default"
+              className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
             >
               <option value="">Top level</option>
               {possibleParents.map((t) => (
@@ -544,7 +544,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                 setSectionId(e.target.value === "" ? "" : Number(e.target.value))
               }
               disabled={!canEdit}
-              className="cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden disabled:cursor-default"
+              className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
             >
               <option value="">No section</option>
               {(sections ?? []).map((s) => (
@@ -564,7 +564,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                 value={epicId === "" ? "" : String(epicId)}
                 onChange={(e) => setEpicId(e.target.value === "" ? "" : Number(e.target.value))}
                 disabled={!canEdit || parentTaskId !== ""}
-                className="cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden disabled:cursor-default"
+                className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
               >
                 <option value="">No epic</option>
                 {(epics ?? []).map((e) => (
@@ -646,7 +646,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
             maxLength={2000}
             placeholder="Add a description…"
             disabled={!canEdit}
-            className="w-full resize-y rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/80 focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:cursor-default"
+            className="w-full resize-y rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/80 focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 focus:ring-2 focus:ring-primary/30 disabled:cursor-default"
           />
         </div>
 
@@ -659,9 +659,10 @@ export function TaskFormModal(props: TaskFormModalProps) {
             {subtasks.length === 0 ? (
               <p className="text-xs text-on-surface-variant">No subtasks yet.</p>
             ) : (
-              <ul className="divide-y divide-outline-variant rounded-xl border border-outline-variant">
+              <ul className="divide-y divide-outline-variant rounded-sm border border-outline-variant">
                 {subtasks.map((s, index) => (
-                  <li key={s.id} className="flex items-center gap-2 px-3 py-2">
+                  <li key={s.id} className="flex [@media(pointer:coarse)]:min-h-11 items-center gap-2 px-3 py-2">
+                    <label className="contents [@media(pointer:coarse)]:grid [@media(pointer:coarse)]:size-11 [@media(pointer:coarse)]:cursor-pointer [@media(pointer:coarse)]:place-items-center">
                     <input
                       type="checkbox"
                       checked={s.status === "DONE"}
@@ -671,20 +672,21 @@ export function TaskFormModal(props: TaskFormModalProps) {
                           patch: { status: s.status === "DONE" ? "TODO" : "DONE" },
                         })
                       }
-                      className="h-3.5 w-3.5 accent-primary"
+                      className="h-3.5 w-3.5 [@media(pointer:coarse)]:h-6 [@media(pointer:coarse)]:w-6 accent-primary"
                     />
+                    </label>
                     <span
                       className={`flex-1 text-xs ${s.status === "DONE" ? "text-on-surface-variant line-through" : "text-on-surface"}`}
                     >
                       {s.title}
                     </span>
-                    <div className="flex shrink-0 items-center gap-0.5">
+                    <div className="flex shrink-0 items-center gap-0.5 [@media(pointer:coarse)]:gap-1">
                       <button
                         type="button"
                         onClick={() => moveSubtask(index, -1)}
                         disabled={!canEdit || index === 0}
                         aria-label="Move subtask up"
-                        className="rounded-sm p-0.5 text-on-surface-variant hover:bg-surface-container disabled:pointer-events-none disabled:opacity-30"
+                        className="rounded-sm p-0.5 [@media(pointer:coarse)]:grid [@media(pointer:coarse)]:size-11 [@media(pointer:coarse)]:place-items-center [@media(pointer:coarse)]:p-0 text-on-surface-variant hover:bg-surface-container disabled:pointer-events-none disabled:opacity-30"
                       >
                         <span aria-hidden="true" className="material-symbols-outlined text-sm">keyboard_arrow_up</span>
                       </button>
@@ -693,7 +695,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                         onClick={() => moveSubtask(index, 1)}
                         disabled={!canEdit || index === subtasks.length - 1}
                         aria-label="Move subtask down"
-                        className="rounded-sm p-0.5 text-on-surface-variant hover:bg-surface-container disabled:pointer-events-none disabled:opacity-30"
+                        className="rounded-sm p-0.5 [@media(pointer:coarse)]:grid [@media(pointer:coarse)]:size-11 [@media(pointer:coarse)]:place-items-center [@media(pointer:coarse)]:p-0 text-on-surface-variant hover:bg-surface-container disabled:pointer-events-none disabled:opacity-30"
                       >
                         <span aria-hidden="true" className="material-symbols-outlined text-sm">keyboard_arrow_down</span>
                       </button>

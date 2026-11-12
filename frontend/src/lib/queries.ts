@@ -3192,7 +3192,7 @@ export function useAddComment(taskId: number, projectId: number) {
 
 // ---- iTop tickets (Task 1.8) ------------------------------------------
 // Non-admin iTop reads: connection status (gates the Customer Tickets tab
-// and builds "Open in iTop ↗" links) and a customer's ticket list + counts.
+// and builds "Open in iTop" links) and a customer's ticket list + counts.
 // Backend: routes/itop.ts, mounted at /itop — any authed user with
 // visibility into the customer can read (no admin gate), unlike the
 // adminQueryKeys `itop*` hooks further down this file, which back the Admin

@@ -53,7 +53,7 @@ export function CopyField({
         onClick={() => void copy()}
         aria-label={`Copy ${label}`}
         title={`Copy ${label}`}
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant outline-hidden hover:bg-surface-container hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+        className="tap-target inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant outline-hidden hover:bg-surface-container hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
       >
         <span className="material-symbols-outlined text-base" aria-hidden="true">
           content_copy

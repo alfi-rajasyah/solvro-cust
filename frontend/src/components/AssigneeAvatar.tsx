@@ -56,7 +56,7 @@ export function AssigneeAvatar({
 
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-full bg-primary font-bold text-white ${dimensions}`}
+      className={`inline-flex items-center justify-center rounded-full bg-primary font-bold text-on-primary ${dimensions}`}
       title={title}
     >
       {initials}

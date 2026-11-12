@@ -86,7 +86,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
         title: "What it shows",
         points: [
           "Three tiles: Overdue and Due this week open the matching Tasks view; Open risks opens the Daily Review.",
-          "\"Projects needing attention\": up to 6 projects, overdue ones first, with overdue-task and open-risk counts. \"View all →\" opens the Projects page.",
+          "\"Projects needing attention\": up to 6 projects, overdue ones first, with overdue-task and open-risk counts. \"View all\" opens the Projects page.",
           "\"Portfolio timeline\": a year calendar of your projects. Use the arrows to change the year.",
           "\"Recent notes\": project and operations notes from the last 7 days. Add notes on the Daily Review page.",
           "Projects marked \"Administrative project\" are left out of the counters, the timeline, and the attention list.",
@@ -105,18 +105,18 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         title: "Create or edit a project",
         points: [
-          "Click \"New project\" on the Projects page. Name and Customer are required — create the customer first on the Customers page.",
+          "Click \"New project\" on the Projects page. Name and Customer are required, so create the customer first on the Customers page.",
           "Set a WIP limit per Kanban column if you want the board to warn when a column is too full. Leave a field empty for no limit.",
           "Tick \"Administrative project\" for internal work that should stay out of the Overview, Executive, and overdue roll-ups.",
           "Inside a project, use \"Edit project\" or \"Delete project\" at the top. Delete removes all of the project's tasks, sections, labels, notes, risks, and reviews, and cannot be undone.",
-          "Filter the Projects page by customer with the \"Customer is …\" chip, or from a customer card's \"View projects →\".",
+          "Filter the Projects page by customer with the \"Customer is …\" chip, or from a customer card's \"View projects\".",
         ],
       },
       {
         title: "Project tabs",
         points: [
           "Overview: counters, the Progress S-Curve, tasks that need attention, status breakdown, top risks, and recent notes.",
-          "List, Kanban, Gantt, and Timeline: four views of the same tasks — see \"Project views\".",
+          "List, Kanban, Gantt, and Timeline: four views of the same tasks, described in \"Project views\".",
           "Epics: group top-level tasks into larger deliverables and track done/total progress. Open one to edit its status, owner, dates, description, and stories.",
           "Risks: the risk register. Services: the services and tools in scope.",
         ],
@@ -205,7 +205,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           "Add subtasks at the bottom of the panel. Tick one to mark it done; drag to reorder. Subtasks go one level deep.",
           "Click a label to toggle it. \"+ Label\" creates a new project label with a color.",
           "Write in \"Write a comment…\" and send to discuss the task. Comment counts show on Kanban cards.",
-          "Link an iTop ticket from the task's \"iTop ticket\" field — see \"iTop tickets\".",
+          "Link an iTop ticket from the task's \"iTop ticket\" field, described in \"iTop tickets\".",
         ],
       },
     ],
@@ -292,7 +292,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         title: "Weekly updates from here",
         points: [
-          "Each customer has a weekly sync row with \"Mid-week sync\" and \"Reflection sync\" buttons — see \"Weekly Sync\".",
+          "Each customer has a weekly sync row with \"Mid-week sync\" and \"Reflection sync\" buttons, described in \"Weekly Sync\".",
           "When iTop is connected, the \"iTop today\" strip shows new, resolved, and SLA-breached tickets. \"Add to note\" copies a ticket into today's operations note.",
         ],
       },
@@ -345,7 +345,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
         points: [
           "Open a customer's Tickets tab. Switch between Table and Board, and filter by Incidents or Requests. The Table view also filters by Ongoing, Resolved this week, and Mine.",
           "On the Board, drag a card to change its state: to Assigned to take it, to Pending (needs a reason), to Resolved (needs a resolution code and solution), or to Closed. A card moves only after iTop accepts the change.",
-          "Click a ticket to open its panel: take actions, read and add public or private log entries, and \"Open in iTop ↗\".",
+          "Click a ticket to open its panel: take actions, read and add public or private log entries, and \"Open in iTop\".",
           "\"New ticket\" creates a user request or incident in iTop.",
           "\"Refresh from iTop\" fetches the latest tickets now.",
         ],

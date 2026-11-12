@@ -5,8 +5,9 @@ import {
 } from "@/components/portfolio/PortfolioCalendar";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { QueryErrorAlert } from "@/components/QueryErrorAlert";
-import { ProjectStatusChip } from "@/components/StatusChip";
+import { Chip, ProjectStatusChip } from "@/components/StatusChip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 import { dateToDay, dayFromIso } from "@/lib/dateField";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { fmtDay, fmtDayLong } from "@/lib/formatDate";
@@ -124,7 +125,7 @@ function PersonPicker({
     options.push({ value: String(value), label: `User #${value}` });
   }
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1 [@media(pointer:coarse)]:gap-3">
       <Select
         items={options}
         value={value === undefined ? null : String(value)}
@@ -133,7 +134,7 @@ function PersonPicker({
         <SelectTrigger
           size="sm"
           aria-label={`${label} filter`}
-          className={value === undefined ? "text-on-surface-variant" : "border-primary text-on-surface"}
+          className={`${value === undefined ? "text-on-surface-variant" : "border-primary text-on-surface"} [@media(pointer:coarse)]:min-h-11`}
         >
           <span className="text-label-caps uppercase text-on-surface-variant">{label}</span>
           <SelectValue placeholder="All" />
@@ -160,7 +161,7 @@ function PersonPicker({
           type="button"
           aria-label={`Clear ${label} filter`}
           onClick={() => onChange(undefined)}
-          className="flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:text-primary outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="tap-target flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:text-primary outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
         </button>
@@ -256,8 +257,8 @@ function OverviewBody({ data, filters }: { data: OverviewResponse; filters: Over
             <h3 className="font-display text-sm font-bold text-on-surface">Projects needing attention</h3>
             {projectsHint && <p className="text-xs text-on-surface-variant">{projectsHint.replace(/^on /, "")}</p>}
           </div>
-          <Link to="/projects" className="text-meta font-semibold text-primary hover:underline">
-            View all →
+          <Link to="/projects" className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center text-meta font-semibold text-primary hover:underline [@media(pointer:coarse)]:min-h-11">
+            View all
           </Link>
         </header>
         {data.portfolio.length === 0 ? (
@@ -287,10 +288,10 @@ function OverviewBody({ data, filters }: { data: OverviewResponse; filters: Over
                   <li key={p.id} className="min-w-0">
                     <Link
                       to={`/projects/${p.id}`}
-                      className={`flex items-center gap-3 rounded-sm border border-l-3 border-outline-variant bg-surface-container-lowest px-3 py-2 transition-colors hover:border-y-primary hover:border-r-primary ${healthBorder(p)}`}
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 transition-colors hover:border-primary md:flex-nowrap [@media(pointer:coarse)]:min-h-11"
                     >
                       <span className="font-mono text-meta text-on-surface-variant">P-{String(p.id).padStart(3, "0")}</span>
-                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-on-surface">{p.name}</span>
+                      <span className="min-w-0 flex-1 basis-[70%] text-sm font-semibold text-on-surface md:basis-auto md:truncate">{p.name}</span>
                       {overdueTasks > 0 && (
                         <span
                           title="Open tasks past their due date"
@@ -307,6 +308,7 @@ function OverviewBody({ data, filters }: { data: OverviewResponse; filters: Over
                           {risks} {risks === 1 ? "risk" : "risks"}
                         </span>
                       )}
+                      {p.isOverdue && <Chip tone="rose">Past end date</Chip>}
                       <ProjectStatusChip status={p.status} />
                     </Link>
                   </li>
@@ -342,8 +344,8 @@ function OverviewBody({ data, filters }: { data: OverviewResponse; filters: Over
         <div className="min-w-0 rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
           <header className="mb-3 flex items-center justify-between">
             <h3 className="font-display text-sm font-bold text-on-surface">Recent notes</h3>
-            <Link to="/daily-review" className="text-meta font-semibold text-primary hover:underline">
-              Daily Review →
+            <Link to="/daily-review" className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center text-meta font-semibold text-primary hover:underline [@media(pointer:coarse)]:min-h-11">
+              Daily Review
             </Link>
           </header>
           <RecentNotesFeed projectIds={filtered ? portfolioIds : null} />
@@ -416,7 +418,7 @@ function RecentNotesFeed({ projectIds }: { projectIds: Set<number> | null }) {
     : data.notes;
   return (
     <>
-      {isError && <p className="mb-2 text-xs text-error">Could not refresh — showing the last loaded notes.</p>}
+      {isError && <p className="mb-2 text-xs text-error">Could not refresh. Showing the last loaded notes.</p>}
       {notes.length === 0 ? (
         <EmptyHint
           label={
@@ -447,7 +449,7 @@ function RecentNoteRow({ note }: { note: RecentNote }) {
   return (
     <li className="py-2 first:pt-0 last:pb-0">
       <div className="flex items-baseline gap-2 text-meta text-on-surface-variant">
-        <span className="shrink-0 tabular-nums">{day ? fmtDay(day) : "—"}</span>
+        <span className="shrink-0 tabular-nums">{day ? fmtDay(day) : EMPTY_VALUE}</span>
         <span className="min-w-0 truncate">
           {note.customer ? (
             <Link to={`/customers/${note.customer.id}`} className="hover:text-primary hover:underline">
@@ -502,10 +504,4 @@ function healthRank(p: { status: ProjectStatus; isOverdue: boolean }): number {
   if (p.isOverdue) return 0;
   if (p.status === "ACTIVE") return 1;
   return 2;
-}
-// Left-edge accent of an attention row, as token classes.
-function healthBorder(p: { status: ProjectStatus; isOverdue: boolean }): string {
-  if (p.isOverdue) return "border-l-error";
-  if (p.status === "ACTIVE") return "border-l-primary";
-  return "border-l-on-surface-variant/40";
 }
