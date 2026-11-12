@@ -148,12 +148,9 @@ test.describe("Outline links", () => {
 
     // Edit lives in the ⋯ menu on phones.
     async function openEditForm() {
-      if (mobile) {
-        await page.getByRole("button", { name: "More project actions" }).click();
-        await page.getByRole("menuitem", { name: "Edit project" }).click();
-      } else {
-        await page.getByRole("button", { name: /\bEdit$/ }).click();
-      }
+      // Edit lives in the project actions menu at every width.
+      await page.getByRole("button", { name: "More project actions" }).click();
+      await page.getByRole("menuitem", { name: "Edit project" }).click();
       return page.getByRole("dialog", { name: "Edit project" });
     }
 

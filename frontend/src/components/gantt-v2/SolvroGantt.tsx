@@ -151,6 +151,10 @@ const SCALES: Array<{ mode: GanttScale; label: string }> = [
 // padding. An explicit height makes the box immune to all three.
 const TOOLBAR_ITEM_HEIGHT = "h-7";
 
+// The tree pane lists tasks, not people: override the engine's "Resources"
+// column header. Module-level so the prop keeps a stable identity.
+const GANTT_I18N = { labels: { resources: "Task" } };
+
 // Ported verbatim from GanttFrame.tsx:72 — same key, same values, so a user's
 // existing pick survives the engine swap.
 const COLOR_BY_STORAGE_KEY = "solvro.gantt.colorBy";
@@ -1434,6 +1438,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
             apiRef={apiRef}
             events={events}
             resources={resources}
+            i18n={GANTT_I18N}
             scale={scale}
             onScaleChange={setScale}
             weekStartsOn={1}

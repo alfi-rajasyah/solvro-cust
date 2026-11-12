@@ -49,7 +49,8 @@ test.describe("deep links", () => {
     await loginViaUi(page);
     await page.goto(`/projects/${projectId}/list`, { waitUntil: "networkidle" });
 
-    await page.getByRole("button", { name: "Copy link", exact: true }).click();
+    await page.getByRole("button", { name: "More project actions" }).click();
+    await page.getByRole("menuitem", { name: "Copy link" }).click();
     await expect(page.getByRole("status").filter({ hasText: "Link copied" })).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
       `${origin}/projects/${projectId}/list`,

@@ -293,8 +293,10 @@ test.describe("Project members", () => {
     try {
       await loginViaUi(memberPage, guest.email, PASSWORD);
       await memberPage.goto(`/projects/${projectId}/overview`, { waitUntil: "networkidle" });
-      await expect(memberPage.getByRole("button", { name: "More project actions" })).toBeHidden();
-      await memberPage.getByRole("button", { name: /Edit$/ }).click();
+      // Delete stays owner-only: the member's menu offers Edit and Copy link.
+      await memberPage.getByRole("button", { name: "More project actions" }).click();
+      await expect(memberPage.getByRole("menuitem", { name: "Delete project" })).toHaveCount(0);
+      await memberPage.getByRole("menuitem", { name: "Edit project" }).click();
       const customers = memberPage.getByTestId("project-customers-field");
       await expect(customers.getByTestId("project-customer-row")).toHaveCount(1);
       // Read-only: no add picker, no remove, the primary radio is locked.

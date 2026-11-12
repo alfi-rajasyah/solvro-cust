@@ -15,6 +15,16 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-12 — One stat strip, a one-line project header
+
+Plan: `docs/archive/plans/stat-strip-project-header.md`.
+
+- **Stat strip** (`frontend/src/components/StatStrip.tsx`): Overview, Project Overview, Daily Review, Utilization and the Admin Users tab open with one bordered row of numbers (number, then a sentence-case label) in place of boxed tiles with corner icons and uppercase labels. Colour appears on a number only when it needs action and is above zero: overdue tasks, open risks on Daily Review, pending users, hours not tied to a customer, hours at or over capacity (the number as well as the bar). Stats that were links keep their destinations. On phones the strip is one compact grid, where three tiles used to fill the screen.
+- **Overview** (`pages/Overview.tsx`): "Projects needing attention" leads the page beside "Recent notes" on wide screens, one project per row, with the portfolio timeline below. The three summary links are named by their visible text ("3 overdue tasks").
+- **Project header** (`components/ProjectHeaderFacts.tsx`, `pages/ProjectDetail.tsx`): the facts sit on one line on desktop without uppercase labels: customer, dates, TAM, progress, then only what needs attention (past end date, overdue tasks, open risks, days behind baseline). "No baseline" and zero counts are no longer shown; the baseline stays in the context panel. "Edit project" and "Copy link" are the first items of the "More project actions" menu at every width, and the menu is shown to every member.
+- **Gantt** (`components/gantt-v2/SolvroGantt.tsx`): the task tree's first column header reads "Task" (was "Resources").
+- **Help** (`lib/helpContent.ts`): the Overview, Utilization and Projects guides describe the summary row and the project actions menu.
+
 ### Changed — 2026-11-12 — Interface pass against the antislop filter
 
 Plan: `docs/archive/plans/antislop-port.md`.

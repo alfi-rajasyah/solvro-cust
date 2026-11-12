@@ -9,16 +9,16 @@ test.describe("Overview work tiles", () => {
     await page.goto("/overview", { waitUntil: "networkidle" });
 
     await expect(page.getByRole("heading", { name: "Overview", exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: /^Overdue: \d+ tasks?$/ })).toBeVisible();
-    await expect(page.getByRole("link", { name: /^Due this week: \d+ tasks?$/ })).toBeVisible();
-    await expect(page.getByRole("link", { name: /^Open risks: \d+$/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^\d+ overdue tasks?$/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^\d+ tasks? due this week$/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^\d+ open risks?$/ })).toBeVisible();
   });
 
   test("the Overdue tile opens the overdue Tasks view", async ({ page }) => {
     await loginViaUi(page);
     await page.goto("/overview", { waitUntil: "networkidle" });
 
-    const tile = page.getByRole("link", { name: /^Overdue: \d+ tasks?$/ });
+    const tile = page.getByRole("link", { name: /^\d+ overdue tasks?$/ });
     await expect(tile).toHaveAttribute("href", "/tasks?view=overdue");
     await tile.click();
     await expect(page).toHaveURL(/\/tasks\?view=overdue/);

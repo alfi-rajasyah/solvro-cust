@@ -10,7 +10,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import { ConfirmModal } from "@/components/ConfirmModal";
-import { CopyLinkButton } from "@/components/CopyLinkButton";
+import { CopyLinkStatus, useCopyLinkFeedback } from "@/components/CopyLinkButton";
 import { RightSidebar } from "@/components/layout/RightSidebar";
 import { OutlineLinkButton } from "@/components/OutlineLinkButton";
 import { ProjectFormModal } from "@/components/ProjectFormModal";
@@ -83,6 +83,9 @@ export function ProjectDetail() {
   const location = useLocation();
   const navigate = useNavigate();
   const deleteProject = useDeleteProject();
+  // "Copy link" lives in the ⋯ menu, which closes on click, so the result is
+  // announced from a status next to the trigger.
+  const { feedback: copyFeedback, copy: copyLink } = useCopyLinkFeedback();
 
   const { data: project, isLoading, isError, error, refetch } = useProject(projectId);
 
@@ -188,10 +191,12 @@ export function ProjectDetail() {
         <h1 className="sr-only">{project.name}</h1>
         <ProjectHeaderFacts project={project} />
 
-        {/* Copy link shows at every width. Below md the other actions live in
-            the ⋯ menu; Edit and the Context toggle render as buttons from md up. The two copies never share a
-            viewport (display:none leaves the accessibility tree), so the
-            Context toggle's aria-labels stay unique. */}
+        {/* Edit and Copy link are the ⋯ menu's first items at every width.
+            Below md the Outline link and the Context toggle join the menu; from
+            md up they render as buttons. The two copies never share a viewport
+            (display:none leaves the accessibility tree), so the Context
+            toggle's aria-labels stay unique. Every control here is one 32px
+            outlined square or pill. */}
         <div className="flex shrink-0 items-center gap-2 [@media(pointer:coarse)]:gap-3">
           <ProjectMembersButton project={project} canManage={canEdit} />
           {/* Guest links: owners only (TAM, customer owner, view-all) with
@@ -199,102 +204,92 @@ export function ProjectDetail() {
           {canEdit && isOwner && <ProjectShareButton project={project} />}
           {/* Outline link: a button from md up, an item in the ⋯ menu below. */}
           <OutlineLinkButton url={project.outlineUrl} className="hidden md:inline-flex" />
-          <CopyLinkButton
-            label="Copy link"
-            className="tap-target h-8 w-8 rounded-sm border border-outline-variant bg-surface-container-lowest hover:bg-surface-container"
-          />
-          {canEdit && (
-            <button
-              type="button"
-              onClick={() => setEditOpen(true)}
-              className="hidden items-center gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container md:inline-flex [@media(pointer:coarse)]:min-h-11"
-            >
-              <span aria-hidden="true" className="material-symbols-outlined text-base">edit</span>
-              Edit
-            </button>
-          )}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <button
-                  type="button"
-                  aria-label="More project actions"
-                  title="More project actions"
-                  className={[
-                    "tap-target h-8 w-8 items-center justify-center rounded-sm border border-outline-variant bg-surface-container-lowest text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
-                    // On desktop the menu only holds Delete and "Embed in Outline";
-                    // with neither on offer, the trigger stays a phone-only control.
-                    canDelete || embedAvailable ? "inline-flex" : "inline-flex md:hidden",
-                  ].join(" ")}
-                >
-                  <span className="material-symbols-outlined text-base" aria-hidden="true">
-                    more_horiz
-                  </span>
-                </button>
-              }
-            />
-            {/* z-50 on the Positioner (frontend/CLAUDE.md "Popover
-                z-index"): the menu never opens inside Modal.tsx's z-100
-                layer. Lock baseline and Export stay in the Context panel
-                (RightSidebar.tsx) — their state and the Gantt export
-                handlers live there. */}
-            <DropdownMenuContent
-              align="end"
-              className="w-52 bg-surface-container-lowest shadow-overlay!"
-              positionerClassName="z-50"
-            >
-              {outlineHref && (
-                <DropdownMenuItem
-                  className="text-xs md:hidden"
-                  render={<a href={outlineHref} target="_blank" rel="noopener noreferrer" />}
-                >
-                  <span className="material-symbols-outlined text-base" aria-hidden="true">
-                    menu_book
-                  </span>
-                  Open in Outline
-                  <span className="sr-only">(opens in a new tab)</span>
-                </DropdownMenuItem>
-              )}
-              {canEdit && (
-                <DropdownMenuItem onClick={() => setEditOpen(true)} className="text-xs md:hidden">
-                  <span className="material-symbols-outlined text-base" aria-hidden="true">
-                    edit
-                  </span>
-                  Edit project
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem
-                onClick={() => setContextOpen((v) => !v)}
-                className="text-xs md:hidden"
+          <div className="relative">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="More project actions"
+                    title="More project actions"
+                    className="tap-target inline-flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant bg-surface-container-lowest text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+                  >
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">
+                      more_horiz
+                    </span>
+                  </button>
+                }
+              />
+              {/* z-50 on the Positioner (frontend/CLAUDE.md "Popover
+                  z-index"): the menu never opens inside Modal.tsx's z-100
+                  layer. Lock baseline and Export stay in the Context panel
+                  (RightSidebar.tsx) — their state and the Gantt export
+                  handlers live there. */}
+              <DropdownMenuContent
+                align="end"
+                className="w-52 bg-surface-container-lowest shadow-overlay!"
+                positionerClassName="z-50"
               >
-                <span className="material-symbols-outlined text-base" aria-hidden="true">
-                  {contextOpen ? "right_panel_close" : "right_panel_open"}
-                </span>
-                {contextOpen ? "Hide project context" : "Show project context"}
-              </DropdownMenuItem>
-              {embedAvailable && (
-                <DropdownMenuItem onClick={() => setEmbedOpen(true)} className="text-xs">
+                {canEdit && (
+                  <DropdownMenuItem onClick={() => setEditOpen(true)} className="text-xs">
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">
+                      edit
+                    </span>
+                    Edit project
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={() => void copyLink(window.location.href)} className="text-xs">
                   <span className="material-symbols-outlined text-base" aria-hidden="true">
-                    integration_instructions
+                    link
                   </span>
-                  Embed in Outline
+                  Copy link
                 </DropdownMenuItem>
-              )}
-              {canDelete && (
+                {outlineHref && (
+                  <DropdownMenuItem
+                    className="text-xs md:hidden"
+                    render={<a href={outlineHref} target="_blank" rel="noopener noreferrer" />}
+                  >
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">
+                      menu_book
+                    </span>
+                    Open in Outline
+                    <span className="sr-only">(opens in a new tab)</span>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
-                  variant="destructive"
-                  disabled={deleteProject.isPending}
-                  onClick={() => setConfirmDeleteOpen(true)}
-                  className="text-xs"
+                  onClick={() => setContextOpen((v) => !v)}
+                  className="text-xs md:hidden"
                 >
                   <span className="material-symbols-outlined text-base" aria-hidden="true">
-                    delete
+                    {contextOpen ? "right_panel_close" : "right_panel_open"}
                   </span>
-                  Delete project
+                  {contextOpen ? "Hide project context" : "Show project context"}
                 </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                {embedAvailable && (
+                  <DropdownMenuItem onClick={() => setEmbedOpen(true)} className="text-xs">
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">
+                      integration_instructions
+                    </span>
+                    Embed in Outline
+                  </DropdownMenuItem>
+                )}
+                {canDelete && (
+                  <DropdownMenuItem
+                    variant="destructive"
+                    disabled={deleteProject.isPending}
+                    onClick={() => setConfirmDeleteOpen(true)}
+                    className="text-xs"
+                  >
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">
+                      delete
+                    </span>
+                    Delete project
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <CopyLinkStatus feedback={copyFeedback} />
+          </div>
           <button
             type="button"
             onClick={() => setContextOpen((v) => !v)}
