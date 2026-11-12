@@ -1,6 +1,6 @@
 # Stat strip and project header (2026-11-12)
 
-Status: implemented on `feat/stat-strip-project-header`, reviewed, awaiting owner approval to commit.
+Status: shipped 2026-11-12 (PR #67, merged into `develop`).
 
 Source: the three items left open by the antislop review of 2026-11-12 (`docs/archive/plans/antislop-port.md`): the stat tile row repeated on five pages, the project header's density, and the Gantt tree header label. Prototypes: Doop canvas `wIbMMkOajZ`, page "08 · Antislop prototypes" (Proposal 1, 2 and 3). The owner accepted all three on 2026-11-12.
 
