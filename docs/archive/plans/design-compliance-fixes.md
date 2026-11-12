@@ -4,7 +4,7 @@
 **Branch:** `fix/design-compliance`, cut from `origin/develop` @ `31e059a`.
 **Source:** the DESIGN.md audit and the before/after frames on the Doop canvas "Solvro-Cust Mockup" (`wIbMMkOajZ`), page "06 · Fix suggestions — before / after" (Fix 1 `b0QWMmApFX`, Fix 2 `5D_RVJbxm-`, Fix 3 `Bpj4ht3UPi`, Fix 4 `XWMaACzKFN`, Fix 5 `zyQgN_VPld`, Fix 6 `OAIPOxaW3V`, Fix 7 `al3qHiuSjJ`, Fix 8 `J1znYHY0WN`). Audit frame: page 00, `h6n8bLXzV_`.
 **User selection (2026-11-02):** Fix 1, 2, 3, 4, 5, 6, 7 and Fix 8 **Option B**.
-**Archive path for code comments:** `docs/archive/plans/design-compliance-fixes.md`.
+**Archived:** shipped on `fix/design-compliance` (2026-11-02).
 
 ## Objective
 
