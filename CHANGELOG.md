@@ -15,6 +15,11 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-12 — Two-branch flow: `develop` and `main`
+
+- **`.github/workflows/ci.yml`, `.github/workflows/docker-publish.yml`**: the `staging` branch is no longer part of the flow. CI runs on pull requests into `develop` (the merge gate) and `main` (a promotion: typecheck and backend tests), and in full, desktop and mobile, on a push to `main`; images publish only after that green run, plus release tags. The `deploy-staging` job and the `:staging` image tag are gone; images already published under `:staging` are left as they are.
+- **`CLAUDE.md`, `e2e/CLAUDE.md`, `docs/CONFIGURATION.md`**: describe the two-branch flow. `main` now takes pull requests from `develop`.
+
 ### Changed — 2026-11-12 — Interface pass against the antislop filter
 
 Plan: `docs/archive/plans/antislop-port.md`.

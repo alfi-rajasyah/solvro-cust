@@ -3,17 +3,16 @@ name: CI
 # What runs where (kept lean to save GitHub Actions minutes):
 # - PR into develop: typecheck, backend tests, desktop e2e in 4 parallel shards.
 #   This is the merge gate.
-# - PR into staging or main (a promotion of already-tested code): typecheck and
-#   backend tests only.
-# - Push to staging or main: the full suite, desktop and mobile e2e (4 shards
-#   each). A green run
-#   here is what lets docker-publish.yml ship images.
+# - PR into main (a promotion of already-tested code from develop): typecheck
+#   and backend tests only.
+# - Push to main: the full suite, desktop and mobile e2e (4 shards each). A
+#   green run here is what lets docker-publish.yml ship images.
 # - Push to develop does not run: every change reached it through a tested PR,
 #   and nothing publishes from develop.
 # - Draft PRs wait until they are marked ready; docs-only changes never run.
 on:
   pull_request:
-    branches: [develop, staging, main]
+    branches: [develop, main]
     types: [opened, synchronize, reopened, ready_for_review]
     paths-ignore:
       - "**/*.md"
@@ -22,7 +21,7 @@ on:
       - "notes/**"
       - "LICENSE*"
   push:
-    branches: [staging, main]
+    branches: [main]
     paths-ignore:
       - "**/*.md"
       - "docs/**"
@@ -207,9 +206,9 @@ jobs:
   # `npm ci` layers inside the Dockerfiles are rebuilt only when a lock file
   # changes — on every other run the build is seconds, not minutes, and a
   # slow registry cannot stall the gate.
-  # e2e runs on PRs into develop (desktop only) and on pushes to staging/main
-  # or a manual run (desktop and mobile). Mobile regressions on a feature PR
-  # therefore surface at the staging push, which blocks publishing.
+  # e2e runs on PRs into develop (desktop only) and on pushes to main or a
+  # manual run (desktop and mobile). Mobile regressions on a feature PR
+  # therefore surface at the main push, which blocks publishing.
   # Each project is split into 4 shards (`--shard=N/4`), each on its own stack
   # and database, so no check runs much past 10 minutes. Playwright splits the
   # suite by spec file (fullyParallel is off). Only the first desktop shard
