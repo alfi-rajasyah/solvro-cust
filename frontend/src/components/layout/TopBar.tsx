@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ProjectStatusChip } from "@/components/StatusChip";
 import { formatElapsed, useRunningItopTimer } from "@/components/itop/useTicketTimer";
@@ -9,6 +9,14 @@ import { useTheme } from "@/lib/theme";
 import { NotificationBell } from "./NotificationBell";
 import { useSidebar } from "./SidebarContext";
 
+/** Visible menu items only: Help and the theme toggle are `md:hidden`. */
+function menuItems(menu: HTMLElement | null): HTMLElement[] {
+  if (!menu) return [];
+  return Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]')).filter(
+    (el) => el.getClientRects().length > 0,
+  );
+}
+
 export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
   const { user, logout } = useAuth();
   const { resolved, toggle } = useTheme();
@@ -17,6 +25,52 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // Set when the menu was opened from the keyboard (ArrowDown), so the
+  // first item takes focus once the menu has rendered.
+  const focusFirstOnOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (!menuOpen || !focusFirstOnOpenRef.current) return;
+    focusFirstOnOpenRef.current = false;
+    menuItems(menuRef.current)[0]?.focus();
+  }, [menuOpen]);
+
+  function onAccountKeyDown(e: KeyboardEvent<HTMLElement>) {
+    if (e.key === "Escape" && menuOpen) {
+      e.stopPropagation();
+      setMenuOpen(false);
+      menuTriggerRef.current?.focus();
+      return;
+    }
+    const onTrigger = e.target === menuTriggerRef.current;
+    if (!menuOpen) {
+      if (onTrigger && e.key === "ArrowDown") {
+        e.preventDefault();
+        focusFirstOnOpenRef.current = true;
+        setMenuOpen(true);
+      }
+      return;
+    }
+    if (e.key === "Tab") {
+      // Close and hand focus back to the trigger; the default Tab then
+      // moves on from there instead of into a menu that is going away.
+      setMenuOpen(false);
+      menuTriggerRef.current?.focus();
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+    const items = menuItems(menuRef.current);
+    if (items.length === 0) return;
+    e.preventDefault();
+    const index = items.findIndex((el) => el === document.activeElement);
+    let next: number;
+    if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = items.length - 1;
+    else if (e.key === "ArrowDown") next = index < 0 ? 0 : (index + 1) % items.length;
+    else next = index < 0 ? items.length - 1 : (index - 1 + items.length) % items.length;
+    items[next].focus();
+  }
   // Global "a timer is running somewhere" indicator (Task 7.1,
   // docs/archive/plans/itop-integration.md) — read-only, no gate needed
   // beyond "is one stored at all": a running timer implies whoever started
@@ -170,13 +224,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
 
         <div
           className="relative"
-          onKeyDown={(e) => {
-            if (e.key === "Escape" && menuOpen) {
-              e.stopPropagation();
-              setMenuOpen(false);
-              menuTriggerRef.current?.focus();
-            }
-          }}
+          onKeyDown={onAccountKeyDown}
         >
           <button
             ref={menuTriggerRef}
@@ -210,7 +258,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
                 onClick={() => setMenuOpen(false)}
                 className="fixed inset-0 z-40 cursor-default"
               />
-              <div role="menu" aria-label="Account" className="absolute right-0 top-full z-50 mt-1 w-48 rounded-sm border border-outline-variant bg-surface-container-lowest py-1 shadow-overlay">
+              <div ref={menuRef} role="menu" aria-label="Account" className="absolute right-0 top-full z-50 mt-1 w-48 rounded-sm border border-outline-variant bg-surface-container-lowest py-1 shadow-overlay">
                 <div className="border-b border-outline-variant px-3 py-2 text-meta text-on-surface-variant">
                   <div className="font-medium text-on-surface">{user?.email}</div>
                   <div className="text-label-caps uppercase">
