@@ -62,6 +62,7 @@ import { priorityOptions, TASK_CATEGORY_GROUP_LABEL } from "@/lib/labels";
 import { STATUS_CATEGORY_ICON } from "@/lib/taskStatuses";
 import { STATUS_TONE_DOT_CLASS } from "@/components/StatusChip";
 import { BoardSkeleton } from "@/components/skeletons";
+import { TOOLBAR_BOX, TOOLBAR_BUTTON_PRIMARY } from "@/lib/utils";
 import { columnIdOf, projectToColumns, sortStatusDefsForBoard, sortTasksCanonical } from "./adapter";
 import { TaskCard } from "./cards";
 import { mapCommitToPatch, type KanbanCommitMetaLike } from "./commitMapper";
@@ -148,7 +149,7 @@ function ColumnMenu({ onAdd }: { onAdd: () => void }) {
       <button
         type="button"
         onClick={() => setMenuOpen((v) => !v)}
-        className="material-symbols-outlined cursor-pointer rounded text-base text-on-surface-variant hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+        className="material-symbols-outlined cursor-pointer rounded [@media(pointer:coarse)]:p-3 text-base text-on-surface-variant hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
         aria-label="Column options"
       >
         more_horiz
@@ -156,14 +157,14 @@ function ColumnMenu({ onAdd }: { onAdd: () => void }) {
       {menuOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-          <div className="absolute right-0 z-20 mt-1 w-40 rounded-lg border border-outline-variant bg-surface-container-lowest py-1 shadow-overlay">
+          <div className="absolute right-0 z-20 mt-1 w-40 rounded-sm border border-outline-variant bg-surface-container-lowest py-1 shadow-overlay">
             <button
               type="button"
               onClick={() => {
                 setMenuOpen(false);
                 onAdd();
               }}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-on-surface hover:bg-surface-container"
+              className="[@media(pointer:coarse)]:min-h-11 flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-on-surface hover:bg-surface-container"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-sm">add</span>
               Add task here
@@ -568,7 +569,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
         </Alert>
       )}
       {/* Toolbar row: filter + add task (ProjectKanban.tsx:479-565) */}
-      <div className="mb-3 flex items-center justify-end gap-2">
+      <div className="mb-3 flex items-center justify-end gap-2 [@media(pointer:coarse)]:gap-3">
         {collapsedDefs.length > 0 && (
           <div className="mr-auto flex min-w-0 flex-wrap items-center gap-2">
             {collapsedDefs.map((def) => (
@@ -577,7 +578,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                 type="button"
                 onClick={() => setCollapsed(def.id, false)}
                 aria-label={`Show ${def.name} column`}
-                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1 rounded-sm px-2 py-1 [@media(pointer:coarse)]:py-3 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-sm">unfold_more</span>
                 {def.name} · {collapsedCounts.get(def.id) ?? 0} (hidden)
@@ -590,7 +591,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
             type="button"
             onClick={() => setFilterOpen((v) => !v)}
             className={[
-              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-display text-xs font-semibold transition-colors",
+              `${TOOLBAR_BOX} [@media(pointer:coarse)]:h-11 border font-semibold transition-colors`,
               filterActive
                 ? "border-primary bg-primary/10 text-primary"
                 : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container",
@@ -609,7 +610,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
           {filterOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setFilterOpen(false)} />
-              <div className="absolute right-0 z-20 mt-2 w-64 rounded-lg border border-outline-variant bg-surface-container-lowest p-3 shadow-overlay">
+              <div className="absolute right-0 z-20 mt-2 w-64 rounded-sm border border-outline-variant bg-surface-container-lowest p-3 shadow-overlay">
                 <div className="mb-3">
                   <label className="mb-1 block text-label-caps uppercase text-on-surface-variant">
                     Assignee
@@ -619,7 +620,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                     onChange={(e) =>
                       setFilterAssigneeId(e.target.value === "" ? "" : Number(e.target.value))
                     }
-                    className="w-full rounded-lg border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden"
+                    className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
                   >
                     <option value="">Everyone</option>
                     {(users ?? []).map((u) => (
@@ -636,7 +637,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                   <select
                     value={filterPriority}
                     onChange={(e) => setFilterPriority(e.target.value as Priority | "")}
-                    className="w-full rounded-lg border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden"
+                    className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
                   >
                     <option value="">Any priority</option>
                     {priorityOptions.map((o) => (
@@ -656,7 +657,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                       const v = e.target.value;
                       setFilterEpicId(v === "" ? "" : v === "none" ? null : Number(v));
                     }}
-                    className="w-full rounded-lg border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden"
+                    className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
                   >
                     <option value="">All</option>
                     <option value="none">No epic</option>
@@ -675,7 +676,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                       setFilterPriority("");
                       setFilterEpicId("");
                     }}
-                    className="text-xs font-semibold text-primary hover:underline"
+                    className="tap-target text-xs font-semibold text-primary hover:underline"
                   >
                     Clear filters
                   </button>
@@ -688,7 +689,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
           <button
             type="button"
             onClick={() => setCreateDef(defaultTodoDef)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 font-display text-xs font-bold text-on-primary hover:bg-primary/90"
+            className={TOOLBAR_BUTTON_PRIMARY}
           >
             <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
             Add task
@@ -706,7 +707,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
           onClick={() => scrollToColumn(activeColIdx - 1)}
           disabled={activeColIdx === 0}
           aria-label="Previous column"
-          className="material-symbols-outlined text-on-surface-variant disabled:opacity-30"
+          className="tap-target material-symbols-outlined text-on-surface-variant disabled:opacity-30"
         >
           chevron_left
         </button>
@@ -719,7 +720,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
           onClick={() => scrollToColumn(activeColIdx + 1)}
           disabled={activeColIdx >= colCount - 1}
           aria-label="Next column"
-          className="material-symbols-outlined text-on-surface-variant disabled:opacity-30"
+          className="tap-target material-symbols-outlined text-on-surface-variant disabled:opacity-30"
         >
           chevron_right
         </button>
@@ -844,7 +845,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                           type="button"
                           onClick={() => setCollapsed(def.id, true)}
                           aria-label={`Collapse ${def.name} column`}
-                          className="material-symbols-outlined cursor-pointer rounded text-base text-on-surface-variant hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+                          className="material-symbols-outlined cursor-pointer rounded [@media(pointer:coarse)]:p-3 text-base text-on-surface-variant hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
                         >
                           unfold_less
                         </button>
@@ -907,7 +908,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                       ))}
 
                       {columnTasks.length === 0 && (
-                        <div className="rounded-lg border border-dashed border-outline-variant px-3 py-8 text-center text-[12px] text-on-surface-variant">
+                        <div className="rounded-sm border border-dashed border-outline-variant px-3 py-8 text-center text-meta text-on-surface-variant">
                           Drop tasks here
                         </div>
                       )}

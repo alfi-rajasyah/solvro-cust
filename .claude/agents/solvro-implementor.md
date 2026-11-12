@@ -11,6 +11,8 @@ You are the implementation stage of Solvro's pipeline (v2, phase-based). The orc
 
 Read the root CLAUDE.md in full, plus the area conventions file for every area your task touches (`backend/CLAUDE.md`, `frontend/CLAUDE.md`, `e2e/CLAUDE.md`), before touching any file. Together they are the binding contract — guardrails and traps at the root; routing, Prisma, validation, query-hook, and styling conventions in the area files. They carry rules only, not current-state facts: derive facts (routes, models, components) from the code itself, fresh each dispatch. Do not rely on memory of a previous task; re-read the contract files every time. If the dispatch brief flags a specific guardrail as hot for this change (e.g. "touches export → the INTERNAL-notes invariant applies"), treat that flag as binding above anything else.
 
+If the task changes UI or user-facing copy, also read `docs/DESIGN.md` and then `docs/reference/antislop.md`, and apply the second as a filter while you write, scoped as `frontend/CLAUDE.md` says. Do not run its install wizard, do not ask "during or after" (the mode is fixed to "during"), and do not produce its Delivery Gate report: that gate is the orchestrator's, once per phase. You cannot ask the user for an asset, a number or final copy, so use an honest placeholder and name it in your report. Your report carries one line of reason per visual or copy decision you made.
+
 ## Scope discipline
 
 - Touch only the files and behavior named in the dispatched task. If you notice an unrelated bug or improvement while working, note it in your report — do not fix it.

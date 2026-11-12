@@ -67,8 +67,8 @@ const CATEGORY_MEANING: Record<TaskStatus, string> = {
 
 const BORDERED_FOCUS =
   "focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
-const BTN_SECONDARY = `inline-flex items-center gap-1.5 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface disabled:opacity-50 ${BORDERED_FOCUS}`;
-const BTN_PRIMARY = `inline-flex items-center gap-1.5 rounded-lg border border-transparent bg-primary px-4 py-1.5 text-xs font-bold text-on-primary transition-colors hover:bg-primary/90 disabled:opacity-50 ${BORDERED_FOCUS}`;
+const BTN_SECONDARY = `[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface disabled:opacity-50 ${BORDERED_FOCUS}`;
+const BTN_PRIMARY = `[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1.5 rounded-sm border border-transparent bg-primary px-4 py-1.5 text-xs font-bold text-on-primary transition-colors hover:bg-primary/90 disabled:opacity-50 ${BORDERED_FOCUS}`;
 
 const HOW_IT_WORKS = [
   "Every status belongs to one of three categories. Overdue, progress and Done counts read the category, so renaming a status never changes them.",
@@ -204,7 +204,7 @@ export function TaskStatusesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boo
       </div>
 
       {error && (
-        <p role="alert" className="rounded-lg bg-error/10 px-3 py-2 text-sm text-error">
+        <p role="alert" className="rounded-sm bg-error/10 px-3 py-2 text-sm text-error">
           {error}
         </p>
       )}
@@ -219,7 +219,7 @@ export function TaskStatusesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boo
                 key={category}
                 aria-label={title}
                 data-testid={`status-group-${category}`}
-                className="rounded-lg border border-outline-variant bg-surface-container-lowest"
+                className="rounded-sm border border-outline-variant bg-surface-container-lowest"
               >
                 <header className="flex items-start gap-2 border-b border-outline-variant px-3 py-2.5">
                   <span
@@ -260,7 +260,7 @@ export function TaskStatusesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boo
                 <div className="border-t border-outline-variant px-3 py-2">
                   <button
                     type="button"
-                    className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-1 text-xs font-semibold text-primary outline-hidden hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/30`}
+                    className={`[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1 rounded-sm px-1.5 py-1 text-xs font-semibold text-primary outline-hidden hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/30`}
                     onClick={() => handleAdd(category)}
                   >
                     <span className="material-symbols-outlined text-base" aria-hidden="true">
@@ -277,7 +277,7 @@ export function TaskStatusesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boo
 
         <aside
           aria-label="How it works"
-          className="rounded-lg border border-outline-variant bg-surface-container-lowest p-4 lg:sticky lg:top-4 lg:w-72 lg:shrink-0"
+          className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4 lg:sticky lg:top-4 lg:w-72 lg:shrink-0"
         >
           <h3 className="text-label-caps uppercase text-on-surface-variant">How it works</h3>
           <ul className="mt-3 space-y-2.5">
@@ -356,14 +356,14 @@ function StatusRow({
       render={<div />}
       data-testid="task-status-row"
       data-category={row.category}
-      className="flex flex-wrap items-center gap-x-2 gap-y-1 bg-surface-container-lowest px-3 py-2"
+      className="flex flex-wrap items-center gap-x-2 gap-y-1 bg-surface-container-lowest px-3 py-2 [@media(pointer:coarse)]:gap-x-6"
     >
       <SortableItemHandle
         render={
           <button
             type="button"
             aria-label={`Reorder ${row.name || "new status"}`}
-            className="material-symbols-outlined touch-none rounded-sm p-1 text-lg text-on-surface-variant/80 outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="tap-target material-symbols-outlined touch-none rounded-sm p-1 text-lg text-on-surface-variant/80 outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30"
           />
         }
       >
@@ -377,7 +377,7 @@ function StatusRow({
               type="button"
               aria-label={`Colour: ${TONE_LABEL[row.color]}`}
               title={`Colour: ${TONE_LABEL[row.color]}`}
-              className={`inline-flex h-6 w-6 items-center justify-center rounded-full border border-outline-variant ${toneClass(row.color, row.category)} ${BORDERED_FOCUS}`}
+              className={`tap-target inline-flex h-6 w-6 items-center justify-center rounded-full border border-outline-variant ${toneClass(row.color, row.category)} ${BORDERED_FOCUS}`}
             >
               <span className={`h-2.5 w-2.5 rounded-full ${STATUS_TONE_DOT_CLASS[row.color]}`} aria-hidden="true" />
             </button>
@@ -438,7 +438,7 @@ function StatusRow({
             <button
               type="button"
               aria-label={`Actions for ${row.name || "new status"}`}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="tap-target inline-flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <span className="material-symbols-outlined text-base" aria-hidden="true">
                 more_horiz
@@ -538,7 +538,7 @@ function MoveTasksModal({
         id={selectId}
         value={target}
         onChange={(e) => setTarget(e.target.value)}
-        className={`mt-1.5 w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm text-on-surface ${BORDERED_FOCUS}`}
+        className={`[@media(pointer:coarse)]:min-h-11 mt-1.5 w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm text-on-surface ${BORDERED_FOCUS}`}
       >
         <option value="">Choose a status…</option>
         {STATUS_CATEGORY_ORDER.map((category) => {

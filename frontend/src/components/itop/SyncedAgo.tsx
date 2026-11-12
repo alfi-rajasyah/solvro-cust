@@ -30,13 +30,13 @@ export function SyncedAgo({
   }
 
   return (
-    <div className="flex items-center gap-2 text-[12px] text-on-surface-variant">
+    <div className="flex items-center gap-2 text-meta text-on-surface-variant">
       <span>{syncedAt ? `Synced ${fmtAgo(syncedAt)}` : "Not synced yet"}</span>
       {lastSyncOk === false && (
         // The raw iTop error text is admin-only (GET /itop/status doesn't
         // return `lastSyncError` to non-admins) — point at Admin › iTop
         // instead of surfacing anything from the API here.
-        <span className="text-error" title="Ask an admin — details are on Admin › iTop">
+        <span className="text-error" title="Ask an admin. Details are on Admin › iTop">
           · Last sync failed
         </span>
       )}
@@ -47,7 +47,7 @@ export function SyncedAgo({
         disabled={refresh.isPending}
         title="Refresh from iTop"
         aria-label="Refresh from iTop"
-        className="inline-flex items-center justify-center rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        className="tap-target inline-flex items-center justify-center rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
       >
         <span aria-hidden="true" className="material-symbols-outlined text-[17px]">refresh</span>
       </button>

@@ -8,6 +8,7 @@ import {
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { ProjectStatusChip } from "@/components/StatusChip";
 import { fmtDateTime, fmtDay, fmtRange } from "@/lib/formatDate";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 import { type PortfolioProjectRow, useExecutiveReport } from "@/lib/queries";
 
 // Executive dashboard — org-wide portfolio roll-up. Two blocks: an
@@ -105,7 +106,7 @@ function OverdueProjectsSection({
       {sorted.length === 0 ? (
         <EmptyState
           icon="task_alt"
-          message="No overdue projects — everything is on schedule."
+          message="No overdue projects. Everything is on schedule."
         />
       ) : (
         <div className="overflow-x-auto rounded-sm border border-outline-variant bg-surface-container-lowest">
@@ -131,11 +132,11 @@ function OverdueRow({ project: p }: { project: PortfolioProjectRow }) {
   return (
     <>
       {/* Desktop row */}
-      <div className="hidden grid-cols-[minmax(200px,1.6fr)_140px_160px_140px_120px] items-center border-t border-outline-variant px-3 py-1.5 text-[13px] hover:bg-surface-container-low md:grid">
+      <div className="hidden grid-cols-[minmax(200px,1.6fr)_140px_160px_140px_120px] items-center border-t border-outline-variant px-3 py-1.5 text-xs hover:bg-surface-container-low md:grid">
         <div className="flex min-w-0 items-center gap-2">
           <Link
             to={`/projects/${p.id}`}
-            className="truncate font-semibold text-primary hover:underline"
+            className="truncate font-semibold text-primary hover:underline [@media(pointer:coarse)]:py-3"
           >
             {p.name}
           </Link>
@@ -143,10 +144,10 @@ function OverdueRow({ project: p }: { project: PortfolioProjectRow }) {
         </div>
         <span className="truncate text-on-surface-variant">{p.tamName}</span>
         <span className="truncate text-on-surface-variant">
-          {p.customerName ?? "—"}
+          {p.customerName ?? EMPTY_VALUE}
         </span>
-        <span className="text-[12px] text-on-surface-variant">
-          {fmtDay(p.end) || "—"}
+        <span className="text-meta text-on-surface-variant">
+          {fmtDay(p.end) || EMPTY_VALUE}
         </span>
         <span className="text-right font-semibold text-error">
           {fmtOverdueBy(p.daysOverdue)}
@@ -158,19 +159,19 @@ function OverdueRow({ project: p }: { project: PortfolioProjectRow }) {
         <div className="flex items-center justify-between gap-2">
           <Link
             to={`/projects/${p.id}`}
-            className="truncate font-semibold text-primary hover:underline"
+            className="truncate font-semibold text-primary hover:underline [@media(pointer:coarse)]:py-3"
           >
             {p.name}
           </Link>
           <ProjectStatusChip status={p.status} />
         </div>
-        <div className="flex items-center justify-between gap-2 text-[12px] text-on-surface-variant">
+        <div className="flex items-center justify-between gap-2 text-meta text-on-surface-variant">
           <span className="truncate">
-            {p.tamName} · {p.customerName ?? "—"}
+            {p.tamName} · {p.customerName ?? EMPTY_VALUE}
           </span>
-          <span className="text-[12px]">{fmtDay(p.end) || "—"}</span>
+          <span className="text-meta">{fmtDay(p.end) || EMPTY_VALUE}</span>
         </div>
-        <div className="text-right text-[13px] font-semibold text-error">
+        <div className="text-right text-xs font-semibold text-error">
           {fmtOverdueBy(p.daysOverdue)} overdue
         </div>
       </div>
@@ -205,7 +206,7 @@ function PortfolioTimelinesSection({
           <h2 className="font-display text-base font-bold text-on-surface">
             Portfolio Timelines
           </h2>
-          <span className="text-[12px] text-on-surface-variant">
+          <span className="text-meta text-on-surface-variant">
             {sorted.length} project{sorted.length === 1 ? "" : "s"}
           </span>
         </div>
@@ -217,7 +218,7 @@ function PortfolioTimelinesSection({
               type="button"
               onClick={() => setView(v.view)}
               className={[
-                "px-2.5 py-1 font-display text-sm font-semibold",
+                "tap-target px-2.5 py-1 font-display text-sm font-semibold",
                 i > 0 ? "border-l border-outline-variant" : "",
                 v.view === view
                   ? "bg-primary text-on-primary"
@@ -247,7 +248,7 @@ function PortfolioList({ projects }: { projects: PortfolioProjectRow[] }) {
   return (
     <div className="space-y-3">
       <p className="text-xs text-on-surface-variant">
-        High-level progress overview — a first pass. Phase dots below are a
+        High-level progress overview, a first pass. Phase dots below are a
         legend, not date-positioned segments.
       </p>
 
@@ -270,13 +271,13 @@ function TimelineRow({ project: p }: { project: PortfolioProjectRow }) {
         <div className="flex min-w-0 items-center gap-2">
           <Link
             to={`/projects/${p.id}`}
-            className="truncate font-semibold text-primary hover:underline"
+            className="truncate font-semibold text-primary hover:underline [@media(pointer:coarse)]:py-3"
           >
             {p.name}
           </Link>
           <ProjectStatusChip status={p.status} />
         </div>
-        <span className="truncate text-[12px] text-on-surface-variant">
+        <span className="truncate text-meta text-on-surface-variant">
           {p.tamName}
           {p.customerName ? ` · ${p.customerName}` : ""}
         </span>
@@ -291,7 +292,7 @@ function TimelineRow({ project: p }: { project: PortfolioProjectRow }) {
                 style={{ width: `${Math.min(100, Math.max(0, p.progressPct))}%` }}
               />
             </div>
-            <span className="w-10 shrink-0 text-right font-mono text-[12px] text-on-surface-variant">
+            <span className="w-10 shrink-0 text-right font-mono text-meta text-on-surface-variant">
               {p.progressPct}%
             </span>
           </div>

@@ -328,7 +328,7 @@ test.describe("Ticket panel", () => {
     await expect(panel.getByText("Add your personal iTop token")).toBeVisible();
     await expect(panel.getByRole("link", { name: "Settings" })).toHaveAttribute(
       "href",
-      "/settings",
+      "/settings?tab=integrations",
     );
   });
 

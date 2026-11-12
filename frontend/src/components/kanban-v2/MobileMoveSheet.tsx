@@ -26,9 +26,9 @@ export function MobileMoveSheet({
   const groups = groupStatusDefs(defs);
   return (
     <div className="fixed inset-0 z-100 flex items-end md:hidden" onMouseDown={onClose}>
-      <div className="absolute inset-0 bg-inverse-surface/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-inverse-surface/40" />
       <div
-        className="relative max-h-[80vh] w-full overflow-y-auto rounded-t-xl border-t border-outline-variant bg-surface-container p-4"
+        className="relative max-h-[80vh] w-full overflow-y-auto rounded-t-sm border-t border-outline-variant bg-surface-container p-4"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <p className="mb-1 truncate text-sm font-bold text-on-surface">{task.title}</p>
@@ -52,14 +52,14 @@ export function MobileMoveSheet({
                       onClick={() => onMove(def)}
                       aria-current={checked ? "true" : undefined}
                       className={[
-                        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm",
+                        "[@media(pointer:coarse)]:min-h-11 flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm",
                         checked ? "text-primary" : "text-on-surface",
                       ].join(" ")}
                     >
                       <span
                         className={[
                           "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
-                          checked ? "border-primary bg-primary text-white" : "border-outline-variant",
+                          checked ? "border-primary bg-primary text-on-primary" : "border-outline-variant",
                         ].join(" ")}
                       >
                         {checked && <span aria-hidden="true" className="material-symbols-outlined text-meta leading-none">check</span>}

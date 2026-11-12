@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { PrimaryChip } from "@/components/customer/PrimaryChip";
 import { ProjectStatusChip } from "@/components/StatusChip";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 import { fmtRange } from "@/lib/formatDate";
 import type { ProjectDetail } from "@/lib/queries";
 
@@ -64,7 +65,7 @@ export function ProjectHeaderFacts({ project }: { project: ProjectDetail }) {
                 <li key={c.id} className="flex min-w-0 items-center gap-1.5">
                   <Link
                     to={`/customers/${c.id}`}
-                    className="block truncate text-primary hover:underline"
+                    className="[@media(pointer:coarse)]:min-h-11 block truncate text-primary hover:underline"
                   >
                     {c.name}
                   </Link>
@@ -131,7 +132,7 @@ export function ProjectHeaderFacts({ project }: { project: ProjectDetail }) {
               </span>
             </span>
           ) : (
-            <span className="text-on-surface-variant">—</span>
+            <span className="text-on-surface-variant">{EMPTY_VALUE}</span>
           )}
         </Fact>
       </dl>

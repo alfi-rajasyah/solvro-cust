@@ -51,7 +51,7 @@ export function ProjectShareButton({ project }: { project: ProjectDetail }) {
         aria-label="Share with a guest"
         title="Share with a guest"
         data-testid="share-button"
-        className={`inline-flex h-8 items-center gap-1.5 rounded-lg border border-outline-variant bg-surface-container-lowest px-2 font-display text-xs font-bold text-on-surface transition-colors hover:bg-surface-container focus-visible:border-primary ${FOCUS_RING}`}
+        className={`tap-target inline-flex h-8 items-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 font-display text-xs font-bold text-on-surface transition-colors hover:bg-surface-container focus-visible:border-primary ${FOCUS_RING}`}
       >
         <span className="material-symbols-outlined text-base" aria-hidden="true">
           ios_share
@@ -144,7 +144,7 @@ function ProjectShareDialog({
         <p className="text-xs text-on-surface-variant">
           Anyone with a guest link can view a read-only summary of this project without signing in:
           its name, customer and status, each phase with its dates and progress, and the
-          milestones. Nothing else is shared — no tasks, notes, comments, risks or people.
+          milestones. Nothing else is shared: no tasks, notes, comments, risks or people.
         </p>
 
         {error && (
@@ -166,7 +166,7 @@ function ProjectShareDialog({
                 maxLength={SHARE_LABEL_MAX}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="e.g. For Nusantara IT"
-                className={`rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant focus-visible:border-primary ${FOCUS_RING}`}
+                className={`[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant focus-visible:border-primary ${FOCUS_RING}`}
               />
             </label>
             <label className="flex flex-col gap-1 sm:w-36">
@@ -174,7 +174,7 @@ function ProjectShareDialog({
               <select
                 value={days}
                 onChange={(e) => setDays(Number(e.target.value))}
-                className={`rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING}`}
+                className={`[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING}`}
               >
                 {SHARE_EXPIRY_OPTIONS.map((o) => (
                   <option key={o.days} value={o.days}>
@@ -187,7 +187,7 @@ function ProjectShareDialog({
           <button
             type="submit"
             disabled={create.isPending}
-            className={`rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60 ${FOCUS_RING}`}
+            className={`[@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60 ${FOCUS_RING}`}
           >
             {create.isPending ? "Creating…" : "Create link"}
           </button>
@@ -280,12 +280,12 @@ function NewLinkPanel({ link }: { link: CreatedShareLink }) {
           aria-label="Guest link"
           data-testid="share-new-link-url"
           onFocus={(e) => e.currentTarget.select()}
-          className={`min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 font-mono text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING}`}
+          className={`[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 font-mono text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING}`}
         />
         <button
           type="button"
           onClick={() => void handleCopy()}
-          className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 ${FOCUS_RING}`}
+          className={`[@media(pointer:coarse)]:min-h-11 inline-flex shrink-0 items-center justify-center gap-1.5 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 ${FOCUS_RING}`}
         >
           <span className="material-symbols-outlined text-base" aria-hidden="true">
             {state === "copied" ? "check" : "content_copy"}
@@ -293,14 +293,14 @@ function NewLinkPanel({ link }: { link: CreatedShareLink }) {
           {state === "copied" ? "Copied" : "Copy link"}
         </button>
       </div>
-      <p className="text-xs text-on-surface">You won't see this link again — copy it now.</p>
+      <p className="text-xs text-on-surface">You won't see this link again. Copy it now.</p>
       {/* Live region for both outcomes; a success is announced only to
           screen readers (the button already reads "Copied"). */}
       <p role="status" className={state === "failed" ? "text-xs text-error" : "sr-only"}>
         {state === "copied"
           ? "Link copied to clipboard."
           : state === "failed"
-            ? "Could not copy automatically — the link is selected, press Ctrl+C."
+            ? "Could not copy automatically. The link is selected: press Ctrl+C."
             : ""}
       </p>
     </section>
@@ -367,7 +367,7 @@ function ShareLinkRow({
             type="button"
             onClick={onAskRevoke}
             aria-label={`Revoke ${title}`}
-            className={`shrink-0 rounded-lg border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container hover:text-error focus-visible:border-primary ${FOCUS_RING}`}
+            className={`[@media(pointer:coarse)]:min-h-11 shrink-0 rounded-sm border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container hover:text-error focus-visible:border-primary ${FOCUS_RING}`}
           >
             Revoke
           </button>
@@ -389,7 +389,7 @@ function ShareLinkRow({
               onCancel();
             }}
             disabled={busy}
-            className={`rounded-lg border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container focus-visible:border-primary ${FOCUS_RING}`}
+            className={`[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container focus-visible:border-primary ${FOCUS_RING}`}
           >
             Cancel
           </button>
@@ -397,7 +397,7 @@ function ShareLinkRow({
             type="button"
             onClick={onRevoke}
             disabled={busy}
-            className={`rounded-lg bg-error px-3 py-1 text-xs font-bold text-on-error hover:bg-error/90 disabled:opacity-60 ${FOCUS_RING}`}
+            className={`[@media(pointer:coarse)]:min-h-11 rounded-sm bg-error px-3 py-1 text-xs font-bold text-on-error hover:bg-error/90 disabled:opacity-60 ${FOCUS_RING}`}
           >
             {busy ? "Revoking…" : "Revoke link"}
           </button>

@@ -34,9 +34,9 @@ describe("copy", () => {
   });
 
   it("pluralises the unconnected sentence", () => {
-    expect(unconnectedLead(1) + unconnectedAction(1)).toBe("Mentioned in 1 Outline page — connect Outline to see it");
+    expect(unconnectedLead(1) + unconnectedAction(1)).toBe("Mentioned in 1 Outline page: connect Outline to see it");
     expect(unconnectedLead(5) + unconnectedAction(5)).toBe(
-      "Mentioned in 5 Outline pages — connect Outline to see them",
+      "Mentioned in 5 Outline pages: connect Outline to see them",
     );
   });
 });

@@ -36,6 +36,14 @@ const CONNECTED: MeState = {
 const NOT_CONNECTED: MeState = { configured: true, connected: false, outlineEmail: null, expiresAt: null };
 
 /** The Outline endpoints every user-facing screen reads (config + connection). */
+// With no Outline address the Integrations tab only exists when iTop is
+// configured for the viewer, so these tests give it a configured iTop token.
+async function mockConfiguredItopToken(page: Page) {
+  await page.route("**/api/itop/me/token", (r) =>
+    json(r, { set: true, personName: "QA Admin", checkedAt: null, expiresAt: null, actionsEnabled: true, configured: true }),
+  );
+}
+
 async function mockMe(page: Page, state: { me: MeState; baseUrl?: string | null }) {
   await page.route("**/api/outline/config", (r) => json(r, { baseUrl: state.baseUrl === undefined ? DOCS_BASE : state.baseUrl }));
   await page.route("**/api/outline/me", (r) => {
@@ -64,7 +72,7 @@ test.describe("Settings › Outline connect card", () => {
     const state = { me: CONNECTED };
     await mockMe(page, state);
     await loginViaUi(page);
-    await page.goto("/settings", { waitUntil: "networkidle" });
+    await page.goto("/settings?tab=integrations", { waitUntil: "networkidle" });
 
     const card = page.getByTestId("outline-connect-card");
     await expect(card.getByText("Connected", { exact: true })).toBeVisible();
@@ -97,14 +105,16 @@ test.describe("Settings › Outline connect card", () => {
       }),
     );
     await loginViaUi(page);
-    await page.goto("/settings", { waitUntil: "networkidle" });
+    await page.goto("/settings?tab=integrations", { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "Connect Outline" }).click();
 
     const notice = page.getByTestId("outline-return-notice");
     await expect(notice).toContainText("That Outline account uses a different email than your Solvro account.");
     // The parameters are stripped so a reload does not repeat the message.
-    await expect(page).toHaveURL(/\/settings$/);
-    await page.reload({ waitUntil: "networkidle" });
+    await expect(page).toHaveURL(/\/settings(\?tab=integrations)?$/);
+    // Reload on the Integrations tab so the card is mounted and the check means something.
+    await page.goto("/settings?tab=integrations", { waitUntil: "networkidle" });
+    await expect(page.getByRole("button", { name: "Connect Outline" })).toBeVisible();
     await expect(page.getByTestId("outline-return-notice")).toHaveCount(0);
   });
 
@@ -120,7 +130,7 @@ test.describe("Settings › Outline connect card", () => {
       return r.fulfill({ status: 200, body: "no" });
     });
     await loginViaUi(page);
-    await page.goto("/settings", { waitUntil: "networkidle" });
+    await page.goto("/settings?tab=integrations", { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "Connect Outline" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Could not start the Outline connection" })).toBeVisible();
     expect(leftSolvro).toBe(false);
@@ -134,8 +144,13 @@ test.describe("Settings › Outline connect card", () => {
       meCalls += 1;
       return json(r, NOT_CONNECTED as unknown as Json);
     });
+    await mockConfiguredItopToken(page);
     await loginViaUi(page);
-    await page.goto("/settings", { waitUntil: "networkidle" });
+    await page.goto("/settings?tab=integrations", { waitUntil: "networkidle" });
+    // The Integrations tab exists (iTop is configured) and is the active one,
+    // so a missing Outline card is a real result, not a page still on Account.
+    await expect(page.getByRole("button", { name: "Integrations" })).toHaveAttribute("aria-current", "true");
+    await expect(page.getByRole("heading", { name: "iTop", exact: true })).toBeVisible();
     await expect(page.getByTestId("outline-connect-card")).toHaveCount(0);
     expect(meCalls).toBe(0);
   });
@@ -155,22 +170,25 @@ test.describe("Settings › Outline connect card", () => {
       await loginViaUi(page);
       await page.goto(`/settings?${query}`, { waitUntil: "networkidle" });
       await expect(page.getByTestId("outline-return-notice")).toContainText(text);
-      await expect(page).toHaveURL(/\/settings$/);
+      await expect(page).toHaveURL(/\/settings(\?tab=integrations)?$/);
     });
   }
 
   test("an install that is not set up for sign-in shows a note instead of a Connect button", async ({ page }) => {
     await mockMe(page, { me: { ...NOT_CONNECTED, configured: false } });
     await loginViaUi(page);
-    await page.goto("/settings", { waitUntil: "networkidle" });
+    await page.goto("/settings?tab=integrations", { waitUntil: "networkidle" });
     await expect(page.getByTestId("outline-not-configured")).toBeVisible();
     await expect(page.getByRole("button", { name: "Connect Outline" })).toHaveCount(0);
   });
 
   test("the card is absent while no Outline address is set", async ({ page }) => {
     await mockMe(page, { me: { ...NOT_CONNECTED, configured: false }, baseUrl: null });
+    await mockConfiguredItopToken(page);
     await loginViaUi(page);
-    await page.goto("/settings", { waitUntil: "networkidle" });
+    await page.goto("/settings?tab=integrations", { waitUntil: "networkidle" });
+    await expect(page.getByRole("button", { name: "Integrations" })).toHaveAttribute("aria-current", "true");
+    await expect(page.getByRole("heading", { name: "iTop", exact: true })).toBeVisible();
     await expect(page.getByTestId("outline-connect-card")).toHaveCount(0);
   });
 });
@@ -330,7 +348,7 @@ test.describe("Admin › Outline API access and webhook", () => {
 
     for (const [last, text] of [
       [null, "No delivery yet"],
-      [iso(3 * 24 * 3_600_000), "No delivery in 24 hours — check the webhook in Outline (Outline turns off webhooks that keep failing)."],
+      [iso(3 * 24 * 3_600_000), "No delivery in 24 hours. Check the webhook in Outline (Outline turns off webhooks that keep failing)."],
     ] as const) {
       await page.unroute("**/api/admin/settings/outline");
       await page.route("**/api/admin/settings/outline", (r) => json(r, { ...settings, lastWebhookAt: last }));
@@ -560,11 +578,11 @@ test.describe("Docs tab", () => {
       const dialog = page.getByRole("dialog", { name: "New Outline doc" });
       await expect(dialog.getByTestId("new-outline-doc-as")).toHaveText("rina@acme.test");
       await expect(dialog.getByLabel("Blank page")).toBeChecked();
-      await expect(dialog.getByTestId("new-outline-doc-title")).toHaveValue(/^New page — \d{1,2} \w{3}/);
+      await expect(dialog.getByTestId("new-outline-doc-title")).toHaveValue(/^New page, \d{1,2} \w{3}/);
 
       // Choosing a template re-titles an untouched title.
       await dialog.getByLabel("Meeting notes").check();
-      await expect(dialog.getByTestId("new-outline-doc-title")).toHaveValue(/^Meeting notes — /);
+      await expect(dialog.getByTestId("new-outline-doc-title")).toHaveValue(/^Meeting notes, /);
       const place = dialog.getByTestId("new-outline-doc-place");
       await expect(place.locator("option").first()).toHaveText("Core Banking Migration (top level)");
       await expect(place.locator("option")).toHaveText([

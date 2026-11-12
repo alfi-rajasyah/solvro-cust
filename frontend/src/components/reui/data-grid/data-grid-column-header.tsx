@@ -189,8 +189,10 @@ function DataGridColumnHeaderInner<TData, TValue>({
   // weight, 700)` fallback ever gets read. `font-bold` (recognized by
   // twMerge as the same `font-weight` group as `font-medium`) evicts it
   // outright, so the variable is never poisoned to begin with.
+  // SOLVRO PATCH — touch target: the 24px sort button grows to 44px on touch
+  // input only (docs/archive/plans/antislop-port.md); desktop density stays.
   const headerButtonClassName = cn(
-    "text-muted-foreground hover:bg-accent data-[state=open]:bg-accent hover:text-foreground data-[state=open]:text-foreground px-2 h-6 rounded-lg font-display text-label-caps font-bold uppercase",
+    "text-muted-foreground hover:bg-accent data-[state=open]:bg-accent hover:text-foreground data-[state=open]:text-foreground px-2 h-6 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:min-w-11 rounded-lg font-display text-label-caps font-bold uppercase",
     className
   )
 

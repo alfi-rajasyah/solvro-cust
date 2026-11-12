@@ -38,6 +38,7 @@ import {
 import type { Role } from "@/lib/auth";
 import { PERMISSION_CATALOG, useAuth } from "@/lib/auth";
 import { copyText } from "@/lib/clipboard";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 import { fmtDateTime } from "@/lib/formatDate";
 import { personNameSortingFn } from "@/lib/tableSort";
 import { DataGrid, DataGridContainer } from "@/components/reui/data-grid/data-grid";
@@ -200,10 +201,7 @@ function UsersTab() {
       sortingFn: personNameSortingFn,
       cell: ({ row }) => (
         <span
-          className={[
-            "font-medium text-on-surface",
-            row.original.active ? "" : "opacity-60",
-          ].join(" ")}
+          className="font-medium text-on-surface"
         >
           {row.original.username}
         </span>
@@ -218,12 +216,7 @@ function UsersTab() {
       sortingFn: personNameSortingFn,
       cell: ({ row }) => (
         <span
-          className={[
-            // text-xs (13px, this theme's own --text-xs override — see
-            // index.css) replaces the carried-over text-[13px] magic number.
-            "text-xs text-on-surface-variant",
-            row.original.active ? "" : "opacity-60",
-          ].join(" ")}
+          className="text-xs text-on-surface-variant"
         >
           {row.original.email}
         </span>
@@ -236,9 +229,7 @@ function UsersTab() {
       header: ({ column }) => <DataGridColumnHeader column={column} title="Provider" />,
       enableSorting: false,
       cell: ({ row }) => (
-        <span className={row.original.active ? undefined : "opacity-60"}>
-          <ProviderChip provider={row.original.provider} />
-        </span>
+        <ProviderChip provider={row.original.provider} />
       ),
       meta: { skeleton: <Skeleton className="h-4 w-16 rounded-full" /> },
     },
@@ -256,11 +247,7 @@ function UsersTab() {
         const u = row.original;
         const isSelf = currentUser?.id === u.id;
         return (
-          <div
-            className={["flex items-center gap-2", u.active ? "" : "opacity-60"].join(
-              " ",
-            )}
-          >
+          <div className="flex items-center gap-2">
             <select
               aria-label={`Role of ${u.username}`}
               value={u.role}
@@ -273,7 +260,7 @@ function UsersTab() {
               // select renders ~4px shorter, accepted as a density win.
               // font-bold stays explicit — see data-grid-column-header.tsx's
               // comment on why the token's baked-in weight needs the guard.
-              className="rounded-sm border border-outline-variant bg-surface px-2 py-1 font-display text-label-caps uppercase text-on-surface focus:border-primary focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-sm border border-outline-variant bg-surface px-2 py-1 font-display text-label-caps uppercase text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60 [@media(pointer:coarse)]:min-h-11"
               title={isSelf ? "You cannot change your own role" : undefined}
             >
               {roleOptionsFor(u.role).map((r) => (
@@ -305,14 +292,11 @@ function UsersTab() {
         <DataGridColumnHeader column={column} title="Projects (TAM)" />
       ),
       cell: ({ row }) => (
-        <span className={row.original.active ? undefined : "opacity-60"}>
-          {row.original.projectsAsTAM}
-        </span>
+        <span>{row.original.projectsAsTAM}</span>
       ),
       meta: {
         headerClassName: "text-right",
-        // text-xs (13px, this theme's own --text-xs override) replaces the
-        // carried-over text-[13px] magic number — see the "email" column.
+        // text-xs (13px, this theme's own --text-xs override).
         cellClassName: "text-right font-mono text-xs text-on-surface-variant",
         skeleton: <Skeleton className="ml-auto h-3.5 w-10" />,
       },
@@ -327,10 +311,10 @@ function UsersTab() {
             "rounded-full px-2 py-0.5 font-display text-label-caps uppercase",
             row.original.active
               ? "bg-chip-emerald-bg text-chip-emerald-text"
-              : "bg-surface-container-high text-on-surface-variant opacity-60",
+              : "bg-surface-container-high text-on-surface-variant",
           ].join(" ")}
         >
-          {row.original.active ? "Active" : "Disabled"}
+          {row.original.active ? "Active" : "Inactive"}
         </span>
       ),
       meta: { skeleton: <Skeleton className="h-4 w-16 rounded-full" /> },
@@ -343,17 +327,12 @@ function UsersTab() {
         const u = row.original;
         const isSelf = currentUser?.id === u.id;
         return (
-          <div
-            className={[
-              "flex items-center justify-end gap-1",
-              u.active ? "" : "opacity-60",
-            ].join(" ")}
-          >
+          <div className="flex items-center justify-end gap-1">
             <button
               type="button"
               onClick={() => handleToggleActive(u)}
               disabled={isSelf}
-              className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 font-semibold"
+              className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 font-semibold [@media(pointer:coarse)]:min-h-11"
               title={isSelf ? "You cannot deactivate yourself" : undefined}
             >
               {u.active ? "Deactivate" : "Reactivate"}
@@ -362,7 +341,7 @@ function UsersTab() {
               type="button"
               onClick={() => setResettingUser(u)}
               disabled={isSelf}
-              className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 font-semibold"
+              className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 font-semibold [@media(pointer:coarse)]:min-h-11"
               title={isSelf ? "Use Settings › Change password for your own account" : undefined}
             >
               Reset password
@@ -371,7 +350,7 @@ function UsersTab() {
               type="button"
               onClick={() => setDeletingUser(u)}
               disabled={isSelf || deleteUser.isPending}
-              className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container disabled:cursor-not-allowed disabled:opacity-50 font-semibold"
+              className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container disabled:cursor-not-allowed disabled:opacity-50 font-semibold [@media(pointer:coarse)]:min-h-11"
               title={
                 isSelf
                   ? "You cannot delete yourself"
@@ -494,10 +473,10 @@ function UsersTab() {
             unambiguously "not loaded yet"; the `rows` fallback wiring itself
             is unchanged (still needed so every other computation below stays
             render-safe). */}
-        <AdminKpi label="Users" value={isLoading ? "—" : rows.length} hint={`${activeCount} active · ${adminCount} admins`} icon="group" tone="primary" />
-        <AdminKpi label="Pending" value={isLoading ? "—" : pendingCount} hint="Needs role assignment" icon="hourglass_top" tone="amber" />
-        <AdminKpi label="Custom roles" value={isLoading ? "—" : customRoleCount} hint={`${(roles ?? []).length} total roles`} icon="shield_person" tone="emerald" />
-        <AdminKpi label="Inactive" value={isLoading ? "—" : rows.length - activeCount} hint="Cannot sign in" icon="block" tone="neutral" />
+        <AdminKpi label="Users" value={isLoading ? EMPTY_VALUE : rows.length} hint={`${activeCount} active · ${adminCount} admins`} icon="group" tone="primary" />
+        <AdminKpi label="Pending" value={isLoading ? EMPTY_VALUE : pendingCount} hint="Needs role assignment" icon="hourglass_top" tone="amber" />
+        <AdminKpi label="Custom roles" value={isLoading ? EMPTY_VALUE : customRoleCount} hint={`${(roles ?? []).length} total roles`} icon="shield_person" tone="emerald" />
+        <AdminKpi label="Inactive" value={isLoading ? EMPTY_VALUE : rows.length - activeCount} hint="Cannot sign in" icon="block" tone="neutral" />
       </div>
       {error && (
         <div className="rounded-sm border border-error/40 bg-error/10 px-3 py-2 text-sm text-error">
@@ -511,7 +490,7 @@ function UsersTab() {
           </p>
           <p className="mt-1">
             For <strong>{resetResult.username}</strong>:{" "}
-            <code className="rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[13px]">
+            <code className="rounded-sm bg-surface px-1.5 py-0.5 font-mono text-xs">
               {resetResult.tempPassword}
             </code>
           </p>
@@ -521,7 +500,7 @@ function UsersTab() {
           <button
             type="button"
             onClick={() => setResetResult(null)}
-            className="mt-2 font-display text-sm text-on-surface-variant hover:text-on-surface font-semibold"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center mt-2 font-display text-sm text-on-surface-variant hover:text-on-surface font-semibold [@media(pointer:coarse)]:min-h-11"
           >
             Dismiss
           </button>
@@ -540,7 +519,7 @@ function UsersTab() {
             value={newEmail}
             onChange={(e) => setNewEmail(e.target.value)}
             placeholder="user@example.com"
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           />
         </label>
         <label className="w-full md:flex-1 md:min-w-[120px]">
@@ -553,7 +532,7 @@ function UsersTab() {
             onChange={(e) => setNewUsername(e.target.value)}
             maxLength={50}
             placeholder="alice"
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           />
         </label>
         <label className="w-full md:flex-1 md:min-w-[140px]">
@@ -565,7 +544,7 @@ function UsersTab() {
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             autoComplete="new-password"
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           />
         </label>
         <label className="w-full md:w-auto md:min-w-[120px]">
@@ -575,7 +554,7 @@ function UsersTab() {
           <select
             value={newRole}
             onChange={(e) => setNewRole(e.target.value as Role)}
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-display text-sm text-on-surface focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-display text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           >
             {assignableRoles.map((r) => (
               <option key={r} value={r}>
@@ -592,7 +571,7 @@ function UsersTab() {
             !newUsername.trim() ||
             newPassword.length < 8
           }
-          className="w-full rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-bold text-on-primary hover:bg-primary-container disabled:opacity-60 md:w-auto"
+          className="w-full rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60 md:w-auto [@media(pointer:coarse)]:min-h-11"
         >
           {createUser.isPending ? "Adding…" : "Add user"}
         </button>
@@ -753,7 +732,7 @@ function PermissionPicker({
           <li key={perm.value}>
             <label
               title={perm.hint}
-              className={`flex items-center gap-2.5 px-3 py-1.5 text-[13px] ${
+              className={`flex items-center gap-2.5 px-3 py-1.5 text-xs ${
                 disabled ? "opacity-50" : "cursor-pointer hover:bg-surface-container-low"
               }`}
             >
@@ -765,7 +744,7 @@ function PermissionPicker({
                 className="accent-primary"
               />
               <span className="font-mono text-on-surface">{perm.value}</span>
-              <span className="text-on-surface-variant">— {perm.label}</span>
+              <span className="text-on-surface-variant">({perm.label})</span>
             </label>
           </li>
         );
@@ -828,7 +807,7 @@ function RolesTab() {
                 onChange={(e) => setEditName(e.target.value)}
                 disabled={r.builtIn}
                 maxLength={50}
-                className="w-32 rounded-sm border border-outline-variant bg-surface px-2 py-1 font-mono text-sm uppercase focus:border-primary focus:outline-hidden disabled:opacity-60"
+                className="w-32 rounded-sm border border-outline-variant bg-surface px-2 py-1 font-mono text-sm uppercase focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
                 title={
                   r.builtIn
                     ? "This role is reserved and cannot be renamed"
@@ -873,7 +852,7 @@ function RolesTab() {
         return isEditing ? (
           <PermissionPicker value={editPerms} onChange={setEditPerms} />
         ) : r.permissions.length === 0 ? (
-          <span className="text-on-surface-variant/80">—</span>
+          <span className="text-on-surface-variant">{EMPTY_VALUE}</span>
         ) : (
           <div className="flex flex-wrap gap-1">
             {r.permissions.map((p) => (
@@ -904,7 +883,7 @@ function RolesTab() {
       meta: {
         headerClassName: "text-right",
         cellClassName:
-          "align-top text-right font-mono text-[13px] text-on-surface-variant",
+          "align-top text-right font-mono text-xs text-on-surface-variant",
         skeleton: <Skeleton className="ml-auto h-3.5 w-6" />,
       },
     },
@@ -923,14 +902,14 @@ function RolesTab() {
                   type="button"
                   onClick={() => saveEdit(r)}
                   disabled={updatePerms.isPending}
-                  className="rounded-sm bg-primary px-2 py-1 font-display text-sm text-on-primary hover:bg-primary-container disabled:opacity-50 font-semibold"
+                  className="rounded-sm bg-primary px-2 py-1 font-display text-sm text-on-primary hover:bg-primary/90 disabled:opacity-50 font-semibold [@media(pointer:coarse)]:min-h-11"
                 >
                   Save
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditingId(null)}
-                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container font-semibold"
+                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container font-semibold [@media(pointer:coarse)]:min-h-11"
                 >
                   Cancel
                 </button>
@@ -941,7 +920,7 @@ function RolesTab() {
                   type="button"
                   onClick={() => startEdit(r)}
                   disabled={r.builtIn}
-                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 font-semibold"
+                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50 font-semibold [@media(pointer:coarse)]:min-h-11"
                   title={
                     r.builtIn
                       ? "Reserved role: new Google sign-ins get no permissions until an admin promotes them"
@@ -954,7 +933,7 @@ function RolesTab() {
                   type="button"
                   onClick={() => setDeletingRole(r)}
                   disabled={r.builtIn || r.userCount > 0}
-                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container disabled:cursor-not-allowed disabled:opacity-50 font-semibold"
+                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container disabled:cursor-not-allowed disabled:opacity-50 font-semibold [@media(pointer:coarse)]:min-h-11"
                   title={
                     r.builtIn
                       ? "Reserved role"
@@ -1065,7 +1044,7 @@ function RolesTab() {
         <code className="font-mono text-on-surface">*</code> grants admin
         access.{" "}
         <code className="font-mono text-on-surface">project:view-all</code>{" "}
-        reveals every project — without it, users only see projects where
+        reveals every project. Without it, users only see projects where
         they're the assigned TAM, or that belong to a customer they own. The
         last full-access admin can't be removed.{" "}
         <code className="font-mono text-on-surface">PENDING</code> is reserved
@@ -1092,7 +1071,7 @@ function RolesTab() {
             onChange={(e) => setNewName(e.target.value)}
             maxLength={50}
             placeholder="e.g. MANAGER"
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm uppercase focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm uppercase focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           />
         </label>
         <div>
@@ -1105,7 +1084,7 @@ function RolesTab() {
           <button
             type="submit"
             disabled={createRole.isPending || !newName.trim()}
-            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-bold text-on-primary hover:bg-primary-container disabled:opacity-60"
+            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60 [@media(pointer:coarse)]:min-h-11"
           >
             {createRole.isPending ? "Adding…" : "Add role"}
           </button>
@@ -1247,7 +1226,7 @@ function SignInTab() {
           <button
             type="button"
             onClick={() => setModalOpen(true)}
-            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container"
+            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary/90 [@media(pointer:coarse)]:min-h-11"
           >
             {connected ? "Manage" : "Connect"}
           </button>
@@ -1264,7 +1243,7 @@ function SignInTab() {
                 {data.googleAllowedDomains.map((d) => (
                   <span
                     key={d}
-                    className="rounded-full bg-primary/10 px-2.5 py-0.5 font-mono text-[12px] text-primary dark:bg-primary/20"
+                    className="rounded-full bg-primary/10 px-2.5 py-0.5 font-mono text-meta text-primary dark:bg-primary/20"
                   >
                     {d}
                   </span>
@@ -1304,7 +1283,7 @@ function ClientIdField({ id }: { id: string }) {
   const [revealed, setRevealed] = useState(false);
   return (
     <div>
-      <div className="mb-1 flex items-center gap-2">
+      <div className="mb-1 flex items-center gap-2 [@media(pointer:coarse)]:gap-4">
         <span className="font-display text-label-caps uppercase text-on-surface-variant">
           Client ID
         </span>
@@ -1319,14 +1298,15 @@ function ClientIdField({ id }: { id: string }) {
           type="button"
           onClick={() => void copyText(id)}
           title="Copy to clipboard"
-          className="text-on-surface-variant hover:text-on-surface"
+          aria-label="Copy to clipboard"
+          className="tap-target text-on-surface-variant hover:text-on-surface"
         >
           <span aria-hidden="true" className="material-symbols-outlined text-[14px]">
             content_copy
           </span>
         </button>
       </div>
-      <div className="break-all rounded-sm bg-surface px-2 py-1.5 font-mono text-[12px] text-on-surface">
+      <div className="break-all rounded-sm bg-surface px-2 py-1.5 font-mono text-meta text-on-surface">
         {revealed ? id : maskClientId(id)}
       </div>
     </div>
@@ -1440,7 +1420,7 @@ function SignInModal({
               type="button"
               onClick={() => setConfirmDisconnect(true)}
               disabled={update.isPending}
-              className="mr-auto rounded-sm px-3 py-1.5 font-display text-xs font-semibold text-error hover:bg-error-container disabled:opacity-50"
+              className="mr-auto rounded-sm px-3 py-1.5 font-display text-xs font-semibold text-error hover:bg-error-container disabled:opacity-50 [@media(pointer:coarse)]:min-h-11"
             >
               Disconnect
             </button>
@@ -1449,7 +1429,7 @@ function SignInModal({
             type="button"
             onClick={onClose}
             disabled={update.isPending}
-            className="rounded-sm px-3 py-1.5 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container"
+            className="rounded-sm px-3 py-1.5 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container [@media(pointer:coarse)]:min-h-11"
           >
             Cancel
           </button>
@@ -1457,7 +1437,7 @@ function SignInModal({
             type="button"
             onClick={save}
             disabled={!dirty || update.isPending}
-            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-50"
+            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary/90 disabled:opacity-50 [@media(pointer:coarse)]:min-h-11"
           >
             {update.isPending ? "Saving…" : "Save"}
           </button>
@@ -1471,14 +1451,14 @@ function SignInModal({
           </summary>
           <ol className="list-decimal space-y-1 border-t border-outline-variant px-6 py-3 text-on-surface-variant">
             <li>
-              Google Cloud Console → APIs & Services → Credentials → Create
-              credentials → <strong>OAuth 2.0 Client ID</strong> (Web application).
+              Google Cloud Console › APIs & Services › Credentials › Create
+              credentials › <strong>OAuth 2.0 Client ID</strong> (Web application).
             </li>
             <li>
               Add your app origins under{" "}
               <strong>Authorized JavaScript origins</strong> (e.g.{" "}
               <span className="font-mono">http://localhost:5173</span> for dev,
-              plus your production URL — no trailing slash, no path).
+              plus your production URL, with no trailing slash and no path).
             </li>
             <li>
               Copy the Client ID (ends in{" "}
@@ -1518,13 +1498,13 @@ function SignInModal({
               placeholder="123456789-abc.apps.googleusercontent.com"
               spellCheck={false}
               autoComplete="off"
-              className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden"
+              className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
             />
           </label>
           <p className="mt-1 text-xs text-on-surface-variant">
             The Client ID is a public identifier (it ships in any Google
             sign-in button). The Client <em>Secret</em> stays in Google Cloud
-            and is never used by Solvro — we verify ID tokens server-side
+            and is never used by Solvro: ID tokens are verified server-side
             against this audience.
           </p>
         </div>
@@ -1542,14 +1522,14 @@ function SignInModal({
             {domains.map((d) => (
               <span
                 key={d}
-                className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 font-mono text-[12px] text-primary dark:bg-primary/20"
+                className="inline-flex items-center gap-1 [@media(pointer:coarse)]:gap-3.5 rounded-full bg-primary/10 px-3 py-1 font-mono text-meta text-primary dark:bg-primary/20"
               >
                 {d}
                 <button
                   type="button"
                   onClick={() => removeDomain(d)}
                   aria-label={`Remove ${d}`}
-                  className="rounded-full p-0.5 text-primary/70 hover:bg-primary/20 hover:text-primary"
+                  className="tap-target rounded-full p-0.5 text-primary hover:bg-primary/20"
                 >
                   <span aria-hidden="true" className="material-symbols-outlined text-[14px]">
                     close
@@ -1571,12 +1551,12 @@ function SignInModal({
               onChange={(e) => setNewDomain(e.target.value)}
               placeholder="example.com"
               maxLength={253}
-              className="flex-1 rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden"
+              className="flex-1 rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
             />
             <button
               type="submit"
               disabled={!newDomain.trim()}
-              className="rounded-sm bg-surface-container-high px-3 py-1.5 font-display text-xs font-semibold text-on-surface hover:bg-surface-container-highest disabled:opacity-50"
+              className="rounded-sm bg-surface-container-high px-3 py-1.5 font-display text-xs font-semibold text-on-surface hover:bg-surface-container-highest disabled:opacity-50 [@media(pointer:coarse)]:min-h-11"
             >
               Add
             </button>
@@ -1659,7 +1639,7 @@ function ProjectsTab() {
       sortingFn: "alphanumeric",
       cell: ({ row }) => (
         <span className="text-on-surface-variant">
-          {row.original.primaryCustomer?.name ?? "—"}
+          {row.original.primaryCustomer?.name ?? EMPTY_VALUE}
         </span>
       ),
       meta: { skeleton: <Skeleton className="h-3.5 w-28" /> },
@@ -1681,7 +1661,7 @@ function ProjectsTab() {
       accessorFn: (row) => row._count.tasks,
       header: ({ column }) => <DataGridColumnHeader column={column} title="Tasks" />,
       cell: ({ row }) => (
-        <span className="font-mono text-[13px] text-on-surface-variant">
+        <span className="font-mono text-xs text-on-surface-variant">
           {row.original._count.tasks}
         </span>
       ),
@@ -1694,7 +1674,7 @@ function ProjectsTab() {
     {
       id: "reassign",
       header: ({ column }) => (
-        <DataGridColumnHeader column={column} title="Current TAM → Reassign" />
+        <DataGridColumnHeader column={column} title="Reassign TAM" />
       ),
       // An interactive <select>, not a single sortable value — same
       // exemption as UsersTab's "role"/"actions" columns.
@@ -1706,7 +1686,7 @@ function ProjectsTab() {
             aria-label={`TAM of ${p.name}`}
             value={p.tamId}
             onChange={(e) => handleReassign(p, Number(e.target.value))}
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1 text-[13px] text-on-surface focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 [@media(pointer:coarse)]:min-h-11"
           >
             {tamCandidates.map((u) => (
               <option key={u.id} value={u.id}>

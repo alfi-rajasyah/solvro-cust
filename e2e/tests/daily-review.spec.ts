@@ -249,7 +249,7 @@ test.describe("Daily Review v2", () => {
     // ------------------------------------------------------------------
     await customerSection.getByRole("button", { name: "Reflection sync" }).click();
     const reflectionDialog = page.getByRole("dialog", {
-      name: new RegExp(`^Reflection sync — ${customerName}, week \\d+$`),
+      name: new RegExp(`^Reflection sync: ${customerName}, week \\d+$`),
     });
     await expect(reflectionDialog).toBeVisible();
     // The blank starter card holds no text, so "Draft from this week" applies

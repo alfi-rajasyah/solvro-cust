@@ -84,7 +84,7 @@ export function OutlineTab() {
           <button
             type="button"
             onClick={() => setModalOpen(true)}
-            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary/90"
           >
             {linked ? "Manage" : "Set address"}
           </button>
@@ -100,7 +100,7 @@ export function OutlineTab() {
               target="_blank"
               rel="noopener noreferrer"
               data-testid="outline-admin-link"
-              className="inline-flex max-w-full items-center gap-1.5 break-all rounded-sm bg-surface px-2 py-1.5 font-mono text-meta text-primary outline-hidden hover:underline focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:min-h-11 inline-flex max-w-full items-center gap-1.5 break-all rounded-sm bg-surface px-2 py-1.5 font-mono text-meta text-primary outline-hidden hover:underline focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               {href}
               <span className="material-symbols-outlined text-base" aria-hidden="true">
@@ -209,7 +209,7 @@ function OutlineSettingsModal({
               type="button"
               onClick={() => setConfirmRemove(true)}
               disabled={update.isPending}
-              className="mr-auto rounded-sm px-3 py-1.5 font-display text-xs font-semibold text-error hover:bg-error-container disabled:opacity-50"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 mr-auto rounded-sm px-3 py-1.5 font-display text-xs font-semibold text-error hover:bg-error-container disabled:opacity-50"
             >
               Remove link
             </button>
@@ -218,7 +218,7 @@ function OutlineSettingsModal({
             type="button"
             onClick={onClose}
             disabled={update.isPending}
-            className="rounded-sm px-3 py-1.5 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm px-3 py-1.5 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container"
           >
             Cancel
           </button>
@@ -226,7 +226,7 @@ function OutlineSettingsModal({
             type="submit"
             form="outline-settings-form"
             disabled={!dirty || update.isPending}
-            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-50"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary/90 disabled:opacity-50"
           >
             {update.isPending ? "Saving…" : "Save"}
           </button>

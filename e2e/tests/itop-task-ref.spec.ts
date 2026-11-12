@@ -178,7 +178,7 @@ test.describe("TaskPanel iTop ticket field", () => {
     expect(request.postDataJSON()).toMatchObject({ itopTicketRef: "R-004512" });
 
     await expect(panel.getByText("Assigned", { exact: true })).toBeVisible();
-    const openLink = panel.getByRole("link", { name: "Open in iTop ↗" });
+    const openLink = panel.getByRole("link", { name: "Open in iTop" });
     await expect(openLink).toBeVisible();
     const href = await openLink.getAttribute("href");
     expect(href).toContain("class=");

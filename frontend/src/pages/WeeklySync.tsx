@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { weekNumberLabel } from "@/lib/dailyReviewStats";
 import { dateToDay } from "@/lib/dateField";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 import { fmtDateTime } from "@/lib/formatDate";
 import { formatWeekRange, parseWeekKey, shiftWeek, weekKeyOf } from "@/lib/isoWeek";
 import { WEEKLY_HEALTH_LABEL } from "@/lib/labels";
@@ -212,7 +213,7 @@ export function WeeklySync() {
               type="button"
               onClick={() => goToWeek(shiftWeek(week, -1))}
               aria-label="Previous week"
-              className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
+              className="tap-target flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_left</span>
             </button>
@@ -226,7 +227,7 @@ export function WeeklySync() {
               type="button"
               onClick={() => goToWeek(shiftWeek(week, 1))}
               aria-label="Next week"
-              className="flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
+              className="tap-target flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_right</span>
             </button>
@@ -238,7 +239,7 @@ export function WeeklySync() {
               onClick={handleCopy}
               disabled={!data}
               data-testid="weekly-sync-copy"
-              className="inline-flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container disabled:opacity-50 [@media(pointer:coarse)]:min-h-11"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-base">content_copy</span>
               Copy as table
@@ -246,7 +247,7 @@ export function WeeklySync() {
             <span
               role="status"
               data-testid="weekly-sync-copied"
-              className="text-[12px] font-semibold text-on-surface-variant"
+              className="text-meta font-semibold text-on-surface-variant"
             >
               {copyMessage ?? ""}
             </span>
@@ -260,7 +261,7 @@ export function WeeklySync() {
           data-testid="weekly-sync-tab-midweek"
           onClick={() => goToTab("midweek")}
           className={[
-            "-mb-px border-b-2 px-1 pb-3 font-display text-sm transition-colors",
+            "tap-target -mb-px border-b-2 px-1 pb-3 font-display text-sm transition-colors",
             tab === "midweek"
               ? "border-primary text-primary"
               : "border-transparent text-on-surface-variant hover:text-on-surface",
@@ -273,7 +274,7 @@ export function WeeklySync() {
           data-testid="weekly-sync-tab-reflection"
           onClick={() => goToTab("reflection")}
           className={[
-            "-mb-px border-b-2 px-1 pb-3 font-display text-sm transition-colors",
+            "tap-target -mb-px border-b-2 px-1 pb-3 font-display text-sm transition-colors",
             tab === "reflection"
               ? "border-primary text-primary"
               : "border-transparent text-on-surface-variant hover:text-on-surface",
@@ -355,21 +356,21 @@ export function WeeklySync() {
           )}
 
           {noUpdateCount > 0 && (
-            <p data-testid="weekly-sync-hidden" className="text-[13px] text-on-surface-variant">
+            <p data-testid="weekly-sync-hidden" className="text-xs text-on-surface-variant">
               {noUpdateCount} {noUpdateCount === 1 ? "customer has" : "customers have"} no {tabLabel} update this
               week.{" "}
               <button
                 type="button"
                 onClick={() => setShowAll((v) => !v)}
                 data-testid="weekly-sync-hidden-toggle"
-                className="text-[12px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center text-meta font-semibold text-primary hover:underline [@media(pointer:coarse)]:min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
               >
                 {showAll ? "Hide them" : "Show them"}
               </button>
             </p>
           )}
 
-          <p className="text-[13px] text-on-surface-variant">
+          <p className="text-xs text-on-surface-variant">
             Click a row to open its {tabLabel} sync form. Copy as table pastes into Google Docs as a real table.
           </p>
         </>
@@ -474,7 +475,7 @@ function TextCell({
   const trimmed = value?.trim();
   return (
     <Cell border={border} label={label}>
-      {trimmed ? value : <span className="text-on-surface-variant">—</span>}
+      {trimmed ? value : <span className="text-on-surface-variant">{EMPTY_VALUE}</span>}
     </Cell>
   );
 }
@@ -579,7 +580,7 @@ function MidweekBlock({ customer, gridColsClass, clickable, onOpen }: MidweekBlo
               {isFirst && (
                 <>
                   <div className="font-semibold text-on-surface">{customer.name}</div>
-                  <div className="mt-0.5 text-[12px] text-on-surface-variant">{category ?? "—"}</div>
+                  <div className="mt-0.5 text-meta text-on-surface-variant">{category ?? EMPTY_VALUE}</div>
                 </>
               )}
             </Cell>
@@ -590,7 +591,7 @@ function MidweekBlock({ customer, gridColsClass, clickable, onOpen }: MidweekBlo
                     {WEEKLY_HEALTH_LABEL[health]}
                   </span>
                 ) : (
-                  <span className="text-on-surface-variant">—</span>
+                  <span className="text-on-surface-variant">{EMPTY_VALUE}</span>
                 ))}
             </Cell>
             <HighlightCell highlight={highlight} border={rowBorder} />
@@ -673,7 +674,7 @@ function ReflectionBlock({ customer, gridColsClass, clickable, onOpen }: Reflect
               {isFirst && (
                 <>
                   <div className="font-semibold text-on-surface">{customer.name}</div>
-                  <div className="mt-0.5 text-[12px] text-on-surface-variant">{category ?? "—"}</div>
+                  <div className="mt-0.5 text-meta text-on-surface-variant">{category ?? EMPTY_VALUE}</div>
                 </>
               )}
             </Cell>
@@ -684,7 +685,7 @@ function ReflectionBlock({ customer, gridColsClass, clickable, onOpen }: Reflect
                     {WEEKLY_HEALTH_LABEL[health]}
                   </span>
                 ) : (
-                  <span className="text-on-surface-variant">—</span>
+                  <span className="text-on-surface-variant">{EMPTY_VALUE}</span>
                 ))}
             </Cell>
             <AchievementTitleCell achievement={achievement} border={rowBorder} />

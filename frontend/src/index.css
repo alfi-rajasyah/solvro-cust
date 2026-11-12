@@ -181,9 +181,10 @@
 
 @layer base {
   /* Light theme — off-white surfaces, Elitery Green primary darkened to
-     #267937 for WCAG AA contrast (4.5:1) as small text on white, the page
-     surface, panel surfaces and its own 10% chip tint, and for white text on
-     it (#2d9042 until 2026-10-23 reached only 3.4–4.05). Values from DESIGN.md frontmatter
+     #1f7533 so it holds WCAG AA (4.5:1) as text on every surface it sits on,
+     down to surface-container-high, the hover tint (was #267937, 4.25:1
+     there; before 2026-10-23 #2d9042). lib/tokenContrast.test.ts pins it
+     (docs/archive/plans/antislop-port.md). Values from DESIGN.md frontmatter
      light overrides; tokens the spec omits for light (inverse-*, *-container,
      secondary/tertiary, error family) are derived from the same palette —
      see CHANGELOG. */
@@ -202,7 +203,7 @@
     --inverse-on-surface: 240 237 232;
     --outline: 154 154 151;
     --outline-variant: 208 208 204;
-    --primary: 38 121 55;
+    --primary: 31 117 51;
     --on-primary: 255 255 255;
     --primary-container: 200 230 207;
     --on-primary-container: 15 43 22;
@@ -306,10 +307,88 @@
   .dark select {
     color-scheme: dark;
   }
+
+  /* Tailwind v4 leaves buttons on the default arrow. Every enabled control
+     shows a pointer and every disabled one shows not-allowed, set once here
+     so no component has to remember (a utility such as cursor-text still
+     wins, since utilities sit above the base layer). A drag-and-drop
+     wrapper is left out of the disabled rule: dnd-kit marks a card
+     aria-disabled when dragging is off, and the card can still be opened. */
+  button,
+  summary,
+  select,
+  label[for],
+  label:has(> input[type="checkbox"], > input[type="radio"]),
+  input[type="checkbox"],
+  input[type="radio"],
+  [role="button"],
+  [role="tab"],
+  [role="switch"],
+  [role="checkbox"],
+  [role="radio"],
+  [role="menuitem"],
+  [role="option"] {
+    cursor: pointer;
+  }
+  button:disabled,
+  select:disabled,
+  input[type="checkbox"]:disabled,
+  input[type="radio"]:disabled,
+  [aria-disabled="true"]:not([aria-roledescription="sortable"]) {
+    cursor: not-allowed;
+  }
 }
 
 @layer components {
   .material-symbols-outlined {
     font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  }
+}
+
+/* Touch target: on touch input (and only there) a small control gets a hit
+   area of at least 44px, centred on it, without changing how it looks or
+   how the row around it lays out. Desktop density is untouched. Put it on
+   the control itself; do not combine it with `absolute`/`fixed` on the same
+   element or with an `after:` utility, since it claims both
+   (docs/archive/plans/antislop-port.md). */
+@utility tap-target {
+  @media (pointer: coarse) {
+    position: relative;
+    &::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
+  }
+}
+
+/* Reduced motion (docs/archive/plans/antislop-port.md): people who ask the OS for less motion get none — no transitions, no looping
+   or entrance animations, no smooth scrolling. docs/DESIGN.md has no motion
+   rule of its own, so this is the standard blanket form. Unlayered and
+   !important on purpose: it must beat every utility, including vendored ones. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Loading indicators are the exception: a frozen spinner reads as a hung
+     page. The spinner keeps turning, slowly (rotation, no flashing); the
+     skeleton pulse becomes a static tint, since the placeholder shape and the
+     "Loading…" live region already say "loading" without an opacity fade */
+  .animate-spin {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
+  }
+  .animate-pulse {
+    animation: none !important;
   }
 }

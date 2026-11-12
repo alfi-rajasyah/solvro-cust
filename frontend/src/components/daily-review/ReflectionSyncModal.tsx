@@ -203,7 +203,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
       return;
     }
     if (rows.length > MAX_ACHIEVEMENTS) {
-      setError("20 achievements max — remove some before saving.");
+      setError("20 achievements max. Remove some before saving.");
       return;
     }
     save.mutate(
@@ -242,7 +242,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
 
   const fieldId = (name: string) => `reflection-${customer.id}-${name}`;
   const linkClass =
-    "text-[12px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+    "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
   // Modal.tsx registers one document-level Escape listener per open
   // instance with no stopPropagation, so a single Escape press would
@@ -254,7 +254,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
     <Modal
       open
       onClose={save.isPending || confirmRedraft || confirmReopen ? () => {} : onClose}
-      title={`Reflection sync — ${customer.name}, week ${weekNumber}`}
+      title={`Reflection sync: ${customer.name}, week ${weekNumber}`}
       widthClass="max-w-3xl"
       footer={
         isDone ? (
@@ -263,7 +263,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
               type="button"
               onClick={onClose}
               disabled={save.isPending}
-              className="rounded-lg border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
             >
               Cancel
             </button>
@@ -271,7 +271,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
               type="button"
               onClick={() => setConfirmReopen(true)}
               disabled={save.isPending}
-              className="rounded-lg border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
             >
               Reopen as draft
             </button>
@@ -279,7 +279,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
               type="button"
               onClick={primarySubmit}
               disabled={primaryDisabled}
-              className="rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {save.isPending ? "Saving…" : "Save"}
             </button>
@@ -290,7 +290,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
               type="button"
               onClick={onClose}
               disabled={save.isPending}
-              className="rounded-lg border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
             >
               Cancel
             </button>
@@ -298,7 +298,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
               type="button"
               onClick={() => submit("DRAFT")}
               disabled={save.isPending}
-              className="rounded-lg border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
             >
               Save draft
             </button>
@@ -306,7 +306,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
               type="button"
               onClick={primarySubmit}
               disabled={primaryDisabled}
-              className="rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {save.isPending ? "Saving…" : "Mark done"}
             </button>
@@ -327,7 +327,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
               Health
             </p>
             <HealthButtonGroup value={state.health} onChange={(health) => patch({ health })} />
-            <p className="mt-1 text-[12px] text-on-surface-variant">
+            <p className="mt-1 text-meta text-on-surface-variant">
               Set on Wednesday. Change it here if the week ended differently.
             </p>
           </div>
@@ -371,7 +371,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
                       type="button"
                       onClick={() => removeAchievement(a.key)}
                       aria-label={`Remove achievement ${n}`}
-                      className="text-[12px] font-semibold text-on-surface-variant hover:text-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                      className="tap-target text-meta font-semibold text-on-surface-variant hover:text-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                     >
                       Remove
                     </button>
@@ -461,7 +461,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
                 type="button"
                 onClick={addAchievement}
                 disabled={state.achievements.length >= MAX_ACHIEVEMENTS}
-                className="flex items-center gap-1.5 rounded-sm border border-outline-variant px-2.5 py-1.5 text-[12px] font-semibold text-on-surface-variant hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
+                className="[@media(pointer:coarse)]:min-h-11 flex items-center gap-1.5 rounded-sm border border-outline-variant px-2.5 py-1.5 text-meta font-semibold text-on-surface-variant hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
               >
                 <span className="material-symbols-outlined text-[16px]" aria-hidden="true">
                   add

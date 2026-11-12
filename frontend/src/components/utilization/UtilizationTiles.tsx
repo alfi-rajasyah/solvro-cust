@@ -66,7 +66,7 @@ export function UtilizationTiles({
         <p className="text-xl font-bold text-on-surface" data-testid="utilization-tile-unassigned">
           {formatHours(tiles.unassignedHours)} h
         </p>
-        <p className="text-[12px] text-on-surface-variant">internal, no organisation on the entry</p>
+        <p className="text-meta text-on-surface-variant">internal, no organisation on the entry</p>
       </TileCard>
     </div>
   );

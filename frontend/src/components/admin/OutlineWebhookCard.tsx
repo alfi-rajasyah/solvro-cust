@@ -67,7 +67,7 @@ export function OutlineWebhookCard({ settings }: { settings: OutlineAdminSetting
           onClick={() => (settings.webhookSecretSet ? setConfirmOpen(true) : void generate())}
           disabled={rotate.isPending}
           data-testid="outline-rotate-secret"
-          className="rounded-sm border border-outline-variant px-3 py-1.5 font-display text-xs font-semibold text-on-surface hover:bg-surface-container disabled:opacity-50"
+          className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-3 py-1.5 font-display text-xs font-semibold text-on-surface hover:bg-surface-container disabled:opacity-50"
         >
           {rotate.isPending
             ? "Generating…"
@@ -84,7 +84,7 @@ export function OutlineWebhookCard({ settings }: { settings: OutlineAdminSetting
         <code className="font-mono text-meta">documents.title_change</code>,{" "}
         <code className="font-mono text-meta">documents.archive</code>,{" "}
         <code className="font-mono text-meta">documents.delete</code>. Solvro keeps only the page
-        id, title and the Solvro links it finds — never the page text. If Outline and Solvro run
+        id, title and the Solvro links it finds, never the page text. If Outline and Solvro run
         on the same private network, set{" "}
         <code className="font-mono text-meta">ALLOWED_PRIVATE_IP_ADDRESSES</code> for Outline,
         which refuses private addresses by default.
@@ -101,7 +101,7 @@ export function OutlineWebhookCard({ settings }: { settings: OutlineAdminSetting
           <AlertDescription>
             <p>
               {health === "never"
-                ? "No delivery yet — add the webhook in Outline with the URL and signing secret, then edit any page to test it."
+                ? "No delivery yet. Add the webhook in Outline with the URL and signing secret, then edit any page to test it."
                 : WEBHOOK_STALE_COPY}
             </p>
           </AlertDescription>
@@ -149,7 +149,7 @@ export function OutlineWebhookCard({ settings }: { settings: OutlineAdminSetting
             type="button"
             onClick={closeSecret}
             data-testid="outline-secret-done"
-            className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary/90"
           >
             Done
           </button>

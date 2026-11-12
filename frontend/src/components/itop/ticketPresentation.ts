@@ -7,6 +7,7 @@
 // exact copy this is reproducing ("TTR breached", "Paused", "TTR 3 h left",
 // "2 d" / "5 h" / "40 min").
 import type { ItopTicketRow } from "@/lib/queries";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 
 // Matches StatusChip.tsx's private `Tone` union structurally (that type
 // isn't exported) — every literal here is one `Chip` already accepts.
@@ -69,9 +70,9 @@ function unit(n: number, label: string): string {
  * nullable — see `ItopTicketRow.startDate`) rather than "NaN d" or a
  * garbage `new Date(null)` epoch-1970 age. */
 export function ageLabel(startDate: string | null, now: Date = new Date()): string {
-  if (!startDate) return "—";
+  if (!startDate) return EMPTY_VALUE;
   const then = new Date(startDate).getTime();
-  if (Number.isNaN(then)) return "—";
+  if (Number.isNaN(then)) return EMPTY_VALUE;
   const minutes = Math.max(0, Math.floor((now.getTime() - then) / 60_000));
   if (minutes < 60) return unit(minutes, "min");
   const hours = Math.floor(minutes / 60);
@@ -103,9 +104,9 @@ export function slaLabel(ticket: SlaTicket, now: Date = new Date()): string {
   if (ticket.slaTtrPassed) return "TTR breached";
   if (ticket.slaTtoPassed) return "TTO breached";
   if (ticket.status === "pending") return "Paused";
-  if (!ticket.ttr) return "—";
+  if (!ticket.ttr) return EMPTY_VALUE;
   const diffMs = new Date(ticket.ttr).getTime() - now.getTime();
-  if (diffMs <= 0) return "—";
+  if (diffMs <= 0) return EMPTY_VALUE;
   return `TTR ${durationLeft(diffMs)} left`;
 }
 
@@ -128,7 +129,7 @@ export function priorityLabel(code: string): string {
 
 type UrlTicket = Pick<ItopTicketRow, "id" | "class">;
 
-/** Builds the "Open in iTop ↗" deep link. Trailing slash(es) on `baseUrl`
+/** Builds the "Open in iTop" deep link. Trailing slash(es) on `baseUrl`
  * are stripped so the URL never doubles up
  * (`https://itop.test//pages/...`). */
 export function itopTicketUrl(baseUrl: string, ticket: UrlTicket): string {

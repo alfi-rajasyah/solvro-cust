@@ -112,6 +112,7 @@ export function OperationsCard({ customer, today, days, currentUserId, canDelete
           canDeleteAny={canDeleteAny}
           placeholder="What happened outside a project today?"
           ariaLabel={`Operations note for ${customer.name}`}
+          fieldLabel="Operations note"
           rowsId={`week-rows-customer-${customer.id}`}
           extraFromNote={(note) => ({ title: note.title })}
           extraValid={(extra) => extra.title.trim().length > 0}

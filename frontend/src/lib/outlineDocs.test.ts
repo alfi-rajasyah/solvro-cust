@@ -83,9 +83,9 @@ describe("placeUnderOptions", () => {
 describe("defaultDocTitle", () => {
   const now = new Date("2026-10-09T10:00:00Z");
   it("is '<template> — <date>' and falls back for a blank page", () => {
-    expect(defaultDocTitle("Meeting notes", now)).toBe("Meeting notes — 9 Oct");
-    expect(defaultDocTitle(null, now)).toBe("New page — 9 Oct");
-    expect(defaultDocTitle("  ", now)).toBe("New page — 9 Oct");
+    expect(defaultDocTitle("Meeting notes", now)).toBe("Meeting notes, 9 Oct");
+    expect(defaultDocTitle(null, now)).toBe("New page, 9 Oct");
+    expect(defaultDocTitle("  ", now)).toBe("New page, 9 Oct");
   });
   describe("uses the local day, not the UTC day", () => {
     const originalTz = process.env.TZ;
@@ -97,16 +97,16 @@ describe("defaultDocTitle", () => {
       process.env.TZ = "Asia/Bangkok";
       // 02:00 local on 9 Oct is 19:00Z on 8 Oct.
       const early = new Date("2026-10-08T19:00:00Z");
-      expect(defaultDocTitle("Meeting notes", early)).toBe("Meeting notes — 9 Oct");
+      expect(defaultDocTitle("Meeting notes", early)).toBe("Meeting notes, 9 Oct");
     });
     it("late evening in UTC-8 is still that local day", () => {
       process.env.TZ = "America/Los_Angeles";
       // 21:00 local on 9 Oct is 04:00Z on 10 Oct.
       const late = new Date("2026-10-10T04:00:00Z");
-      expect(defaultDocTitle(null, late)).toBe("New page — 9 Oct");
+      expect(defaultDocTitle(null, late)).toBe("New page, 9 Oct");
     });
     it("a local-time date is its own day in any zone", () => {
-      expect(defaultDocTitle(null, new Date(2026, 9, 9, 2, 0))).toBe("New page — 9 Oct");
+      expect(defaultDocTitle(null, new Date(2026, 9, 9, 2, 0))).toBe("New page, 9 Oct");
     });
   });
   it("never exceeds the 255-character limit", () => {

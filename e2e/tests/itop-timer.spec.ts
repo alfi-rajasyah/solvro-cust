@@ -241,7 +241,7 @@ test.describe("Ticket timer", () => {
     );
     await panel.getByRole("button", { name: "Stop" }).click();
     await postRequest;
-    await expect(panel.getByText("Less than a minute — discard instead?")).toHaveCount(0);
+    await expect(panel.getByText("Less than a minute: discard instead?")).toHaveCount(0);
 
     expect(timePostBody).not.toBeNull();
     expect(typeof timePostBody!.startedAt).toBe("string");
@@ -296,7 +296,7 @@ test.describe("Ticket timer", () => {
 
     // Stop immediately — well under the backend's 1-minute floor.
     await panel.getByRole("button", { name: "Stop" }).click();
-    await expect(panel.getByText("Less than a minute — discard instead?")).toBeVisible();
+    await expect(panel.getByText("Less than a minute: discard instead?")).toBeVisible();
 
     // "Keep running" backs out of the confirm without logging or clearing —
     // the clock is still visible and running afterwards.
@@ -306,7 +306,7 @@ test.describe("Ticket timer", () => {
 
     // Stop again, this time follow through with Discard.
     await panel.getByRole("button", { name: "Stop" }).click();
-    await expect(panel.getByText("Less than a minute — discard instead?")).toBeVisible();
+    await expect(panel.getByText("Less than a minute: discard instead?")).toBeVisible();
     await panel.getByRole("button", { name: "Discard" }).click();
     await page.waitForTimeout(300);
 
@@ -352,7 +352,7 @@ test.describe("Ticket timer", () => {
     // Past the backend's 24h ceiling on a loggable entry.
     await backdateStoredTimer(page, 25 * 3600);
 
-    await expect(panel.getByText("Timer expired — discard")).toBeVisible();
+    await expect(panel.getByText("Timer expired: discard")).toBeVisible();
     await expect(panel.getByRole("button", { name: "Stop" })).toHaveCount(0);
 
     await panel.getByRole("button", { name: "Discard" }).click();

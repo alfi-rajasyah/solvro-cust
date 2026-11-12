@@ -180,7 +180,7 @@ test.describe("Weekly Sync page", () => {
     // ------------------------------------------------------------------
     await row.click();
     const dialog = page.getByRole("dialog", {
-      name: new RegExp(`^Reflection sync — ${customer.name}, week \\d+$`),
+      name: new RegExp(`^Reflection sync: ${customer.name}, week \\d+$`),
     });
     await expect(dialog).toBeVisible();
 
@@ -261,7 +261,7 @@ test.describe("Weekly Sync page", () => {
     await expect(row).toBeVisible();
     await row.click();
     const dialog = page.getByRole("dialog", {
-      name: new RegExp(`^Reflection sync — ${customer.name}, week \\d+$`),
+      name: new RegExp(`^Reflection sync: ${customer.name}, week \\d+$`),
     });
     await expect(dialog).toBeVisible();
 
@@ -341,7 +341,7 @@ test.describe("Weekly Sync page", () => {
     // ------------------------------------------------------------------
     await row.click();
     const dialog = page.getByRole("dialog", {
-      name: new RegExp(`^Mid-week sync — ${customer.name}, week \\d+$`),
+      name: new RegExp(`^Mid-week sync: ${customer.name}, week \\d+$`),
     });
     await expect(dialog).toBeVisible();
 

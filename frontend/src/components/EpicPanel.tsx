@@ -169,7 +169,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container-high"
+            className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container-high"
             aria-label="Close"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
@@ -199,7 +199,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container-high"
+            className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container-high"
             aria-label="Close"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
@@ -229,7 +229,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
         <button
           type="button"
           onClick={onClose}
-          className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container-high"
+          className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container-high"
           aria-label="Close"
         >
           <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
@@ -246,7 +246,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
             disabled={!canEdit}
             aria-label="Epic status"
             onChange={(e) => patch({ status: e.target.value as TaskStatus })}
-            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden disabled:cursor-default"
+            className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
           >
             {STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -265,7 +265,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
             onChange={(e) =>
               patch({ ownerId: e.target.value === "" ? null : Number(e.target.value) })
             }
-            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden disabled:cursor-default"
+            className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
           >
             <option value="">Unassigned</option>
             {(users ?? []).map((u) => (
@@ -294,7 +294,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
                 type="button"
                 disabled={!canEdit}
                 onClick={() => setEditingDates(true)}
-                className="rounded-sm px-1 py-0.5 text-left text-on-surface hover:bg-surface-container-high disabled:cursor-default"
+                className="[@media(pointer:coarse)]:min-h-11 rounded-sm px-1 py-0.5 text-left text-on-surface hover:bg-surface-container-high disabled:cursor-default"
               >
                 {fmtRange(epic.startDate, epic.dueDate)}
               </button>
@@ -318,7 +318,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
             rows={4}
             maxLength={2000}
             placeholder="What does this epic cover?"
-            className="w-full resize-none rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant/80 focus:border-primary focus:outline-hidden disabled:cursor-default"
+            className="w-full resize-none rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant/80 focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
           />
         </div>
 
@@ -337,13 +337,13 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
           ) : (
             <ul className="space-y-1">
               {epic.tasks.map((t) => (
-                <li key={t.id} className="flex items-center gap-2 rounded-sm px-1 py-1 text-[13px]">
+                <li key={t.id} className="flex items-center gap-2 rounded-sm px-1 py-1 text-xs">
                   <button
                     type="button"
                     onClick={() => openTask(t.id)}
                     title={t.title}
                     className={[
-                      "min-w-0 flex-1 truncate rounded-sm text-left hover:text-primary outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring",
+                      "[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 truncate rounded-sm text-left hover:text-primary outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring",
                       t.status === "DONE" ? "text-on-surface-variant line-through" : "text-on-surface",
                     ].join(" ")}
                   >
@@ -365,7 +365,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
                 placeholder="Add story…"
                 maxLength={200}
                 aria-label="Add story"
-                className="flex-1 border-none bg-transparent text-[13px] text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden"
+                className="[@media(pointer:coarse)]:min-h-11 flex-1 border-none bg-transparent text-xs text-on-surface rounded-sm outline-hidden placeholder:text-on-surface-variant/80 focus-visible:ring-2 focus-visible:ring-primary/30"
               />
             </form>
           )}

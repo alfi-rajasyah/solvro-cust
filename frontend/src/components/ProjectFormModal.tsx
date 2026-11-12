@@ -10,6 +10,7 @@ import { saveErrorMessage } from "@/lib/ownerAccess";
 import { PROJECT_STATUS_LABEL, TASK_CATEGORY_GROUP_LABEL } from "@/lib/labels";
 import { STATUS_TONE_DOT_CLASS } from "@/components/StatusChip";
 import { groupStatusDefs } from "@/lib/taskStatuses";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 import {
   type ProjectCustomerLink,
   type ProjectDetail,
@@ -235,7 +236,7 @@ export function ProjectFormModal({
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="rounded-lg border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+            className="[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
           >
             Cancel
           </button>
@@ -243,7 +244,7 @@ export function ProjectFormModal({
             type="submit"
             form="project-form"
             disabled={submitting}
-            className="rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60"
+            className="[@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60"
           >
             {submitting ? "Saving…" : isEdit ? "Save changes" : "Create project"}
           </button>
@@ -258,7 +259,7 @@ export function ProjectFormModal({
             onChange={(e) => setName(e.target.value)}
             maxLength={200}
             autoFocus
-            className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 focus:ring-2 focus:ring-primary/30"
           />
         </Field>
 
@@ -268,7 +269,7 @@ export function ProjectFormModal({
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
             maxLength={2000}
-            className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 focus:ring-2 focus:ring-primary/30"
           />
         </Field>
 
@@ -281,7 +282,7 @@ export function ProjectFormModal({
           error={outlineUrlError}
           noun="project"
           inputRef={outlineUrlInput}
-          inputClassName="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+          inputClassName="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 focus:ring-2 focus:ring-primary/30"
         />
 
         <CustomersField
@@ -298,7 +299,7 @@ export function ProjectFormModal({
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as ProjectStatus)}
-            className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 focus:ring-2 focus:ring-primary/30"
           >
             {PROJECT_STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -313,7 +314,7 @@ export function ProjectFormModal({
             <select
               value={tamId === "" ? "" : String(tamId)}
               onChange={(e) => setTamId(e.target.value === "" ? "" : Number(e.target.value))}
-              className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+              className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 focus:ring-2 focus:ring-primary/30"
             >
               <option value="">Defaults to current user</option>
               {tams.map((u) => (
@@ -325,7 +326,7 @@ export function ProjectFormModal({
           </Field>
         )}
 
-        <Field label="WIP limit — leave empty for none">
+        <Field label="WIP limit (leave empty for none)">
           <div className="space-y-3">
             {groupStatusDefs(statusDefs).map((group) => (
               <div key={group.category}>
@@ -352,8 +353,8 @@ export function ProjectFormModal({
                         onChange={(e) =>
                           setWipLimits((prev) => ({ ...prev, [String(def.id)]: e.target.value }))
                         }
-                        placeholder="—"
-                        className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+                        placeholder={EMPTY_VALUE}
+                        className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 focus:ring-2 focus:ring-primary/30"
                       />
                     </label>
                   ))}
@@ -363,12 +364,12 @@ export function ProjectFormModal({
           </div>
         </Field>
 
-        <label className="flex cursor-pointer items-start gap-2">
+        <label className="flex [@media(pointer:coarse)]:min-h-11 cursor-pointer items-start gap-2">
           <input
             type="checkbox"
             checked={excludeFromPortfolio}
             onChange={(e) => setExcludeFromPortfolio(e.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+            className="mt-0.5 h-4 w-4 [@media(pointer:coarse)]:h-6 [@media(pointer:coarse)]:w-6 shrink-0 accent-primary"
           />
           <span className="min-w-0">
             <span className="block text-label-caps uppercase text-on-surface-variant">
@@ -412,7 +413,7 @@ function Field({
 }
 
 const LINK_ACTION_CLASS =
-  "rounded-sm font-display text-meta font-semibold text-primary hover:underline outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
+  "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm font-display text-meta font-semibold text-primary hover:underline outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
 
 // "Customers" list of Triage 05 (docs/archive/plans/multi-customer-projects.md):
 // a primary radio, the name, a Primary chip or "Set as primary", remove, and
@@ -441,9 +442,10 @@ function CustomersField({
         Customers<span className="ml-1 text-error">*</span>
       </legend>
       {links.length > 0 && (
-        <ul className="divide-y divide-outline-variant/60 rounded-lg border border-outline-variant bg-surface-container-lowest">
+        <ul className="divide-y divide-outline-variant/60 rounded-sm border border-outline-variant bg-surface-container-lowest">
           {links.map((l) => (
-            <li key={l.id} className="flex items-center gap-3 px-3 py-2" data-testid="project-customer-row">
+            <li key={l.id} className="flex [@media(pointer:coarse)]:min-h-11 items-center gap-3 px-3 py-2" data-testid="project-customer-row">
+              <label className="contents [@media(pointer:coarse)]:grid [@media(pointer:coarse)]:size-11 [@media(pointer:coarse)]:cursor-pointer [@media(pointer:coarse)]:place-items-center">
               <input
                 type="radio"
                 name="primary-customer"
@@ -451,8 +453,9 @@ function CustomersField({
                 disabled={readOnly}
                 onChange={() => onChange(setPrimaryLink(links, l.id))}
                 aria-label={`Make ${l.name} the primary customer`}
-                className="h-4 w-4 shrink-0 accent-primary"
+                className="h-4 w-4 [@media(pointer:coarse)]:h-6 [@media(pointer:coarse)]:w-6 shrink-0 accent-primary"
               />
+              </label>
               <span className="min-w-0 flex-1 truncate text-sm text-on-surface">{l.name}</span>
               {l.isPrimary ? (
                 <PrimaryChip />
@@ -474,7 +477,7 @@ function CustomersField({
                   disabled={links.length === 1}
                   aria-label={`Remove ${l.name}`}
                   title={links.length === 1 ? "A project needs at least one customer" : undefined}
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex h-6 w-6 [@media(pointer:coarse)]:size-11 shrink-0 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <span aria-hidden="true" className="material-symbols-outlined text-[18px]">
                     close
@@ -498,11 +501,11 @@ function CustomersField({
             }}
             aria-label="Add customer"
             disabled={available.length === 0}
-            className="min-w-0 flex-1 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-70"
+            className="[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-70"
           >
             <option value="">
               {noCustomersExist
-                ? "No customers — create one in the Customers tab first"
+                ? "No customers yet. Create one in the Customers tab first"
                 : links.length === 0
                   ? "Select customer…"
                   : "Add customer…"}

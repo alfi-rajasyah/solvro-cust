@@ -65,7 +65,7 @@ const CALENDAR_LEGEND = [
 ];
 
 const DEFAULT_UNSCHEDULED_NOTE = (n: number): string =>
-  `${n} project${n === 1 ? "" : "s"} ha${n === 1 ? "s" : "ve"} no scheduled dates — see List view.`;
+  `${n} project${n === 1 ? "" : "s"} ha${n === 1 ? "s" : "ve"} no scheduled dates. See List view.`;
 
 export function PortfolioCalendar({
   projects,
@@ -109,20 +109,20 @@ export function PortfolioCalendar({
             type="button"
             onClick={() => setYear((y) => y - 1)}
             aria-label="Previous year"
-            className="flex h-6 w-6 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+            className="tap-target flex h-6 w-6 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-[17px]">
               chevron_left
             </span>
           </button>
-          <span className="min-w-[4ch] text-center font-mono text-[13px] font-semibold text-on-surface">
+          <span className="min-w-[4ch] text-center font-mono text-xs font-semibold text-on-surface">
             {year}
           </span>
           <button
             type="button"
             onClick={() => setYear((y) => y + 1)}
             aria-label="Next year"
-            className="flex h-6 w-6 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+            className="tap-target flex h-6 w-6 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-[17px]">
               chevron_right
@@ -233,7 +233,7 @@ export function PortfolioCalendar({
                       >
                         <Link
                           to={`/projects/${p.id}`}
-                          className="font-semibold text-primary hover:underline"
+                          className="font-semibold text-primary hover:underline [@media(pointer:coarse)]:inline-block [@media(pointer:coarse)]:py-3"
                         >
                           {p.name}
                         </Link>
@@ -242,7 +242,7 @@ export function PortfolioCalendar({
                             {" · "}
                             <Link
                               to={`/customers/${customer.id}`}
-                              className="hover:text-primary hover:underline"
+                              className="hover:text-primary hover:underline [@media(pointer:coarse)]:inline-block [@media(pointer:coarse)]:py-3"
                             >
                               {customer.name}
                             </Link>

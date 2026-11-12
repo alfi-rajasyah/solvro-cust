@@ -32,7 +32,7 @@ export function NotificationBell() {
         aria-label={label}
         title="Notifications"
         data-testid="notifications-button"
-        className={`relative flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface ${FOCUS_RING}`}
+        className={`tap-target relative flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface ${FOCUS_RING}`}
       >
         <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
           notifications
@@ -87,7 +87,7 @@ function NotificationList({
           type="button"
           onClick={() => markAll.mutate()}
           disabled={unreadCount === 0 || markAll.isPending}
-          className={`rounded-sm text-xs font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:text-on-surface-variant disabled:no-underline ${FOCUS_RING}`}
+          className={`tap-target rounded-sm text-xs font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:text-on-surface-variant disabled:no-underline ${FOCUS_RING}`}
         >
           Mark all as read
         </button>
@@ -110,7 +110,7 @@ function NotificationList({
             <button
               type="button"
               onClick={() => void refetch()}
-              className={`rounded-sm font-semibold text-primary hover:underline ${FOCUS_RING}`}
+              className={`tap-target rounded-sm font-semibold text-primary hover:underline ${FOCUS_RING}`}
             >
               Try again
             </button>
@@ -138,7 +138,7 @@ function NotificationList({
                   type="button"
                   onClick={() => void fetchNextPage()}
                   disabled={isFetchingNextPage}
-                  className={`rounded-lg border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 focus-visible:border-primary ${FOCUS_RING}`}
+                  className={`rounded-sm border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 focus-visible:border-primary ${FOCUS_RING}`}
                 >
                   {isFetchingNextPage ? "Loading…" : "Load more"}
                 </button>
@@ -168,7 +168,7 @@ function NotificationRow({
         onClick={() => onOpen(n)}
         data-testid="notification-item"
         data-unread={unread ? "true" : "false"}
-        className={`flex w-full items-start gap-2.5 px-3 py-2.5 text-left hover:bg-surface-container-high ${FOCUS_RING} focus-visible:ring-inset`}
+        className={`[@media(pointer:coarse)]:min-h-11 flex w-full items-start gap-2.5 px-3 py-2.5 text-left hover:bg-surface-container-high ${FOCUS_RING} focus-visible:ring-inset`}
       >
         <span className="mt-0.5 shrink-0">
           {n.event.actor ? (

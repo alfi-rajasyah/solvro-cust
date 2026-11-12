@@ -17,6 +17,8 @@ import {
   useProjectEpics,
   useUpdateEpic,
 } from "@/lib/queries";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
+import { TOOLBAR_BUTTON_PRIMARY } from "@/lib/utils";
 
 /**
  * Epics tab (docs/archive/plans/epics-spec.md §6/§7 T3): a table of a project's
@@ -170,7 +172,7 @@ export function ProjectEpics() {
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="inline-flex items-center gap-2 rounded-sm bg-primary px-3 py-1.5 font-display text-xs font-bold text-on-primary hover:bg-primary-container"
+            className={TOOLBAR_BUTTON_PRIMARY}
           >
             <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
             Add epic
@@ -197,12 +199,12 @@ export function ProjectEpics() {
             placeholder="Epic title"
             maxLength={200}
             aria-label="New epic title"
-            className="flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-sm text-on-surface focus:border-primary focus:outline-hidden"
+            className="flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           />
           <button
             type="submit"
             disabled={createEpic.isPending || !newTitle.trim()}
-            className="rounded-sm bg-primary px-3 py-1.5 font-display text-xs font-bold text-on-primary hover:bg-primary-container disabled:opacity-50"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm bg-primary px-3 py-1.5 font-display text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-50"
           >
             Create
           </button>
@@ -212,7 +214,7 @@ export function ProjectEpics() {
               setCreating(false);
               setNewTitle("");
             }}
-            className="font-display text-xs font-semibold text-on-surface-variant hover:text-on-surface"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 font-display text-xs font-semibold text-on-surface-variant hover:text-on-surface"
           >
             Cancel
           </button>
@@ -235,7 +237,7 @@ export function ProjectEpics() {
               <button
                 type="button"
                 onClick={() => setCreating(true)}
-                className="mt-3 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container"
+                className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 mt-3 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 font-display text-xs font-bold text-on-surface hover:bg-surface-container"
               >
                 Add the first epic
               </button>
@@ -366,7 +368,7 @@ function ProgressBar({ done, total }: { done: number; total: number }) {
       </div>
       <span
         data-testid="epic-progress-text"
-        className="font-mono text-[12px] text-on-surface-variant"
+        className="font-mono text-meta text-on-surface-variant"
       >
         {done}/{total}
       </span>
@@ -393,7 +395,7 @@ function ColorDot({
           e.stopPropagation();
           setPicking((v) => !v);
         }}
-        className="h-2.5 w-2.5 rounded-full disabled:cursor-default"
+        className="h-2.5 w-2.5 rounded-full disabled:cursor-default [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 [@media(pointer:coarse)]:bg-clip-content [@media(pointer:coarse)]:p-[17px]"
         style={{ backgroundColor: color }}
         aria-label="Set epic color"
         title={canEdit ? "Set epic color" : undefined}
@@ -409,12 +411,12 @@ function ColorDot({
             }}
             aria-label="Close color picker"
           />
-          <div className="absolute left-0 top-4 z-50 flex gap-1 rounded-sm border border-outline-variant bg-surface-container-lowest p-1.5 shadow-overlay">
+          <div className="absolute left-0 top-4 z-50 flex max-w-[calc(100vw-3rem)] flex-wrap gap-1 rounded-sm border border-outline-variant bg-surface-container-lowest p-1.5 shadow-overlay">
             {SECTION_COLOR_PRESETS.map((hex) => (
               <button
                 key={hex}
                 type="button"
-                className="h-4 w-4 rounded-full hover:ring-2 hover:ring-primary"
+                className="h-4 w-4 rounded-full [@media(pointer:fine)]:hover:ring-2 hover:ring-primary [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 [@media(pointer:coarse)]:bg-clip-content [@media(pointer:coarse)]:p-[14px]"
                 style={{ backgroundColor: hex }}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -462,7 +464,7 @@ function TitleCell({
             }}
             maxLength={200}
             aria-label="Epic title"
-            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 text-sm font-semibold text-on-surface focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 text-sm font-semibold text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           />
         </form>
       ) : (
@@ -470,7 +472,7 @@ function TitleCell({
           type="button"
           onClick={onOpen}
           title={epic.title}
-          className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-on-surface hover:text-primary"
+          className="[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 truncate text-left text-sm font-semibold text-on-surface hover:text-primary"
         >
           {epic.title}
         </button>
@@ -483,7 +485,7 @@ function TitleCell({
             onStartRename();
           }}
           aria-label={`Rename ${epic.title}`}
-          className="material-symbols-outlined shrink-0 rounded-sm p-1 text-[15px] text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="tap-target material-symbols-outlined shrink-0 rounded-sm p-1 text-[15px] text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           edit
         </button>
@@ -508,8 +510,8 @@ function EpicRow(props: RowProps) {
       <td className="px-3 py-2 align-middle text-on-surface-variant">
         {epic.owner?.username ?? "Unassigned"}
       </td>
-      <td className="px-3 py-2 align-middle text-[12px] text-on-surface-variant">
-        {fmtDay(epic.dueDate) || "—"}
+      <td className="px-3 py-2 align-middle text-meta text-on-surface-variant">
+        {fmtDay(epic.dueDate) || EMPTY_VALUE}
       </td>
       <td className="px-3 py-2 align-middle">
         <ProgressBar done={epic.progress.done} total={epic.progress.total} />
@@ -520,7 +522,7 @@ function EpicRow(props: RowProps) {
             type="button"
             onClick={onDelete}
             aria-label={`Delete ${epic.title}`}
-            className="material-symbols-outlined rounded-sm p-1 text-[17px] text-on-surface-variant/80 hover:bg-error-container hover:text-error"
+            className="tap-target material-symbols-outlined rounded-sm p-1 text-[17px] text-on-surface-variant/80 hover:bg-error-container hover:text-error"
           >
             delete
           </button>
@@ -543,17 +545,17 @@ function EpicCard(props: RowProps) {
             type="button"
             onClick={onDelete}
             aria-label={`Delete ${epic.title}`}
-            className="material-symbols-outlined shrink-0 rounded-sm p-1 text-[17px] text-on-surface-variant/80 hover:bg-error-container hover:text-error"
+            className="tap-target material-symbols-outlined shrink-0 rounded-sm p-1 text-[17px] text-on-surface-variant/80 hover:bg-error-container hover:text-error"
           >
             delete
           </button>
         )}
       </div>
-      <button type="button" onClick={onOpen} className="mt-2 block w-full text-left">
-        <div className="flex flex-wrap items-center gap-2 text-[12px]">
+      <button type="button" onClick={onOpen} className="[@media(pointer:coarse)]:min-h-11 mt-2 block w-full text-left">
+        <div className="flex flex-wrap items-center gap-2 text-meta">
           <TaskStatusChip status={epic.status} />
           <span className="text-on-surface-variant">{epic.owner?.username ?? "Unassigned"}</span>
-          <span className="text-on-surface-variant">{fmtDay(epic.dueDate) || "—"}</span>
+          <span className="text-on-surface-variant">{fmtDay(epic.dueDate) || EMPTY_VALUE}</span>
         </div>
         <div className="mt-2">
           <ProgressBar done={epic.progress.done} total={epic.progress.total} />

@@ -20,6 +20,8 @@ import { DataGridColumnHeader } from "@/components/reui/data-grid/data-grid-colu
 import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll-area";
 import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
+import { TOOLBAR_BUTTON_PRIMARY } from "@/lib/utils";
 
 // Stable empty-array reference for `data:` while useServices is loading —
 // same rationale as Tasks.tsx's EMPTY_TASKS: avoids a fresh `[]` literal
@@ -83,7 +85,7 @@ export function ServiceCatalogueManager() {
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
             maxLength={100}
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1 text-sm focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           />
         ) : (
           <span className={["font-medium text-on-surface", s.active ? "" : "opacity-60"].join(" ")}>
@@ -109,11 +111,11 @@ export function ServiceCatalogueManager() {
             value={editDesc}
             onChange={(e) => setEditDesc(e.target.value)}
             maxLength={1000}
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1 text-sm focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           />
         ) : (
           <span className={["text-on-surface-variant", s.active ? "" : "opacity-60"].join(" ")}>
-            {s.description || "—"}
+            {s.description || EMPTY_VALUE}
           </span>
         );
       },
@@ -131,7 +133,7 @@ export function ServiceCatalogueManager() {
               type="button"
               onClick={() => toggleActive(s)}
               className={[
-                "rounded-full px-2 py-0.5 font-display text-sm font-semibold",
+                "tap-target rounded-full px-2 py-0.5 font-display text-sm font-semibold",
                 s.active
                   ? "bg-chip-emerald-bg text-chip-emerald-text"
                   : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest",
@@ -160,7 +162,7 @@ export function ServiceCatalogueManager() {
                   type="button"
                   onClick={saveEdit}
                   disabled={update.isPending || !editName.trim()}
-                  className="rounded-sm bg-primary px-2 py-1 font-display text-sm text-on-primary hover:bg-primary-container disabled:opacity-50 font-semibold"
+                  className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm bg-primary px-2 py-1 font-display text-sm text-on-primary hover:bg-primary/90 disabled:opacity-50 font-semibold"
                 >
                   Save
                 </button>
@@ -168,7 +170,7 @@ export function ServiceCatalogueManager() {
                   type="button"
                   onClick={() => setEditingId(null)}
                   disabled={update.isPending}
-                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container font-semibold"
+                  className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container font-semibold"
                 >
                   Cancel
                 </button>
@@ -178,14 +180,14 @@ export function ServiceCatalogueManager() {
                 <button
                   type="button"
                   onClick={() => startEdit(s)}
-                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-semibold"
+                  className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-semibold"
                 >
                   Edit
                 </button>
                 <button
                   type="button"
                   onClick={() => setDeleting(s)}
-                  className="rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container font-semibold"
+                  className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm px-2 py-1 font-display text-sm text-on-surface-variant hover:bg-error-container hover:text-on-error-container font-semibold"
                 >
                   Delete
                 </button>
@@ -300,7 +302,7 @@ export function ServiceCatalogueManager() {
             onChange={(e) => setNewName(e.target.value)}
             maxLength={100}
             placeholder="e.g. Penetration Testing"
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           />
         </label>
         <label className="w-full md:flex-2 md:min-w-[240px]">
@@ -313,13 +315,13 @@ export function ServiceCatalogueManager() {
             onChange={(e) => setNewDesc(e.target.value)}
             maxLength={1000}
             placeholder="Short blurb shown in the catalogue"
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           />
         </label>
         <button
           type="submit"
           disabled={create.isPending || !newName.trim()}
-          className="w-full rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-bold text-on-primary hover:bg-primary-container disabled:opacity-60 md:w-auto"
+          className={`${TOOLBAR_BUTTON_PRIMARY} w-full justify-center md:w-auto`}
         >
           {create.isPending ? "Adding…" : "Add service"}
         </button>
@@ -328,7 +330,7 @@ export function ServiceCatalogueManager() {
       <DataGrid
         table={table}
         recordCount={rows.length}
-        emptyMessage="No services yet — add the first one above."
+        emptyMessage="No services yet. Add the first one above."
         tableLayout={{
           dense: true,
           rowBorder: true,

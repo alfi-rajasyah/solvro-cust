@@ -201,7 +201,7 @@ test.describe("Customer Tickets tab", () => {
     const request = await incidentsRequest;
     expect(request.url()).toContain("class=Incident");
 
-    // "Open in iTop ↗" builds the details deep link off the mocked baseUrl.
+    // "Open in iTop" builds the details deep link off the mocked baseUrl.
     const openLink = page.locator('[data-testid="itop-open-link"]:visible').first();
     await expect(openLink).toBeVisible();
     const href = await openLink.getAttribute("href");

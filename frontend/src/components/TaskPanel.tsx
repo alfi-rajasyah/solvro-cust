@@ -264,7 +264,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
           <button
             type="button"
             onClick={onClose}
-            className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container-high"
+            className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container-high"
             aria-label="Close"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
@@ -460,7 +460,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
-              className="material-symbols-outlined rounded-sm p-1 text-base text-on-surface-variant hover:bg-surface-container-high"
+              className="material-symbols-outlined rounded-sm p-1 [@media(pointer:coarse)]:grid [@media(pointer:coarse)]:size-11 [@media(pointer:coarse)]:place-items-center [@media(pointer:coarse)]:p-0 text-base text-on-surface-variant hover:bg-surface-container-high"
               aria-label="Task options"
             >
               more_horiz
@@ -468,7 +468,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 z-20 mt-1 w-40 rounded-lg border border-outline-variant bg-surface-container-lowest py-1 shadow-overlay">
+                <div className="absolute right-0 z-20 mt-1 w-40 rounded-sm border border-outline-variant bg-surface-container-lowest py-1 shadow-overlay">
                   <button
                     type="button"
                     disabled={!canEdit || duplicateTask.isPending}
@@ -476,7 +476,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                       setMenuOpen(false);
                       void handleDuplicate();
                     }}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-on-surface hover:bg-surface-container-high disabled:cursor-default disabled:opacity-50"
+                    className="[@media(pointer:coarse)]:min-h-11 flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-on-surface hover:bg-surface-container-high disabled:cursor-default disabled:opacity-50"
                   >
                     <span className="material-symbols-outlined text-sm" aria-hidden="true">
                       content_copy
@@ -490,7 +490,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                       setMenuOpen(false);
                       setConfirmDelete(true);
                     }}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-error hover:bg-error-container disabled:cursor-default disabled:opacity-50"
+                    className="[@media(pointer:coarse)]:min-h-11 flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-error hover:bg-error-container disabled:cursor-default disabled:opacity-50"
                   >
                     <span aria-hidden="true" className="material-symbols-outlined text-sm">delete</span>
                     Delete task
@@ -502,7 +502,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
           <button
             type="button"
             onClick={onClose}
-            className="rounded-sm p-1 text-on-surface-variant hover:bg-surface-container-high"
+            className="rounded-sm p-1 [@media(pointer:coarse)]:grid [@media(pointer:coarse)]:size-11 [@media(pointer:coarse)]:place-items-center [@media(pointer:coarse)]:p-0 text-on-surface-variant hover:bg-surface-container-high"
             aria-label="Close"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
@@ -516,7 +516,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               <button
                 type="button"
                 onClick={() => onOpenTask(parentTask.id)}
-                className="flex min-w-0 items-center gap-0.5 rounded-sm text-meta text-on-surface-variant hover:text-primary outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
+                className="[@media(pointer:coarse)]:min-h-11 flex min-w-0 items-center gap-0.5 rounded-sm text-meta text-on-surface-variant hover:text-primary outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
               >
                 <span className="material-symbols-outlined text-[13px]" aria-hidden="true">
                   arrow_back
@@ -537,7 +537,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                 onChange={(e) => setTitleDraft(e.target.value)}
                 onBlur={handleTitleSubmit}
                 maxLength={200}
-                className="w-full border-none bg-transparent text-lg font-bold text-on-surface outline-hidden focus:outline-hidden"
+                className="[@media(pointer:coarse)]:min-h-11 w-full border-none bg-transparent text-lg font-bold text-on-surface rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
               />
             </form>
           ) : (
@@ -550,7 +550,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                 setTitleDraft(task.title);
                 setEditingTitle(true);
               }}
-              className="block w-full rounded-sm text-left text-lg font-bold text-on-surface hover:bg-surface-container-high disabled:cursor-default"
+              className="[@media(pointer:coarse)]:min-h-11 block w-full rounded-sm text-left text-lg font-bold text-on-surface hover:bg-surface-container-high disabled:cursor-default"
             >
               {task.title}
             </button>
@@ -575,7 +575,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     setEditingAssignee(false);
                   }}
                   onBlur={() => setEditingAssignee(false)}
-                  className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden"
+                  className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <option value="">Unassigned</option>
                   {(users ?? []).map((u) => (
@@ -599,7 +599,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                   type="button"
                   disabled={!canEdit}
                   onClick={() => setEditingAssignee(true)}
-                  className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
+                  className="[@media(pointer:coarse)]:min-h-11 flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
                 >
                   <AssigneeAvatar user={task.assignedTo} size="xs" />
                   <span className="text-on-surface">
@@ -635,7 +635,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     setEditBase(task);
                     setEditingDates(true);
                   }}
-                  className="rounded-sm px-1 py-0.5 text-left text-on-surface hover:bg-surface-container-high disabled:cursor-default"
+                  className="[@media(pointer:coarse)]:min-h-11 rounded-sm px-1 py-0.5 text-left text-on-surface hover:bg-surface-container-high disabled:cursor-default"
                 >
                   {fmtRange(task.startDate, task.dueDate)}
                 </button>
@@ -649,7 +649,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               type="button"
               disabled={!canEdit}
               onClick={() => patch({ priority: nextPriority(task.priority) })}
-              className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
+              className="[@media(pointer:coarse)]:min-h-11 flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
               title={canEdit ? "Click to cycle priority" : undefined}
             >
               <span aria-hidden="true"
@@ -667,7 +667,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               type="button"
               disabled={!canEdit}
               onClick={() => patch({ isMilestone: !task.isMilestone })}
-              className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
+              className="[@media(pointer:coarse)]:min-h-11 flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
               title={canEdit ? "Toggle between task bar and milestone diamond" : undefined}
             >
               <span aria-hidden="true"
@@ -687,7 +687,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               type="button"
               disabled={!canEdit}
               onClick={() => patch({ isCriticalPath: !task.isCriticalPath })}
-              className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
+              className="[@media(pointer:coarse)]:min-h-11 flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
               title={canEdit ? CRITICAL_PATH_HELPER_TEXT : undefined}
               aria-label={`${CRITICAL_PATH_LABEL}: ${task.isCriticalPath ? "Yes" : "No"}`}
             >
@@ -712,7 +712,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     setEditingSection(false);
                   }}
                   onBlur={() => setEditingSection(false)}
-                  className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden"
+                  className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <option value="">No section</option>
                   {(sections ?? []).map((s) => (
@@ -726,7 +726,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                   type="button"
                   disabled={!canEdit}
                   onClick={() => setEditingSection(true)}
-                  className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
+                  className="[@media(pointer:coarse)]:min-h-11 flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
                 >
                   {task.section && (
                     <span
@@ -758,7 +758,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                           setEditingEpic(false);
                         }}
                         onBlur={() => setEditingEpic(false)}
-                        className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden"
+                        className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
                       >
                         <option value="">No epic</option>
                         {(epics ?? []).map((e) => (
@@ -774,7 +774,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                       type="button"
                       disabled={!canEdit || taskEpicPending}
                       onClick={() => setEditingEpic(true)}
-                      className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
+                      className="[@media(pointer:coarse)]:min-h-11 flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
                     >
                       {taskEpicPending ? (
                         <span
@@ -863,7 +863,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     // `disabled && "opacity-50"` (sortable.tsx) — a regression
                     // vs. the old markup, which only dimmed the arrows.
                     render={
-                      <div className="group/subtask flex items-center gap-2 rounded-sm px-1 py-1 text-[13px]" />
+                      <div className="group/subtask flex [@media(pointer:coarse)]:min-h-11 items-center gap-2 rounded-sm px-1 py-1 text-xs" />
                     }
                   >
                     <button
@@ -872,18 +872,24 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                       onClick={() => toggleSubtask(s)}
                       aria-label={s.status === "DONE" ? "Mark not done" : "Mark done"}
                       className={[
-                        "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors",
-                        s.status === "DONE"
-                          ? "border-primary bg-primary text-on-primary"
-                          : "border-outline-variant hover:border-primary",
-                        canEdit ? "cursor-pointer" : "cursor-default",
+                        "group/tog flex h-4 w-4 shrink-0 items-center justify-center",
+                        canEdit ? "cursor-pointer [@media(pointer:coarse)]:size-11" : "cursor-default",
                       ].join(" ")}
                     >
-                      {s.status === "DONE" && (
-                        <span aria-hidden="true" className="material-symbols-outlined text-meta leading-none">
-                          check
-                        </span>
-                      )}
+                      <span
+                        className={[
+                          "flex h-4 w-4 items-center justify-center rounded-full border transition-colors",
+                          s.status === "DONE"
+                            ? "border-primary bg-primary text-on-primary"
+                            : "border-outline-variant group-hover/tog:border-primary",
+                        ].join(" ")}
+                      >
+                        {s.status === "DONE" && (
+                          <span aria-hidden="true" className="material-symbols-outlined text-meta leading-none">
+                            check
+                          </span>
+                        )}
+                      </span>
                     </button>
                     {editingSubtaskId === s.id ? (
                       <form onSubmit={commitSubtaskRename} className="min-w-0 flex-1">
@@ -903,7 +909,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                           }}
                           maxLength={200}
                           aria-label="Subtask title"
-                          className="w-full border-none bg-transparent text-[13px] text-on-surface outline-hidden focus:outline-hidden"
+                          className="[@media(pointer:coarse)]:min-h-11 w-full border-none bg-transparent text-xs text-on-surface rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
                         />
                       </form>
                     ) : (
@@ -912,7 +918,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         onClick={() => onOpenTask(s.id)}
                         title={s.title}
                         className={[
-                          "min-w-0 flex-1 truncate rounded-sm text-left hover:text-primary outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring",
+                          "[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 truncate rounded-sm text-left hover:text-primary outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring",
                           s.status === "DONE"
                             ? "text-on-surface-variant line-through"
                             : "text-on-surface",
@@ -950,7 +956,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         type="button"
                         onClick={() => startSubtaskRename(s)}
                         aria-label={`Rename ${s.title}`}
-                        className="material-symbols-outlined -m-2 shrink-0 rounded-sm p-2 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100"
+                        className="material-symbols-outlined -m-2 [@media(pointer:coarse)]:m-0 shrink-0 rounded-sm p-2 [@media(pointer:coarse)]:p-3.5 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100"
                       >
                         edit
                       </button>
@@ -961,7 +967,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         disabled={duplicateTask.isPending && duplicateTask.variables === s.id}
                         onClick={() => void handleSubtaskDuplicate(s)}
                         aria-label={`Duplicate ${s.title}`}
-                        className="material-symbols-outlined -m-2 shrink-0 rounded-sm p-2 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100 disabled:cursor-default disabled:opacity-50"
+                        className="material-symbols-outlined -m-2 [@media(pointer:coarse)]:m-0 shrink-0 rounded-sm p-2 [@media(pointer:coarse)]:p-3.5 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100 disabled:cursor-default disabled:opacity-50"
                       >
                         content_copy
                       </button>
@@ -978,7 +984,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                           <button
                             type="button"
                             aria-label="Reorder subtask"
-                            className="material-symbols-outlined shrink-0 touch-none rounded-sm text-sm text-on-surface-variant/80 cursor-grab active:cursor-grabbing outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
+                            className="material-symbols-outlined shrink-0 touch-none rounded-sm [@media(pointer:coarse)]:p-3.5 text-sm text-on-surface-variant/80 cursor-grab active:cursor-grabbing outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
                           />
                         }
                       >
@@ -998,7 +1004,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     placeholder="Add subtask"
                     maxLength={200}
                     readOnly={createTask.isPending}
-                    className="min-w-0 flex-1 border-none bg-transparent text-[13px] text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden"
+                    className="[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 border-none bg-transparent text-xs text-on-surface rounded-sm outline-hidden placeholder:text-on-surface-variant/80 focus-visible:ring-2 focus-visible:ring-primary/30"
                   />
                   <SubtaskAssigneePicker
                     canEdit={canEdit}
@@ -1132,7 +1138,7 @@ function PanelComments({ taskId, projectId }: { taskId: number; projectId: numbe
             <li key={c.id} className="flex gap-2.5">
               <AssigneeAvatar user={c.author} size="xs" />
               <div className="min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2">
-                <div className="mb-0.5 flex items-center justify-between gap-2 text-[12px]">
+                <div className="mb-0.5 flex items-center justify-between gap-2 text-meta">
                   <span className="min-w-0 truncate font-medium text-on-surface">{c.author.username}</span>
                   <span className="shrink-0 text-on-surface-variant">{fmtAgo(c.createdAt)}</span>
                 </div>
@@ -1192,7 +1198,7 @@ function SubtaskAssigneePicker({
           setEditing(false);
         }}
         onBlur={() => setEditing(false)}
-        className="w-28 shrink-0 rounded-sm border border-outline-variant bg-surface-container-lowest px-1 py-0.5 text-xs text-on-surface focus:border-primary focus:outline-hidden"
+        className="[@media(pointer:coarse)]:min-h-11 w-28 shrink-0 rounded-sm border border-outline-variant bg-surface-container-lowest px-1 py-0.5 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
       >
         <option value="">Unassigned</option>
         {users.map((u) => (
@@ -1211,7 +1217,7 @@ function SubtaskAssigneePicker({
       onClick={() => setEditing(true)}
       aria-label={label}
       title={assignee ? assignee.username : "Unassigned"}
-      className="shrink-0 rounded-full outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
+      className="tap-target shrink-0 rounded-full outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
     >
       <AssigneeAvatar user={assignee ?? null} size="xs" />
     </button>

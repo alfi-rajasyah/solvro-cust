@@ -38,9 +38,10 @@ import {
 import { buildTimezoneGroups } from "./itopTimezones";
 import { Chip } from "@/components/StatusChip";
 import { Switch } from "@/components/ui/switch";
+import { EMPTY_VALUE } from "@/lib/emptyValue";
 
 const OUTLINE_BUTTON_CLASS =
-  "rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50";
+  "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50";
 
 const READ_CLASS_LABEL: Record<ItopReadClass, string> = {
   UserRequest: "User requests",
@@ -162,7 +163,7 @@ function ConnectionCard() {
       ? testData.ok
         ? { label: `Connected · ${passedProbes}/${totalProbes} checks passed`, tone: "emerald" as const }
         : { label: `${passedProbes}/${totalProbes} checks passed`, tone: "amber" as const }
-      : { label: "Configured — run Test connection to verify", tone: "gray" as const };
+      : { label: "Configured: run Test connection to verify", tone: "gray" as const };
 
   async function handleSave() {
     setSaveError(null);
@@ -265,7 +266,7 @@ function ConnectionCard() {
             placeholder="https://itop.example.com"
             spellCheck={false}
             autoComplete="off"
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           />
           <span className="mt-1 block text-meta text-on-surface-variant">
             Changing the URL removes every user&apos;s personal iTop token. Each user must connect
@@ -283,7 +284,7 @@ function ConnectionCard() {
             placeholder={settings.appTokenSet ? "•••••••• (set)" : "Auth-Token header"}
             spellCheck={false}
             autoComplete="off"
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           />
         </label>
       </div>
@@ -294,7 +295,7 @@ function ConnectionCard() {
           type="button"
           onClick={() => void handleTest()}
           disabled={testConnection.isPending}
-          className="rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+          className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
         >
           {testConnection.isPending ? "Testing…" : "Test connection"}
         </button>
@@ -322,7 +323,7 @@ function ConnectionCard() {
                 setForm((f) => (f ? { ...f, refreshMinutes: e.target.value } : f))
               }
               onBlur={handleRefreshMinutesBlur}
-              className="w-24 rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden"
+              className="w-24 rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
             />
             <span className="text-sm text-on-surface-variant">min</span>
           </div>
@@ -343,7 +344,7 @@ function ConnectionCard() {
                 )
               }
               onBlur={handleCapacityBlur}
-              className="w-24 rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden"
+              className="w-24 rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
             />
             <span className="text-sm text-on-surface-variant">h / week</span>
           </div>
@@ -358,7 +359,7 @@ function ConnectionCard() {
           <select
             value={form.timezone}
             onChange={(e) => setForm((f) => (f ? { ...f, timezone: e.target.value } : f))}
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           >
             {timezoneGroups.map((group) => (
               <optgroup key={group.region} label={group.region}>
@@ -422,14 +423,14 @@ function ConnectionCard() {
           type="button"
           onClick={() => void handleSave()}
           disabled={!dirty || updateSettings.isPending}
-          className="rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary-container disabled:opacity-50"
+          className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary/90 disabled:opacity-50"
         >
           {updateSettings.isPending ? "Saving…" : "Save"}
         </button>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-outline-variant pt-3">
-        <p className="text-[13px] text-on-surface-variant">
+        <p className="text-xs text-on-surface-variant">
           {settings.lastSyncAt ? (
             settings.lastSyncOk ? (
               <>Synced {fmtAgo(settings.lastSyncAt)} · ok</>
@@ -447,19 +448,19 @@ function ConnectionCard() {
           type="button"
           onClick={() => void handleSync()}
           disabled={syncNow.isPending || !settings.baseUrl || !settings.appTokenSet}
-          className="rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+          className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
         >
           {syncNow.isPending ? "Syncing…" : "Sync now"}
         </button>
       </div>
       {timezoneSavedNotice && (
-        <p className="mt-2 text-[12px] text-on-surface-variant">
+        <p className="mt-2 text-meta text-on-surface-variant">
           Times will be corrected at the next sync.
         </p>
       )}
       {syncError && <p className="mt-2 text-sm text-error">{syncError}</p>}
       {syncMessage && (
-        <p className="mt-2 text-[12px] text-on-surface-variant">{syncMessage}</p>
+        <p className="mt-2 text-meta text-on-surface-variant">{syncMessage}</p>
       )}
     </section>
   );
@@ -469,7 +470,7 @@ function ProbeList({ probes }: { probes: ItopProbeResult[] }) {
   return (
     <ul className="mt-2 space-y-1 rounded-sm border border-outline-variant bg-surface p-2">
       {probes.map((p) => (
-        <li key={p.name} className="flex items-start gap-2 text-[13px]">
+        <li key={p.name} className="flex items-start gap-2 text-xs">
           <span
             aria-hidden="true"
             className={`material-symbols-outlined shrink-0 text-[16px] ${p.ok ? "text-chip-emerald-text" : "text-error"}`}
@@ -562,7 +563,7 @@ function WebhookCard() {
   return (
     <section className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
       <h2 className="font-display text-sm font-semibold text-on-surface">Webhook (optional)</h2>
-      <p className="mt-1 text-[13px] text-on-surface-variant">
+      <p className="mt-1 text-xs text-on-surface-variant">
         Without it, tickets are at most {settings.refreshMinutes} minutes stale; with it, seconds.
       </p>
 
@@ -583,7 +584,7 @@ function WebhookCard() {
                 copiedLabel={copiedLabel}
                 onCopy={handleCopy}
               />
-              <p className="text-[12px] text-on-surface-variant">
+              <p className="text-meta text-on-surface-variant">
                 Shown once. In iTop, add a Webhook integration with trigger "on ticket update"
                 that POSTs to this URL with this header.
               </p>
@@ -614,20 +615,20 @@ function WebhookCard() {
               {generateSecret.isPending ? "Rotating…" : "Rotate"}
             </button>
             {confirmingRemove ? (
-              <span className="flex items-center gap-2 text-[12px] text-on-surface-variant">
+              <span className="flex items-center gap-2 text-meta text-on-surface-variant">
                 Remove the webhook secret?
                 <button
                   type="button"
                   onClick={() => void handleRemove()}
                   disabled={removeSecret.isPending}
-                  className="font-display text-[12px] font-bold text-error underline disabled:opacity-50"
+                  className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 font-display text-meta font-bold text-error underline disabled:opacity-50"
                 >
                   {removeSecret.isPending ? "Removing…" : "Confirm"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmingRemove(false)}
-                  className="font-display text-[12px] font-bold text-on-surface-variant underline"
+                  className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 font-display text-meta font-bold text-on-surface-variant underline"
                 >
                   Cancel
                 </button>
@@ -680,14 +681,14 @@ function CopyRow({
         {label}
       </span>
       <div className="flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 font-mono text-[12px] text-on-surface">
+        <code className="min-w-0 flex-1 truncate rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 font-mono text-meta text-on-surface">
           {value}
         </code>
         <button
           type="button"
           onClick={() => void onCopy(label, value)}
           title="Copy to clipboard"
-          className="shrink-0 text-on-surface-variant hover:text-on-surface"
+          className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 shrink-0 text-on-surface-variant hover:text-on-surface"
         >
           <span aria-hidden="true" className="material-symbols-outlined text-[14px]">
             content_copy
@@ -770,14 +771,14 @@ function CustomersCard() {
           Customers → iTop organisations
         </h2>
         <div className="flex items-center gap-3">
-          <span className="text-[12px] text-on-surface-variant">
-            {isLoading ? "—" : `${matched} of ${list.length} matched`}
+          <span className="text-meta text-on-surface-variant">
+            {isLoading ? EMPTY_VALUE : `${matched} of ${list.length} matched`}
           </span>
           <button
             type="button"
             onClick={() => void handleAutomatch()}
             disabled={automatch.isPending || orgsQuery.isError}
-            className="rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
           >
             {automatch.isPending ? "Matching…" : "Automatch by name"}
           </button>
@@ -785,7 +786,7 @@ function CustomersCard() {
       </div>
 
       {automatchMessage && (
-        <p className="mt-2 text-[12px] text-on-surface-variant">{automatchMessage}</p>
+        <p className="mt-2 text-meta text-on-surface-variant">{automatchMessage}</p>
       )}
       {orgsError && <p className="mt-2 text-sm text-error">{orgsError}</p>}
 
@@ -815,7 +816,7 @@ function CustomersCard() {
                     value={row.itopOrgId ?? ""}
                     onChange={(e) => void handleOrgChange(row, e.target.value)}
                     disabled={orgsQuery.isError || pendingRowId === row.id}
-                    className="w-full max-w-[220px] rounded-sm border border-outline-variant bg-surface px-2 py-1 text-sm focus:border-primary focus:outline-hidden disabled:opacity-60"
+                    className="[@media(pointer:coarse)]:min-h-11 w-full max-w-[220px] rounded-sm border border-outline-variant bg-surface px-2 py-1 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
                   >
                     <option value="">Choose an organisation…</option>
                     {orgs.map((org) => (
@@ -889,14 +890,14 @@ function PersonsCard() {
           Users → iTop persons
         </h2>
         <div className="flex items-center gap-3">
-          <span className="text-[12px] text-on-surface-variant">
-            {isLoading ? "—" : `${matchedCount} of ${users.length} matched by email`}
+          <span className="text-meta text-on-surface-variant">
+            {isLoading ? EMPTY_VALUE : `${matchedCount} of ${users.length} matched by email`}
           </span>
           <button
             type="button"
             onClick={() => void handleMatch()}
             disabled={matchNow.isPending}
-            className="rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-3 py-1 font-display text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50"
           >
             {matchNow.isPending ? "Matching…" : "Match now"}
           </button>
@@ -939,7 +940,7 @@ function PersonsCard() {
                   <span className="sr-only">{u.matched ? "Matched" : "Not matched"}</span>
                 </td>
                 <td className="py-1.5 font-mono text-xs text-on-surface-variant">
-                  {u.itopPersonId ?? "—"}
+                  {u.itopPersonId ?? EMPTY_VALUE}
                 </td>
               </tr>
             ))}
@@ -954,7 +955,7 @@ function PersonsCard() {
         </table>
       </div>
 
-      <p className="mt-3 text-[12px] text-on-surface-variant">
+      <p className="mt-3 text-meta text-on-surface-variant">
         Unmatched users have no "Mine" filter or hours until iTop has their email.
       </p>
     </section>

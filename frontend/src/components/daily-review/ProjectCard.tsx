@@ -18,7 +18,7 @@ import { Link } from "react-router-dom";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { ApiError } from "@/lib/api";
-import { scoreClass, scoreLevel } from "@/components/RiskFormModal";
+import { RiskScoreChip } from "@/components/RiskScoreChip";
 import { ProjectStatusChip } from "@/components/StatusChip";
 import { StatusSelect } from "@/components/StatusSelect";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -118,7 +118,7 @@ export function ProjectCard({
   return (
     <article className="rounded-sm border border-outline-variant bg-surface-container-lowest">
       {unassigned && (
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-outline-variant bg-chip-amber-bg px-4 py-2 text-[12px] font-medium text-chip-amber-text">
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-outline-variant bg-chip-amber-bg px-4 py-2 text-meta font-medium text-chip-amber-text">
           <span aria-hidden="true" className="material-symbols-outlined text-base">warning</span>
           <span>
             Weekly updates are per customer. Assign a customer to{" "}
@@ -141,7 +141,7 @@ export function ProjectCard({
           aria-expanded={bodyExpanded}
           aria-controls={bodyId}
           aria-label={bodyExpanded ? "Collapse project" : "Expand project"}
-          className="flex h-6 w-6 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="tap-target flex h-6 w-6 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           <span className="material-symbols-outlined text-lg" aria-hidden="true">
             {bodyExpanded ? "expand_less" : "expand_more"}
@@ -152,7 +152,7 @@ export function ProjectCard({
         </span>
         <Link
           to={`/projects/${project.id}/overview`}
-          className="font-display text-sm font-semibold text-on-surface hover:text-primary"
+          className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 font-display text-sm font-semibold text-on-surface hover:text-primary"
         >
           {project.name}
         </Link>
@@ -174,7 +174,7 @@ export function ProjectCard({
             <button
               type="button"
               onClick={() => setConfirmUnmark(true)}
-              className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <span className="flex items-center gap-1 rounded-full bg-chip-emerald-bg px-2 py-0.5 text-meta font-bold text-chip-emerald-text">
                 <span aria-hidden="true" className="material-symbols-outlined text-sm">check_circle</span>
@@ -186,7 +186,7 @@ export function ProjectCard({
               type="button"
               onClick={() => markReviewed.mutate({ reviewDate: today })}
               disabled={markReviewed.isPending}
-              className="rounded-sm border border-outline-variant px-2.5 py-1 text-meta font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-2.5 py-1 text-meta font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
             >
               Mark reviewed
             </button>
@@ -214,7 +214,7 @@ export function ProjectCard({
             <Metric label="Progress" value={`${pct}%`} sub={`${project.progress.done}/${project.progress.total}`} />
           </div>
 
-          <div className="relative border-b border-outline-variant px-4 py-3">
+          <div className="relative border-b border-outline-variant px-4 py-3 [@media(pointer:coarse)]:pt-14">
             {actionError && (
               <Alert variant="destructive" className="mb-3" data-testid="daily-review-action-error">
                 <AlertDescription>Could not save the change: {actionError}</AlertDescription>
@@ -227,7 +227,7 @@ export function ProjectCard({
                   onClick={() => setAttentionExpanded((v) => !v)}
                   aria-expanded={attentionExpanded}
                   aria-controls={attentionId}
-                  className="absolute right-4 top-3 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="absolute right-4 top-3 [@media(pointer:coarse)]:top-0 [@media(pointer:coarse)]:right-1 [@media(pointer:coarse)]:px-3 [@media(pointer:coarse)]:py-[13px] [@media(pointer:coarse)]:leading-[18px] text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   {attentionExpanded ? "Hide lists" : "Show lists"}
                 </button>
@@ -269,17 +269,11 @@ export function ProjectCard({
                       </AttentionColumn>
                       <AttentionColumn label="Open risks" count={project.openRisks.length} tone="warn">
                         {project.openRisks.map((r) => {
-                          const score = r.probability * r.impact;
                           const pending = updateRisk.isPending && updateRisk.variables?.id === r.id;
                           return (
                             <li key={r.id} className={`flex items-center gap-2 ${pending ? "opacity-60" : ""}`}>
                               <span className="min-w-0 flex-1 truncate text-sm text-on-surface">{r.description}</span>
-                              <span
-                                className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-meta font-bold ${scoreClass(score)}`}
-                                title={`${r.probability} × ${r.impact} = ${score}`}
-                              >
-                                {scoreLevel(score)}
-                              </span>
+                              <RiskScoreChip probability={r.probability} impact={r.impact} levelOnly />
                               <Select
                                 items={riskStatusOptions}
                                 value={r.status}
@@ -294,7 +288,7 @@ export function ProjectCard({
                               >
                                 <SelectTrigger
                                   size="sm"
-                                  className="w-auto shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
+                                  className="[@media(pointer:coarse)]:min-h-11 w-auto shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
                                   aria-label="Risk status"
                                 >
                                   <SelectValue />
@@ -338,6 +332,7 @@ export function ProjectCard({
               canDeleteAny={canDeleteAny}
               placeholder='What happened on this project today? Nothing? Use "Mark reviewed".'
               ariaLabel={`Note for ${project.name}`}
+              fieldLabel="Note"
               rowsId={`week-rows-project-${project.id}`}
               onAdd={(day, body) => addNote.mutate({ body, noteDate: day })}
               onUpdate={(noteId, body) => updateNote.mutate({ noteId, body })}
