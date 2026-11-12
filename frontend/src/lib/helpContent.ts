@@ -85,11 +85,11 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         title: "What it shows",
         points: [
-          "Three tiles: Overdue and Due this week open the matching Tasks view; Open risks opens the Daily Review.",
+          "A summary row at the top: overdue tasks and tasks due this week open the matching Tasks view; open risks opens the Daily Review.",
           "\"Projects needing attention\": up to 6 projects, overdue ones first, with overdue-task and open-risk counts. \"View all\" opens the Projects page.",
           "\"Portfolio timeline\": a year calendar of your projects. Use the arrows to change the year.",
           "\"Recent notes\": project and operations notes from the last 7 days. Add notes on the Daily Review page.",
-          "Projects marked \"Administrative project\" are left out of the counters, the timeline, and the attention list.",
+          "Projects marked \"Administrative project\" are left out of the summary row, the timeline, and the attention list.",
         ],
       },
     ],
@@ -108,14 +108,14 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           "Click \"New project\" on the Projects page. Name and Customer are required, so create the customer first on the Customers page.",
           "Set a WIP limit per Kanban column if you want the board to warn when a column is too full. Leave a field empty for no limit.",
           "Tick \"Administrative project\" for internal work that should stay out of the Overview, Executive, and overdue roll-ups.",
-          "Inside a project, use \"Edit project\" or \"Delete project\" at the top. Delete removes all of the project's tasks, sections, labels, notes, risks, and reviews, and cannot be undone.",
+          "Inside a project, open the \"More project actions\" menu (the three dots at the top) for \"Edit project\", \"Copy link\" and \"Delete project\". Delete removes all of the project's tasks, sections, labels, notes, risks, and reviews, and cannot be undone.",
           "Filter the Projects page by customer with the \"Customer is …\" chip, or from a customer card's \"View projects\".",
         ],
       },
       {
         title: "Project tabs",
         points: [
-          "Overview: counters, the Progress S-Curve, tasks that need attention, status breakdown, top risks, and recent notes.",
+          "Overview: the summary row (tasks, complete, overdue, baseline), the Progress S-Curve, tasks that need attention, status breakdown, top risks, and recent notes.",
           "List, Kanban, Gantt, and Timeline: four views of the same tasks, described in \"Project views\".",
           "Epics: group top-level tasks into larger deliverables and track done/total progress. Open one to edit its status, owner, dates, description, and stories.",
           "Risks: the risk register. Services: the services and tools in scope.",
@@ -372,7 +372,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
         points: [
           "\"Me\" shows your own week. Users with Executive access also get \"By TAM\" and \"By customer\".",
           "Move between weeks with the arrows. Solvro keeps the last 8 weeks of time entries.",
-          "The tiles show \"Hours logged\" against your weekly capacity (the bar turns amber at capacity), \"Customers touched\", and hours \"Not tied to a customer\".",
+          "The summary row shows hours logged against your weekly capacity (the number and the bar turn amber at capacity), customers touched, and hours not tied to a customer.",
           "Hours come from iTop. To change a number, edit the time entry in iTop, then click \"Refresh from iTop\".",
         ],
       },

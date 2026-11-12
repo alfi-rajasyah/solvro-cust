@@ -15,6 +15,7 @@ import {
 import { useProjectContext } from "../ProjectDetail";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { Alert, AlertDescription } from "@/components/reui/alert";
+import { StatStrip, type StatItem } from "@/components/StatStrip";
 import { RiskScoreChip } from "@/components/RiskScoreChip";
 import { OutlineMentions } from "@/components/OutlineMentions";
 import { ProjectActivity } from "@/components/ProjectActivity";
@@ -36,16 +37,47 @@ export function ProjectOverview() {
 
   const stats = useMemo(() => computeStats(tasks ?? []), [tasks]);
   const sCurve = useMemo(() => buildSCurve(tasks ?? []), [tasks]);
+  const statItems = useMemo<StatItem[]>(
+    () => [
+      {
+        key: "tasks",
+        value: stats.total,
+        label: "tasks",
+        detail: `${stats.topLevel} top-level, ${stats.subtasks} subtasks`,
+      },
+      {
+        key: "complete",
+        value: `${stats.pct}%`,
+        label: "complete",
+        progress: stats.pct,
+      },
+      {
+        key: "overdue",
+        value: stats.overdue,
+        label: "overdue",
+        detail: stats.overdue > 0 ? "open tasks past due date" : undefined,
+        tone: stats.overdue > 0 ? "bad" : "neutral",
+      },
+      {
+        key: "baseline",
+        label: "Baseline",
+        detail: project.baselineLockedAt ? (
+          <span title={`Locked by ${project.baselineLockedBy?.username ?? EMPTY_VALUE}`}>
+            {`locked ${fmtDay(dateToDay(new Date(project.baselineLockedAt)))}`}
+          </span>
+        ) : (
+          "not locked"
+        ),
+      },
+    ],
+    [stats, project.baselineLockedAt, project.baselineLockedBy],
+  );
   const taskIds = useMemo(() => new Set((tasks ?? []).map((t) => t.id)), [tasks]);
 
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low" />
-          ))}
-        </div>
+        <div className="h-16 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low md:h-12" />
         <div className="h-72 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low" />
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="h-48 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low" />
@@ -71,41 +103,7 @@ export function ProjectOverview() {
         </p>
       )}
 
-      {/* KPI strip */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi
-          icon="checklist"
-          label="Total tasks"
-          value={String(stats.total)}
-          hint={`${stats.topLevel} top-level · ${stats.subtasks} subtasks`}
-        />
-        <Kpi
-          icon="task_alt"
-          label="Completion"
-          value={`${stats.pct}%`}
-          hint={`${stats.done} of ${stats.total} done`}
-          accent={stats.pct === 100 ? "emerald" : undefined}
-          progress={stats.pct}
-        />
-        <Kpi
-          icon="warning"
-          label="Overdue"
-          value={String(stats.overdue)}
-          hint={stats.overdue > 0 ? "open tasks past due date" : "nothing overdue"}
-          accent={stats.overdue > 0 ? "error" : "emerald"}
-        />
-        <Kpi
-          icon={project.baselineLockedAt ? "lock" : "lock_open"}
-          label="Baseline"
-          value={project.baselineLockedAt ? "Locked" : "Not set"}
-          hint={
-            project.baselineLockedAt
-              ? `by ${project.baselineLockedBy?.username ?? EMPTY_VALUE} · ${fmtDay(dateToDay(new Date(project.baselineLockedAt)))}`
-              : "Lock to capture planned dates"
-          }
-          accent={project.baselineLockedAt ? "primary" : undefined}
-        />
-      </div>
+      <StatStrip label="Project summary" items={statItems} />
 
       {/* S-Curve segment */}
       <section className="rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
@@ -399,49 +397,6 @@ function dayDelta(day: string, today: string): number {
   const ms =
     new Date(day + "T00:00:00").getTime() - new Date(today + "T00:00:00").getTime();
   return Math.round(ms / 86400000);
-}
-
-function Kpi({
-  icon,
-  label,
-  value,
-  hint,
-  accent,
-  progress,
-}: {
-  icon: string;
-  label: string;
-  value: string;
-  hint?: string;
-  accent?: "primary" | "emerald" | "error";
-  progress?: number;
-}) {
-  const accentClass =
-    accent === "emerald"
-      ? "text-chip-emerald-text"
-      : accent === "error"
-        ? "text-error"
-        : accent === "primary"
-          ? "text-primary"
-          : "text-on-surface";
-  return (
-    <div className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
-      <div className="flex items-center justify-between">
-        <span className="text-label-caps uppercase text-on-surface-variant">{label}</span>
-        <span aria-hidden="true" className={`material-symbols-outlined text-base ${accent === "primary" ? "text-primary" : accent === "emerald" ? "text-chip-emerald-text" : accent === "error" ? "text-error" : "text-on-surface-variant"}`}>{icon}</span>
-      </div>
-      <div className={`mt-2 font-body text-3xl font-bold tabular-nums ${accentClass}`}>{value}</div>
-      {progress !== undefined && (
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-surface-container-high">
-          <div
-            className="h-full rounded-full bg-primary"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      )}
-      {hint && <div className="mt-1 text-xs text-on-surface-variant">{hint}</div>}
-    </div>
-  );
 }
 
 function Legend2({ swatch, label }: { swatch: string; label: string }) {

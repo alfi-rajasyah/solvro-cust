@@ -48,9 +48,9 @@ test("assignee filter persists on reload and the Overdue tile matches the Tasks 
   // Reload: the filter comes back from the URL.
   await page.reload();
   await expect(page.getByRole("combobox", { name: "Assignee filter" })).toContainText(username);
-  const tile = page.getByRole("link", { name: /^Overdue: \d+/ });
+  const tile = page.getByRole("link", { name: /^\d+ overdue tasks?/ });
   await expect(tile).toContainText(`assigned to ${username}`);
-  const count = Number((await tile.getAttribute("aria-label"))!.match(/Overdue: (\d+)/)![1]);
+  const count = Number((await tile.getAttribute("aria-label"))!.match(/^(\d+) overdue/)![1]);
   expect(count).toBeGreaterThanOrEqual(2);
 
   await tile.click();

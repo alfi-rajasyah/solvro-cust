@@ -20,7 +20,7 @@ export function formatHours(hours: number): string {
 }
 
 /**
- * Utilisation percentage for the "Hours logged" tile's bar, capped to
+ * Utilisation percentage for the "hours logged" stat's bar, capped to
  * [0, 100] so a TAM who logged more than their capacity still renders a
  * full (not overflowing) bar. A zero or negative capacity — no `ItopConfig`
  * value yet, or a scope with nobody assigned — reads as 0% rather than

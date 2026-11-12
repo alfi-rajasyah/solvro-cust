@@ -436,12 +436,9 @@ test.describe("Docs tab", () => {
     const before = gets;
 
     try {
-      if (testInfo.project.name === "mobile") {
-        await page.getByRole("button", { name: "More project actions" }).click();
-        await page.getByRole("menuitem", { name: "Edit project" }).click();
-      } else {
-        await page.getByRole("button", { name: /\bEdit$/ }).click();
-      }
+      // Edit lives in the project actions menu at every width.
+      await page.getByRole("button", { name: "More project actions" }).click();
+      await page.getByRole("menuitem", { name: "Edit project" }).click();
       const dialog = page.getByRole("dialog", { name: "Edit project" });
       await dialog.locator('input[name="outlineUrl"]').fill(`${DOCS_BASE}/doc/new-link-zzz`);
       await dialog.getByRole("button", { name: "Save changes" }).click();

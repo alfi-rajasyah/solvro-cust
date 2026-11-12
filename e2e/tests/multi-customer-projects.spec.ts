@@ -28,7 +28,6 @@ test.describe("Projects linked to several customers", () => {
     page,
     browser,
   }, testInfo) => {
-    const mobile = testInfo.project.name === "mobile";
     const base = apiBase(testInfo);
     const admin = await login(base);
     const H = { Authorization: `Bearer ${admin.token}`, "Content-Type": "application/json" };
@@ -89,12 +88,9 @@ test.describe("Projects linked to several customers", () => {
     await expect(facts.getByText("Primary", { exact: true })).toHaveCount(1);
 
     // --- Rename: both customers survive.
-    if (mobile) {
-      await page.getByRole("button", { name: "More project actions" }).click();
-      await page.getByRole("menuitem", { name: "Edit project" }).click();
-    } else {
-      await page.getByRole("button", { name: /\bEdit$/ }).click();
-    }
+    // Edit lives in the project actions menu at every width.
+    await page.getByRole("button", { name: "More project actions" }).click();
+    await page.getByRole("menuitem", { name: "Edit project" }).click();
     const edit = page.getByRole("dialog", { name: "Edit project" });
     await expect(edit.getByTestId("project-customer-row")).toHaveCount(2);
     const renamed = `${projectName} renamed`;

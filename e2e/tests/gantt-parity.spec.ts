@@ -652,7 +652,7 @@ test.describe("gantt parity — ReUI engine (desktop)", () => {
   });
 
   // Walkthrough finding F6 (task-f6-report.md): the tree pane's fixed-width
-  // "Resources" name cell truncates long task titles with no on-screen way
+  // "Task" name cell truncates long task titles with no on-screen way
   // to widen it. Investigation found the vendored engine already ships a
   // controlled tree-panel width AND a built-in draggable splitter
   // (GanttTreePanelConfig, reui/gantt/gantt.tsx:1218-1231; splitter DOM +
@@ -663,7 +663,7 @@ test.describe("gantt parity — ReUI engine (desktop)", () => {
   // fixed Dates/color columns (issue #118), so those stay visible while every
   // pixel of splitter drag still lands on the title 1:1 and reveals more of
   // a truncated title.
-  test("(j) tree-pane splitter widens the Resources column, reveals a truncated title, and persists across reload", async ({
+  test("(j) tree-pane splitter widens the Task column, reveals a truncated title, and persists across reload", async ({
     page,
     seededProject,
   }) => {

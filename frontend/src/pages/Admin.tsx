@@ -10,6 +10,7 @@ import {
 } from "@tanstack/react-table";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Modal } from "@/components/Modal";
+import { StatStrip } from "@/components/StatStrip";
 import { ProjectStatusChip } from "@/components/StatusChip";
 import { Tabs } from "@/components/Tabs";
 import { ItopTab } from "@/components/admin/ItopTab";
@@ -463,21 +464,39 @@ function UsersTab() {
 
   return (
     <div className="space-y-4">
-      {/* KPI strip */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Ledger fix: em-dash (not the pre-fetch computed zero) while
-            `isLoading` — `rows`/`activeCount`/etc. all read through the
-            EMPTY_USERS fallback (see `rows` above) so they compute to 0
-            before the first response lands, and rendering that 0 as a KPI
-            value reads as a real "zero users" flash. The em-dash is
-            unambiguously "not loaded yet"; the `rows` fallback wiring itself
-            is unchanged (still needed so every other computation below stays
-            render-safe). */}
-        <AdminKpi label="Users" value={isLoading ? EMPTY_VALUE : rows.length} hint={`${activeCount} active · ${adminCount} admins`} icon="group" tone="primary" />
-        <AdminKpi label="Pending" value={isLoading ? EMPTY_VALUE : pendingCount} hint="Needs role assignment" icon="hourglass_top" tone="amber" />
-        <AdminKpi label="Custom roles" value={isLoading ? EMPTY_VALUE : customRoleCount} hint={`${(roles ?? []).length} total roles`} icon="shield_person" tone="emerald" />
-        <AdminKpi label="Inactive" value={isLoading ? EMPTY_VALUE : rows.length - activeCount} hint="Cannot sign in" icon="block" tone="neutral" />
-      </div>
+      {/* Summary strip. While `isLoading`, values read EMPTY_VALUE: `rows` and
+          the counts come from the EMPTY_USERS fallback and would otherwise
+          show a real-looking 0 before the first response lands. */}
+      <StatStrip
+        label="User summary"
+        items={[
+          {
+            key: "users",
+            value: isLoading ? EMPTY_VALUE : rows.length,
+            label: rows.length === 1 ? "user" : "users",
+            detail: `${activeCount} active · ${adminCount} admins`,
+          },
+          {
+            key: "pending",
+            value: isLoading ? EMPTY_VALUE : pendingCount,
+            label: "pending",
+            detail: "Needs role assignment",
+            tone: !isLoading && pendingCount > 0 ? "warn" : "neutral",
+          },
+          {
+            key: "custom-roles",
+            value: isLoading ? EMPTY_VALUE : customRoleCount,
+            label: "custom roles",
+            detail: `${(roles ?? []).length} total roles`,
+          },
+          {
+            key: "inactive",
+            value: isLoading ? EMPTY_VALUE : rows.length - activeCount,
+            label: "inactive",
+            detail: "Cannot sign in",
+          },
+        ]}
+      />
       {error && (
         <div className="rounded-sm border border-error/40 bg-error/10 px-3 py-2 text-sm text-error">
           {error}
@@ -653,44 +672,6 @@ function ProviderChip({ provider }: { provider: "google" | "password" }) {
       <span aria-hidden="true" className="material-symbols-outlined text-[12px]">key</span>
       Password
     </span>
-  );
-}
-
-function AdminKpi({
-  label,
-  value,
-  hint,
-  icon,
-  tone,
-}: {
-  label: string;
-  // "—" while the tab's underlying query is still loading (ledger fix,
-  // Admin.tsx:439-444) — every call site passes the computed number once
-  // loaded, an em-dash literal until then.
-  value: number | string;
-  hint?: string;
-  icon: string;
-  tone: "primary" | "emerald" | "amber" | "neutral";
-}) {
-  const iconColor =
-    tone === "primary"
-      ? "text-primary"
-      : tone === "emerald"
-        ? "text-chip-emerald-text"
-        : tone === "amber"
-          ? "text-chip-amber-text"
-          : "text-on-surface-variant";
-  return (
-    <div className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4">
-      <div className="flex items-center justify-between">
-        <span className="text-label-caps uppercase text-on-surface-variant">{label}</span>
-        <span aria-hidden="true" className={`material-symbols-outlined text-base ${iconColor}`}>{icon}</span>
-      </div>
-      <div className="mt-2 flex items-baseline gap-2">
-        <span className="text-3xl font-bold tabular-nums text-on-surface">{value}</span>
-        {hint && <span className="text-meta text-on-surface-variant">{hint}</span>}
-      </div>
-    </div>
   );
 }
 
