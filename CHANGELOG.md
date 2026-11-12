@@ -15,6 +15,14 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-13 — Local smoke gate ports are configurable
+
+- `.claude/scripts/gates.sh` reads the smoke gate's targets from `API_URL` (default `http://localhost:3000`) and `BASE_URL` (default `http://localhost:5173`). A host that runs two Solvro stacks side by side can now point the smoke gate at the right one, for example `API_URL=http://localhost:3010 BASE_URL=http://localhost:5174`. Before, the sign-in pre-flight always called port 3000.
+
+### Added — 2026-11-13 — npm audit report in CI
+
+- `.github/workflows/ci.yml`: the typecheck job runs `npm audit --omit=dev --audit-level=high` for `backend/` and `frontend/` and reports the result in the job log and as a warning annotation. The step never fails the run. It becomes a gate only after the `zod` 4 upgrade clears the known advisory (GHSA-mrhx-c7xc-m3w5, see `docs/ISSUES.md`).
+
 ## [1.2.1] — 2026-11-12
 
 ### Changed — 2026-11-12 — Version 1.2.1

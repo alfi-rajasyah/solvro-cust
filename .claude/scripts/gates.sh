@@ -11,6 +11,10 @@
 #   --skip-smoke                skip the Playwright smoke gate
 #   --performed-review=<none|opus>  review already performed for spine touches (default: none)
 #
+# Smoke targets: API_URL (default http://localhost:3000) and BASE_URL (default
+# http://localhost:5173). Set both when the stack runs on other ports, e.g. a host
+# that also runs the sibling stack: API_URL=http://localhost:3010 BASE_URL=http://localhost:5174.
+#
 # Test hook: GATES_DIFF_OVERRIDE (newline-separated paths) stands in for the real diff.
 # Output: one "PASS <gate>" / "FAIL <gate> — reason" line per gate; failing command
 # output echoed indented. Exit 0 iff every gate passed.
@@ -78,11 +82,11 @@ smoke_gate() {
   # have twice reset this user's password via create-admin.ts for their own
   # verification — fail here with a one-line diagnosis instead.
   local code
-  code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:3000/auth/login \
+  code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${API_URL:-http://localhost:3000}/auth/login" \
     -H 'Content-Type: application/json' \
     -d "{\"email\":\"${ADMIN_EMAIL:-qa@solvro.test}\",\"password\":\"${ADMIN_PASSWORD:-QaTest1234!}\"}")
   if [ "$code" = "000" ]; then
-    echo "backend unreachable on :3000 — the stack isn't up (docker compose up -d), not a fixture problem"
+    echo "backend unreachable at ${API_URL:-http://localhost:3000} — the stack isn't up (docker compose up -d), not a fixture problem"
     return 1
   fi
   if [ "$code" != "200" ]; then
