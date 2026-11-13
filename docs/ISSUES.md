@@ -2294,8 +2294,8 @@ Tested against a real iTop 3.2.2 (ITIL, default lifecycle). Fixed in code the sa
 ## Professional UI pass — deferred findings (2026-09-29)
 
 - **e2e flakes that pass on retry** (2026-09-29): `e2e/tests/list-dnd.spec.ts:89` (cross-status reorder, Gamma onto Alpha), `e2e/tests/kanban-dnd.spec.ts:1114` (mobile touch append), `e2e/tests/kanban-dnd.spec.ts:1071` (R3 cross-view parity), `e2e/tests/gantt-parity.spec.ts:246` (drag-move). The sidebar now starts expanded at 1440px, which makes the main area 196px narrower; suspect for the desktop drag flakes, not confirmed. Same flake class as the earlier drag/reorder-timing entries above.
-- **`frontend/src/components/Drawer.tsx` has no focus management** (2026-09-29): `Modal` gained focus trap/restore via `frontend/src/hooks/useDialogFocus.ts`; `Drawer` is intentionally non-modal, so whether it should trap, restore, or stay as is needs a decision.
-- **`frontend/src/lib/contrast.ts` `pickContrast` has no callers left** (2026-09-29): label/epic chips now use `on-surface` text over a tint, so nothing needs it. Kept on purpose pending a decision to delete it.
+- **`frontend/src/components/Drawer.tsx` has no focus management** (2026-09-29): `Modal` gained focus trap/restore via `frontend/src/hooks/useDialogFocus.ts`; `Drawer` is intentionally non-modal, so whether it should trap, restore, or stay as is needs a decision. **Resolved 2026-11-12:** `Drawer` stays non-modal and now returns focus to the element that was focused when it opened, once it closes or unmounts (no trap, no move on open).
+- **`frontend/src/lib/contrast.ts` `pickContrast` has no callers left** (2026-09-29): label/epic chips now use `on-surface` text over a tint, so nothing needs it. Kept on purpose pending a decision to delete it. **Resolved 2026-11-12:** the file was deleted.
 - **CORS config has no `exposedHeaders`** (2026-09-29): `backend/src/app.ts` (`cors({...})`) does not expose `X-Total-Count` (set in `backend/src/routes/tasks.ts:203`), so cross-origin callers cannot read it. Fine through the same-origin `/api` proxy the app uses; matters only if the API is ever called cross-origin.
 - **`GET /tasks` still caps at 200 rows** (2026-09-29): the `/tasks` page now shows "Showing N of total" (`frontend/src/pages/Tasks.tsx:424`), so truncation is visible, but pagination remains deferred (see the earlier `GET /tasks` window entry).
 
@@ -2378,7 +2378,7 @@ Contrast ratios below were measured against the token values in `frontend/src/in
 
 - **On phones the portfolio timeline hides the dashed "Today" line** (2026-10-26): it would cross the stacked project labels, so `frontend/src/components/portfolio/PortfolioCalendar.tsx` shows it from 768 px up only. Possible follow-up: draw it over the year track only on phones.
 - **`weekly-sync.spec.ts` "customer row, Reflection sync save…" depends on database size** (2026-10-26): `e2e/tests/weekly-sync.spec.ts` walks every customer block (`groupContainingRow`) with two awaits each. On a long-lived dev database with about 500 customers that exceeds the default 5 s poll on the mobile project; it passes with a clean database. Possible fix: a faster locator that does not walk the blocks.
-- **The account menu has no arrow-key navigation** (2026-10-26): `frontend/src/components/layout/TopBar.tsx` uses `role="menu"` / `menuitem` and closes on Escape, but Up/Down/Home/End do not move between items (Tab still does). Either add arrow-key handling or drop the menu roles.
+- **The account menu has no arrow-key navigation** (2026-10-26): `frontend/src/components/layout/TopBar.tsx` uses `role="menu"` / `menuitem` and closes on Escape, but Up/Down/Home/End do not move between items (Tab still does). Either add arrow-key handling or drop the menu roles. **Resolved 2026-11-12:** Up, Down, Home and End now move between the visible items with wrap, ArrowDown on the button opens the menu, and Tab closes it.
 
 ## Code splitting — deferred findings (2026-10-24)
 

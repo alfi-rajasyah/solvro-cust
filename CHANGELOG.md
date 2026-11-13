@@ -23,6 +23,15 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 - `.github/workflows/ci.yml`: the typecheck job runs `npm audit --omit=dev --audit-level=high` for `backend/` and `frontend/` and reports the result in the job log and as a warning annotation. The step never fails the run. It becomes a gate only after the `zod` 4 upgrade clears the known advisory (GHSA-mrhx-c7xc-m3w5, see `docs/ISSUES.md`).
 
+### Added — 2026-11-12 — Keyboard focus in the drawer and the account menu
+
+- The account menu in the top bar (**`frontend/src/components/layout/TopBar.tsx`**) now works with the arrow keys: Down and Up move between the items and wrap around, Home and End jump to the first and last item, and Down on the account button opens the menu with the first item focused. Items hidden on the current screen size (Help and the theme toggle on desktop) are skipped. Tab closes the menu and moves on from the account button.
+- The side drawer (**`frontend/src/components/Drawer.tsx`**) gives focus back to the control that was focused when it opened, once it closes. It still does not trap focus and does not move focus when it opens, because the board behind it stays usable.
+
+### Removed — 2026-11-12 — Unused contrast helper
+
+- Deleted **`frontend/src/lib/contrast.ts`** (`pickContrast`). Nothing used it since label and epic chips moved to a tinted background with normal text.
+
 ## [1.2.1] — 2026-11-12
 
 ### Changed — 2026-11-12 — Version 1.2.1

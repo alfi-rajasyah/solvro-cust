@@ -75,6 +75,19 @@ export function Drawer({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  // Focus: the drawer is non-modal, so nothing moves on open and there is
+  // no trap. We only remember the opener and hand focus back when the
+  // drawer closes or unmounts (if the opener is still in the document).
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    return () => {
+      if (previous && previous !== document.body && previous.isConnected) {
+        previous.focus();
+      }
+    };
+  }, [open]);
+
   if (!open) return null;
 
   return createPortal(
