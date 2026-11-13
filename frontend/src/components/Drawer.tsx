@@ -78,12 +78,22 @@ export function Drawer({
   // Focus: the drawer is non-modal, so nothing moves on open and there is
   // no trap. We only remember the opener and hand focus back when the
   // drawer closes or unmounts (if the opener is still in the document).
+  // The opener is read during render, before the children mount: a child
+  // with `autoFocus` (the task form's title) takes focus at mount, ahead of
+  // any effect, and would otherwise be remembered as the opener.
+  const openerRef = useRef<HTMLElement | null>(null);
+  const wasOpenRef = useRef(false);
+  if (open && !wasOpenRef.current) {
+    openerRef.current = document.activeElement as HTMLElement | null;
+  }
+  wasOpenRef.current = open;
+
   useEffect(() => {
     if (!open) return;
-    const previous = document.activeElement as HTMLElement | null;
+    const opener = openerRef.current;
     return () => {
-      if (previous && previous !== document.body && previous.isConnected) {
-        previous.focus();
+      if (opener && opener !== document.body && opener.isConnected) {
+        opener.focus();
       }
     };
   }, [open]);

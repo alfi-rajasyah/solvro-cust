@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-13 — Focus returns to the task button after closing the drawer
+
+- Closing the task drawer (**`frontend/src/components/Drawer.tsx`**) now returns focus to the control that opened it. The task form focuses its title field when it opens, and the drawer had remembered that field instead of the opener, so focus was lost on close.
+
 ### Changed — 2026-11-13 — Local smoke gate ports are configurable
 
 - `.claude/scripts/gates.sh` reads the smoke gate's targets from `API_URL` (default `http://localhost:3000`) and `BASE_URL` (default `http://localhost:5173`). A host that runs two Solvro stacks side by side can now point the smoke gate at the right one, for example `API_URL=http://localhost:3010 BASE_URL=http://localhost:5174`. Before, the sign-in pre-flight always called port 3000.
