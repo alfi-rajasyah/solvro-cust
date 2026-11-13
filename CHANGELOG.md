@@ -32,6 +32,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 - Deleted **`frontend/src/lib/contrast.ts`** (`pickContrast`). Nothing used it since label and epic chips moved to a tinted background with normal text.
 
+### Changed — 2026-11-12 — Stronger focus ring on borderless controls, one green
+
+- Borderless controls (card title buttons, icon-only buttons, text-link buttons, chips and similar, across `frontend/src/components/` and `frontend/src/pages/`) now use a solid `focus-visible:ring-primary` ring instead of `ring-primary/30`. The ring measures about 5.5:1 on dark and 5.1:1 on light, above the 3:1 that WCAG 1.4.11 asks for. Bordered controls keep the primary border plus the soft ring. Solid `bg-primary` and `bg-error` buttons also get a 2px ring offset so the ring stays visible against their fill.
+- `--inverse-primary` in the dark theme is `#1f7533` (was `#2d9042`), the same value as the light `primary` (`frontend/src/index.css`).
+- `docs/DESIGN.md` (frontmatter, section 1 and section 4) and `docs/CONFIGURATION.md` describe the new values.
+
 ## [1.2.1] — 2026-11-12
 
 ### Changed — 2026-11-12 — Version 1.2.1

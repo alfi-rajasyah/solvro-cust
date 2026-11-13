@@ -260,7 +260,7 @@ export function TaskStatusesTab({ onDirtyChange }: { onDirtyChange?: (dirty: boo
                 <div className="border-t border-outline-variant px-3 py-2">
                   <button
                     type="button"
-                    className={`[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1 rounded-sm px-1.5 py-1 text-xs font-semibold text-primary outline-hidden hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/30`}
+                    className={`[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1 rounded-sm px-1.5 py-1 text-xs font-semibold text-primary outline-hidden hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary`}
                     onClick={() => handleAdd(category)}
                   >
                     <span className="material-symbols-outlined text-base" aria-hidden="true">
@@ -363,7 +363,7 @@ function StatusRow({
           <button
             type="button"
             aria-label={`Reorder ${row.name || "new status"}`}
-            className="tap-target material-symbols-outlined touch-none rounded-sm p-1 text-lg text-on-surface-variant/80 outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="tap-target material-symbols-outlined touch-none rounded-sm p-1 text-lg text-on-surface-variant/80 outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary"
           />
         }
       >
@@ -438,7 +438,7 @@ function StatusRow({
             <button
               type="button"
               aria-label={`Actions for ${row.name || "new status"}`}
-              className="tap-target inline-flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="tap-target inline-flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary"
             >
               <span className="material-symbols-outlined text-base" aria-hidden="true">
                 more_horiz

@@ -17,7 +17,7 @@ const SCOPE_LABEL: Record<ItopTicketScope, string> = {
 };
 
 const PILL_BASE =
-  "tap-target rounded-sm px-3 py-1 font-display text-meta font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "tap-target rounded-sm px-3 py-1 font-display text-meta font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2";
 
 /** Exported (fix round, phase review) so other Tickets-tab toggle controls
  * (e.g. `TicketsTab.tsx`'s Table|Board `ViewSwitch`) share the exact same
@@ -26,8 +26,8 @@ export function pillClass(active: boolean): string {
   return cn(
     PILL_BASE,
     active
-      ? "bg-primary text-on-primary"
-      : "border border-outline-variant focus-visible:border-primary text-on-surface-variant hover:text-on-surface",
+      ? "bg-primary text-on-primary focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      : "border border-outline-variant focus-visible:border-primary focus-visible:ring-primary/30 text-on-surface-variant hover:text-on-surface",
   );
 }
 

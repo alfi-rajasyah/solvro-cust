@@ -537,7 +537,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                 onChange={(e) => setTitleDraft(e.target.value)}
                 onBlur={handleTitleSubmit}
                 maxLength={200}
-                className="[@media(pointer:coarse)]:min-h-11 w-full border-none bg-transparent text-lg font-bold text-on-surface rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="[@media(pointer:coarse)]:min-h-11 w-full border-none bg-transparent text-lg font-bold text-on-surface rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
               />
             </form>
           ) : (
@@ -909,7 +909,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                           }}
                           maxLength={200}
                           aria-label="Subtask title"
-                          className="[@media(pointer:coarse)]:min-h-11 w-full border-none bg-transparent text-xs text-on-surface rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+                          className="[@media(pointer:coarse)]:min-h-11 w-full border-none bg-transparent text-xs text-on-surface rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                         />
                       </form>
                     ) : (
@@ -956,7 +956,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         type="button"
                         onClick={() => startSubtaskRename(s)}
                         aria-label={`Rename ${s.title}`}
-                        className="material-symbols-outlined -m-2 [@media(pointer:coarse)]:m-0 shrink-0 rounded-sm p-2 [@media(pointer:coarse)]:p-3.5 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100"
+                        className="material-symbols-outlined -m-2 [@media(pointer:coarse)]:m-0 shrink-0 rounded-sm p-2 [@media(pointer:coarse)]:p-3.5 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100"
                       >
                         edit
                       </button>
@@ -967,7 +967,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         disabled={duplicateTask.isPending && duplicateTask.variables === s.id}
                         onClick={() => void handleSubtaskDuplicate(s)}
                         aria-label={`Duplicate ${s.title}`}
-                        className="material-symbols-outlined -m-2 [@media(pointer:coarse)]:m-0 shrink-0 rounded-sm p-2 [@media(pointer:coarse)]:p-3.5 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100 disabled:cursor-default disabled:opacity-50"
+                        className="material-symbols-outlined -m-2 [@media(pointer:coarse)]:m-0 shrink-0 rounded-sm p-2 [@media(pointer:coarse)]:p-3.5 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100 disabled:cursor-default disabled:opacity-50"
                       >
                         content_copy
                       </button>
@@ -1004,7 +1004,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     placeholder="Add subtask"
                     maxLength={200}
                     readOnly={createTask.isPending}
-                    className="[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 border-none bg-transparent text-xs text-on-surface rounded-sm outline-hidden placeholder:text-on-surface-variant/80 focus-visible:ring-2 focus-visible:ring-primary/30"
+                    className="[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 border-none bg-transparent text-xs text-on-surface rounded-sm outline-hidden placeholder:text-on-surface-variant/80 focus-visible:ring-2 focus-visible:ring-primary"
                   />
                   <SubtaskAssigneePicker
                     canEdit={canEdit}
@@ -1217,7 +1217,7 @@ function SubtaskAssigneePicker({
       onClick={() => setEditing(true)}
       aria-label={label}
       title={assignee ? assignee.username : "Unassigned"}
-      className="tap-target shrink-0 rounded-full outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
+      className="tap-target shrink-0 rounded-full outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default"
     >
       <AssigneeAvatar user={assignee ?? null} size="xs" />
     </button>

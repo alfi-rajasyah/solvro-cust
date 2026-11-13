@@ -430,7 +430,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
             maxLength={200}
             autoFocus
             placeholder="Task title"
-            className="[@media(pointer:coarse)]:min-h-11 flex-1 border-none bg-transparent text-lg font-bold text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="[@media(pointer:coarse)]:min-h-11 flex-1 border-none bg-transparent text-lg font-bold text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
           />
         </div>
 
@@ -442,7 +442,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
               value={priority}
               onChange={(e) => setPriority(e.target.value as Priority)}
               disabled={!canEdit}
-              className={`[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default ${PRIORITY_COLOR[priority]}`}
+              className={`[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default ${PRIORITY_COLOR[priority]}`}
             >
               {PRIORITIES.map((p) => (
                 <option key={p} value={p}>
@@ -485,7 +485,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                 setAssignedToId(e.target.value === "" ? "" : Number(e.target.value))
               }
               disabled={!canEdit}
-              className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
+              className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default"
             >
               <option value="">Unassigned</option>
               {(users ?? []).map((u) => (
@@ -525,7 +525,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                 setParentTaskId(e.target.value === "" ? "" : Number(e.target.value))
               }
               disabled={!canEdit}
-              className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
+              className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default"
             >
               <option value="">Top level</option>
               {possibleParents.map((t) => (
@@ -544,7 +544,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                 setSectionId(e.target.value === "" ? "" : Number(e.target.value))
               }
               disabled={!canEdit}
-              className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
+              className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default"
             >
               <option value="">No section</option>
               {(sections ?? []).map((s) => (
@@ -564,7 +564,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                 value={epicId === "" ? "" : String(epicId)}
                 onChange={(e) => setEpicId(e.target.value === "" ? "" : Number(e.target.value))}
                 disabled={!canEdit || parentTaskId !== ""}
-                className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
+                className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default"
               >
                 <option value="">No epic</option>
                 {(epics ?? []).map((e) => (

@@ -365,7 +365,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
                 placeholder="Add story…"
                 maxLength={200}
                 aria-label="Add story"
-                className="[@media(pointer:coarse)]:min-h-11 flex-1 border-none bg-transparent text-xs text-on-surface rounded-sm outline-hidden placeholder:text-on-surface-variant/80 focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="[@media(pointer:coarse)]:min-h-11 flex-1 border-none bg-transparent text-xs text-on-surface rounded-sm outline-hidden placeholder:text-on-surface-variant/80 focus-visible:ring-2 focus-visible:ring-primary"
               />
             </form>
           )}

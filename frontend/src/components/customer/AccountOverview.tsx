@@ -388,7 +388,7 @@ function ProfileSection({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={bodyId}
-        className="[@media(pointer:coarse)]:min-h-11 flex w-full items-center gap-2 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        className="[@media(pointer:coarse)]:min-h-11 flex w-full items-center gap-2 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
         <span className="material-symbols-outlined text-[19px] text-primary" aria-hidden="true">
           {open ? "expand_more" : "chevron_right"}
@@ -529,7 +529,7 @@ function WeeklyUpdatesPanel({ customerId }: { customerId: number }) {
         <button
           type="button"
           onClick={() => setShowAll((v) => !v)}
-          className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 mt-3 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 mt-3 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           {showAll ? "Show latest only" : "Show earlier weeks"}
         </button>
@@ -636,7 +636,7 @@ function WeeklyUpdateRow({ update }: { update: WeeklyUpdate }) {
             onClick={() => setMidweekOpen((v) => !v)}
             aria-expanded={midweekOpen}
             aria-controls={midweekFieldsId}
-            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 mt-2 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 mt-2 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             {midweekOpen ? "Hide mid-week" : "Show mid-week"}
           </button>

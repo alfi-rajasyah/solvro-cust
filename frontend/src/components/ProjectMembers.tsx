@@ -223,7 +223,7 @@ function ProjectMembersDialog({
               type="button"
               onClick={() => void handleAdd()}
               disabled={pickedId === "" || add.isPending}
-              className="[@media(pointer:coarse)]:min-h-11 shrink-0 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60 outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:min-h-11 shrink-0 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60 outline-hidden focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               {add.isPending ? "Adding…" : "Add"}
             </button>
@@ -296,7 +296,7 @@ function MemberRow({
           <button
             type="button"
             onClick={confirm.onConfirm}
-            className="[@media(pointer:coarse)]:min-h-11 rounded-sm bg-error px-3 py-1 text-xs font-bold text-on-error hover:bg-error/90 outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="[@media(pointer:coarse)]:min-h-11 rounded-sm bg-error px-3 py-1 text-xs font-bold text-on-error hover:bg-error/90 outline-hidden focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             Remove and unassign
           </button>

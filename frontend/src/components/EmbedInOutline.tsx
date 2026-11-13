@@ -20,7 +20,8 @@ import { absoluteShareUrl, DEFAULT_SHARE_EXPIRY_DAYS } from "@/lib/shareLinks";
 // cannot be listed and reused: the owner creates a dedicated one here, on
 // purpose, and sees it once.
 
-const FOCUS_RING = "outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
+const FOCUS_RING = "outline-hidden focus-visible:ring-2 focus-visible:ring-primary";
+const FOCUS_RING_BORDERED = "outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
 const GUEST_LABEL = "Outline embed";
 
 type Audience = "signed-in" | "guest";
@@ -135,7 +136,7 @@ export function EmbedInOutlineDialog({
               value={epicId ?? ""}
               onChange={(e) => setEpicId(e.target.value ? Number(e.target.value) : null)}
               aria-label="Filter by epic"
-              className={`[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING}`}
+              className={`[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING_BORDERED}`}
             >
               <option value="">All tasks</option>
               {(epics.data ?? []).map((e) => (
@@ -196,7 +197,7 @@ export function EmbedInOutlineDialog({
                 data-testid="embed-create-guest"
                 onClick={() => void handleCreate()}
                 disabled={create.isPending}
-                className={`[@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60 ${FOCUS_RING}`}
+                className={`[@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60 ${FOCUS_RING} focus-visible:ring-offset-2 focus-visible:ring-offset-background`}
               >
                 {create.isPending ? "Creating…" : "Create guest link"}
               </button>
@@ -260,13 +261,13 @@ function LinkField({ url, label, testId }: { url: string; label: string; testId:
           aria-label={label}
           data-testid={testId}
           onFocus={(e) => e.currentTarget.select()}
-          className={`[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 font-mono text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING}`}
+          className={`[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 font-mono text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING_BORDERED}`}
         />
         <button
           type="button"
           data-testid="embed-copy"
           onClick={() => void handleCopy()}
-          className={`[@media(pointer:coarse)]:min-h-11 inline-flex shrink-0 items-center justify-center gap-1.5 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 ${FOCUS_RING}`}
+          className={`[@media(pointer:coarse)]:min-h-11 inline-flex shrink-0 items-center justify-center gap-1.5 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 ${FOCUS_RING} focus-visible:ring-offset-2 focus-visible:ring-offset-background`}
         >
           <span className="material-symbols-outlined text-base" aria-hidden="true">
             {state === "copied" ? "check" : "content_copy"}

@@ -36,7 +36,7 @@ type State = { error: Error | null };
 const SECONDARY_BUTTON =
   "[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
 const PRIMARY_BUTTON =
-  "[@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 text-xs font-semibold text-on-primary hover:bg-primary/90 outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
+  "[@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 text-xs font-semibold text-on-primary hover:bg-primary/90 outline-hidden focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 export class AppErrorBoundary extends Component<Props, State> {
   state: State = { error: null };

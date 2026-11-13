@@ -170,7 +170,7 @@ export function Utilization() {
             disabled={refresh.isPending}
             title="Refresh from iTop"
             aria-label="Refresh from iTop"
-            className="tap-target inline-flex items-center justify-center rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="tap-target inline-flex items-center justify-center rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-[17px]">refresh</span>
           </button>

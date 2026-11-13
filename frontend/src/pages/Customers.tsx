@@ -342,7 +342,7 @@ function CustomersTable({
                     type="button"
                     aria-label={`Actions for ${row.original.name}`}
                     title="More customer actions"
-                    className="tap-target inline-flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30"
+                    className="tap-target inline-flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <span className="material-symbols-outlined text-base" aria-hidden="true">
                       more_horiz
