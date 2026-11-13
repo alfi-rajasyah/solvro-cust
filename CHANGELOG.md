@@ -19,6 +19,11 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 - Closing the task drawer (**`frontend/src/components/Drawer.tsx`**) now returns focus to the control that opened it. The task form focuses its title field when it opens, and the drawer had remembered that field instead of the opener, so focus was lost on close.
 
+### Fixed — 2026-11-13 — Dark "In progress" chip text contrast
+
+- New colour token `--primary-tint-text` in `frontend/src/index.css`: `#6dd183` in the dark theme, `#1f7533` (the light primary) in the light theme. The "blue" tone of `StatusChip` (In progress tasks, Planning and Completed projects, and the status controls that reuse it) uses it. Before, dark `#3aae51` text on the 20% green tint measured 3.04:1 on the selected-row surface and 3.33:1 on the hover surface. It now holds 4.58:1 or better on every surface. The primary green, buttons and links do not change.
+- `frontend/src/lib/tokenContrast.test.ts` pins the new pair on five surfaces. `docs/DESIGN.md` lists the token.
+
 ### Changed — 2026-11-13 — Local smoke gate ports are configurable
 
 - `.claude/scripts/gates.sh` reads the smoke gate's targets from `API_URL` (default `http://localhost:3000`) and `BASE_URL` (default `http://localhost:5173`). A host that runs two Solvro stacks side by side can now point the smoke gate at the right one, for example `API_URL=http://localhost:3010 BASE_URL=http://localhost:5174`. Before, the sign-in pre-flight always called port 3000.
