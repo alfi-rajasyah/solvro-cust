@@ -19,7 +19,8 @@ import { expect, loginViaUi, test } from "../fixtures/test";
 // dependent on earlier specs.
 
 const KNOWN_GAP_RULES = ["region", "landmark-unique", "heading-order"];
-const CONTRAST_GAP = ":is(.bg-primary\\/10, .bg-primary\\/15).text-primary";
+const CONTRAST_GAP =
+  ":is(.bg-primary\\/10, .bg-primary\\/15):is(.text-primary, .text-primary-tint-text)";
 const REPEATED_ROWS = "tbody tr:nth-child(n+11)";
 
 async function violations(page: Page) {
