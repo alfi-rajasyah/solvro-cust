@@ -25,6 +25,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 - `e2e/tests/axe.spec.ts`: the known-gap contrast skip (`CONTRAST_GAP`) also matches the chip with the new `text-primary-tint-text` class, so the light-theme scan skips the same chips as before. The light value is unchanged (`#1f7533`).
 - `frontend/src/lib/tokenContrast.test.ts` pins the new pair on five surfaces. `docs/DESIGN.md` lists the token.
 
+### Changed — 2026-11-13 — Standing approval to commit and open PRs to develop
+
+- `CLAUDE.md` (Guardrails and Agent Roster): a session may commit, push a feature branch and open a PR to `develop` once the local checks pass. A push or PR to `main`, a merge to `main` and a force-push to `develop` or `main` still wait for explicit user approval.
+
 ### Changed — 2026-11-13 — Local smoke gate ports are configurable
 
 - `.claude/scripts/gates.sh` reads the smoke gate's targets from `API_URL` (default `http://localhost:3000`) and `BASE_URL` (default `http://localhost:5173`). A host that runs two Solvro stacks side by side can now point the smoke gate at the right one, for example `API_URL=http://localhost:3010 BASE_URL=http://localhost:5174`. Before, the sign-in pre-flight always called port 3000.
