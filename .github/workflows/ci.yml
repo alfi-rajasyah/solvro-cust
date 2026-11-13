@@ -136,6 +136,18 @@ jobs:
       - name: Check release version consistency
         run: ci/check-version.sh
 
+      # Report-only: lists production advisories at high severity or above in
+      # the job log without failing the run (decision 2026-11-13). Make it a
+      # gate only after the zod 4 upgrade clears GHSA-mrhx-c7xc-m3w5.
+      - name: npm audit (report only)
+        continue-on-error: true
+        run: |
+          for dir in backend frontend; do
+            echo "::group::npm audit $dir"
+            (cd "$dir" && npm audit --omit=dev --audit-level=high) || echo "::warning title=npm audit ($dir)::advisories at high or above, see the log"
+            echo "::endgroup::"
+          done
+
   backend-tests:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
