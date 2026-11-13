@@ -50,6 +50,30 @@ describe("Drawer focus", () => {
     opener.remove();
   });
 
+  it("returns focus to the opener when a child takes focus on mount", () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const { rerender } = render(
+      <Drawer open={false} onClose={vi.fn()} title="Edit task">
+        <input aria-label="Title" autoFocus />
+      </Drawer>,
+    );
+    rerender(
+      <Drawer open onClose={vi.fn()} title="Edit task">
+        <input aria-label="Title" autoFocus />
+      </Drawer>,
+    );
+    expect(document.activeElement).toBe(screen.getByLabelText("Title"));
+    rerender(
+      <Drawer open={false} onClose={vi.fn()} title="Edit task">
+        <input aria-label="Title" autoFocus />
+      </Drawer>,
+    );
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
   it("leaves focus alone when the opener left the document", () => {
     const opener = document.createElement("button");
     document.body.appendChild(opener);
