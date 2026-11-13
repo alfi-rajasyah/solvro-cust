@@ -11,6 +11,8 @@ import { ACTIVITY_MAX_PAGES, type ActivityEvent, useProjectActivity, useProjectM
 const ALL_PEOPLE = "all";
 
 const FOCUS_RING =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+const FOCUS_RING_BORDERED =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
 /**
@@ -61,7 +63,7 @@ export function ProjectActivity({
         >
           <SelectTrigger
             size="sm"
-            className={`[@media(pointer:coarse)]:min-h-11 w-auto min-w-36 ${FOCUS_RING}`}
+            className={`[@media(pointer:coarse)]:min-h-11 w-auto min-w-36 ${FOCUS_RING_BORDERED}`}
             aria-label="Filter activity by person"
           >
             <SelectValue />
@@ -126,7 +128,7 @@ export function ProjectActivity({
                 type="button"
                 onClick={() => void fetchNextPage()}
                 disabled={isFetchingNextPage}
-                className={`[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 focus-visible:border-primary ${FOCUS_RING}`}
+                className={`[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 focus-visible:border-primary ${FOCUS_RING_BORDERED}`}
               >
                 {isFetchingNextPage ? "Loading…" : "Load more"}
               </button>

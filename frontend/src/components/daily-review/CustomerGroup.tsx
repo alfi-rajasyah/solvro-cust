@@ -100,7 +100,7 @@ export function CustomerGroup({
           aria-expanded={expanded}
           aria-controls={bodyId}
           aria-label={expanded ? "Collapse customer" : "Expand customer"}
-          className="tap-target flex h-6 w-6 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="tap-target flex h-6 w-6 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           <span className="material-symbols-outlined text-lg" aria-hidden="true">
             {expanded ? "expand_less" : "expand_more"}

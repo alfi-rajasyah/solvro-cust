@@ -33,7 +33,8 @@ import {
 // only in the create response, so it is shown once here with a Copy button and
 // can never be recovered from the list.
 
-const FOCUS_RING = "outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
+const FOCUS_RING = "outline-hidden focus-visible:ring-2 focus-visible:ring-primary";
+const FOCUS_RING_BORDERED = "outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
 
 const STATUS_TONE: Record<ShareLinkStatus, "emerald" | "amber" | "gray"> = {
   active: "emerald",
@@ -51,7 +52,7 @@ export function ProjectShareButton({ project }: { project: ProjectDetail }) {
         aria-label="Share with a guest"
         title="Share with a guest"
         data-testid="share-button"
-        className={`tap-target inline-flex h-8 items-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 font-display text-xs font-bold text-on-surface transition-colors hover:bg-surface-container focus-visible:border-primary ${FOCUS_RING}`}
+        className={`tap-target inline-flex h-8 items-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 font-display text-xs font-bold text-on-surface transition-colors hover:bg-surface-container focus-visible:border-primary ${FOCUS_RING_BORDERED}`}
       >
         <span className="material-symbols-outlined text-base" aria-hidden="true">
           ios_share
@@ -166,7 +167,7 @@ function ProjectShareDialog({
                 maxLength={SHARE_LABEL_MAX}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="e.g. For Nusantara IT"
-                className={`[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant focus-visible:border-primary ${FOCUS_RING}`}
+                className={`[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant focus-visible:border-primary ${FOCUS_RING_BORDERED}`}
               />
             </label>
             <label className="flex flex-col gap-1 sm:w-36">
@@ -174,7 +175,7 @@ function ProjectShareDialog({
               <select
                 value={days}
                 onChange={(e) => setDays(Number(e.target.value))}
-                className={`[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING}`}
+                className={`[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING_BORDERED}`}
               >
                 {SHARE_EXPIRY_OPTIONS.map((o) => (
                   <option key={o.days} value={o.days}>
@@ -187,7 +188,7 @@ function ProjectShareDialog({
           <button
             type="submit"
             disabled={create.isPending}
-            className={`[@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60 ${FOCUS_RING}`}
+            className={`[@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-60 ${FOCUS_RING} focus-visible:ring-offset-2 focus-visible:ring-offset-background`}
           >
             {create.isPending ? "Creating…" : "Create link"}
           </button>
@@ -280,12 +281,12 @@ function NewLinkPanel({ link }: { link: CreatedShareLink }) {
           aria-label="Guest link"
           data-testid="share-new-link-url"
           onFocus={(e) => e.currentTarget.select()}
-          className={`[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 font-mono text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING}`}
+          className={`[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 font-mono text-xs text-on-surface focus-visible:border-primary ${FOCUS_RING_BORDERED}`}
         />
         <button
           type="button"
           onClick={() => void handleCopy()}
-          className={`[@media(pointer:coarse)]:min-h-11 inline-flex shrink-0 items-center justify-center gap-1.5 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 ${FOCUS_RING}`}
+          className={`[@media(pointer:coarse)]:min-h-11 inline-flex shrink-0 items-center justify-center gap-1.5 rounded-sm bg-primary px-4 py-1.5 text-xs font-bold text-on-primary hover:bg-primary/90 ${FOCUS_RING} focus-visible:ring-offset-2 focus-visible:ring-offset-background`}
         >
           <span className="material-symbols-outlined text-base" aria-hidden="true">
             {state === "copied" ? "check" : "content_copy"}
@@ -367,7 +368,7 @@ function ShareLinkRow({
             type="button"
             onClick={onAskRevoke}
             aria-label={`Revoke ${title}`}
-            className={`[@media(pointer:coarse)]:min-h-11 shrink-0 rounded-sm border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container hover:text-error focus-visible:border-primary ${FOCUS_RING}`}
+            className={`[@media(pointer:coarse)]:min-h-11 shrink-0 rounded-sm border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container hover:text-error focus-visible:border-primary ${FOCUS_RING_BORDERED}`}
           >
             Revoke
           </button>
@@ -389,7 +390,7 @@ function ShareLinkRow({
               onCancel();
             }}
             disabled={busy}
-            className={`[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container focus-visible:border-primary ${FOCUS_RING}`}
+            className={`[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container focus-visible:border-primary ${FOCUS_RING_BORDERED}`}
           >
             Cancel
           </button>
@@ -397,7 +398,7 @@ function ShareLinkRow({
             type="button"
             onClick={onRevoke}
             disabled={busy}
-            className={`[@media(pointer:coarse)]:min-h-11 rounded-sm bg-error px-3 py-1 text-xs font-bold text-on-error hover:bg-error/90 disabled:opacity-60 ${FOCUS_RING}`}
+            className={`[@media(pointer:coarse)]:min-h-11 rounded-sm bg-error px-3 py-1 text-xs font-bold text-on-error hover:bg-error/90 disabled:opacity-60 ${FOCUS_RING} focus-visible:ring-offset-2 focus-visible:ring-offset-background`}
           >
             {busy ? "Revoking…" : "Revoke link"}
           </button>

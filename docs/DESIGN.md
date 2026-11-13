@@ -25,7 +25,7 @@ colors:
     on-primary: '#0f2b16'
     primary-container: '#2d9042'
     on-primary-container: '#e8f7eb'
-    inverse-primary: '#2d9042'
+    inverse-primary: '#1f7533'
     secondary: '#888780'
     on-secondary: '#1a1a18'
     secondary-container: '#323230'
@@ -168,7 +168,7 @@ Every token is a CSS custom property in `index.css` (`--token-name`, space-separ
 | `on-primary` | `#0f2b16` | `#ffffff` | |
 | `primary-container` | `#2d9042` | `#c8e6cf` | |
 | `on-primary-container` | `#e8f7eb` | `#0f2b16` | |
-| `inverse-primary` | `#2d9042` | `#3aae51` | dark value is the old brand green and no longer equals the light `primary` (`#1f7533`) — alignment is an open user decision, see `docs/ISSUES.md` |
+| `inverse-primary` | `#1f7533` | `#3aae51` | dark value equals the light `primary` (aligned 2026-11-12, user decision D-06); it is the green used on an inverted (light) surface |
 | `secondary` | `#888780` | `#5f5e57` | inactive sidebar icons |
 | `on-secondary` | `#1a1a18` | `#ffffff` | |
 | `secondary-container` | `#323230` | `#e0dfd8` | |
@@ -320,7 +320,7 @@ This value is **fixed** — it does not flip between themes (unlike every color 
 
 > Implementation note: `RightSidebar.tsx` is in the whitelist by design intent (it's a floating overlay layer, same as Drawer), but as of this writing it does **not** apply the `shadow-overlay` class — it relies on `border-l border-outline-variant` over an opaque `bg-surface-container-low` only (no backdrop blur). Don't flag this as a violation; flag it as a gap if you're implementing elevation work in that file.
 
-Nothing else gets a shadow. No card shadows, no hover-lift shadows, no focus-ring glows beyond the focus treatment described next. The app-wide keyboard focus treatment (user decision 2026-11-02, replacing the 2026-08-29 ring-only reduced form) depends on whether the control has a border. **Every bordered interactive control** (buttons, inputs, selects, switch) uses `focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30`, adapted to `has-focus-visible:`/`group-data-*` prefixes where the trigger is a wrapper rather than the focusable element itself (e.g. `calendar.tsx`'s dropdown root and day button). The ring alone (`ring-primary/30`) measures about 1.7:1 on dark and 1.5:1 on light, below the 3:1 WCAG 1.4.11 asks of a focus indicator; the primary border carries the contrast (about 6:1). **Borderless controls** (card title buttons, icon-only buttons, text-link buttons) keep `outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30` — `outline-hidden` (unlike `outline-none`) keeps an outline in forced-colours mode — and that form has the known sub-3:1 gap tracked in `docs/ISSUES.md`. The title buttons in `kanban-v2/cards.tsx`, `itop/board/TicketCard.tsx` and `pages/views/ProjectList.tsx` use the borderless form. This is the one focus treatment for every form control app-wide; there is no separate "Buttons/Inputs conventions" section to consult.
+Nothing else gets a shadow. No card shadows, no hover-lift shadows, no focus-ring glows beyond the focus treatment described next. The app-wide keyboard focus treatment (user decision 2026-11-02, replacing the 2026-08-29 ring-only reduced form) depends on whether the control has a border. **Every bordered interactive control** (buttons, inputs, selects, switch) uses `focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30`, adapted to `has-focus-visible:`/`group-data-*` prefixes where the trigger is a wrapper rather than the focusable element itself (e.g. `calendar.tsx`'s dropdown root and day button). The ring alone (`ring-primary/30`) measures about 1.7:1 on dark and 1.5:1 on light, below the 3:1 WCAG 1.4.11 asks of a focus indicator; the primary border carries the contrast (about 6:1). **Borderless controls** (card title buttons, icon-only buttons, text-link buttons) use `outline-hidden focus-visible:ring-2 focus-visible:ring-primary` with a solid ring (user decision 2026-11-12; about 5.5:1 on dark and 5.1:1 on light, above the 3:1 of WCAG 1.4.11) — `outline-hidden` (unlike `outline-none`) keeps an outline in forced-colours mode. A borderless control with a solid `bg-primary` or `bg-error` fill adds `focus-visible:ring-offset-2 focus-visible:ring-offset-background`, so the ring does not merge into the fill. The title buttons in `kanban-v2/cards.tsx`, `itop/board/TicketCard.tsx` and `pages/views/ProjectList.tsx` use the borderless form. This is the one focus treatment for every form control app-wide; there is no separate "Buttons/Inputs conventions" section to consult.
 
 **AI Breakdown** styling (`.ai-glow`, amber inner-border + glow) was reserved for blueprint-generated task cards; the Secure Ingestion Port that would have produced them is cancelled (see CLAUDE.md's Standing decisions), so this reservation is retired — see §5.
 

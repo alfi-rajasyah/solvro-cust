@@ -13,6 +13,8 @@ import {
 } from "@/lib/queries";
 
 const FOCUS_RING =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+const FOCUS_RING_BORDERED =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
 /**
@@ -138,7 +140,7 @@ function NotificationList({
                   type="button"
                   onClick={() => void fetchNextPage()}
                   disabled={isFetchingNextPage}
-                  className={`rounded-sm border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 focus-visible:border-primary ${FOCUS_RING}`}
+                  className={`rounded-sm border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 focus-visible:border-primary ${FOCUS_RING_BORDERED}`}
                 >
                   {isFetchingNextPage ? "Loading…" : "Load more"}
                 </button>

@@ -541,7 +541,7 @@ function PersonChip({ label, onClear }: { label: string; onClear: () => void }) 
         type="button"
         aria-label={`Remove filter: ${label}`}
         onClick={onClear}
-        className="tap-target flex h-5 w-5 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:text-primary outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+        className="tap-target flex h-5 w-5 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:text-primary outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
       >
         <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
       </button>

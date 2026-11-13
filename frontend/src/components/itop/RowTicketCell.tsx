@@ -46,7 +46,7 @@ export interface RowTicketContext {
 }
 
 const MENU_TRIGGER_CLASS =
-  "tap-target inline-flex max-w-full items-center gap-1.5 rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
+  "tap-target inline-flex max-w-full items-center gap-1.5 rounded-sm outline-hidden focus-visible:ring-2";
 
 export function RowTicketCell({
   task,
@@ -146,7 +146,7 @@ export function RowTicketCell({
 
   let trigger: React.ReactNode;
   if (ref) {
-    const chipClass = `${MENU_TRIGGER_CLASS} rounded-full bg-surface-container-high px-2 py-0.5 ${dimmed ? "opacity-60" : ""}`;
+    const chipClass = `${MENU_TRIGGER_CLASS} rounded-full bg-surface-container-high px-2 py-0.5 focus-visible:ring-primary ${dimmed ? "opacity-60" : ""}`;
     trigger = canEdit ? (
       <DropdownMenuTrigger
         render={<button type="button" aria-label={`iTop ticket ${ref}`} className={chipClass} />}
@@ -169,7 +169,7 @@ export function RowTicketCell({
             type="button"
             aria-label={`Add iTop ticket to ${task.title}`}
             title={ctx.gate.reason ?? undefined}
-            className={`${MENU_TRIGGER_CLASS} border border-dashed border-outline-variant px-2 py-0.5 font-display text-meta font-semibold text-on-surface-variant hover:border-primary hover:text-primary focus-visible:border-primary`}
+            className={`${MENU_TRIGGER_CLASS} border border-dashed border-outline-variant focus-visible:ring-primary/30 px-2 py-0.5 font-display text-meta font-semibold text-on-surface-variant hover:border-primary hover:text-primary focus-visible:border-primary`}
           />
         }
       >

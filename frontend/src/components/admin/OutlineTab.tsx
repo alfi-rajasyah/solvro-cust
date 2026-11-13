@@ -100,7 +100,7 @@ export function OutlineTab() {
               target="_blank"
               rel="noopener noreferrer"
               data-testid="outline-admin-link"
-              className="[@media(pointer:coarse)]:min-h-11 inline-flex max-w-full items-center gap-1.5 break-all rounded-sm bg-surface px-2 py-1.5 font-mono text-meta text-primary outline-hidden hover:underline focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:min-h-11 inline-flex max-w-full items-center gap-1.5 break-all rounded-sm bg-surface px-2 py-1.5 font-mono text-meta text-primary outline-hidden hover:underline focus-visible:ring-2 focus-visible:ring-primary"
             >
               {href}
               <span className="material-symbols-outlined text-base" aria-hidden="true">

@@ -203,7 +203,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
           to="/help"
           aria-label="Help"
           title="Help"
-          className="hidden h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:flex"
+          className="hidden h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary md:flex"
         >
           <span aria-hidden="true" className="material-symbols-outlined text-[20px]">help</span>
         </Link>

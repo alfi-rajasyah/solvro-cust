@@ -30,7 +30,7 @@ export function QueryErrorAlert({ title, error, onRetry, children, className }: 
             <button
               type="button"
               onClick={() => void onRetry()}
-              className="[@media(pointer:coarse)]:min-h-11 rounded-sm font-bold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:min-h-11 rounded-sm font-bold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               Retry
             </button>

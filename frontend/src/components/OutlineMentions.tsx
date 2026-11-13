@@ -81,7 +81,7 @@ export function OutlineMentions({
                     href={href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="[@media(pointer:coarse)]:min-h-11 flex items-center gap-2 rounded-sm px-1.5 py-1 text-xs text-on-surface outline-hidden hover:bg-surface-container focus-visible:ring-2 focus-visible:ring-primary/30"
+                    className="[@media(pointer:coarse)]:min-h-11 flex items-center gap-2 rounded-sm px-1.5 py-1 text-xs text-on-surface outline-hidden hover:bg-surface-container focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     {label}
                     <span className="material-symbols-outlined text-base text-on-surface-variant" aria-hidden="true">

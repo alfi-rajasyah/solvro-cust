@@ -804,7 +804,7 @@ function SectionGroup({
             <button
               type="button"
               onClick={() => onRename(section)}
-              className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               title={section ? "Rename section" : "Promote into a real section"}
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[17px]">edit</span>
@@ -814,7 +814,7 @@ function SectionGroup({
                 type="button"
                 onClick={() => onDuplicate(section)}
                 disabled={duplicatingSectionId === section.id}
-                className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default disabled:opacity-50"
+                className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default disabled:opacity-50"
                 title="Duplicate section"
                 aria-label="Duplicate section"
               >
@@ -825,7 +825,7 @@ function SectionGroup({
               <button
                 type="button"
                 onClick={() => onDelete(section)}
-                className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-error-container hover:text-on-error-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-error-container hover:text-on-error-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 title="Delete section"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[17px]">delete</span>
@@ -959,7 +959,7 @@ function TaskRow({
           <button
             type="button"
             className={[
-              "[@media(pointer:coarse)]:min-h-11 min-w-0 truncate text-sm rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30",
+              "[@media(pointer:coarse)]:min-h-11 min-w-0 truncate text-sm rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary",
               task.status === "DONE" ? "text-on-surface-variant line-through" : "text-on-surface",
             ].join(" ")}
           >
@@ -1050,7 +1050,7 @@ function TaskRow({
           <button
             type="button"
             className={[
-              "[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 truncate text-sm rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30",
+              "[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 truncate text-sm rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary",
               task.status === "DONE" ? "text-on-surface-variant line-through" : "text-on-surface",
             ].join(" ")}
           >
@@ -1188,7 +1188,7 @@ function SubtaskRow({
         <button
           type="button"
           className={[
-            "[@media(pointer:coarse)]:min-h-11 min-w-0 truncate rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30",
+            "[@media(pointer:coarse)]:min-h-11 min-w-0 truncate rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary",
             done ? "text-on-surface-variant line-through" : "text-on-surface",
           ].join(" ")}
         >

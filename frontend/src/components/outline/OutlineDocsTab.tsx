@@ -353,7 +353,7 @@ function TreeRow({
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 truncate rounded-sm text-sm text-on-surface outline-hidden hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 truncate rounded-sm text-sm text-on-surface outline-hidden hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-primary"
           >
             {node.title}
             <span className="sr-only"> (opens in a new tab)</span>

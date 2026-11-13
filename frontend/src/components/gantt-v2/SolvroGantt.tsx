@@ -1072,9 +1072,9 @@ export function SolvroGantt(props: SolvroGanttProps) {
               onClick={() => setScale(s.mode)}
               className={cn(
                 TOOLBAR_ITEM_HEIGHT,
-                "inline-flex items-center rounded-sm px-2.5 font-display text-meta font-semibold tracking-wide outline-hidden transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+                "inline-flex items-center rounded-sm px-2.5 font-display text-meta font-semibold tracking-wide outline-hidden transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary",
                 s.mode === scale
-                  ? "bg-primary text-on-primary"
+                  ? "bg-primary text-on-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   : "text-on-surface-variant hover:text-on-surface",
               )}
             >
@@ -1093,7 +1093,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                 onClick={() => onCreateTaskOpen(null)}
                 className={cn(
                   TOOLBAR_ITEM_HEIGHT,
-                  "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium text-on-surface outline-hidden transition-colors hover:text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+                  "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium text-on-surface outline-hidden transition-colors hover:text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary",
                 )}
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[15px]">add</span>
@@ -1104,7 +1104,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                 onClick={() => setAddingSection(true)}
                 className={cn(
                   TOOLBAR_ITEM_HEIGHT,
-                  "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+                  "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary",
                 )}
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[15px]">add</span>
@@ -1140,7 +1140,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
               disabled={resources.length === 0}
               className={cn(
                 TOOLBAR_ITEM_HEIGHT,
-                "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50",
+                "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50",
               )}
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[15px]">today</span>
@@ -1153,7 +1153,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
               aria-label="Previous period"
               className={cn(
                 TOOLBAR_ITEM_HEIGHT,
-                "inline-flex w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50",
+                "inline-flex w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50",
               )}
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[15px]">chevron_left</span>
@@ -1165,7 +1165,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
               aria-label="Next period"
               className={cn(
                 TOOLBAR_ITEM_HEIGHT,
-                "inline-flex w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50",
+                "inline-flex w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50",
               )}
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[15px]">chevron_right</span>
@@ -1200,9 +1200,9 @@ export function SolvroGantt(props: SolvroGanttProps) {
               }
               className={cn(
                 TOOLBAR_ITEM_HEIGHT,
-                "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium outline-hidden transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+                "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium outline-hidden transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary",
                 showBaseline
-                  ? "bg-primary text-on-primary"
+                  ? "bg-primary text-on-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   : "text-on-surface-variant hover:text-on-surface",
               )}
             >
@@ -1228,7 +1228,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                     type="button"
                     className={cn(
                       TOOLBAR_ITEM_HEIGHT,
-                      "inline-flex items-center gap-1.5 rounded-sm pl-2.5 pr-1.5 font-display text-meta font-medium text-on-surface outline-hidden transition-colors hover:text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+                      "inline-flex items-center gap-1.5 rounded-sm pl-2.5 pr-1.5 font-display text-meta font-medium text-on-surface outline-hidden transition-colors hover:text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary",
                     )}
                   >
                     <span className="text-meta text-on-surface-variant">
@@ -1346,7 +1346,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                 title={exporting ? "Exporting…" : "Export"}
                 className={cn(
                   TOOLBAR_ITEM_HEIGHT,
-                  "inline-flex w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50",
+                  "inline-flex w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50",
                 )}
               >
                 <span className="material-symbols-outlined text-[15px]" aria-hidden="true">
@@ -1527,7 +1527,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                     <button
                       type="button"
                       aria-label="Task actions"
-                      className="text-on-surface-variant hover:text-on-surface ms-auto flex size-5 shrink-0 items-center justify-center rounded-sm outline-hidden opacity-0 transition-opacity group-hover/gantt-row:opacity-100 group-data-hover/gantt-row:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary/30 pointer-coarse:opacity-100"
+                      className="text-on-surface-variant hover:text-on-surface ms-auto flex size-5 shrink-0 items-center justify-center rounded-sm outline-hidden opacity-0 transition-opacity group-hover/gantt-row:opacity-100 group-data-hover/gantt-row:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary pointer-coarse:opacity-100"
                       onClick={(e) => {
                         e.stopPropagation();
                         const rect = e.currentTarget.getBoundingClientRect();

@@ -233,7 +233,7 @@ export function TicketPanel({
                     href={url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1 font-display text-meta font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                    className="[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1 font-display text-meta font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     Open in iTop
                     <span aria-hidden="true" className="material-symbols-outlined text-sm">open_in_new</span>

@@ -149,7 +149,7 @@ function ColumnMenu({ onAdd }: { onAdd: () => void }) {
       <button
         type="button"
         onClick={() => setMenuOpen((v) => !v)}
-        className="material-symbols-outlined cursor-pointer rounded [@media(pointer:coarse)]:p-3 text-base text-on-surface-variant hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+        className="material-symbols-outlined cursor-pointer rounded [@media(pointer:coarse)]:p-3 text-base text-on-surface-variant hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
         aria-label="Column options"
       >
         more_horiz
@@ -578,7 +578,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                 type="button"
                 onClick={() => setCollapsed(def.id, false)}
                 aria-label={`Show ${def.name} column`}
-                className="inline-flex items-center gap-1 rounded-sm px-2 py-1 [@media(pointer:coarse)]:py-3 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1 rounded-sm px-2 py-1 [@media(pointer:coarse)]:py-3 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-sm">unfold_more</span>
                 {def.name} · {collapsedCounts.get(def.id) ?? 0} (hidden)
@@ -845,7 +845,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                           type="button"
                           onClick={() => setCollapsed(def.id, true)}
                           aria-label={`Collapse ${def.name} column`}
-                          className="material-symbols-outlined cursor-pointer rounded [@media(pointer:coarse)]:p-3 text-base text-on-surface-variant hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+                          className="material-symbols-outlined cursor-pointer rounded [@media(pointer:coarse)]:p-3 text-base text-on-surface-variant hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                         >
                           unfold_less
                         </button>

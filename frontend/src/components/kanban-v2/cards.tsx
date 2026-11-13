@@ -126,7 +126,7 @@ export function TaskCard({
           {onClick ? (
             <button
               type="button"
-              className="[@media(pointer:coarse)]:min-h-11 min-w-0 [@media(pointer:coarse)]:min-w-11 rounded-sm text-left text-sm font-bold leading-tight text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:min-h-11 min-w-0 [@media(pointer:coarse)]:min-w-11 rounded-sm text-left text-sm font-bold leading-tight text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
             >
               <CardTitle task={task} />
             </button>

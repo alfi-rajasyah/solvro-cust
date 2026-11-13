@@ -88,7 +88,7 @@ export function TicketCard({
       ) : (
         <button
           type="button"
-          className="[@media(pointer:coarse)]:min-h-11 block w-full rounded-sm text-left text-xs font-bold leading-snug text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="[@media(pointer:coarse)]:min-h-11 block w-full rounded-sm text-left text-xs font-bold leading-snug text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
         >
           <span className="line-clamp-2">{ticket.title}</span>
         </button>

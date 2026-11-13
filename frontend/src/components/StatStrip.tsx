@@ -154,7 +154,7 @@ export function StatStrip({
                 data-testid={item.testId}
                 className={cn(
                   cell,
-                  "h-full outline-hidden transition-colors hover:bg-surface-container-low focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30",
+                  "h-full outline-hidden transition-colors hover:bg-surface-container-low focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
                 )}
               >
                 {body}

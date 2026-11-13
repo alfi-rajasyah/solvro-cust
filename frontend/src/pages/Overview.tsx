@@ -162,7 +162,7 @@ function PersonPicker({
           type="button"
           aria-label={`Clear ${label} filter`}
           onClick={() => onChange(undefined)}
-          className="tap-target flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:text-primary outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="tap-target flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:text-primary outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
         >
           <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
         </button>
