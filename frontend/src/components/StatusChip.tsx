@@ -9,7 +9,7 @@ const TONE_CLASS: Record<Tone, string> = {
   amber: "bg-chip-amber-bg text-chip-amber-text",
   rose: "bg-chip-rose-bg text-chip-rose-text",
   violet: "bg-chip-violet-bg text-chip-violet-text",
-  blue: "bg-primary/10 text-primary dark:bg-primary/20",
+  blue: "bg-primary/10 text-primary-tint-text dark:bg-primary/20",
   gray: "bg-surface-container-high text-on-surface-variant",
 };
 

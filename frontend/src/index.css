@@ -37,6 +37,7 @@
   --color-primary-container: rgb(var(--primary-container));
   --color-on-primary-container: rgb(var(--on-primary-container));
   --color-inverse-primary: rgb(var(--inverse-primary));
+  --color-primary-tint-text: rgb(var(--primary-tint-text));
   --color-secondary: rgb(var(--secondary));
   --color-on-secondary: rgb(var(--on-secondary));
   --color-secondary-container: rgb(var(--secondary-container));
@@ -208,6 +209,7 @@
     --primary-container: 200 230 207;
     --on-primary-container: 15 43 22;
     --inverse-primary: 58 174 81;
+    --primary-tint-text: 31 117 51;
     --secondary: 95 94 87;
     --on-secondary: 255 255 255;
     --secondary-container: 224 223 216;
@@ -255,6 +257,9 @@
     --primary-container: 45 144 66;
     --on-primary-container: 232 247 235;
     --inverse-primary: 31 117 51;
+    /* Green text on a primary/20 tint (StatusChip "blue" tone). Plain primary is
+       3.04:1 there on surface-container-highest; this lighter green holds 4.5:1. */
+    --primary-tint-text: 109 209 131;
     --secondary: 136 135 128;
     --on-secondary: 26 26 24;
     --secondary-container: 50 50 48;

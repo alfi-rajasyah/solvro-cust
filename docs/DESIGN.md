@@ -25,6 +25,7 @@ colors:
     on-primary: '#0f2b16'
     primary-container: '#2d9042'
     on-primary-container: '#e8f7eb'
+    primary-tint-text: '#6dd183'
     inverse-primary: '#1f7533'
     secondary: '#888780'
     on-secondary: '#1a1a18'
@@ -57,6 +58,7 @@ colors:
     on-primary: '#ffffff'
     primary-container: '#c8e6cf'
     on-primary-container: '#0f2b16'
+    primary-tint-text: '#1f7533'
     inverse-primary: '#3aae51'
     secondary: '#5f5e57'
     on-secondary: '#ffffff'
@@ -168,6 +170,7 @@ Every token is a CSS custom property in `index.css` (`--token-name`, space-separ
 | `on-primary` | `#0f2b16` | `#ffffff` | |
 | `primary-container` | `#2d9042` | `#c8e6cf` | |
 | `on-primary-container` | `#e8f7eb` | `#0f2b16` | |
+| `primary-tint-text` | `#6dd183` | `#1f7533` | text of the StatusChip "blue" tone on its `primary/20` tint; lighter than `primary` in dark so it holds 4.5:1 up to `surface-container-highest` (user decision 2026-11-13); pinned by `tokenContrast.test.ts` |
 | `inverse-primary` | `#1f7533` | `#3aae51` | dark value equals the light `primary` (aligned 2026-11-12, user decision D-06); it is the green used on an inverted (light) surface |
 | `secondary` | `#888780` | `#5f5e57` | inactive sidebar icons |
 | `on-secondary` | `#1a1a18` | `#ffffff` | |

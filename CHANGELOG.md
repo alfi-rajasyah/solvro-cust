@@ -19,6 +19,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 - Closing the task drawer (**`frontend/src/components/Drawer.tsx`**) now returns focus to the control that opened it. The task form focuses its title field when it opens, and the drawer had remembered that field instead of the opener, so focus was lost on close.
 
+### Fixed — 2026-11-13 — Dark "In progress" chip text contrast
+
+- New colour token `--primary-tint-text` in `frontend/src/index.css`: `#6dd183` in the dark theme, `#1f7533` (the light primary) in the light theme. The "blue" tone of `StatusChip` (In progress tasks, Planning and Completed projects, and the status controls that reuse it) uses it. Before, dark `#3aae51` text on the 20% green tint measured 3.04:1 on the selected-row surface and 3.33:1 on the hover surface. It now holds 4.58:1 or better on every surface. The primary green, buttons and links do not change.
+- `e2e/tests/axe.spec.ts`: the known-gap contrast skip (`CONTRAST_GAP`) also matches the chip with the new `text-primary-tint-text` class, so the light-theme scan skips the same chips as before. The light value is unchanged (`#1f7533`).
+- `frontend/src/lib/tokenContrast.test.ts` pins the new pair on five surfaces. `docs/DESIGN.md` lists the token.
+
 ### Changed — 2026-11-13 — Standing approval to commit and open PRs to develop
 
 - `CLAUDE.md` (Guardrails and Agent Roster): a session may commit, push a feature branch and open a PR to `develop` once the local checks pass. A push or PR to `main`, a merge to `main` and a force-push to `develop` or `main` still wait for explicit user approval.
