@@ -15,6 +15,11 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-18 — Unknown user ids and NUL bytes answer 400
+
+- Updating a project's TAM, a task's assignee or an epic's owner to a user id that does not exist now answers 400 (`tam_not_found`, `assignee_not_found`, `owner_not_found`), matching the create routes, instead of 404.
+- A NUL character (`\u0000`) in any validated request body, query or path parameter now answers 400 `validation_error` instead of 500; a Postgres 22021 error that still reaches the error handler is also answered as 400.
+
 ### Fixed — 2026-11-18 — Reply-style rules load at session start
 
 - `.claude/settings.local.json`: the SessionStart hook now prints `.claude/reply-style.md` with `cat`. The old hook called `/usr/local/bin/node`, which does not exist on this host, so the rules never loaded. `.claude/hooks/reply-style.js` is deleted. The workflow reference pages in `docs/reference/` describe the new hook.
