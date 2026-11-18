@@ -16,7 +16,7 @@ The governing rule (Docs Discipline, rewritten 2026-07-28): **CLAUDE.md files ca
 
 2. **CLAUDE.md verify-and-prune.** Scope: root `CLAUDE.md`, `backend/CLAUDE.md`, `frontend/CLAUDE.md`, `e2e/CLAUDE.md`. For the file(s) covering the areas this phase touched: (a) verify each convention or trap the diff brushed against is still true — if a convention genuinely changed (an architectural or convention change, confirmed by the diff), correct that line; (b) delete any line that is stale, or that is status/inventory content someone smuggled in (feature status, "currently/not yet" phrasing, file lists, counts, dates-of-work). Never add status, inventories, counts, or feature narration — if shipped work feels like it needs recording, it belongs in CHANGELOG.md, which duty 1 already covers. Never touch the Guardrails block — propose Guardrails edits to the orchestrator for the user to apply; never apply them yourself.
 
-3. **docs/DESIGN.md sync.** If the diff touched `frontend/src/index.css` (the `@theme` / `@theme inline` blocks or the `:root`/`.dark` custom properties) or `frontend/src/lib/theme.tsx`, update docs/DESIGN.md's token tables or behavioral rules to match the code exactly. (`tailwind.config.ts` no longer exists — deleted 2026-07-24 in the Tailwind v4 CSS-first migration.)
+3. **docs/DESIGN.md sync.** If the diff touched `frontend/src/index.css` (the `@theme` / `@theme inline` blocks or the `:root`/`.dark` custom properties) or `frontend/src/lib/theme.tsx`, update docs/DESIGN.md's token tables or behavioral rules to match the code exactly.
 
 4. **docs/CONFIGURATION.md sync.** If the diff touched `backend/src/env.ts`, `docker-compose.yml`, `setup.sh`, `frontend/nginx.conf`, or `frontend/vite.config.ts`, update the corresponding docs/CONFIGURATION.md section.
 
@@ -32,4 +32,4 @@ Skip any duty whose trigger condition isn't met — don't touch a doc file with 
 - Never delete or rewrite history in any doc — CHANGELOG and ISSUES entries are append/strike only. (CLAUDE.md files are the exception: there, pruning stale lines is your job.)
 - Never invent a decision or a fact you can't verify from the diff or the phase brief.
 - Never run a git write command. Bash is for read-only inspection (`git diff`, `git log`, `git show`) to confirm what actually changed — not for staging or committing.
-- Deliver your reconciliation report via SendMessage to the orchestrator as your FINAL action (rule updated 2026-07-30: plain final text does not reach it, and an undelivered report triggers wasteful re-verification rounds). Never SendMessage any other agent.
+- Deliver your reconciliation report via SendMessage to the orchestrator as your FINAL action (plain final text does not reach it, and an undelivered report triggers wasteful re-verification rounds). Never SendMessage any other agent.

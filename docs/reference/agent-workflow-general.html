@@ -976,8 +976,7 @@ section[id] { scroll-margin-top: 86px; } /* clears the sticky nav on anchor jump
       <p><b>Two constraints make or break this.</b> Scope the rules to conversation only: they must never reach code, comments, commit messages, or any file you write. And do not put them in a CLAUDE.md. Every CLAUDE.md in the hierarchy reaches subagents, where "answer first" would strip the file:line evidence out of a reviewer's findings. A subagent's output is data for the orchestrator, not chat for a human, and it never gets a follow-up turn to supply the detail you cut.</p>
       <p>A <code>SessionStart</code> hook fires for the main session alone, which is exactly the scope you want. Keep the rules in a file you can edit without touching the hook.</p>
 <pre><b>.claude/reply-style.md</b>         the rules, edit here
-<b>.claude/hooks/reply-style.js</b>   prints them as additionalContext
-<b>.claude/settings.local.json</b>    registers the SessionStart hook</pre>
+<b>.claude/settings.local.json</b>    a SessionStart hook prints them with cat</pre>
       <p>Verify the scope yourself rather than trusting a diagram: start a fresh session, spawn a subagent, and ask it to quote the rules back. Anything that reaches it is in the wrong file.</p>
     </div>
   </div>
@@ -1007,8 +1006,6 @@ section[id] { scroll-margin-top: 86px; } /* clears the sticky nav on anchor jump
 │  │  └─ docs-keeper.md         <s>sonnet, docs only</s>
 │  ├─ <i>scripts/</i>
 │  │  └─ gates.sh               <s>your checks, single writer</s>
-│  ├─ <i>hooks/</i>
-│  │  └─ reply-style.js         <s>SessionStart context</s>
 │  ├─ reply-style.md            <s>lives here, not in ~/.claude</s>
 │  ├─ <i>settings.local.json</i>       <s>permissions, hook registration</s>
 │  └─ worktrees/                <s>isolation for overlapping waves</s>
@@ -1031,7 +1028,7 @@ section[id] { scroll-margin-top: 86px; } /* clears the sticky nav on anchor jump
         </div>
         <div class="note">
           <h4>A local layer does not travel</h4>
-          <p>Cloning the repository on a second machine gives you none of it. Copy <code>agents/</code>, <code>scripts/</code>, <code>hooks/</code>, and the settings file by hand. Track the layer instead if your team should share it; the trade is that agent files then live in the repository history.</p>
+          <p>Cloning the repository on a second machine gives you none of it. Copy <code>agents/</code>, <code>scripts/</code>, <code>reply-style.md</code>, and the settings file by hand. Track the layer instead if your team should share it; the trade is that agent files then live in the repository history.</p>
         </div>
         <div class="note">
           <h4>Know what reaches a subagent</h4>
