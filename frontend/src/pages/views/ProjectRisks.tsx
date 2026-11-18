@@ -312,7 +312,7 @@ function RisksDataGrid({
                 // Prose-overflow sweep (GH #57 convention): the pre-DataGrid
                 // table's `max-w-md` cell had no wrap-hardening, so a long
                 // unbroken description could stretch the table past its
-                // `overflow-x-auto` bound (docs/ISSUES.md deferred finding).
+                // `overflow-x-auto` bound (docs/archive/ISSUES-2026-11-18-phase-log.md deferred finding).
                 // `whitespace-pre-wrap` preserves operator-entered line
                 // breaks (this text comes from a `<textarea>`); `wrap-
                 // break-word` is Tailwind v4's renamed `break-words` (see
@@ -515,7 +515,7 @@ function RisksDataGrid({
     getRowId: (row) => String(row.id),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    // Pagination stays OFF (pilot verdict — docs/plans/reui-data-grid.md
+    // Pagination stays OFF (pilot verdict — docs/archive/plans/reui-data-grid.md
     // Checkpoint B): no getPaginationRowModel, so the full sorted row model
     // renders. `pageSize` here only sizes the loading-skeleton row count.
     initialState: { pagination: { pageSize: 8 } },

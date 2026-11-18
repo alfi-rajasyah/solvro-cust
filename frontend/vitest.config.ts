@@ -7,7 +7,7 @@ import path from "node:path";
 // node-environment function tests don't need). Only the `@` alias is
 // mirrored so modules under test can import `@/lib/...` the same way the
 // app does. Node environment, .ts-only, no globals — see
-// docs/plans/kanban-reui-swap/plan.md Task 4.
+// docs/archive/plans/kanban-reui-swap/plan.md Task 4.
 export default defineConfig({
   // Same build-time constant vite.config.ts defines (the login page's version),
   // so src/lib/version.test.ts and any component reading it run under vitest.

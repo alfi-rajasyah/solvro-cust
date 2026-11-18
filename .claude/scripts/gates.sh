@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Solvro quality gates — deterministic replacement for the retired solvro-qa agent.
-# Pipeline v2 (approved 2026-07-28): gates run per task; review runs per phase,
-# except spine touches which require an instant opus review (enforced here, not by
-# model judgment). Design: docs/archive/plans/pipeline-v2-design.md
+# Full runs are orchestrator-owned and serial: once per lane-D or lane-S change, and per wave
+# integration plus at close for a phase (lanes: root CLAUDE.md roster). Spine touches
+# require an instant opus review in any lane (enforced here, not by model judgment).
+# Design: docs/archive/plans/pipeline-v2-design.md, docs/archive/plans/pipeline-v3-simplify.md
 #
 # Usage: .claude/scripts/gates.sh [options]
 #   --base=<ref>                diff base, merge-base semantics (default: origin/develop)
@@ -107,7 +108,12 @@ if [ "$F_FRONT" -eq 1 ]; then
   # East-of-UTC run: pins the date-contract invariant (dateField.ts) — a reintroduced
   # local-midnight serialization is invisible under the container's default UTC clock.
   run_gate frontend-vitest-tz docker compose exec -T -e TZ=Asia/Jakarta frontend npm test
-  if [ "$SKIP_SMOKE" -eq 0 ]; then run_gate playwright-smoke smoke_gate; else echo "SKIP playwright-smoke (--skip-smoke)"; fi
+  # A frontend diff of test files only renders nothing new, so smoke has nothing
+  # to prove; typecheck and both vitest runs above still cover it.
+  FRONT_NON_TEST="$(echo "$DIFF_FILES" | grep -E '^frontend/' | grep -vE '\.test\.tsx?$' | sed '/^$/d')"
+  if [ "$SKIP_SMOKE" -eq 1 ]; then echo "SKIP playwright-smoke (--skip-smoke)"
+  elif touches '^frontend/' && [ -z "$FRONT_NON_TEST" ]; then echo "SKIP playwright-smoke (test-only frontend diff)"
+  else run_gate playwright-smoke smoke_gate; fi
 fi
 
 # ---------- changelog presence (always) ----------
@@ -118,6 +124,28 @@ if [ -n "$NON_DOC" ]; then
   if echo "$DIFF_FILES" | grep -qx 'CHANGELOG.md'; then pass changelog-presence
   else fail changelog-presence "code/config changed without a CHANGELOG.md entry"; fi
 else pass "changelog-presence (no code changes in diff)"; fi
+
+# ---------- plan-doc hygiene (always) ----------
+# Plans are cited by their archive path from the start (root CLAUDE.md, Map), so a
+# cited docs/archive/plans/<x> must exist there or still be live in docs/plans/.
+# Code never cites a live docs/plans|docs/prompts path: it goes stale at archive time.
+CITE_BAD=""
+for p in $(git grep --untracked -ohE 'docs/archive/plans/[A-Za-z0-9._/-]+\.md' | sort -u); do
+  [ -e "$p" ] || [ -e "docs/plans/${p#docs/archive/plans/}" ] || CITE_BAD="$CITE_BAD $p"
+done
+CODE_LIVE="$(git grep --untracked -nE 'docs/(plans|prompts)/' -- backend frontend e2e ':!*CLAUDE.md' | head -3)"
+if [ -n "$CITE_BAD" ]; then fail docs-plan-citations "cited plan exists neither in docs/archive/plans/ nor docs/plans/:$CITE_BAD"
+elif [ -n "$CODE_LIVE" ]; then fail docs-plan-citations "code cites a live docs/plans or docs/prompts path (cite docs/archive/...): $(echo "$CODE_LIVE" | cut -c1-120 | tr '\n' ' ')"
+else pass docs-plan-citations; fi
+# Every live plan states its status; a shipped one belongs in docs/archive/plans/.
+STATUS_BAD=""
+for f in docs/plans/*.md; do
+  [ -f "$f" ] || continue
+  s="$(grep -m1 -iE '^([>-]\s*)?\**status\**:' "$f")"
+  if [ -z "$s" ]; then STATUS_BAD="$STATUS_BAD $f(no Status line)"
+  elif echo "$s" | grep -qiE 'status\**:\**\s*\**(shipped|complete)'; then STATUS_BAD="$STATUS_BAD $f(shipped: git mv it to docs/archive/plans/)"; fi
+done
+if [ -n "$STATUS_BAD" ]; then fail docs-plans-status "$STATUS_BAD"; else pass docs-plans-status; fi
 
 # ---------- standing guardrail checks (always) ----------
 if [ -f frontend/src/pages/Tasks.tsx ] && grep -q 'path="tasks"' frontend/src/App.tsx; then

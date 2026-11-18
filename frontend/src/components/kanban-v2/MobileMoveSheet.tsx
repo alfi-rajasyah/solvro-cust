@@ -1,6 +1,6 @@
 // Copied from the legacy frontend/src/pages/views/ProjectKanban.tsx
 // (MobileMoveSheet lines 1123-1173, pre-T11 cutover) per Architecture
-// Decision 2 (docs/plans/kanban-reui-swap/plan.md): copy, don't extract. The
+// Decision 2 (docs/archive/plans/kanban-reui-swap/plan.md): copy, don't extract. The
 // legacy file is gone as of T11 cutover (git history preserves it). Kept as
 // its own file rather than folded into cards.tsx (T8 brief's "or its own
 // small file if cleaner") since it's a sheet/overlay concern, not a card

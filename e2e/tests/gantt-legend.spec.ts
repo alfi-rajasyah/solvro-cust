@@ -2,7 +2,7 @@ import { test, expect, loginViaUi, apiBase } from "../fixtures/test";
 import type { Page } from "@playwright/test";
 
 // Regression coverage for the sustained Color-by legend
-// (docs/plans/optional-sa-and-gantt-color-legend-plan.md, Task 3): the
+// (docs/archive/plans/optional-sa-and-gantt-color-legend-plan.md, Task 3): the
 // toolbar must expose a "Color by" control, and the legend must be present
 // in ALL three modes — Section mode previously rendered no legend at all.
 // Since 2026-08-31 the control is a menu button (mode radios + the full

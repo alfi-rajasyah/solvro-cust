@@ -14,8 +14,8 @@ import { getTasks, setWipLimits, type SeededTask, createEpic } from "../fixtures
 import type { Page } from "@playwright/test";
 
 // Ported from the QA gate script qa-wave2.mjs, then rewritten against the
-// ReUI board (docs/plans/kanban-reui-swap/plan.md, T10) per the binding
-// scenario table (docs/plans/kanban-reui-swap/scenarios.md) and its e2e
+// ReUI board (docs/archive/plans/kanban-reui-swap/plan.md, T10) per the binding
+// scenario table (docs/archive/plans/kanban-reui-swap/scenarios.md) and its e2e
 // Coverage Audit (T2) section. `openKanban` (fixtures/test.ts) targets
 // `KANBAN_ROUTE` ("kanban" as of the T11 cutover).
 // Mouse-drag cases only make sense on the desktop project (dnd-kit
@@ -293,7 +293,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // Sub one seeds at position 0, Sub two at 1 → Sub two owns the second
     // "Reorder subtask" handle in the panel's subtask list. exact: true —
     // dnd-kit also puts role="button" on each row, whose accessible name
-    // CONTAINS the handle's label (docs/ISSUES.md, sortable deferred #4).
+    // CONTAINS the handle's label (docs/ISSUES.md ISS-079).
     const handles = panel.getByRole("button", { name: "Reorder subtask", exact: true });
     await expect(handles).toHaveCount(2);
     const subTwoHandle = handles.nth(1);

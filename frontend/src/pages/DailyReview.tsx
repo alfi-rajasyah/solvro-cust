@@ -18,7 +18,7 @@ interface FocusRequest {
   token: number;
 }
 
-// Daily Review v2 (docs/plans/daily-review-v2-spec.md): a weekly, per-
+// Daily Review v2 (docs/archive/plans/daily-review-v2-spec.md): a weekly, per-
 // customer surface — daily notes per project, operations notes per
 // customer, an explicit "Mark reviewed" action, actionable overdue-task/
 // open-risk lists, and a weekly update drafted from the week's notes. The

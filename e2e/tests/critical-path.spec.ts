@@ -2,7 +2,7 @@ import { test, expect, loginViaUi, apiBase, openKanban } from "../fixtures/test"
 import { createTask, isoDateOffset } from "../fixtures/seed";
 import type { Page } from "@playwright/test";
 
-// Critical Path mark (docs/plans/critical-path-mark.md, T4) — e2e coverage
+// Critical Path mark (docs/archive/plans/critical-path-mark.md, T4) — e2e coverage
 // for the §3 DOM contract T3 implements in gantt-v2/: the bar wrapper span
 // (`[data-task-id]`, task bars AND milestones) carries `data-critical-path`
 // when the task is marked and lacks it otherwise; the task panel's toggle is

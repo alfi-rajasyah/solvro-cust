@@ -5,7 +5,7 @@ import { mapCommitToPatch, type KanbanCommitMetaLike } from "./commitMapper";
 import { withStatus } from "@/lib/taskStatusFixture";
 
 // Every test in this file is a named row from
-// docs/plans/kanban-reui-swap/scenarios.md sections SC/CC/FA/NO/MS (the
+// docs/archive/plans/kanban-reui-swap/scenarios.md sections SC/CC/FA/NO/MS (the
 // binding, CP0-approved behavior spec for this mapper). RG rows are modal/
 // backend paths, out of mapper scope, and are not tested here.
 

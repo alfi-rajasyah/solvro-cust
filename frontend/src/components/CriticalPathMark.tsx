@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 // Single spec for the manual Critical Path mark — reused by every surface
 // (Gantt tree, Kanban card, Timeline card, List row, task panel, task form).
-// See docs/plans/critical-path-mark.md §3.
+// See docs/archive/plans/critical-path-mark.md §3.
 export const CRITICAL_PATH_LABEL = "Critical Path";
 export const CRITICAL_PATH_HELPER_TEXT = "Slip here moves the end date.";
 export const CRITICAL_PATH_GLYPH = "conversion_path";

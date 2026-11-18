@@ -1,5 +1,5 @@
 // SolvroKanban — kanban-v2 container mounted at /projects/:id/kanban (T11
-// cutover; see docs/plans/kanban-reui-swap/plan.md T6, Architecture Decision 1).
+// cutover; see docs/archive/plans/kanban-reui-swap/plan.md T6, Architecture Decision 1).
 // Renders the vendored ReUI Kanban engine (frontend/src/components/reui/
 // kanban.tsx) over the pure adapter.ts projection. T7 wires
 // value/onValueChange/onValueCommit: a live local projection is authoritative

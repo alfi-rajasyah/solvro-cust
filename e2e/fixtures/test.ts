@@ -73,7 +73,7 @@ export async function submitLoginForm(
 /**
  * Route segment for the Kanban board under test — the ReUI-engine board,
  * cut over to the real `/kanban` route at
- * `docs/plans/kanban-reui-swap/plan.md` T11. Single source of truth so specs
+ * `docs/archive/plans/kanban-reui-swap/plan.md` T11. Single source of truth so specs
  * don't hardcode the segment.
  */
 export const KANBAN_ROUTE = "kanban";

@@ -223,7 +223,7 @@ test.describe("global search palette", () => {
   // dialog is `w-full` inside `fixed inset-0 flex items-stretch
   // justify-center`, so `{x: 0, y: 0, height: <viewport height>}` is
   // structurally guaranteed regardless of content — they added no coverage.
-  // Ledger item 7 (docs/ISSUES.md, "⌘K toggle-close is effectively
+  // Ledger item 7 (docs/archive/ISSUES-2026-11-18-phase-log.md, "⌘K toggle-close is effectively
   // unreachable"): the palette autofocuses its own input the instant it
   // opens (AutocompleteInput's `autoFocus`), so a second ⌘K press almost
   // always fires with focus already inside that input. The fix checks
@@ -245,7 +245,7 @@ test.describe("global search palette", () => {
     await expect(dialog).toHaveCount(0);
   });
 
-  // Ledger item 4 (docs/ISSUES.md, "Palette result-state machine: error
+  // Ledger item 4 (docs/archive/ISSUES-2026-11-18-phase-log.md, "Palette result-state machine: error
   // state indistinguishable from empty"): `useSearch`'s `error` was never
   // destructured, so a failed `/search` rendered the same `No results for
   // "x"` copy as a genuine zero-hit query. Assert the failure copy is
@@ -283,7 +283,7 @@ test.describe("global search palette", () => {
   });
   });
 
-  // Ledger item 6 (docs/ISSUES.md, "Shared body-scroll-lock helper needed"):
+  // Ledger item 6 (docs/archive/ISSUES-2026-11-18-phase-log.md, "Shared body-scroll-lock helper needed"):
   // Modal.tsx and CommandPalette.tsx each wrote `document.body.style.overflow`
   // directly with no ref-count, so closing the palette while a Modal was
   // still open behind it unlocked the page. `useBodyScrollLock` fixes this

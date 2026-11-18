@@ -198,7 +198,7 @@ function TaskTimelineItem({
           <AssigneeAvatar user={task.assignedTo} size="xs" />
         </div>
         {task.description && (
-          // Prose-overflow sweep (GH #57 convention, docs/ISSUES.md deferred
+          // Prose-overflow sweep (GH #57 convention, docs/archive/ISSUES-2026-11-18-phase-log.md deferred
           // finding): this cell had neither wrap-hardening nor a clamp — a
           // long unbroken description could stretch the timeline card.
           // `whitespace-pre-wrap` preserves operator-entered line breaks;

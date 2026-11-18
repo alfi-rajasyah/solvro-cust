@@ -1,2456 +1,1418 @@
-# Known Issues & Pending Work
-
-Tracking doc for Solvro, compiled from **CLAUDE.md** canonical decisions,
-**CHANGELOG.md**, and working-session history (as of 2026-06-03). Scope: known
-bugs, doc/reality drift, deferred decisions, and follow-ups — not the full
-product backlog. Update or prune items as they're resolved.
-Last whole-list code check: 2026-09-02, against `develop` @ `7aa0339` (static read of
-cited files; entries marked *code check* below carry the result).
-
----
-
-## Known bugs / inconsistencies
-
-### Accepted risk — per-email sign-in lockout (2026-10-22)
-- `POST /auth/login` blocks an email for 15 minutes after 10 rejected attempts
-  (`backend/src/routes/auth.ts`, `http/loginThrottle.ts`). Anyone who knows a
-  colleague's email can therefore keep that colleague's password sign-in
-  blocked by sending 10 wrong passwords every 15 minutes, from any address.
-  Accepted (user decision 2026-10-22) because the alternative — keying the
-  counter on email + address only — would let a distributed guess run 10
-  attempts per address per email. Mitigations available if it is ever abused:
-  the per-address limit (50 failures / 15 min) already caps one source;
-  Google sign-in is unaffected; an admin password reset issues a fresh token.
-  Revisit if the app is exposed beyond the LAN.
-- The email counter table is bounded at 10 000 keys (oldest evicted), so a
-  flood of distinct emails from many addresses can evict a target's counter;
-  the per-address limit still applies. Same design as the public-share limiter.
-
-### ~~Unknown user id: 400 on create, 404 on update (2026-10-23)~~ — fixed 2026-11-18
-- Creating a project, task or epic with an unknown `tamId`, `assignedToId` or
-  `ownerId` answers 400 `tam_not_found` / `assignee_not_found` /
-  `owner_not_found` (`backend/src/lib/userRefs.ts`). The update routes
-  (`PATCH /projects/:id` `tamId`, `PATCH /tasks/:id` `assignedToId`,
-  `PATCH /epics/:id` `ownerId`) still write the relation with `connect`, so an
-  unknown id there is Prisma's P2025 → 404 `not_found` "Record not found". Not a
-  500, but a 404 for a body field blurs the rule that 404 means a hidden
-  resource. Fix: call `assertUserExists` on the three update paths and change
-  the 404 expectation in `backend/test/taskAssigneeMembers.test.ts`.
-
-### ~~A NUL byte in a text field answers 500 (2026-10-23)~~ — fixed 2026-11-18 (`validate()` rejects U+0000 in body/query/params with 400; errors.ts maps Postgres 22021 to 400 as a safety net)
-- A string containing `\u0000` passes every Zod `z.string()` check, then
-  Postgres refuses it at the write (error 22021, a
-  `PrismaClientUnknownRequestError`), which the error handler answers as 500.
-  Any free-text body field is affected (task title, description, notes).
-- The two rollback tests in `backend/test/taskAssigneeMembers.test.ts` use this
-  on purpose as their "write fails after the assignee helper ran" trigger. A fix
-  (reject or strip NUL in a shared string schema, or map 22021 to 400) must
-  give those tests another late-failure trigger, for example a `vi.spyOn` on
-  the transaction's `task.create` / `task.update`.
-
-### Inactive user accepted as TAM, assignee or epic owner (2026-10-23)
-- The create and update paths for `tamId`, `assignedToId` and `ownerId` check
-  that the user exists (`backend/src/lib/userRefs.ts`) but not that the user is
-  active, so an inactive user can still be set as TAM, assignee or epic owner.
-  Waits for Alfi's decision on whether to reject them (and with which error
-  code) or keep accepting them.
-
-### A Postgres 22021 reaching the error handler is not logged (2026-11-18)
-- `backend/src/http/errors.ts:111` answers 400 "Text must not contain NUL
-  characters" and logs nothing, where the 500 it replaced logged at `error`.
-  Validated routes reject NUL earlier (`http/validate.ts`). Only paths that
-  skip `validate()` can still reach this branch: the signed webhooks, multipart
-  routes, and server-side writes that no try/catch wraps. The iTop re-reads
-  after a write are wrapped (`reReadAfterWrite`, `readAndUpsertNewTicket`,
-  `readAndUpsertNewTimeEntry`), log a `warn` and do not reach it. When the NUL
-  comes from something other than the caller's own text, the message blames the
-  caller. Fix: `logger.warn({ pgCode }, ...)` without `err` (it carries row
-  data), plus a neutral message.
-
-### Gantt tree pane — residual clipping after the #118 fix (2026-07-30)
-- **Engine container clamp can re-clip the Dates/color columns.** The vendored
-  engine (`clampContainer`, `reui/gantt/gantt-view.tsx:977-987`) renders the
-  tree pane narrower than the configured `treePanel.width` when the container
-  can't spare its minimum timeline width, and never reports that through
-  `onWidthChange`. `SolvroGantt.tsx` derives `nameColumnWidth` from its own
-  `treeWidth` state, so on ~768–850px viewports a wide persisted width (e.g.
-  640) pushes the fixed columns past the rendered pane edge again — the exact
-  #118 symptom. Fix options (deferred from the #118 instant review): clamp
-  `nameColumnWidth` by the measured pane width (ResizeObserver on the pane),
-  or patch the engine to surface the clamped width with a `// SOLVRO PATCH`
-  marker. Rare in practice: the Gantt is desktop-first and the default pane
-  (364) never triggers the clamp at supported widths.
-  *Updated 2026-11-18 (code check)*: default pane 498 (`SolvroGantt.tsx:209`); the clamp engages below a ~699px container (498 + `MIN_TIMELINE_WIDTH` 200 + 1, `gantt-view.tsx:213`); the ResizeObserver fix is still deferred.
-- **A pane narrowed below 256px clips the fixed columns** (name column floors
-  at 100px; 100 + 156 > pane). Deliberate user narrowing — accepted, not
-  planned for a fix.
-  *Updated 2026-09-02 (code check)*: the fixed-column total is now 256px (Dates 132 + color 24 + Status 100), so the clip threshold is 356px, not 256 (`SolvroGantt.tsx:218`). Same accepted behavior.
-- **Mid-drag geometry lag (pre-existing).** The engine writes the pane width
-  to the DOM during a splitter drag but fires `onWidthChange` only on
-  pointerup (`gantt-view.tsx:1057-1077`), so during a narrowing drag the
-  fixed columns clip and snap back on release. Same lag existed under the old
-  formula; noted 2026-07-30 because the #118 fix makes pane edge and column
-  geometry co-dependent.
-- ~~**Updated 2026-08-03 (Gantt visual refresh phase, T2's Status/Due
-  columns) — the figures in the two bullets above are stale.** The fixed
-  columns total they cite (156px) grew to 316px (`TREE_FIXED_COLUMNS_WIDTH`,
-  `SolvroGantt.tsx:206-210`: Dates 132 + color 24 + new Status 100 + new Due
-  60), and the tree pane's own default/max grew with it
-  (`TREE_PANEL_DEFAULT_WIDTH` 364→558, `TREE_PANEL_MAX_WIDTH` 640→834 —
-  `SolvroGantt.tsx:158-172`) specifically to preserve the same title-text
-  room a pre-T2 visitor had. Two corrections: (a) the first bullet's claim
-  that "the default pane (364) never triggers the clamp at supported
-  widths" no longer holds — `clampContainer`'s ceiling is `container −
-  minTimelineWidth(200) − 1` (`MIN_TIMELINE_WIDTH`, `gantt-view.tsx:213`;
-  `clampContainer`, `gantt-view.tsx:977-987`), so the new 558 default now
-  engages the clamp under a ~759px container, reachable on ~1024px
-  viewports with the sidebar expanded — the deferred ResizeObserver fix is
-  worth re-weighing now that its trigger range widened; (b) the second
-  bullet's "narrowed below 256px" is now 416px (`316 + 100`
-  `TREE_NAME_COLUMN_MIN_WIDTH`) — same deliberate-narrowing acceptance,
-  just a wider pane before it bites.~~ **Obsolete 2026-09-02**: code check — these figures (316px fixed columns, 558/834 panel) describe the removed Due-column build; the next bullet matches current code (`SolvroGantt.tsx:199,205,237-240`: 256 / 498 / 774).
-- ~~**Updated 2026-08-03 (later the same day, Due-column removal) — the
-  figures in the 2026-08-03 update above shrank again.** The Due column was
-  removed as redundant with the Dates range: fixed columns total is now
-  256px (Dates 132 + color 24 + Status 100), pane default/max are 498/774
-  (width key bumped to `solvro.gantt.treeWidth.v4`, Due-era v3 values
-  migrate −60), and the deliberate-narrowing threshold is 356px
-  (`256 + 100`). The clamp-at-default observation in (a) still holds
-  directionally — the 498 default engages `clampContainer` under a ~699px
-  container — and the deferred ResizeObserver fix remains worth re-weighing.~~ **Moot 2026-11-18**: the figures are superseded by the update on the first bullet of this section (default pane 498 at `SolvroGantt.tsx:209`, max 774 at `:215`, fixed columns at `:247`).
-
-### Gantt Excel/PDF export downloads blocked in production (2026-07-31)
-- **Cause: Chromium insecure-download blocking, keyed on the origin scheme.**
-  Prod is served at `http://solvro.elitery.local`. Chromium-family browsers
-  block downloads that originate from a non-trustworthy origin, showing
-  "blocked this download because the site isn't using a secure connection and
-  the file may have been tampered with". Observed in **Dia** (Chromium-based)
-  on 2026-07-31. The user can still keep the file via the download item's
-  overflow menu, so this is friction, not data loss.
-- **Supersedes the earlier Safe Browsing diagnosis** recorded in
-  `docs/archive/ideas/gantt-ux-and-export-fixes.md` and the appendix of
-  `docs/archive/plans/gantt-ux-and-export-fixes-plan.md`. That theory is
-  falsified: Chromium's download-protection ping is bounded by
-  `kDownloadRequestTimeoutMs = 7000` (`chrome/browser/safe_browsing/
-  download_protection/download_protection_service.cc`), after which the check
-  returns `UNKNOWN` and the download proceeds — it cannot hang a download
-  indefinitely. The block is also independent of network egress and of file
-  type (`.pdf` is `SAMPLED_PING`, yet it is blocked too).
-- **Not fixable by changing the export format.** Every spreadsheet format that
-  preserves formatting is `FULL_PING` in
-  `components/safe_browsing/content/resources/download_file_types.asciipb`
-  (`xlsx`, `xls`, `xml` SpreadsheetML, `ods`, `slk`, `htm`, `zip`); only `csv`,
-  `txt`, `json`, and `pdf` are `SAMPLED_PING`. Irrelevant to this bug anyway,
-  since the block is scheme-based, not type-based.
-- **Fix directions (no code change required for the first two):**
-  (a) reach the app at `http://localhost:PORT` via an SSH forward or a local
-  reverse proxy — Chromium treats `localhost` as a potentially trustworthy
-  origin with no certificate, which also revives the clipboard APIs and lets
-  the PWA service worker register; (b) HTTPS with an internal-CA cert (user
-  declined 2026-07-31 — per-machine CA trust); (c) PDF only — the existing
-  **View** action in `RightSidebar.tsx` opens a blob URL in a tab and skips the
-  download pipeline entirely, so `Cmd+P` → "Save as PDF" writes the file. Excel
-  has no in-browser viewer equivalent.
-- **Unrelated hygiene spotted while investigating (not fixed):** all three
-  download helpers call `URL.revokeObjectURL` synchronously right after
-  `a.click()` — `frontend/src/lib/gantt/exportExcel.ts:311`,
-  `frontend/src/lib/gantt/exportPdf.ts` (`pdf.save` path), and
-  `frontend/src/lib/export/projectExport.ts:84`. The revoke belongs on a later
-  task. Not the cause of this bug.
-  **Note (2026-08-03, docs-keeper phase-end pass):** the third site,
-  `frontend/src/lib/export/projectExport.ts`, is deleted in its entirety on
-  the unmerged branch `chore/move-description-to-context-sidebar` (commit
-  `c39b935`, "remove the Reports page and its export-packet builder") — not
-  merged into `develop` as of this writing, so the file still exists on
-  `develop`/this phase's base today. Do not mark this item resolved on that
-  basis; if/when that branch merges, this item shrinks to the two remaining
-  sites (`exportExcel.ts:311`, `exportPdf.ts`'s `pdf.save` path).
-  *Updated 2026-09-02 (code check)*: `frontend/src/lib/export/` no longer exists (that branch merged); `exportPdf.ts` uses `pdf.save()` with no object URL at all. The only remaining site is `frontend/src/lib/gantt/exportExcel.ts:363`, still a synchronous revoke after `a.click()`.
-
-### Documentation vs. reality drift
-- ~~**DESIGN.md is gitignored and untracked.**~~ **Resolved 2026-07-21**:
-  DESIGN.md is tracked and was regenerated from code + the paper-extraction
-  references; the solvro-docs-keeper agent syncs it whenever a diff touches
-  `tailwind.config.ts`, `index.css`, or `theme.tsx` (see
-  `docs/plans/claude-agent-architecture-design.md`).
-- ~~**DESIGN.md typo:** the light-mode `surface-container` value is written
-  `#ebebе7` with a stray **Cyrillic** `е`.~~ **Resolved 2026-07-21** in the
-  DESIGN.md regeneration (`#ebebe7`, verified against `index.css`).
-
-### Dev environment
-- ~~**Tailwind config changes need a frontend container restart.**~~ **Obsolete
-  2026-07-25**: `tailwind.config.ts` was deleted 2026-07-24 in the Tailwind v4
-  CSS-first migration — the theme now lives in `frontend/src/index.css`'s
-  `@theme` blocks, which hot-reload through Vite like any other CSS. The
-  config-caching failure mode (and its worse `tailwind.config.js`-shadowing
-  variant, fixed 2026-06-03) no longer has a config file to apply to.
-- ~~**Backend test-DB isolation is broken** (discovered 2026-07-22, plan Task 1):
-  `backend/test/env.ts` only *falls back* to a disposable `localhost:5433`
-  Postgres when `DATABASE_URL` is undefined — but `docker compose exec backend
-  npm test` (the CLAUDE.md-documented gate command) inherits the backend
-  container's dev `DATABASE_URL` from its environment, bypassing the fallback
-  and pointing vitest at the **LIVE dev database**. Consequences: (a) ~330 junk
-  test projects and hundreds of junk tasks accumulated in the dev DB from prior
-  branch work; (b) `backend/test/taskOrdering.test.ts` test
-  `"orders GET /tasks (cross-project) by position asc, then id asc"` is flaky
-  (the endpoint's `take: 200` truncates amid the junk rows; pre-existing, also
-  reproduces on `develop` before this task). Workaround used by this branch's QA
-  gates: create an isolated `solvro_test` database inside the existing postgres
-  container and run `docker compose exec -e DATABASE_URL="postgresql://solvro:test@postgres:5432/solvro_test?schema=public"
-  backend npm test` (globalSetup auto-migrates it). Suggested proper fix
-  (not implemented): codify an isolated test DB (compose service or documented
-  recipe) and truncate between runs to prevent junk accumulation; optionally
-  scope the flaky cross-project test to its own rows.~~ **Resolved 2026-08-02**
-  (Issues Sweep #1): `backend/test/globalSetup.ts` now hard-guards against
-  running (throws before migrating or touching data) unless `DATABASE_URL`
-  names a database ending in `_test`, closing off the live-dev-DB pollution
-  path structurally rather than by convention alone; `backend/test/env.ts`'s
-  comment was rewritten to document the guard. Separately, the ~330+ rows of
-  accumulated junk already in the dev DB (plus later "Diag"/"Gate"/"Timeline
-  Check"/QA-fixture leftovers — see the entries below) were deleted with user
-  approval: 1,092 projects / 419 customers / 805 users removed, 144/34/8
-  legitimate rows remain. See CHANGELOG's "Backend tests start from a clean
-  database" entry.
-- **`pwa.spec.ts` fails against the dev server** (discovered 2026-07-22, plan
-  Task 6): vite-plugin-pwa is configured with `devOptions: false`, so the
-  service-worker registration and manifest link are only available in build
-  mode (Vite dev server doesn't emit them). All four pwa cases (`manifest link
-  is present`, `service worker registers`, both desktop and mobile) fail at
-  `BASE_URL=http://localhost:5173` but pass on the built CI stack (`:8080`).
-  Consider gating the spec on `BASE_URL` to skip locally or enabling
-  `devOptions: true` for dev-server registration.
-  *Updated 2026-09-02 (code check)*: still open. `pwa.spec.ts` now has 3 tests (manifest, service worker, theme-color); the service-worker test skips on non-local HTTP hosts (`pwa.spec.ts:26`) but `localhost:5173` counts as secure, so it still runs and fails on the Vite dev server; the manifest test has no guard; `vite.config.ts` still has no `devOptions`. `e2e/CLAUDE.md` records the dev-server failure as accepted.
-- **`e2e/fixtures/test.ts` stale comment about fixture isolation** (discovered
-  2026-07-22, plan Task 6): the comment claims `seededProject` is "effectively
-  per test file," but it is WORKER-scoped with `workers: 1`, meaning one
-  seeded project is shared across ALL spec files sequentially (not isolated per
-  file). During plan Task 6, `list-dnd.spec.ts` inherited cross-spec state
-  pollution from `kanban-dnd.spec.ts` mutating the same fixture project, which
-  caused a test to fail because a precondition ("Beta is TODO") was false
-  (Beta was already IN_PROGRESS from the prior spec). Fixed by deriving state
-  from the API rather than hardcoding preconditions, but the comment and
-  cross-spec mutations should be kept in mind when writing new specs.
-- ~~**`backend/test/taskOrdering.test.ts` still flakes on the isolated `solvro_test`
-  DB itself** (discovered 2026-07-23, Task 1 docs-reconciliation, fix/optional-sa-gantt-legend):
-  the isolated-`solvro_test`-DB workaround (see the entry above) prevents
-  pollution from the *live dev* DB, but `solvro_test` is never truncated
-  between suite runs — rows accumulate across repeated `npm test` invocations
-  against the same instance. Once the accumulated rows push `GET /tasks`
-  (cross-project, unfiltered) past its `take: 200` cap
-  (`backend/src/routes/tasks.ts:111`), `taskOrdering.test.ts`'s `"orders GET
-  /tasks (cross-project) by position asc, then id asc"` starts failing —
-  observed 39/40 after ~5 suite runs against the same `solvro_test` instance.
-  Workaround applied: `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` on
-  `solvro_test`, then rerun (back to 40/40). Suggested fix (not implemented):
-  truncate all tables in vitest `globalSetup` before each run, or scope the
-  cross-project test to only its own seeded rows.~~ **Resolved 2026-08-02**
-  (Issues Sweep #1): implemented exactly the suggested fix —
-  `globalSetup.ts`'s `truncateAllTables` now `TRUNCATE`s every table
-  (`RESTART IDENTITY CASCADE`) after migrating and before each test run, so
-  `solvro_test` starts empty every invocation; no more manual schema
-  drop/recreate. See CHANGELOG's "Backend tests start from a clean database"
-  entry.
-- ~~**`backend/test/opportunities.test.ts` flakes under a full gates run, order-dependent on other test files sharing `solvro_test`** (discovered 2026-09-09, weekly-sync-highlight-rows phase close; pre-existing, unrelated to that phase's changes): `"repacks the SOURCE stage densely (0..n-1) after a cross-stage move"` (`opportunities.test.ts:439`) failed once in a full `gates.sh` run — expected `stageOrder` 0, got 1 for the first `DELIVER_PROPOSAL` opportunity — then passed on an immediate single-file re-run (44/44) and in every other full run that same day. The test's own comment assumes `DELIVER_PROPOSAL` is untouched by any earlier test *in that file*, but a full run shares one `solvro_test` database across all 30 test files, so an opportunity another file leaves in that stage (order/timing dependent) shifts the positions this test appends onto. Fix direction: assert relative order among this test's own three rows instead of absolute `stageOrder`, or seed into a stage no other file touches.~~ **Moot 2026-09-22**: `backend/test/opportunities.test.ts` was deleted with the Pipeline module removal.
-
----
-
-## Pending features (not yet built)
-
-- ~~**Secure Ingestion Port** (`POST /webhook/blueprint`) — top-priority
-  SA→TAM handoff. The `Blueprint` model exists, but there is **no** webhook
-  route, no API-key auth, and no `blueprintId` FK on `Task` to tag
-  AI-Breakdown cards. (Spec in CLAUDE.md.)~~ **Cancelled 2026-08-03**: the
-  user cancelled the Secure Ingestion Port — Solvro is a TAM-only tool, with
-  no Solution Architect ingestion path. The `Blueprint` model, its
-  `blueprints` table, and the RightSidebar "Blueprint reference" card were
-  removed (migration `20260803000000_remove_blueprints`); the spec moved to
-  `docs/archive/plans/secure-ingestion-port-spec.md`. The SA user role,
-  `Project.saId`, and SA visibility matching are unrelated to the webhook and
-  stay. **Update 2026-09-22**: the SA user role and `Project.saId` were
-  subsequently removed in their own right, as part of the Pipeline-module
-  removal — see the dated line below.
-- ~~**Reports screen revamp**~~ — **Resolved (noted stale 2026-07-25)**:
-  shipped. CLAUDE.md's Facts block ("Reports & export (shipped)") documents
-  `Reports.tsx` producing the full export packet (identity / health / phase
-  breakdown / task signals / open risks / `CUSTOMER_FACING` notes, last 14
-  days) via dynamically-imported `frontend/src/lib/export/projectExport.ts`,
-  with both copy-to-clipboard and `.md` download. **Update 2026-11-18**: the Reports
-  page was removed on 2026-08-03 (CLAUDE.md Standing decisions), so `Reports.tsx` and
-  `projectExport.ts` named above are no longer live.
-- ~~**Work Logs / Utilization** (`WorkLogs.tsx`) — placeholder only, now hidden
-  from the sidebar; awaits the iTop API spec. Rename to "Utilization" when
-  implemented.~~ **Resolved 2026-09-22**: shipped as the Utilization page
-  (iTop integration Phase 3) — `frontend/src/pages/Utilization.tsx` at
-  `/utilization`, with `/work-logs` redirecting to it and the sidebar entry
-  restored after Weekly Sync. See `CHANGELOG.md`'s "Utilization from iTop
-  time tracking" entry.
-- **Task attachments** — not built. The "Attachments placeholder" block this
-  entry used to cite in `TaskFormModal.tsx` was removed (verified absent
-  2026-09-02); the "Document attachments will live here once uploads are implemented" notice
-  that an earlier version of this entry cited in `frontend/src/pages/CustomerDetail.tsx`
-  is gone too (re-checked 2026-11-18: no such text left in that file, no attachment
-  model in `backend/prisma/schema.prisma`, no upload route in `backend/src/routes`). Storage, size limits, and
-  export visibility are undecided.
-
----
-
-## Deferred (explicit, by decision)
-
-- **Critical-path highlighting** — the *computed* path stays deferred.
-  *Updated 2026-08-02*: the `data-cp`/`--cp-stroke` hooks this entry used to
-  point to lived in the dead Network Diagram CSS block, deleted from
-  `frontend/src/index.css` in the Issues Sweep #1 cleanup (see the Network
-  Diagram entry below) — no CSS hooks for critical-path highlighting exist in
-  the tree anymore; if/when this feature is built, its styling starts from
-  scratch. *Updated 2026-09-02*: a manual **Critical Path** mark shipped this
-  phase (branch `feat/critical-path-mark`) — `Task.isCriticalPath`
-  (`is_critical_path`, boolean, default false, TAM-set), rendered via
-  `frontend/src/components/CriticalPathMark.tsx` on the Gantt bar/milestone
-  (violet ring/outline), tree, row menu and Color-by key, the Kanban and
-  Timeline cards, the List row, the task panel and task form, and the PDF/
-  Excel exports (see `CHANGELOG.md`, "Critical Path mark on tasks"). It
-  computes nothing from `TaskDependency` — the computed path above is
-  unaffected and stays deferred. A later "Suggest from dependencies" action
-  could populate the flag from a computed path if one is ever built; the flag
-  stays the source of truth either way.
-- **Network Diagram tab** — per CLAUDE.md, "never built / do not implement"
-  (reconfirmed 2026-07-21). *Updated 2026-07-25*: `@xyflow/react` has been
-  removed from `frontend/package.json` (verified absent); the remaining
-  primitives were the `dependencies` routes, `.diagram-*` CSS in `index.css`,
-  and the unused `TaskDependency.sourceHandle`/`targetHandle` schema fields.
-  *Updated 2026-08-02*: the `.diagram-*` CSS (179 lines — `.diagram-canvas`,
-  `.diagram-task-node`, `.react-flow__*` overrides, milestone/edge/handle
-  styling) was deleted from `frontend/src/index.css` (Issues Sweep #1,
-  zero-consumer-verified — see CHANGELOG); the remaining primitives are just
-  the `dependencies` routes and the unused schema fields.
-- **Native AI summarisation inside Solvro** — deferred indefinitely; the export
-  packet is designed for external AI tools.
-
----
-
-## Tech debt / follow-ups from recent work
-
-- **Service-mapping mutations lack the optimistic-update pattern** (2026-07-15
-  code review, deferred as inherited debt): `useUpdateProjectServices` and the
-  pre-existing `useUpdateCustomerServices` (`frontend/src/lib/queries.ts`) use
-  plain `onSuccess` + invalidate. The `ServiceMappingList` checkbox toggles and
-  tool chips disable while saving, so it's correct but not instant. Follow-up:
-  add `onMutate` snapshot → optimistic `services[]` patch → `onError` rollback →
-  `onSettled` invalidate, for both hooks together.
-- **Inactive services can still be assigned** — the mapping picker shows
-  deactivated services dimmed but toggleable (pre-existing), and the project
-  tab's "Add all subscribed" carries inactive legacy subscriptions over without
-  filtering. Consistent behavior, but a product call is pending on whether
-  `active: false` should block *new* assignments.
-- **`ensureTaskVisible` does 2 DB round-trips** per task mutation (visibility
-  check, then the write). Folding the filter into the `where` isn't possible
-  with Prisma `update` (unique `where` only). Watch against the sub-200ms NFR;
-  revisit with an `updateMany` + returned-row approach if profiling flags it.
-- **Sidebar nav text still uses cool `slate-*` greys** instead of DESIGN.md's
-  warm `#888780` for inactive items. Deferred — needs a small set of *fixed*
-  always-dark text tokens (the theme-flipping `secondary` token renders too dark
-  on the always-dark rail). Contrast is fine; it's a tint nit.
-- **Admin active-status pill lost its `hover:bg-emerald-200`** during the
-  emerald → chip-token migration (no chip hover token exists). Minor; status
-  pills arguably shouldn't have a hover state.
-- ~~**Caps-label variants not migrated to the token:** 4× `text-[11px] uppercase`
-  (no bold) and 1× `text-[11px] font-semibold uppercase` were left as-is
-  (adopting the 700-weight `text-label-caps` token would change their weight).
-  Decide whether to align them.~~ **Resolved 2026-11-18**: `grep -rn 'text-\[11px\]' frontend/src` returns nothing; commit 489b0a4 (2026-09-29) removed all 150 occurrences; CHANGELOG `### Changed — 2026-09-29 — Professional UI pass`.
-- **`ProjectOverview` KPI value uses `font-body`**, not the reviewer-suggested
-  `text-data-mono` (that token's fixed 13px would shrink the `text-3xl` stat and
-  its weight 500 would fight `font-bold`). Working as intended — noted in case a
-  future review re-flags it.
-- **Favicon** is the flat on-light mark (no green tile); may read weakly on dark
-  browser tab strips. Quantified (solvro-reviewer, 2026-07-25/26 PWA-icons
-  review): the arc ink `#5b5b5d` is 2.38:1 against Chrome's dark tab background
-  `#202124` — a pre-existing artwork choice, not a regression from that task's
-  `frontend/public/favicon.png` trim-to-64×64 (which kept the on-light artwork
-  and alpha channel unchanged, per CHANGELOG). Follow-up candidate:
-  `prefers-color-scheme`-aware favicon (an SVG favicon with a media query, or a
-  second `<link media="(prefers-color-scheme: dark)">` pointing at the on-dark
-  mark).
-- **Overview.tsx pre-existing off-token styling** (2026-07-16 UI review of the
-  portfolio-timeline change; all predate that diff and were deliberately left
-  untouched to keep it minimal): KPI icon tones use raw `text-emerald-600` /
-  `text-amber-600` instead of chip tokens; `AVATAR_PALETTE` is 8 hardcoded hexes
-  incl. `#f59e0b` (the AI-Breakdown-reserved amber) applied via inline style;
-  `P-`/`T-` ids and the KPI number use raw `font-mono` instead of the
-  `data-mono` token; assorted `text-[11px]`/`text-[12px]` captions bypass the
-  type scale; `healthColor()` left-border hexes (`#F59E0B`/`#8DC63F`/`#6B7280`)
-  could migrate to `border-l-chip-amber-text`/`border-l-primary`/
-  `border-l-outline` token classes (note `#8DC63F` matches no current token).
-  Fix as one dedicated token-migration pass. **Updated 2026-08-31** (Daily
-  Review collapse phase, solvro-reviewer review of the Overview diff): the
-  `AVATAR_PALETTE`/`avatarColor` hexes, the `T-` task ids, and the
-  `text-[12px]` caption size are gone — `ActivityFeed` (with its raw-color
-  avatar swatches) was deleted and replaced by `RecentNotesFeed`, whose meta
-  line kept the surviving `text-[11px]` size for file consistency. The KPI
-  `text-emerald-600`/`text-amber-600` tones, the `P-` id's raw `font-mono`,
-  `text-[11px]` captions (now including the new Recent notes meta line), and
-  the `healthColor()` hexes are all still present as described above — the
-  fix-as-one-pass plan still applies to those.
-- ~~**`ActivityFeed` empty-state edge case** (`frontend/src/pages/Overview.tsx`,
-  pre-existing): the `projects` prop is only used in the combined empty guard —
-  with recent projects but zero recent tasks it renders an empty `<ul>` instead
-  of an empty state, and project activity is never rendered at all. Either
-  render project events or key the empty state off `tasks.length` alone.~~
-  **Moot 2026-08-31**: `ActivityFeed` and the `recentProjects`/`recentTasks`
-  payload fields it read were deleted in the Daily Review collapse phase
-  (`frontend/src/pages/Overview.tsx`, `backend/src/routes/overview.ts`,
-  `frontend/src/lib/queries.ts`), replaced by `RecentNotesFeed` reading
-  `GET /notes/recent` — verified absent from the current tree.
-- **`PortfolioCalendar` carried-over nits** (2026-07-16 extraction review,
-  kept verbatim on purpose): `rounded-full` on the timeline bar (tailwind config
-  reserves `full` for pills/avatars) and raw `font-mono` for the year switcher
-  display. Fix in the shared component once, benefits both Executive and
-  Overview.
-- **Section-color parity gap across non-Gantt surfaces** (2026-07-22 code review,
-  gantt-bar-reskin Task 2, deferred as paint-only Gantt scope): `frontend/src/pages/views/ProjectList.tsx:537`,
-  `frontend/src/pages/Executive.tsx:314`, and `frontend/src/components/TaskPanel.tsx:502`
-  resolve `section.color` directly (no fallback), so uncustomized sections
-  render vivid presets in the Gantt tab but legacy slate `#94a3b8` in the List
-  tab (which is also documented as the Gantt's mobile fallback), the Executive
-  roll-up chips, and the task-detail-panel dot. Possible fix directions: export
-  a shared resolver from `lib/gantt/palette.ts` or `geometry.ts`, or centralize
-  the fallback server-side in the `Section` query.
-- **`#94a3b8` sentinel is duplicated and now load-bearing** (2026-07-22 code
-  review, gantt-bar-reskin Task 2 risk): the hex value exists independently in
-  `frontend/src/lib/gantt/geometry.ts` (`DEFAULT_SECTION_COLOR`, line 33),
-  `frontend/src/lib/gantt/palette.ts:26`, `backend/prisma/schema.prisma`
-  (`Section.color` @default, line 290), and the `--phase` fallback in
-  `frontend/src/index.css` (lines 203, 215, 278, 288). Task 2's sentinel
-  byte-equality compare (`.toLowerCase()` against `DEFAULT_SECTION_COLOR`)
-  makes this duplicated value functionally load-bearing: if the schema default
-  ever changes without updating all frontend consts in sync, legacy uncustomized
-  sections will silently stop being recognized as "unset" and will render the
-  new server default instead of vivid presets. Recommend centralizing the
-  sentinel as an exported constant or migrating to a separate `isCustom` boolean
-  on `Section`.
-  *Updated 2026-09-02 (code check)*: the `index.css` `--phase` fallback cited above is gone (zero `94a3b8` hits there); the duplication that remains is `frontend/src/lib/gantt/geometry.ts:2`, `frontend/src/lib/gantt/palette.ts:31`, and `backend/prisma/schema.prisma:352`, with the sentinel compare at `palette.ts:223`.
-
-- **TaskPanel section chip briefly stale on cross-section drag** (2026-07-22,
-  plan Task 3 review, deferred): During a cross-section move's optimistic
-  window, the moved task's nested `section` object in the projectTasks cache
-  stays stale — only `sectionId` is updated by `reorderTasksLocally`/plain
-  merge in `frontend/src/lib/queries.ts`. The only reachable consumer is
-  `frontend/src/components/TaskPanel.tsx` (lines ~211/330/499/502 read
-  `task.section?.name`/`.color` from the same cache), so a TaskPanel open on
-  the exact task being dragged cross-section briefly shows the old section chip
-  until `onSettled` refetch. Pre-existing behavior (old `{sectionId}`-only path
-  had the same window), transient, self-healing. Possible future fix: recompute
-  nested `section` from the sections cache inside `reorderTasksLocally`.
-- ~~**Stale Task.position doc comment** (2026-07-22, plan Task 2 docs-close):
-  `backend/prisma/schema.prisma` lines 235-240 still describe the per-sibling
-  model as `(projectId, status, parentTaskId)` and state that "status does not
-  partition subtasks," but Task 1 re-scoped the top-level key to `(projectId,
-  parentTaskId)` (status removed from the sibling ordering dimension). Comment
-  needs to reflect the new model: status is now orthogonal to ordering, siblings
-  are tasks sharing `(projectId, parentTaskId)` regardless of status, and
-  `position` is maintained as a dense 0..n-1 list within that group for both
-  top-level tasks and subtasks. Queued for the plan's Task 6 docs-sweep on
-  branch feat/unified-task-ordering.~~ **Resolved 2026-09-02**: code check — `backend/prisma/schema.prisma:296-303` now describes the unified model ("status does NOT partition it … ONE canonical order … Dense 0..n-1").
-- ~~**Missing DELETE /projects/:id route** (2026-07-22, discovered during plan
-  Task 2 NFR cleanup): `backend/src/routes/projects.ts` has no `router.delete`
-  for top-level project deletion. The API is create/read/update only. During
-  Task 2's NFR verification, a scratch project's cleanup went through a direct
-  DB delete (which cascades to tasks via `onDelete: Cascade` FK). Verify this
-  is intentional (projects may be scoped to be only archived, not deleted) or
-  file a follow-up to add the route.~~ **Resolved 2026-08-31** (branch
-  `feat/project-delete`): user decided on a hard delete behind `project:write`
-  + visibility, native `confirm()` in `ProjectDetail.tsx`, linked won deal
-  keeps its row with `projectId` cleared. Route, `useDeleteProject()`, button
-  and `backend/test/projectDelete.test.ts` shipped — see CHANGELOG.
-- ~~**GanttFrame and ProjectList use different dnd-kit collision strategies**
-  (2026-07-22, plan Task 5 review, deferred): `GanttFrame.tsx` uses dnd-kit's
-  default `rectIntersection` collision detection, while `ProjectList.tsx`
-  (plan Task 3) uses `closestCenter`. For Gantt rows of uniform height in a
-  single-column list, the difference is negligible in practice — both produce
-  identical behavior at drop boundaries. However, aligning both surfaces to the
-  same strategy would strengthen robustness and maintainability (ProjectList's
-  `closestCenter` is dnd-kit's documented recommendation for vertical lists).
-  Low impact; candidate for a small follow-up pass covering both Gantt and List
-  collision detection uniformity.~~ **Obsolete 2026-09-02**: code check — `frontend/src/components/gantt/GanttFrame.tsx` no longer exists; the vendored `reui/gantt/gantt-dnd.tsx` does its own hit-testing without dnd-kit collision detection, so there is no strategy pair to reconcile. `ProjectList.tsx:6,414` still uses `closestCenter`.
-- **ESLint `exhaustive-deps` disable comment is inert; repo has no lint config**
-  (2026-07-23, plan Task 1 docs-reconciliation, GH #56): the `//
-  eslint-disable-next-line react-hooks/exhaustive-deps` directive at
-  `frontend/src/components/TaskFormModal.tsx` (~line 116) is ignored because
-  the repo has no ESLint configuration or lint script anywhere. Nothing
-  mechanically prevents a future edit from reintroducing the entire `props`
-  object into the reset-effect dependencies (the second root cause of GH #56),
-  silently undoing the fix. Recommend adding an ESLint configuration with
-  `react-hooks/exhaustive-deps` rule enforcement and a `npm run lint` gate in
-  CI to prevent regression.
-- **Redundant double-sort in `legendEntries`'s section branch** (2026-07-23,
-  plan Task 3 review, deferred): `frontend/src/lib/gantt/palette.ts:115-117` —
-  `resolveSectionColors(sections)` already sorts internally (`palette.ts:81`);
-  `legendEntries`'s Section branch then sorts the same array again with the
-  identical comparator to build display order. Negligible cost given typical
-  section counts, and this is exactly what the plan's Step 3 code specifies
-  verbatim (not implementer error) — flagged for awareness only, deliberately
-  not fixed on this branch.
-- **No e2e coverage for `colorBy` persistence across a full page reload**
-  (2026-07-23, plan Task 3 review, deferred): `e2e/tests/gantt-legend.spec.ts`
-  (and the plan's own Step 1 spec, before adaptation) only exercise in-session
-  `selectOption` switches between Status/Section/Priority; neither asserts
-  that the `localStorage["solvro.gantt.colorBy"]` value survives a full page
-  reload. Pre-existing gap, not introduced or removed by this task —
-  candidate follow-up: reload the page after selecting a mode, then confirm
-  the select's value and legend are restored.
-
----
-
-## Verification debt
-
-- ~~**Visual sign-off pending.**~~ **Stale, closed 2026-07-25**: the June
-  brand/design changes this entry covered (Elitery palette migration, logo +
-  `BrandMark`, login split, sidebar charcoal, drop-shadow removal, type-scale
-  tokens) shipped through multiple subsequent releases and later review/
-  walkthrough passes without a dedicated sign-off ever being logged. The known
-  residual visual nits from that era are tracked individually under Tech debt
-  (sidebar slate greys, favicon, caps-label variants, admin pill hover) — this
-  blanket item adds nothing over those.
-
-- **Reorder repack is N sequential UPDATEs — batch if perf ever bites** (2026-07-22, plan Task 6 close-out, orchestrator-filed): `insertAt`/`closeGap` in `backend/src/lib/taskOrdering.ts` issue one `UPDATE` per displaced sibling inside the transaction (~200 round-trips on a 200-task project). Calm-host worst case measured 0.196s (inside the 200ms NFR); under host load 6-15 the same call measured 0.20-0.47s with containers idle — host contention, not endpoint cost. If real-world use ever feels slow, batch the repack into a single SQL statement (`UPDATE ... FROM (VALUES ...)`) — one round-trip, no model change. Re-time on a quiet host: seed ~200 tasks, `curl -w "%{time_total}" -X PATCH .../tasks/<id> -d '{"position":0}'`.
-- ~~**Unswept prose-overflow surfaces remain candidates for overflow hardening** (2026-07-23, plan Task 2 review, deferred): The comment-text wrap fix (GH #57, `whitespace-pre-wrap break-words` convention) was applied to three surfaces in TaskPanel, CustomerDetail, and ProjectDetail. Three other surfaces remain unswept: (a) `frontend/src/pages/views/ProjectRisks.tsx:299` and `:446` — risk.description in a `max-w-[28rem]` cell, contained by table's `overflow-x-auto` but stretches it; (b) `frontend/src/pages/views/ProjectTimeline.tsx:157` — task.description with neither wrap-hardening nor clamp. Follow-up: apply the prose standard across all surfaces.~~ **Resolved 2026-08-02** (Issues Sweep #1): both surfaces now use `whitespace-pre-wrap wrap-break-word` (Tailwind v4's renamed `break-words`) — `ProjectRisks.tsx`'s desktop grid cell and mobile card description, and `ProjectTimeline.tsx`'s task description. Verified in the current tree. See CHANGELOG's "Service Catalogue and project Risks tables on the data grid; long text wraps" entry.
-- **E2E fixture pollution pattern: shared seeded state across suite** (2026-07-23, plan Task 2 review, deferred): `e2e/fixtures/test.ts` doc-comment incorrectly claims `seededProject` is "effectively per test file," but it is WORKER-scoped with `workers: 1`, meaning ONE seeded project is shared by the entire suite run (all specs sequentially). `e2e/tests/comments.spec.ts` (new) leaves a 300-char comment on task Alpha, inherited by `kanban-dnd.spec.ts` and `list-dnd.spec.ts`. Benign today (drag specs don't depend on Alpha being comment-free), but a known suspect for CI fragility if comment mutations cause later specs to flake. Future fix: clean comment state in specs that don't exercise comment persistence, or truncate seeded comment history between specs.
-  *Updated 2026-09-24 (Epics phase, docs-reconciliation)*: `e2e/fixtures/test.ts`'s comment (lines 4-7) still says "effectively per test file"; still inaccurate for the same reason — `playwright.config.ts` also sets `fullyParallel: false`, so the whole run is genuinely ONE seeded project shared by every spec file in sequence, not an approximation of per-file isolation. Two new specs add to the same pattern: `e2e/tests/epics.spec.ts` creates and deletes an epic on the shared `seededProject`, leaving behind a top-level "story" task (via the epic's "Add story…", later DONE-marked and orphaned by the epic delete) that persists into every later spec in the run; `e2e/tests/task-epic-select.spec.ts` seeds its own tasks/epics via the API rather than mutating the shared project directly, but its own file header notes that page-scoped `getByTestId("epic-chip")` locators must stay drawer/panel-scoped because the shared project can already carry epic-tagged tasks from earlier tests in the same worker. Still not fixed — same future-fix direction applies (truncate or scope seeded mutations per spec).
-
----
-
-## Gantt GH #58 deferred findings (2026-07-24)
-
-- ~~**Gantt label measurement caches pre-font-load metrics permanently** (solvro-reviewer, GH #58 Task 4): `frontend/src/components/gantt/GanttBar.tsx` — `labelTextWidth` cache may hold fallback-font widths measured before "Source Sans 3" (display=swap) loads; never re-measured once populated (cache only clears at 1000-entry capacity). Benign in practice (12px slack + inside `truncate` safety net), but airtight fix would warm/clear the cache on `document.fonts.ready`.~~ **Resolved 2026-09-02**: code check — the old `gantt/GanttBar.tsx` is gone; `frontend/src/components/gantt-v2/SolvroBar.tsx:90-113` (`useLabelFits`) re-measures via a per-bar ResizeObserver and `document.fonts.ready` (line 106), so no pre-font-load metric is cached.
-
-- ~~**PDF export bar-label rule diverges from screen** (solvro-reviewer, GH #58 Task 4): `frontend/src/lib/gantt/exportPdf.ts` (~line 315) uses a >60px bar-width rule + char-count truncation with no outside-label fallback — narrow bars go unlabeled in PDF. Screen now uses measured text fit (GH #58). Requires a product decision: should PDF follow screen's measured-fit rule, or is current PDF behavior acceptable?~~ **Resolved 2026-09-02**: code check — `frontend/src/lib/gantt/exportPdf.ts:126-148` (`fitText`) now does measured binary-search truncation via `pdf.getTextWidth`, the PDF analogue of the screen rule.
-
-- **Label-route permission asymmetry** (solvro-reviewer, GH #58 Task 4): `POST /projects/:id/labels` requires `project:write` (backend/src/routes/projects.ts ~:679) while `PATCH/DELETE /labels/:id` require `task:write` (backend/src/routes/labels.ts:37,52); the task form gates on `task:write`. Latent (TAM holds both; ADMIN wildcard covers all), but inconsistent for custom roles with granular permissions. Suggested fix: align label creation to `task:write` with vitest coverage.
-
-- **Duplicate-label-name 409 surfaces raw database error message** (solvro-reviewer, GH #58 Task 4): Label picker (UI surface unspecified in review, likely `LabelPicker.tsx` or task form) renders "Unique constraint violated" (P2002) as-is instead of a user-friendly message. P2 (user-facing error messaging).
-
-- **Comment composer is single-line input with horizontal scroll** (solvro-reviewer, GH #58 Task 4): `frontend/src/components/TaskPanel.tsx` — PanelComments composer is a single-line text input that scrolls horizontally for long comments. Suggested improvement: auto-growing textarea for better UX. P3 (UX refinement).
-
-- ~~**Outside Gantt label can create dead horizontal scroll** (solvro-reviewer, GH #58 Task 4): `frontend/src/components/gantt/GanttBar.tsx` — outside labels positioned at `left + width + 6` with maxWidth 240px can overhang the chart's contentWidth on narrow windows, creating ≤246px dead horizontal scroll. Pre-existing, unchanged by GH #58 fix. Minor (UI polish). Note: this file was deleted in Plan B Task 9 (hand-rolled Gantt removal) — if the ReUI engine has an equivalent outside-label affordance, re-verify against the new code; otherwise this finding is moot.~~ **Obsolete 2026-09-02**: code check — the old `GanttBar.tsx` positioning is gone; `SolvroBar.tsx:456-468` places the outside label with relative `start-full`/`ms-1.5` inside the bar group, a different mechanism. Any overhang there would be a new finding.
-
----
-
-## Plan B Task 9 deferred findings — ReUI Gantt swap (2026-07-25)
-
-User-deferred findings from the Tailwind v4 / shadcn bootstrap / ReUI Gantt swap effort (Plan A + Plan B, branch `feat/tailwind-v4-shadcn`, commits 3cb3582..c4ab962).
-
-- **Milestone connector endpoints anchor at the day-box edge, not the diamond glyph** (cosmetic, deferred): in `frontend/src/components/gantt-v2/connector-paths.ts` / `SolvroBar.tsx`, dependency-arrow endpoints for milestone tasks terminate at the cell's day-box edge rather than the visual diamond glyph center. Most noticeable at Week zoom, ~30-40px visual gap. Cosmetic only, connectors are still correctly routed logically.
-- **Absolute-positioned popovers can clip near the new scroll containers' bottom edges** (deferred, same trade-off class as the Gantt overlay): now that List row dropdowns, Kanban column menu, and Risks selects sit inside internally-scrolling containers (walkthrough F5/F5b, `aaa10fa`), absolute-positioned popovers near the bottom of the visible scroll area can get clipped instead of flipping/repositioning. Same known trade-off already accepted for the Gantt `GanttOverlay` positioning approach. Revisit if user-reported.
-- **Connector hover-delete e2e test has a rare flake** (deferred): the ReUI-engine hover-to-delete-connector Playwright assertion (in `gantt-parity.spec.ts` or `gantt-legend.spec.ts`, whichever exercises hover-delete) occasionally fails on first attempt but recovers on retry. Root cause not isolated; not blocking, tracked for a future flake-hunt pass.
-- **Per-bar `ResizeObserver` in `SolvroBar`** (deferred, scale watch): `frontend/src/components/gantt-v2/SolvroBar.tsx` attaches one `ResizeObserver` per rendered bar. Fine at current scale (typical project task counts); revisit if a project ever renders low hundreds of bars simultaneously — batch to a single shared observer if profiling flags it.
-- **Row-reorder e2e spec lacks `waitForResponse`** (deferred, consistency tightening): a row-reorder-related e2e test (List/Gantt drag reorder family) doesn't await the backend PATCH response before asserting DOM state, relying on implicit timing instead. Works today; tighten to `waitForResponse` for robustness alongside other e2e hardening below.
-- **shadcn CLI strips vendor headers / `"use client"` directives on re-pulls** (expected behavior, not a bug): re-running `npx shadcn add` or the ReUI registry pull on an already-vendored file in `frontend/src/components/ui/` or `frontend/src/components/reui/gantt/` will overwrite hand-edits, including the `// SOLVRO PATCH` markers left in the 3 patched ReUI gantt files. Discipline: always re-apply `// SOLVRO PATCH` sites after any future re-pull; do not re-pull without diffing first.
-  *Updated 2026-09-02 (code check)*: `// SOLVRO PATCH` markers now total 82 across 20 vendored files (4 gantt files plus kanban, autocomplete, alert, badge, icon-tile, filters, frame, and 8 data-grid files), not "3 patched gantt files". The re-pull caution stands for all of them.
-- **E2E fixed-timeout convention (`waitForTimeout`) predates this effort** (deferred, pre-existing pattern carried forward): several specs still use fixed `waitForTimeout` sleeps instead of condition-based waits. Not introduced by Plan A/B; candidate for a dedicated e2e-hardening pass converting these to `waitForResponse`/`waitForSelector`-style waits across the whole suite (also see the row-reorder finding above, which is one instance of this pattern).
-- ~~**Junk "Diag …" projects may exist in the dev DB** (deferred, cleanup candidate): a leaked diagnostic/scratch spec run against the dev database is suspected to have left behind projects named with a "Diag …" prefix. Not confirmed cleaned up. Follow-up: query the dev DB for `name LIKE 'Diag%'` and delete if confirmed to be diagnostic leftovers, distinct from the pre-existing junk-test-data issue tracked above under "Backend test-DB isolation is broken."~~ **Resolved 2026-08-02** (Issues Sweep #1): dev-DB junk (Diag/Gate/Timeline Check/QA-fixture leftovers, confirmed diagnostic) deleted with user approval alongside the accumulated test-isolation junk — see the "Backend test-DB isolation is broken" entry above for the row counts.
-
-## Final whole-branch review additions (2026-07-25)
-
-- ~~**Baseline-locked toast uses raw emerald-* utilities** (`frontend/src/components/gantt-v2/SolvroGantt.tsx` ~:1136, ported verbatim from the old GanttFrame): `border-emerald-300 bg-emerald-50 text-emerald-700` should map to DESIGN.md chip/semantic tokens. Cosmetic, deferred from final review.~~ **Moot 2026-08-31** (Gantt toolbar one-row phase): the floating toast (and the Lock/Reset baseline flow that produced it) was removed from `SolvroGantt.tsx` — the baseline lock/reset action and its confirmation now live in `RightSidebar.tsx`'s Baseline section, which uses an inline `text-primary` status line, not a raw-emerald floating pill. Verified absent from the current tree (`grep -c emerald-300` = 0).
-- **Section-id parse/format logic split across files**: `adapter.ts` owns `sectionNodeId`/`parseTaskId` but SolvroGantt parses section ids ad hoc (`toGeometryCollapsedIds` + reorder handler). Consolidate a `parseSectionId` in the adapter when its signature lock lifts. Coupling hygiene, no defect.
-- **`handleResourceReorder` is ~130 lines / three branches** (SolvroGantt.tsx) — mirrors the old engine's shape intentionally (diffability); split into named helpers in a future readability pass.
-
-## Login/Sidebar always-dark-pin fix — deferred findings (2026-07-25)
-
-From `docs/plans/2026-07-25-login-dark-pin-and-pwa-icons.md` Task 1 (branch `fix/login-dark-and-pwa-icons`): `frontend/src/index.css`'s primary `@theme` block was switched to `@theme inline` so the subtree `dark` pins on `Login.tsx:99`/`Sidebar.tsx:59` resolve at the consuming element again (see CHANGELOG entry "Login (and sidebar rail) always-dark pin broken...").
-
-- **`DESIGN.md` frontmatter `theme_default: dark` doesn't match `frontend/src/lib/theme.tsx:30`'s actual default (`"system"`)** — pre-existing drift, surfaced (not introduced) by this task. User decision (2026-07-25, task brief): keep the `"system"` default as-is; only the dark-pin bug gets fixed, not the default-theme behavior. Per DESIGN.md's own maintenance note ("if this file and the code ever disagree, the code is right — file a docs-sync task"), filing here rather than editing the frontmatter unilaterally, since the plan explicitly routes this discrepancy to ISSUES.md rather than folding it into the pin fix. Follow-up: either correct `theme_default` to `system` in a docs-only pass, or get an explicit product decision that `dark` is the *intended* first-visit default (in which case `theme.tsx` would need to change instead, and that's a behavior change, not a docs fix).
-- ~~**`frontend/src/index.css` carries ~180 lines of dead Network Diagram CSS** (reviewer finding on this task, out of scope for this diff — not touched): lines 294–471 (`.diagram-canvas`, `.diagram-task-node`, `.react-flow__*` overrides, milestone/edge/handle styling) style a Network Diagram view that was never built (CLAUDE.md: "never built, do not implement", reconfirmed 2026-07-21) and whose `@xyflow/react` dependency has already been removed from `frontend/package.json` (verified absent). No shipped component references `.diagram-canvas`/`.diagram-task-node` (grep-verified: zero matches outside `index.css` itself). Candidate for a dedicated cleanup task — delete the block, keeping only `TaskDependency.sourceHandle`/`targetHandle` in the schema per the existing "Network Diagram tab" entry above.~~ **Resolved 2026-09-02**: code check — `frontend/src/index.css` is 308 lines with zero `.diagram-*` / `react-flow` hits (removed in Issues Sweep #1, see the Network Diagram entry above).
-- **No e2e spec asserts the Login/Sidebar always-dark pin** (reviewer nit on this task): none of `e2e/tests/*.spec.ts` verify that `Login.tsx`'s root wrapper or the sidebar rail render dark regardless of OS/app theme preference. Without a regression test, a future `@theme`/`@theme inline` change (or an unrelated Tailwind upgrade) could silently reintroduce the exact bug this task fixed. Follow-up: add an assertion (e.g. force `light` theme via `localStorage["solvro.theme"]`, then check the Login root and sidebar rail still compute dark background colors) to a suite that already visits `/login` and an authed page with the sidebar, or a new small spec.
-
-## PWA icon regeneration — deferred findings (2026-07-25/26)
-
-From `docs/plans/2026-07-25-login-dark-pin-and-pwa-icons.md` Task 2 (branch `fix/login-dark-and-pwa-icons`): all 4 `frontend/public/icons/*.png` plus `frontend/public/favicon.png` regenerated onto an opaque `#232321` charcoal plate with the full two-tone Elitery mark (see CHANGELOG entry "PWA/home-screen icons rendered as an unrecognizable dark square with a white blob"). See also the enriched Favicon tech-debt entry above for the dark-tab-strip contrast finding from this same review.
-
-- **Typecheck gate doesn't cover `vite.config.ts`** (solvro-reviewer, PWA-icons review): `frontend/package.json`'s `typecheck` script is `tsc --noEmit`, which resolves `tsconfig.json` — `include: ["src"]` only, so `frontend/vite.config.ts` (one of this task's changed files) is never typechecked by the documented gate command; TS project references aren't built by plain `tsc`. Separately, `frontend/tsconfig.node.json:17`'s `include` array still lists `tailwind.config.ts` and `postcss.config.js`, both deleted 2026-07-24 in the Tailwind v4 migration (verified absent from the tree). Fix candidate: add `tsc -p tsconfig.node.json --noEmit` to the `typecheck` script and prune the stale `include` entries.
-- **`frontend/nginx.conf` has no explicit `Cache-Control` for `/icons/` or `/favicon.png`** (solvro-reviewer, PWA-icons review): only `location /assets/` gets `expires 1y; Cache-Control: public, immutable`; icon/favicon requests fall through to the bare `location /` block (`try_files ... /index.html`, no cache header), so browser-process fetches of these assets (as opposed to service-worker-mediated ones) get no explicit caching directive. Belt-and-braces candidate: add a short explicit `Cache-Control` for `/icons/` and `= /favicon.png` in `frontend/nginx.conf`.
-- **Only a 512 maskable icon is declared** (solvro-reviewer, PWA-icons review, minor): `frontend/vite.config.ts`'s manifest `icons` array has exactly one `purpose: "maskable"` entry (`icon-maskable-512.png`); low-DPI Android launchers requesting a maskable icon get a downscale from 512 rather than a purpose-sized 192. Follow-up candidate: generate `icon-maskable-192.png` and add a matching manifest entry.
-
-## Kanban → ReUI swap — deferred findings (2026-07-27)
-
-User-deferred findings from the Kanban → ReUI Engine Swap effort
-(`docs/plans/kanban-reui-swap/plan.md`, branch `feat/kanban-reui-swap`, T3–T13b
-+ review-fix batches + T11 cutover). The reviewer cleared all blockers; these
-are accepted-as-deferred, not outstanding review items.
-
-- **Vendored Kanban's keyboard-DnD is unreachable** (`frontend/src/components/reui/kanban.tsx`):
-  dnd-kit's `attributes` (role/tabIndex — what makes an element focusable)
-  land on `KanbanItem`'s outer wrapper (non-overlay branch, `...attributes`
-  spread ~line 796) while `listeners` (the actual keyboard activator) land
-  only on the inner `KanbanItemHandle` (`...listeners` spread ~line 838),
-  which carries no `tabIndex`/`role` of its own. No Tab+keyboard sequence can
-  reach the sensor's keyboard activator — mouse and touch drag work,
-  keyboard drag does not. Candidate: upstream report to the ReUI/shadcn
-  registry, or a future sanctioned `// SOLVRO PATCH` moving `listeners` onto
-  the outer wrapper (would need a CHANGELOG entry + patch-count bump per the
-  Guardrail, and solvro-qa's standing patch-count check would need updating
-  from 0).
-- **`GET /users` is unpaginated** (`backend/src/routes/users.ts:10`,
-  `prisma.user.findMany` with no `take`/`skip`): `TaskFormModal`'s Assignee
-  `<select>` renders every user in the DB as an `<option>`. Already
-  load-bearing this cycle — the `kanban-dnd.spec.ts` stabilization had to
-  stop using `getByRole("option", ...)` because the accessibility tree can no
-  longer resolve against a `<select>` this large (see CHANGELOG's "modal
-  trio" root-cause note) — and pathological on a real large production DB
-  too. Follow-up: paginate, or at minimum cap/search-filter, the endpoint.
-- ~~**`GET /tasks` has a ~200-row window** (`backend/src/routes/tasks.ts:111`,
-  `take: 200`, cross-project/unfiltered): on a large DB the `/tasks` page
-  (`Tasks.tsx`) can silently truncate results below a project's own rows, as
-  this cycle's e2e stabilization discovered firsthand (Acme Corp's 380+
-  accumulated projects pushed a fresh fixture's rows out of the window — see
-  CHANGELOG). The e2e fix scopes queries by `customerId`; the product itself
-  still has no scoping affordance on `/tasks`. Related to, but distinct from,
-  the test-DB-pollution entries above (those are about the isolated *test*
-  DB; this is the live product route, on any sufficiently large real DB).
-  Follow-up: add filters (project/customer/date-range) to `/tasks` sufficient
-  to keep realistic result sets under the cap, or add real pagination.~~ **Resolved 2026-11-18**: `GET /tasks` takes `offset` and sends `X-Total-Count` (`backend/src/routes/tasks.ts:331-336`); `Tasks.tsx` has "Load more" and `customerId`/due filters; CHANGELOG "The Tasks page reaches every task".
-- **No board-adjacent subtask promote/re-parent path**: `TaskPanel.tsx` has
-  no parent field, so promoting a subtask to top-level or re-parenting it
-  still requires `TaskFormModal`'s Parent field — no in-board (Kanban) or
-  in-panel affordance exists. This is the "Promote to task" row-menu
-  shortcut deferred at plan CP0/Decision 8 (R6: the dogfood window would
-  decide if it's needed); the window closed at cutover without one being
-  built, so it stays open. Revisit if usage patterns show the modal
-  round-trip is friction.
-- ~~**`kanban-v2/cards.tsx` and `MobileMoveSheet.tsx` carry copied non-token
-  styles**: ported verbatim from the old `ProjectKanban.tsx` per Architecture
-  Decision 2 ("copy, don't extract"). `border-emerald-500 bg-emerald-500
-  text-white` (`cards.tsx:199`, subtask-done checkbox),
-  `border-primary bg-primary text-white` (`MobileMoveSheet.tsx:54`), and a
-  fixed `text-[15px]` (`cards.tsx:83`) bypass DESIGN.md's chip/semantic
-  tokens and type scale. Deviated at copy time (T6); now live on the shipped
-  board post-cutover — cleanup candidate now that `kanban-v2` is the only
-  Kanban.~~ **Resolved 2026-11-18**: `cards.tsx:276` and `MobileMoveSheet.tsx:62` use `bg-primary text-on-primary`; no emerald or `text-[15px]` left in `kanban-v2/` outside a test fixture.
-- **`TaskFormModal`'s subtask DONE checkbox lacks the `canEdit` gate**
-  (`TaskFormModal.tsx:444-454`): unlike the new up/down reorder arrows (both
-  `disabled={!canEdit || ...}`, added T13/M3), the checkbox has no `disabled`
-  attribute at all — a non-writer can still toggle a subtask's DONE status
-  from the modal. Pre-existing gap (predates this task; the Phase 2 review's
-  M3 fix gated only the arrows, deliberately leaving the checkbox as
-  pre-existing/out-of-scope per the CHANGELOG).
-- **Vendored engine quirk: a mouse drop on the post-preview-displaced card
-  can cancel a one-slot move**: `frontend/src/components/reui/kanban.tsx`'s
-  same-container branch calls `arrayMove` during both `handleDragOver` (live
-  preview splice, ~line 403) and `handleDragEnd` (commit, ~line 527) —
-  `handleDragEnd` recomputes `activeIndex`/`overIndex` against the
-  already-shuffled preview state, so a drop landing exactly on the card the
-  preview already swapped into the source slot can have the second
-  `arrayMove` reverse the first, netting a no-op instead of the intended
-  one-slot reorder. Low real-user impact (requires precise pointer
-  geometry); not reproduced under a fixed e2e assertion — dogfood watch
-  item only.
-
-## Global search & ⌘K command palette — deferred findings (2026-07-27)
-
-User-deferred findings from the global search / command palette effort
-(`docs/superpowers/plans/2026-07-27-global-search-command-palette.md`, branch
-`feat/global-search`, commits `5f78b0c..8305eb7`). The final whole-branch
-review (`solvro-reviewer`) cleared all blockers (verdict
-MERGEABLE-AFTER-FIXES; the two required code fixes — raw status-enum hint,
-Enter-key e2e coverage — shipped in the same branch's fix wave, commit
-`8305eb7`); these are its 21 raw FILE-TO-ISSUES findings, consolidated into 8
-entries per the review's own triage recommendation. Two of the 21 raw items
-— the `AutocompleteEmpty` duplicated-`hasQuery`-predicate nit and the
-`Sidebar.tsx` stale `tailwind.config.ts` comment — were **also** fixed in
-that same fix wave (as N-a/N-c) and are omitted below as already resolved.
-
-1. **`/search` contract-test gaps** (`backend/test/search.test.ts`): no
-   assertion that `q` over 100 chars 400s (the cap is enforced at
-   `backend/src/routes/search.ts:13` but untested); no assertion that
-   results are ordered ascending; the 8-item group cap is proven only for
-   `customers` (`search.test.ts:95-110`), not for `projects`/`tasks`.
-   Separately, the test named "escapes LIKE metacharacters so % and _ are
-   not treated as wildcards" (`search.test.ts:147`) seeds and asserts only
-   the `%` case (:154-178) — no literal `_` seed/assertion exists despite
-   the name promising one, which overclaims coverage in a suite other code
-   now depends on (the `GET /search` contract feeds the palette directly).
-   Fix: add the three missing assertions plus a `_`-literal case (or rename
-   the test to drop the `_` claim). Cheap; nothing wrong with the escaping
-   itself today.
-2. **`pg_trgm` GIN index follow-up for `/search`** (`backend/src/routes/search.ts`) — *Resolved 2026-10-26: migration `20261027090000_search_trigram_activity_index` adds the trigram indexes on project names, task titles and customer names.*
-   the projects/tasks `ILIKE` queries run as sequential scans today —
-   measured baseline (final review, 2026-07-27): 901 projects / 4,181 tasks
-   / 221 customers, `EXPLAIN ANALYZE` 0.58ms (projects) / 2.61ms (tasks),
-   5.4-30.0ms end-to-end `/search` latency. Comfortably inside the 200ms NFR
-   now, but scan cost grows linearly with row count and nothing guards it.
-   Schema change is ask-first per the branch's spec — don't add
-   speculatively. **Trigger: revisit when task rows approach ~50k, or when
-   `/search` p95 latency exceeds 100ms**, whichever comes first.
-3. **Vendored `reui/autocomplete.tsx` fidelity gaps** (third vendored ReUI
-   engine after gantt/kanban, `frontend/src/components/CommandPalette.tsx`
-   is its only consumer):
-   - Vendor header (`autocomplete.tsx:1-8`) says "a handful of marked
-     hand-edits" of three kinds, but the file carries **5**
-     `// SOLVRO PATCH` markers (lines 11, 20, 125, 303, 322 — confirmed via
-     `grep -c "SOLVRO PATCH"`), undercutting the header's usefulness as a
-     `grep -c` re-pull gate until it names an exact, current count.
-   - Malformed upstream class fragments inherited verbatim at
-     `autocomplete.tsx:193` (`([class*='size-'])]:size-4` × 6, most missing
-     the `[&_svg:not` prefix) — correctly left as-is per the byte-for-byte
-     vendoring discipline, but undocumented; note only, so a future reader
-     doesn't "clean it up" and break registry-diff parity.
-   - No registry source hash/ETag recorded for **any** of the three
-     vendored ReUI engines (`reui/gantt/`, `reui/kanban.tsx`,
-     `reui/autocomplete.tsx`) — one repo-wide follow-up, not three: pin
-     each file's registry JSON hash somewhere (vendor header or a small
-     manifest) so a future re-pull has a known-good baseline to diff
-     against.
-   - `CommandPalette.tsx:177`'s `AutocompleteInput` beats the vendored
-     `inputVariants` `cva` base (`autocomplete.tsx:26-27`) via six
-     className overrides (`dark:bg-transparent rounded-none h-auto px-0
-     focus-visible:ring-0 focus-visible:border-transparent`) with no test
-     gating them. Works today, but a future ReUI re-pull that changes the
-     base could silently restore the 3px focus-ring/boxed-input look this
-     branch's own fix round removed — the same silent-regression shape as
-     the 2026-07-24 non-inline `@theme` incident. Follow-up: an e2e
-     assertion on the input's computed style, or a Vitest snapshot of the
-     merged class string.
-  *Updated 2026-09-02 (code check)*: `autocomplete.tsx` now carries 6 `// SOLVRO PATCH` markers (not 5); the header still says "a handful". Everything else in this entry is unchanged.
-4. ~~**Palette result-state machine: error state indistinguishable from
-   empty, sub-debounce stale-reopen residual** (`frontend/src/components/CommandPalette.tsx`):
-   - `useSearch`'s `error` is never destructured (`:50`, only `data`/
-     `isFetching` are) — a `/search` 500 or offline state renders the same
-     `No results for "x"` copy (`:193-195`) as a genuine zero-hit query, so
-     the UI asserts absence when the request actually failed. Fix:
-     destructure `error` and render a distinct failure message.
-   - B1 residual: `hasQuery` reads the **debounced** query (`:56`), which
-     lags the immediate `setQuery("")` reset on close by up to the 200ms
-     debounce window — a reopen inside that window can still flash the
-     prior session's rows, even though the main B1 bug (stale rows across a
-     settled close/reopen) is fixed. Fix: gate on the live `query` clearing
-     too, or reset both synchronously on close.~~ **Resolved 2026-08-02**
-   (Issues Sweep #1): both sub-items fixed together — `error` is now
-   destructured from `useSearch` and renders "Could not load results. Try
-   again." instead of the zero-hits copy on failure; `hasQuery` now gates on
-   both the live `query` and the debounced value, closing the sub-debounce
-   stale-reopen window. Covered by a new e2e case ("Ledger item 4") in
-   `e2e/tests/search.spec.ts`. See CHANGELOG's "⌘K palette: toggle-close,
-   failed-search message, and a scroll-lock collision" entry.
-5. **Palette visual polish** (cosmetic, no defect) — `frontend/src/components/CommandPalette.tsx`
-   unless noted:
-   - Highlighted-row color/radius: the call site sets
-     `data-highlighted:bg-surface-container` (`:209`), but the vendored
-     base paints a `::before` at `bg-accent`/`rounded-md`
-     (`autocomplete.tsx:190,193`) that overlays the element's own
-     background — net color lands on `surface-container-high`, which is
-     the *correct* DESIGN.md hover token, but by accident; the call-site
-     class is dead, and the row's `rounded-sm` disagrees with the
-     `::before`'s `rounded-md` by 2px at the corners. Fix: delete the dead
-     class, align to `rounded-md`.
-   - Dead `flex-1` on the input (`:177`) — the real flex child is the
-     vendored wrapper `div.relative.w-full` (`autocomplete.tsx:63`); the
-     class on the input itself is inert.
-   - `frontend/src/components/layout/TopBar.tsx`'s search trigger button
-     (`:82-95`) has no `hover:`/`focus:` affordance, unlike every sibling
-     button in the same file (mobile search icon `:99-106`, notification
-     and user-menu buttons). Reads as inert chrome.
-   - `TopBar.tsx:95` hardcodes the `⌘K` glyph even though `Shell.tsx`'s
-     listener accepts both Cmd and Ctrl. Low urgency (solo-TAM/macOS-first
-     tool) but the wrong affordance for a Windows/Linux user.
-6. ~~**Shared body-scroll-lock helper needed**: `Modal.tsx:24-32` and
-   `CommandPalette.tsx:64-73` both write `document.body.style.overflow`
-   directly with no ref-count. Reachable collision: open ⌘K while a
-   `Modal` is already open (e.g. focus lands outside a form field) — closing
-   the palette unlocks the page behind the still-open Modal. Two
-   independent owners of one global now justifies a small ref-counted
-   `useBodyScrollLock()` hook shared by both call sites.~~ **Resolved
-   2026-08-02** (Issues Sweep #1): new `frontend/src/hooks/useBodyScrollLock.ts`
-   is a module-level ref-counted lock, now the sole owner for both
-   `Modal.tsx` and `CommandPalette.tsx` — closing one no longer unlocks
-   scroll behind the other. Covered by a new e2e case ("Ledger item 6") in
-   `e2e/tests/search.spec.ts`. See CHANGELOG's "⌘K palette: toggle-close,
-   failed-search message, and a scroll-lock collision" entry.
-7. ~~**⌘K toggle-close is effectively unreachable**: `Shell.tsx`'s keydown
-   handler skips `INPUT`/`TEXTAREA`/`contentEditable` targets before
-   toggling `paletteOpen` (`~:14-21`), but the palette autofocuses its own
-   input the instant it opens (`CommandPalette.tsx:174`, `autoFocus` on
-   `AutocompleteInput`) — so a second ⌘K press while the palette is open
-   almost always has focus sitting inside that same input, and the handler
-   no-ops instead of closing. Reads as a toggle, delivers open-only-via-⌘K
-   (Esc and backdrop-click still close it). Fix: either drop the toggle
-   intent from the code/comment, or check for the palette's own open state
-   directly rather than inferring it from `document.activeElement`'s tag.~~
-   **Resolved 2026-08-02** (Issues Sweep #1): `Shell.tsx`'s keydown handler
-   now checks a `paletteOpenRef` mirror directly for the close direction —
-   the editable-target guard applies only to the open direction — so a
-   second ⌘K press closes the palette regardless of where focus sits.
-   Covered by a new e2e case ("Ledger item 7") in `e2e/tests/search.spec.ts`.
-   See CHANGELOG's "⌘K palette: toggle-close, failed-search message, and a
-   scroll-lock collision" entry.
-8. **`search.spec.ts` polish + listener-ready guard** (`e2e/tests/search.spec.ts`):
-   - `:93-96`'s project-name fetch doesn't check `res.ok` before `.json()`,
-     unlike the file's own `createUniqueTask` (`:18`) — a seed failure
-     would surface as a confusing `undefined` name instead of a clear
-     throw.
-   - `:85-87`'s task deep-link URL regex (`` `task=${target.id}` ``) is
-     unanchored — could substring-match `task=${id}X`. False-pass risk
-     only, never false-fail.
-   - `:31`'s comment cites `backend/src/routes/tasks.ts:22` for the
-     200-char title cap; the create schema this test actually exercises is
-     `backend/src/routes/projects.ts:84` (both cap at 200, so the claim is
-     true, the pointer is wrong — can't fix via the append-only CHANGELOG
-     entry that repeats the same pointer, but the spec comment itself can
-     be corrected).
-   - No listener-ready guard on any `page.keyboard.press("ControlOrMeta+k")`
-     call (`:75,101,135,...`) — a real flake was observed once under
-     concurrent CI load (SDD ledger, 2026-07-27) because the press can fire
-     before `Shell.tsx`'s `useEffect` attaches the keydown listener.
-     Highest-value fix in this batch: assert the TopBar trigger is visible
-     first (proves `Shell` mounted) before pressing ⌘K, or wrap the press
-     in a retry.
-
-## ReUI DateField swap — deferred findings (2026-07-28)
-
-User-deferred findings from `solvro-reviewer`'s pass on Task 1 of the ReUI
-date-field swap (`docs/plans/reui-date-field-swap-plan.md`, branch
-`feat/reui-date-field`). The reviewer cleared all blockers on this task;
-these are accepted-as-deferred, not outstanding review items.
-
-- **`dropdown-menu.tsx`/`tooltip.tsx` share the popover's pre-fix
-  z-index-on-Popup gap**: Task 1's fix round put `positionerClassName` on
-  `frontend/src/components/ui/popover.tsx`'s `PopoverContent` because
-  Base-UI's `Positioner` carries an inline `transform` that creates its own
-  stacking context, trapping a z-index set on the nested `Popup`. The same
-  shape exists unfixed in `frontend/src/components/ui/dropdown-menu.tsx:262`
-  (`DropdownMenuSubContent`'s `Popup` hardcodes `z-50`, no
-  `positionerClassName` escape hatch) and in
-  `frontend/src/components/ui/tooltip.tsx` (`TooltipContent`'s `Popup`,
-  same pattern). Harmless today — neither is currently mounted inside a
-  z-100+ Modal/Drawer host — but latent: the first submenu or tooltip that
-  needs to render above a Modal/Drawer will hit the identical
-  can't-outrank-the-host bug the popover had. Deferred as out of scope for
-  Task 1 (which only touched `popover.tsx`); follow-up: port the same
-  `positionerClassName` passthrough to both files if/when a real host
-  collision surfaces.
-- **`reui/gantt/gantt-nav.tsx:394`'s `GanttDatePicker` uses `shadow-md`,
-  not the sanctioned `shadow-overlay`, and may be dead code**: the
-  `PopoverContent` there (`className="w-auto p-0!"`) doesn't override
-  `ui/popover.tsx`'s hardcoded `shadow-md` default, so it never picked up
-  the `shadow-overlay` token DESIGN.md §4 sanctions for popovers (unlike
-  the new `DateField.tsx`, which explicitly adds `shadow-overlay` to its
-  `PopoverContent`). Separately, grepping `frontend/src` for
-  `GanttDatePicker` turns up only its own definition/export in
-  `gantt-nav.tsx` (lines 358, 476) — no import or JSX mount site anywhere
-  else in `src/`, suggesting it may be compile-surface-only dead code left
-  over from an earlier iteration of the Gantt nav bar. Deferred (not
-  Task 1's scope — `DateField.tsx` is a new, separate component, not an
-  edit to `gantt-nav.tsx`); follow-up: either confirm dead and remove, or
-  if a mount site is planned, align its shadow to `shadow-overlay` at that
-  time.
-- ~~**Display-representation mismatch between the collapsed DATES row and the
-  opened editor** (Task 2/5, deferred as pre-existing and deliberately
-  preserved — not introduced by the swap): `TaskPanel.tsx:56`'s `fmtShort`
-  renders an ISO's LOCAL calendar day (`new Date(iso).toLocaleDateString(...)`),
-  while `DateField`/`dayFromIso` renders the UTC slice (`iso.slice(0, 10)`).
-  East of UTC, a stored `2026-07-27T17:00:00.000Z` shows "Jul 28" in the
-  collapsed DATES row but "27/07/2026" once `InlineDateRangeEditor` is opened
-  on the same task. Root cause is the app's mixed legacy write conventions
-  (some dates written at local midnight, the Gantt's at UTC midnight) predating
-  this swap — out of scope for Task 2, which intentionally preserved
-  `dayFromIso`'s UTC-slice behavior for byte-parity with the pre-swap inline
-  editors (see `frontend/src/lib/dateField.ts`'s module doc). Follow-up:
-  decide a single canonical write convention and align `fmtShort` to whichever
-  representation `dayFromIso` uses, or vice versa.
-  **Root cause, spelled out explicitly (Task 3/5, 2026-07-28):** the codebase
-  has exactly TWO write conventions for `Task.startDate`/`dueDate`, split by
-  site, not by whim: (1) `TaskFormModal.tsx`'s submit path
-  (`new Date(startDate).toISOString()`, `TaskFormModal.tsx:189/195`) and the
-  Gantt drag-to-reschedule adapter (`eventPatch` in
-  `frontend/src/components/gantt-v2/adapter.ts:172-173`, which emits a bare
-  `"yyyy-MM-dd"` that the backend's `z.coerce.date()` — `backend/src/routes/tasks.ts:26-27`
-  — then parses as UTC midnight per the ECMAScript date-string grammar) both
-  write **UTC-midnight ISO**; (2) `InlineDateRangeEditor` (mounted in
-  `TaskPanel.tsx` and the Gantt tree cells, `gantt-v2/TreeCells.tsx`) writes
-  **local-midnight ISO** via `isoFromDay`/`commitDraft`
-  (`frontend/src/lib/dateField.ts:66-70`, `` new Date(`${day}T00:00:00`).toISOString() ``).
-  Task 3 deliberately preserved each site's convention byte-for-byte rather
-  than unifying them — `passthroughDate` (`TaskFormModal.tsx:73-76`) and
-  `commitDraft`'s own untouched-draft passthrough both exist specifically to
-  stop an unrelated field's edit-and-save from silently rewriting an
-  already-stored date into the OTHER site's convention. This is intentional
-  scope-limiting, not an oversight, but it means the two conventions are now
-  load-bearing in three call sites, not one — any future unification work
-  must pick a single canonical convention AND write a data migration for
-  already-stored rows (a UTC-midnight-written date and a local-midnight
-  -written date can represent different calendar days east of UTC, so this
-  isn't a no-op rename). Recorded here so that decision doesn't get made
-  blind as a "just pick one" call later — there are exactly two existing
-  conventions to reconcile, not an arbitrary third one to invent.~~ **Resolved
-  2026-07-29**: the date-contract phase (branch `fix/date-contract-utc-midnight`)
-  picked the single canonical convention this entry called for — UTC-midnight
-  ISO — and unified both write sites on it: `dateField.ts`'s `isoFromDay` now
-  emits `${day}T00:00:00.000Z` (was local midnight), and `TaskFormModal.tsx`'s
-  separate `passthroughDate` path was deleted in favor of reusing `commitDraft`.
-  `fmtShort` was aligned to `dayFromIso`'s UTC-slice representation
-  (`dayToDate(dayFromIso(iso))`), closing the display mismatch this entry
-  named. The called-for data migration for already-stored rows also shipped:
-  `backend/scripts/normalize-day-dates.ts`, applied to the dev DB (37 rows
-  repaired). See CHANGELOG's "Date pickers no longer walk task dates back one
-  day east of UTC" and "One-off data-normalization script" entries.
-- **e2e flake: `list-dnd.spec.ts:171` "gantt row drag: reorder sticks, dates
-  untouched"** (observed during Task 2/5 QA, 2026-07-28): reproducibly fails
-  on the first attempt (`Expected: 15, Received: 0`) and passes on Playwright's
-  automatic retry — observed twice in a row during this task's QA pass.
-  Absorbed by the suite's retry budget today, so not currently blocking, but
-  re-check during Task 5's full-gates run; if it's still flaking at that
-  point, investigate drag-timing in that spec specifically (this looks like a
-  distinct root cause from the CLAUDE.md-documented `taskOrdering.test.ts`
-  test-DB flake — different suite, different symptom).
-  **Task 5 full-suite gate run, fuller inventory (2026-07-28):** the re-check
-  above ran the complete Playwright suite (desktop + mobile) as part of
-  Task 5's acceptance sweep. This exact `list-dnd.spec.ts:171` case did not
-  reproduce this time, but four OTHER first-attempt flakes did, every one
-  self-healed on Playwright's `retries: 1` and every one in a spec this
-  branch's date-field swap never touches: `gantt-parity.spec.ts:330`
-  connector create/delete (delete-dependency button not visible on the first
-  attempt), `kanban-dnd.spec.ts:939` cross-view parity (order mismatch),
-  `list-dnd.spec.ts:66` cross-status reorder (index off), and
-  `kanban-dnd.spec.ts:982` mobile touch reorder (position off). None of these
-  block Task 5's acceptance — all four passed on retry, same as the original
-  case above — but they read as the same drag/reorder-timing flake class this
-  bullet already flagged rather than four unrelated bugs, so they're recorded
-  together here instead of as separate bullets. Worth a dedicated flake-hunt
-  pass across `gantt-parity`/`kanban-dnd`/`list-dnd` someday; not scheduled.
-  **Still live, same four cases, 10 days on (2026-08-07):** CI run
-  `31143153025` (PR #144) reported `4 flaky, 91 passed` and named exactly the
-  set above, only shifted by intervening edits — `gantt-parity.spec.ts:330`
-  connector create/delete, `kanban-dnd.spec.ts:987` R3 cross-view parity,
-  `list-dnd.spec.ts:66` cross-status reorder, and `kanban-dnd.spec.ts:1030`
-  mobile touch reorder. The preceding run on `develop` (`31127624026`) hit
-  three of the four, dropping only the cross-view parity case. All self-healed
-  on `retries: 1` in both runs. Two things this pins down that the 2026-07-28
-  note left open: the membership is stable rather than drifting (so it is one
-  timing class, not a rolling set of unrelated bugs), and it is independent of
-  any one branch's changes — PR #144 touched only test selectors and
-  expectations. The flake-hunt pass is still unscheduled; the retry budget
-  still absorbs it. Escalate if a fifth case joins or if any of the four ever
-  fails through its retry, since `retries: 1` gives exactly one spare attempt
-  and nothing here has margin beyond it.
-  **Seen again, 2026-10-24 (code-splitting phase):** full local runs against
-  `vite preview` hit the same class again: `gantt-parity.spec.ts` connector
-  create, `kanban-dnd.spec.ts` refused drag and mobile touch reorder, and
-  `list-dnd.spec.ts` "Gamma onto Alpha" cross-status reorder. Each passed on
-  rerun and under repeat-each. The phase touched no drag code; the "refused
-  drag" case is new to this list. Still the one unscheduled flake-hunt class.
-- ~~**Baseline "as-of" default derives "today" in UTC, not local time**
-  (pre-existing, unchanged by Task 3/5 — noted while swapping the field to
-  `DateField`): `SolvroGantt.tsx:322-326`'s effect seeds `baselineAsOf` via
-  `new Date().toISOString().slice(0, 10)` whenever the Lock/Overwrite
-  Baseline dialog opens. `toISOString()` is always UTC, so a user east of
-  UTC (e.g. UTC+7) opening the dialog after 17:00 local time gets
-  YESTERDAY's date pre-filled instead of today's — silently, since nothing
-  in the dialog flags the mismatch. The field is directly editable (not
-  `clearable`, but not read-only either) so a user who notices can correct
-  it by hand before confirming; the risk is a user who doesn't notice and
-  locks a baseline dated one day early. Out of scope for Task 3 (which only
-  swapped the input's markup to `DateField`, not its date-computation
-  logic — see the CHANGELOG's Task 3 entry). Follow-up: derive the default
-  from local calendar time (e.g. `dateToDay(new Date())` /
-  `format(new Date(), "yyyy-MM-dd")`, both already available via
-  `frontend/src/lib/dateField.ts`/`date-fns`) instead of a UTC ISO slice.~~
-  **Resolved 2026-07-29**: the date-contract phase's "Local 'today' and
-  export-overdue boundaries derive from calendar days" fix switched
-  `SolvroGantt.tsx`'s `baselineAsOf` seed to `dateToDay(new Date())`, exactly
-  the follow-up this entry asked for; verified in the current tree at
-  `SolvroGantt.tsx:324`.
-
-## DateRangeField — deferred findings (2026-07-28, Task 3.5)
-
-User-deferred findings surfaced while closing out Task 3.5 of the ReUI
-date-field swap (`docs/plans/reui-date-field-swap-plan.md`, branch
-`feat/reui-date-field`) — the `DateRangeField` between-style range picker.
-QA green 119/119 under both `TZ=UTC` and `TZ=Asia/Jakarta`; reviewer
-verification complete, no blockers. These are accepted-as-deferred
-polish/pre-existing items, not outstanding review items.
-
-- **Gantt tree Dates cell shows the range text twice while editing**
-  (`frontend/src/components/gantt-v2/TreeCells.tsx:26-58`, `TaskDatesCell`):
-  the cell's own trigger `<button>` (rendering `fmtDateRangeDDMM(...)`) stays
-  mounted once `editing` flips true, and the `defaultOpen`
-  `InlineDateRangeEditor`/`DateRangeField` mounts its own trigger button
-  (rendering `formatRangeDisplay(start, end)`) floated below it via the
-  wrapping `<span className="absolute right-0 top-full z-50 mt-1">` — both
-  show the same start/due range simultaneously. Pre-existing pattern (the old
-  two-`DateField` form had the same double-trigger shape), but visually worse
-  now that one combined range replaces two separate single-date triggers,
-  making the duplication an exact text match instead of two partial ones.
-  Polish candidate: hide/collapse the cell button while `editing` is true, or
-  render only `DateRangeField`'s own trigger once editing starts.
-- ~~**Pre-existing React console warning: "Function components cannot be given
-  refs… CalendarDayButton"** (`frontend/src/components/ui/calendar.tsx` +
-  `ui/button.tsx` composition): `Calendar`'s `components.DayButton` override,
-  `CalendarDayButton` (`calendar.tsx:180`), renders the vendored `Button`
-  (`ui/button.tsx:44`), a plain function component with no
-  `React.forwardRef`. `react-day-picker` passes a ref to each day button for
-  its own keyboard-focus management, so every calendar render (both
-  `DateField` and the new `DateRangeField`) fires this warning in dev.
-  Predates this branch — introduced when `Button`/`Calendar` were vendored in
-  the 2026-07-25 shadcn bootstrap — surfaced here because `DateRangeField` is
-  a second, higher-traffic mount point for the same composition. Fix
-  candidate: wrap `Button` in `React.forwardRef`, or have `CalendarDayButton`
-  render a plain `<button>` with the same class list instead of the `Button`
-  component.~~ **Resolved 2026-07-31**: the ReUI Filters phase wrapped
-  `ui/button.tsx`'s `Button` in `React.forwardRef` (React 18 needs it as a
-  prop-plumbed ref, unlike the React-19-targeting registry) — exactly the
-  first fix candidate above — closing the warning at its root; verified via
-  the CHANGELOG's "Vendored controls forward refs on React 18" entry, which
-  names this exact warning as gone.
-- ~~**East-of-UTC display quirk: a freshly picked day in the
-  local-midnight-convention editors re-displays one day earlier after
-  save+reopen** (`DateRangeField`/`InlineDateRangeEditor`, observed during
-  Task 3.5 verification, Asia/Jakarta UTC+7): picking a day writes
-  `isoFromDay`'s local-midnight ISO (`frontend/src/lib/dateField.ts:67-72`,
-  `` new Date(`${day}T00:00:00`).toISOString() ``), which east of UTC
-  serializes to the PREVIOUS UTC calendar day; reopening the editor reads
-  that ISO back through `dayFromIso`'s UTC slice (`dateField.ts:53-59`,
-  `iso.slice(0, 10)`), so the picker shows the day before the one actually
-  clicked. This is the same lossy local-midnight-write / UTC-slice-read
-  mechanism already root-caused in the "ReUI DateField swap — deferred
-  findings" section above (its Task 3/5 "Root cause, spelled out explicitly"
-  paragraph) — cross-referenced here rather than re-explained; no new root
-  cause, just a newly observed symptom of it inside the range picker
-  specifically. Preserved deliberately for byte-parity with the pre-swap
-  inline editors (see `dateField.ts`'s module doc); follow-up is the same one
-  already filed above (pick one canonical write convention, plus a data
-  migration for already-stored rows).~~ **Resolved 2026-07-29**: `isoFromDay`
-  now writes UTC-midnight ISO (`${day}T00:00:00.000Z`), the same canonical
-  rule `dayFromIso` reads by, so this write/read mismatch no longer exists —
-  same fix and same CHANGELOG entries as the cross-referenced "Display-
-  representation mismatch" entry above, which carries the full resolution
-  note.
-
-## Date contract UTC-midnight unification — deferred findings (2026-07-29)
-
-User-deferred findings surfaced during the phase that unified all task-date
-reads on "a task date's calendar day is the UTC date-part of its stored
-instant" (writer fix in `dateField.ts`'s `isoFromDay`, read-path unification
-across views, branch `fix/date-contract-utc-midnight`). Out-of-scope-by-plan
-backend items, deliberately not fixed in this phase.
-
-- ~~**`/tasks?overdue=true` filters by instant-vs-server-now, not calendar-day**
-  (`backend/src/routes/tasks.ts:92`): `where.dueDate = { lt: new Date() }`
-  compares the stored instant against the server's exact current instant,
-  while this phase moved all client-side overdue logic to calendar-day-string
-  comparison (`dayFromIso(dueDate) < dateToDay(today)`). Consequence: once any
-  time has elapsed past UTC midnight on the due day, a task due *today* already
-  satisfies `dueDate < new Date()` and the API reports it as overdue, while the
-  frontend (correctly, post-fix) renders it as not-overdue — a route/UI
-  disagreement for any caller that trusts the `overdue=true` filter directly
-  rather than re-deriving the flag client-side. Fix direction: compare against
-  UTC midnight of the server's current calendar day, or a lexicographic
-  day-string compare, consistent with the frontend's new rule.~~ **Resolved
-  2026-08-02** (Issues Sweep #1): the frontend now sends its local calendar
-  day (`today=yyyy-MM-dd`, validated server-side) with overdue-filtered task
-  queries, and `routes/tasks.ts` compares against that day's UTC midnight via
-  the new `backend/src/lib/dateBoundary.ts` (falling back to the server's UTC
-  day for direct API callers without `today`). Combining `status` with
-  `overdue=true` also no longer silently discards the status filter — see the
-  next entry's CHANGELOG reference. Covered by three new backend test suites
-  (`backend/test/tasksOverdue.test.ts` and siblings). See CHANGELOG's
-  "Overdue follows the viewer's calendar day; the status filter is no longer
-  discarded" entry.
-- ~~**Portfolio rollup `isOverdue`/`daysOverdue` compare against the server's
-  LOCAL midnight, not UTC** (`backend/src/lib/portfolio.ts:74-80`):
-  `startOfToday` (lines 46-47) is built via `new Date(); setHours(0,0,0,0)` —
-  the server process's local midnight, not UTC midnight. On a server host
-  configured west of UTC, a project due exactly today can mis-flag as
-  overdue (or the reverse, east of UTC) — the same defect class this phase's
-  frontend-side fix addressed via calendar-day comparisons in
-  `ProjectOverview.tsx`, `Tasks.tsx`, `ProjectTimeline.tsx`, and
-  `DailyReview.tsx`. Fix direction: derive the boundary from UTC midnight (or
-  a day-string compare) so the rollup's overdue flag is timezone-independent,
-  matching the read-path unification this phase applied everywhere else.~~
-  **Resolved 2026-08-02** (Issues Sweep #1): `computePortfolioRows` now
-  accepts the caller's `today` day string (threaded from `routes/overview.ts`
-  and `routes/reports.ts`'s executive report) and derives `startOfToday` via
-  the same `lib/dateBoundary.ts` UTC-midnight boundary as the tasks route,
-  replacing the server-local-midnight `setHours(0,0,0,0)` computation. Also
-  fixed in the same change: a non-midnight due instant now counts a full day
-  overdue instead of rounding to zero (`daysOverdue` floors `endMs` to its
-  own UTC calendar day first). Covered by `backend/test/portfolioOverdue.test.ts`
-  and `portfolioRouteToday.test.ts`. See CHANGELOG's "Overdue follows the
-  viewer's calendar day..." entry.
-- **`backend/tsconfig.json`'s `include` never reaches `scripts/` or `test/`**
-  (`backend/tsconfig.json:17`, `"include": ["src/**/*.ts"]`): the
-  CLAUDE.md-documented backend typecheck gate (`npx tsc --noEmit`) only ever
-  resolves `src/**/*.ts`, so this phase's new `backend/scripts/normalize-day-dates.ts`
-  — and every pre-existing script under `backend/scripts/` — is type-exercised
-  only incidentally, by `tsx` at runtime or by `vitest` importing it in tests,
-  never by the dedicated typecheck gate. Fix direction: broaden `include` to
-  cover `scripts/**/*.ts` and `test/**/*.ts`, or add a second `tsconfig`
-  scoped to those directories and run it alongside the main gate.
-
-## Sortable reorder (sections + subtasks) — deferred findings (2026-07-30)
-
-User-deferred findings from the phase review of `feat/reui-sortable`
-(vendored ReUI `Sortable` into `frontend/src/components/reui/sortable.tsx`;
-backend dense re-pack on `PATCH /sections/:id`; the "Reorder sections" modal;
-drag-only subtask reorder in `TaskPanel.tsx`). The reviewer cleared all
-blockers; these are accepted-as-deferred, not outstanding review items.
-
-- **TaskPanel subtask drag has a possible snap-back flicker before the
-  reorder commits** (`frontend/src/components/TaskPanel.tsx:493`): the
-  Sortable's `onValueChange` is a deliberate no-op — `subtasks` is derived
-  from the tasks query, not local state, so the DOM keeps the pre-drop order
-  until `useUpdateTask`'s `onMutate` optimistic re-pack lands, and that
-  handler first `await`s `qc.cancelQueries`. A visible snap-back flicker is
-  possible in the window between drop and that await resolving.
-  `SectionReorderModal` avoids this by holding local order state
-  (`order`/`setOrder`) instead. Deliberate asymmetry between the two
-  surfaces, documented in code at the no-op site; fix direction if it proves
-  visible in practice would be giving TaskPanel's subtask list the same local
-  mirror pattern.
-- **`SectionReorderModal` has no permission check of its own**
-  (`frontend/src/components/SectionReorderModal.tsx`, whole file — no
-  `canEdit`/permission reference anywhere in it): it relies wholly on
-  `ProjectList.tsx`'s `canEdit` gate on the "Reorder sections" entry button
-  that opens it, unlike `TaskPanel.tsx`'s subtask handle, which defensively
-  re-checks `canEdit` itself (only renders `SortableItemHandle` when
-  `canEdit`, per the phase's CHANGELOG entry). Inconsistent defense-in-depth
-  between the two new reorder surfaces; low risk today since the only mount
-  site is already gated, but a future second entry point would silently
-  inherit no protection.
-- **`useUpdateSection`'s mutation-scope serialization can diverge from the
-  server on a failing PATCH** (`frontend/src/lib/queries.ts:865-906`): the
-  `scope: { id: sections-${projectId} }` on `useUpdateSection` serializes
-  concurrent section PATCHes for the same project (so two fast drops can't
-  land out of order), but if a queued drop's predecessor errors, that
-  predecessor's `onError` rollback (`:902`) discards the optimistic write of
-  every mutation still queued behind it in the scope, and the queued
-  mutation then proceeds against a server that never applied the failed one.
-  `SectionReorderModal` shows a diverged order until the modal is reopened
-  (its local `order` state is only re-seeded on the open transition, per its
-  own comment at `SectionReorderModal.tsx:39-56`). Only reachable when a
-  `PATCH /sections/:id` actually fails mid-session.
-- **Vendored `sortable.tsx` puts every `SortableItem` in the tab order,
-  even for read-only viewers** (`frontend/src/components/reui/sortable.tsx:359`,
-  the `...attributes` spread from dnd-kit's `useSortable` onto the item's
-  root element): dnd-kit's default `attributes` include `role="button"`
-  and `tabIndex={0}`, applied unconditionally to every `SortableItem`
-  regardless of whether a handle is rendered for it. In `TaskPanel.tsx`, the
-  drag handle (`SortableItemHandle`) is only rendered when `canEdit` is
-  true, but the row itself is still focusable — a read-only user tabs
-  through inert, focusable subtask rows that do nothing on Enter/Space.
-  Vendor-level (upstream dnd-kit + ReUI behavior, not Solvro-authored code);
-  fixing it means patching the vendored file, which requires a `//
-  SOLVRO PATCH` marker plus bumping `gates.sh`'s
-  `EXPECTED_SORTABLE_PATCHES` counter and a matching CHANGELOG entry, per
-  the guardrail-sortable-vendor drift guard.
-- **`SectionReorderModal`'s drag-guard can strand the modal if a drag never
-  cleanly ends** (`frontend/src/components/SectionReorderModal.tsx:69-72`,
-  `handleModalClose`): `isDraggingRef.current` blocks every close route
-  (Escape, backdrop click, header X) while a drag is in progress, and is
-  only reset on the Sortable's own `onDragEnd`/`onDragCancel` callbacks or
-  on the next open/close effect run (`:39-44`). A drag start that never
-  pairs with an end/cancel callback — e.g. a pointerup lost outside the
-  viewport, a known dnd-kit sensor gap that also affects the Kanban board —
-  leaves `isDraggingRef.current` stuck `true`, and the reset effect can't
-  fire because its dependency array is `[open]` (self-sealing: the modal
-  never re-runs the effect while it's already open and can't close to
-  re-run it). Escape hatch candidate: exempt the header X specifically from
-  the guard, so there's always one way out regardless of drag state.
-- **No dedicated Playwright drag-interaction spec for either new reorder
-  surface** (phase plan decision, not a review finding): neither the
-  "Reorder sections" modal nor `TaskPanel`'s subtask drag has an e2e spec
-  exercising the actual drag gesture; `.claude/scripts/gates.sh`'s
-  `playwright-smoke` gate covers load/render regressions only. Deferred by
-  plan, not forgotten — candidate for a future e2e pass alongside the
-  existing Gantt/Kanban drag specs (`gantt-parity.spec.ts`, `kanban-dnd.spec.ts`,
-  `list-dnd.spec.ts`).
-
-## ReUI Presentation Set — deferred findings (2026-07-31)
-
-User-deferred findings from the ReUI Presentation Set phase (vendored
-`Timeline`/`Alert`/`Frame`/`IconTile`/`IconStack` into
-`frontend/src/components/reui/`; consumer surfaces: `EmptyState.tsx`,
-`ProjectTimeline.tsx`, and the form-error callouts in `Login.tsx`,
-`TaskFormModal.tsx`, `ProjectFormModal.tsx`, `CustomerFormModal.tsx`,
-`RiskFormModal.tsx`). The phase review cleared all blockers; these are
-accepted-as-deferred, not outstanding review items.
-
-- ~~**Form-error `Alert` migration covers 5 of 26 `bg-error-container` callout
-  sites** (the five modal/drawer/login edit-error boxes listed above) — the
-  remaining 21 are a deferred sweep for a later phase. One confirmed
-  example: `frontend/src/pages/views/ProjectTimeline.tsx:82` still renders a
-  raw `bg-error-container` div for its page-level task-fetch error banner —
-  a different error path from the edit-dialog error this phase migrated.
-  Follow-up: migrate the remaining callout sites onto the vendored `Alert`
-  in a dedicated pass.~~ **Resolved 2026-08-02** (Issues Sweep #1): the
-  remaining ad-hoc `bg-error-container` callout boxes (24 sites across
-  `pages/`, `pages/views/`, `components/`, incl. the cited
-  `ProjectTimeline.tsx` banner and the Gantt/Kanban engines' error banners)
-  now render on the vendored `Alert`. Verified in the current tree: every
-  remaining `bg-error-container` occurrence is a chip/badge/hover-state use
-  (risk-score bands in `RiskFormModal.tsx`/`ProjectRisks.tsx`, status pills,
-  action-button hover backgrounds) — deliberate carve-outs, not missed
-  callouts. See CHANGELOG's "Error callouts on the vendored Alert
-  everywhere" entry.
-- **Stat-card `Frame` evaluation deferred**: whether `Overview.tsx`'s and
-  `Executive.tsx`'s KPI stat cards should adopt the vendored `Frame` is
-  deferred to the Phase 4 "leftovers" sweep of the ReUI migration roadmap
-  (`docs/plans/reui-component-migration.md`).
-- **`IconTile`'s `outline` variant is invisible-by-default in dark theme
-  on a `surface-container-lowest` background** (`frontend/src/components/reui/icon-tile.tsx`):
-  the variant's base `bg-background` (`#1a1a18` in dark) is the same value
-  as `surface-container-lowest` (also `#1a1a18`), so on a surface at that
-  container level (e.g. `EmptyState`'s `Frame`) the tile's own fill is
-  invisible — the visible fill comes only from its `dark:bg-input/32` rule
-  layered on top. Worth knowing before this variant is reused on a
-  differently-toned surface; verify contrast there rather than assuming the
-  `outline` variant reads consistently everywhere.
-- ~~**Dev-DB residue from visual verification**: a scratch "Timeline Check"
-  customer + project (5 tasks) was seeded while manually verifying the
-  `ProjectTimeline` change across themes/widths. No `DELETE /projects/:id`
-  route exists (see the "Missing DELETE /projects/:id route" tech-debt entry
-  above) — remove via the UI if unwanted, or fold into the same cleanup pass
-  as the other dev-DB junk-data entries in this file.~~ **Resolved 2026-08-02**
-  (Issues Sweep #1): the "Timeline Check" scratch data was deleted along with
-  the other dev-DB junk — see the "Backend test-DB isolation is broken"
-  entry above for the row counts.
-
-## ReUI Filters phase — deferred findings (2026-07-31)
-
-User-deferred findings from the ReUI Filters phase (vendored
-`frontend/src/components/reui/filters.tsx` and six `ui/` form primitives;
-chip-toolbar migrations on `Tasks.tsx` and `Projects.tsx`; app-wide
-form-control focus unification; React 18 `forwardRef` fixes). The phase
-review cleared all blockers; these are accepted-as-deferred, not outstanding
-review items.
-
-- ~~**Duplicate-chip mouse race** (upstream Base UI × vendored ReUI interaction,
-  not a Solvro defect): per the phase reviewer, Base UI's
-  `useMenuItemCommonProps` fires a programmatic `itemRef.current.click()` on
-  mouseup once `allowMouseUpTriggerRef` is armed (a trigger press held
-  ≥200ms; submenus share the parent trigger's ref), and `MenuCheckboxItem`
-  fires `onCheckedChange` on every click — programmatic or natural. The
-  keyboard path never enters this at all. The amplifier, and the definitive
-  fix site, is `frontend/src/components/reui/filters.tsx`'s `addFilter`
-  (~:2109-2116): it appends a new chip unconditionally — fresh id, no
-  idempotence guard, ignores `allowMultiple` — so a raced double-activation
-  can append the same field+value twice. The guard belongs there: skip the
-  append if a chip with the same field+value already exists. Current
-  shielding is incidental and per-consumer, not a fix: Tasks shields via
-  `allowMultiple={false}`, which unmounts the just-committed field's row
-  before the raced second activation lands (observed 0/6 on repro, was 2/2
-  before that shielding existed); Projects shields because its chip state is
-  derived from the URL, which collapses duplicate values. Re-exposure
-  condition: any future filter-toolbar consumer that leaves `allowMultiple`
-  at its default `true`, or that holds chip state locally instead of from a
-  single source of truth. Note: Projects' customer submenu renders 400+
-  options in dev, which widens the race window by lengthening render time
-  between mousedown and mouseup. No e2e spec covers either filter toolbar
-  today, so there is no automated regression cover for this.~~ **Resolved
-  2026-08-02** (Issues Sweep #1): the definitive fix landed exactly where
-  this entry called for it — `filters.tsx`'s module-level `findFilterMatch`
-  (unit-tested in the new `filters.test.ts`) is now consulted by every
-  unconditional chip-append call site (`addFilter`, the single-remaining-
-  field direct list, and both branches of the field-then-value submenu
-  flow), skipping the append (or adopting the existing chip's id into the
-  session) when a chip with the same field+values already exists. **Residual
-  (not fully closed):** the upstream Base UI mouseup-double-fire itself
-  remains unreproducible on demand — the new
-  `e2e/tests/filters-duplicate-chip.spec.ts` is an invariant net (asserts
-  "never more than one chip per field" under a manufactured long-press
-  approximation), not a spec that discriminates the exact upstream race;
-  the deterministic proof of the guard's own logic is `filters.test.ts`. See
-  CHANGELOG's "Focus/shadow stragglers unified; duplicate filter chips
-  guarded" entry.
-- **Pointer-dependent initial submenu highlight** (cosmetic, upstream
-  hover-follows-highlight behavior): when a submenu opens, whichever row the
-  repositioned popup happens to land under the cursor wins the highlight
-  over the component's own `setHighlightedIndex(0)` call. The only visible
-  edge is a blind Enter-key press picking a different row than expected. Not
-  worth a vendored patch.
-- ~~**Old focus/shadow style survivors after the focus-style unification**
-  (unification-tail entry — this phase's "one focus style" pass across
-  `ui/button.tsx`, `checkbox.tsx`, `calendar.tsx`, `input.tsx`, `textarea.tsx`,
-  and `input-group.tsx` did not reach every file that still carries the old
-  treatment): `ui/scroll-area.tsx:21` still has `ring-[3px] ring-ring/50`
-  (renders inside every filters options list), as do
-  `reui/autocomplete.tsx:27`, `reui/gantt/gantt-bar.tsx:293`, and
-  `reui/gantt/gantt-view.tsx:2279`. The old `shadow-xs` is also still open at
-  `reui/gantt/gantt-view.tsx:3695` and, non-vendored, at
-  `gantt-v2/SolvroBar.tsx:154,165` (Solvro-owned code, so no re-pull excuse
-  for that last pair). Follow-up: one dedicated pass finishing the
-  unification across these files.~~ **Resolved 2026-08-02** (Issues Sweep
-  #1): all five sites now use the sanctioned
-  `focus-visible:border-primary focus-visible:ring-2
-  focus-visible:ring-primary/30` treatment and the `shadow-xs` drops, with
-  `// SOLVRO PATCH` markers on the two vendored files. Verified in the
-  current tree. See CHANGELOG's "Focus/shadow stragglers unified; duplicate
-  filter chips guarded" entry.
-- **Toolbar text-size drift** (deliberate-answer-pending density note, not a
-  defect): the migrated filter rows mix a 15px chip label with 13px
-  checkbox-row text and a 12px Reset control — the pre-migration dropdown
-  rows were a uniform 12-13px. Recorded for an explicit future call on
-  whether the chip row should match the old uniform density or keep its
-  current mixed scale.
-
-## ReUI Data Grid phase — deferred findings (2026-08-01)
-
-User-deferred findings from the ReUI Data Grid phase (vendored
-`frontend/src/components/reui/data-grid/` family, `reui/badge.tsx`,
-`ui/select.tsx`, `ui/skeleton.tsx`, `ui/spinner.tsx`; migrated the Admin
-Users table, the CustomerDetail Overview projects table, and the Tasks
-cross-project list onto the grid; `Customers.tsx` card shells onto `Frame`;
-the `lib/utils.ts` tailwind-merge classifier fix). The phase review cleared
-all blockers; these are accepted-as-deferred, not outstanding review items.
-
-- **Badge solid-tone variants are NOT FOR USE until the Phase 4 chip rebase**
-  (`frontend/src/components/reui/badge.tsx:31-52`): the `info`/`success`/
-  `warning` variants render white text on a solid full-opacity tint fill in
-  dark mode at ≈1.2-1.3:1 contrast (near-invisible) — those three tokens are
-  calibrated as text-on-tint colors (the `Alert` component's existing usage),
-  not vivid solid-fill colors. `destructive` is milder (white on dark-mode
-  `--error` ≈2.8:1, below AA but not near-invisible) and isn't the same
-  combination `ui/button.tsx`'s destructive variant ships (Button also mixes
-  in `dark:bg-destructive/60`, which this Badge variant lacks). All four
-  variants have zero consumers today — only `secondary`/`outline` are
-  consumed, by `data-grid-column-filter.tsx`'s selected-count chips. The
-  correct rendering for a status chip today is DESIGN.md §1's chip
-  background/text pair, not one of these solid tones; the constraint comment
-  lives in-code at the cited site. Flagged for whoever wires one of the tone
-  variants up before Phase 4 decides on a real solid-fill tone family.
-- ~~**Nested anchors in `Customers.tsx`** (`frontend/src/pages/Customers.tsx:126,184`):
-  the customer card's outer `<Link to={.../customers/:id}>` wraps an inner
-  `<Link to={.../projects?customerId=...}>` ("View projects →") — invalid
-  HTML (nested `<a>`), pre-existing before this phase's `Frame` refactor
-  (the refactor swapped the hand-rolled bordered `div` for `Frame` inside the
-  same outer `Link`; the nesting itself is untouched). Survives only because
-  React's synthetic event system and browsers' lenient parsers don't enforce
-  the HTML spec here — the inner link's `stopPropagation` masks the practical
-  symptom (a real nested-anchor click in a spec-compliant parser closes the
-  outer tag early). Real fix requires restructuring the card away from a
-  wrapping anchor (e.g. make the card a non-interactive container with an
-  absolutely-positioned "stretched link" for the primary click target, and a
-  sibling link for the secondary action).~~ **Resolved 2026-11-18**: `Customers.tsx` is a data grid now; the name link (`:229`) and the projects link (`:266`) sit in separate cells with no wrapping card `Link`.
-- **`data-grid-column-header.tsx`'s `hasControls` branch ignores the
-  right-align convention** (`frontend/src/components/reui/data-grid/data-grid-column-header.tsx:434-439`):
-  the branch rendering a column's move/pin/visibility dropdown doesn't honor
-  `meta.headerClassName: "text-right"` the way the plain sortable-label path
-  does (see `alignEnd`, same file). Unreachable under the current feature
-  floor — no shipped grid enables column filters/move/visibility/pin — so
-  nothing renders misaligned today. A `SOLVRO PATCH note — KNOWN GAP` marker
-  is already at the site; the first column that pairs `hasControls` with a
-  right-aligned header needs this branch taught the same trick.
-- ~~**Four hand-rolled tables remain un-migrated**: `frontend/src/pages/Admin.tsx`'s
-  Roles tab (`:839`) and Project Overrides tab (`:1438`) — highest-value
-  follow-up, since they're one tab-click away from the just-migrated Users
-  tab in the same file and page; `frontend/src/components/services/ServiceCatalogueManager.tsx:152`;
-  `frontend/src/pages/views/ProjectRisks.tsx:193`. Candidates for the next
-  data-grid migration pass.~~ **Resolved 2026-08-02** (Issues Sweep #1): all
-  four now render on the vendored `DataGrid`. See CHANGELOG's "Admin's Roles
-  and Project Override tabs join the data grid" and "Service Catalogue and
-  project Risks tables on the data grid" entries.
-- ~~**Admin Users tab's grid container sits on `surface-container-lowest`,
-  lighter than its sibling tabs' `bg-surface` tables** (in light theme;
-  reversed in dark theme — see below): `Admin.tsx:585`'s
-  `<DataGridContainer className="... bg-surface-container-lowest">` vs. the
-  Roles tab's `<div className="... bg-surface">` (`Admin.tsx:838`) and the
-  Project Overrides tab's equivalent wrapper. Per DESIGN.md §1,
-  `surface-container-lowest` is `#ffffff` / `surface` is `#f9f9f7` in light
-  theme (lowest reads lighter), but `#1a1a18` / `#232321` in dark theme
-  (lowest reads darker) — so the three tabs' panels are tonally inconsistent
-  in both themes, just in opposite directions. Cosmetic; not blocking.~~
-  **Resolved 2026-08-02** (Issues Sweep #1): the Roles and Project Override
-  tabs' new `DataGrid`s use the same `bg-surface-container-lowest` as the
-  Users tab (`Admin.tsx`, verified in the current tree), unifying all three
-  panels' tone.
-- ~~**Admin KPI strip renders zeros during the load window** beside a
-  skeletoned grid, instead of the previous blocking loading message
-  (`Admin.tsx:90-97`, `UsersTab`'s `rows = users ?? EMPTY_USERS` fallback,
-  deliberate per its own in-code comment — "Loading-safe fallback (fix round
-  S2)"): every KPI count (`Admin.tsx:439-444`) reads through `rows`, so
-  before the first response lands they render `0`/`0 active · 0 admins`
-  etc. next to the grid's own skeleton rows, rather than the old
-  whole-component loading gate. Options: skeleton or em-dash the KPI strip
-  during `isLoading`, or accept the flash as-is.~~ **Resolved 2026-08-02**
-  (Issues Sweep #1): the KPI strip now renders `"—"` per stat while
-  `isLoading`, instead of asserting `0`. See CHANGELOG's "Admin's Roles and
-  Project Override tabs join the data grid; KPI strip stops flashing zeros"
-  entry.
-- ~~**`text-[10px]` "Needs role" chip has no scale token** (`Admin.tsx:243`,
-  the amber "Needs role" badge on PENDING users): the smallest named
-  typography role is `text-label-caps` at 12px (DESIGN.md §2); 10px has no
-  token. Three other `text-[10px]` sites exist in the same file
-  (`Admin.tsx:877,1119,1313`, unrelated chips/links) — not part of this
-  finding, just noted as siblings. Note for if a micro-label token is ever
-  wanted; not worth inventing one for a single badge today.~~ **Resolved 2026-11-18**: `Admin.tsx:279` uses `text-label-caps` with chip-amber tokens; no 10px chip is left.
-- ~~**`frontend/src/lib/tableSort.ts`'s `personNameSortingFn` is typed
-  `SortingFn<any>`** (`tableSort.ts:20`, with an
-  `eslint-disable-next-line @typescript-eslint/no-explicit-any` — moot today
-  since the repo has no lint config/gate, see the existing "ESLint
-  `exhaustive-deps` disable comment is inert" tech-debt entry above): a
-  generic `SortingFn<TData>` signature would restore compile-time guarding
-  against accidentally wiring this sort function onto a non-string column.
-  Works correctly today (both consumers pass string-valued columns);
-  follow-up is a type-safety tightening, not a behavior fix.~~ **Resolved
-  2026-08-02** (Issues Sweep #1): `personNameSortingFn` is now generic over
-  `TData extends RowData` instead of `SortingFn<any>` — no `any` escape
-  hatch, no per-consumer cast. See CHANGELOG's "Admin's Roles and Project
-  Override tabs join the data grid" entry.
-- ~~**Backend `/tasks?overdue=true` still compares a server instant, not a
-  calendar day** (`backend/src/routes/tasks.ts:91-94`,
-  `where.dueDate = { lt: new Date() }`) — re-surfaced during this phase's
-  review while cross-checking the migrated `Tasks.tsx` grid's per-row
-  OVERDUE badge, which (correctly, per the date-contract phase) compares
-  calendar-day strings (`Tasks.tsx:218-219`,
-  `dayFromIso(task.dueDate)! < todayDay!`). Verified in the current tree:
-  **both paths already exclude `DONE` tasks** (backend:
-  `where.status = { not: "DONE" }`; frontend: `task.status !== "DONE"`), so
-  this is not a DONE-exclusion gap. The real, pre-existing gap is the
-  instant-vs-calendar-day date boundary itself — already tracked above under
-  "Date contract UTC-midnight unification — deferred findings (2026-07-29)"
-  → "`/tasks?overdue=true` filters by instant-vs-server-now, not
-  calendar-day". Not re-filed as a separate entry; cross-referenced here
-  since this phase's review surfaced it again at a new call site
-  (`Tasks.tsx`'s migrated grid).~~ **Resolved 2026-08-02** (Issues Sweep
-  #1): fixed at the entry this cross-referenced — see "`/tasks?overdue=true`
-  filters by instant-vs-server-now, not calendar-day" below.
-
-## Issues Sweep #1 — residuals (2026-08-02)
-
-New findings surfaced while closing out Issues Sweep #1 (all four ledger
-batches — Data Grid Admin/Risks/ServiceCatalogue migrations, the ⌘K palette
-fixes, the focus/shadow + duplicate-chip guard, the overdue date-contract
-fix, and the dev-DB cleanup). Not blockers — the phase review cleared all
-findings; these are accepted-as-deferred.
-
-- **`data-grid-column-header.tsx`'s sortable path supports left/right
-  alignment only, not center** (`frontend/src/components/reui/data-grid/data-grid-column-header.tsx`,
-  see its `alignEnd`): `ProjectRisks.tsx`'s Probability/Impact columns had to
-  be left `enableSorting: false` specifically so their headers could stay
-  centered (matching the pre-DataGrid table's `text-center` treatment) —
-  documented in-file at both column definitions. A vendored change (new
-  `alignCenter` handling alongside `alignEnd`) is needed before a sortable
-  column can be centered; distinct from the pre-existing "`hasControls`
-  branch ignores the right-align convention" finding above (that one is
-  about the move/pin/visibility-dropdown path, this is about the plain
-  sortable-label path).
-- **`e2e/tests/filters-duplicate-chip.spec.ts` is an invariant net, not a
-  discriminating regression test** for the duplicate-chip guard: it proves
-  "never more than one chip per field survives repeated add attempts" via a
-  manufactured ≥200ms long-press on a value option (documented in the spec's
-  own header comment as "the closest reproducible approximation," not the
-  exact upstream Base UI mouseup-double-fire). The upstream race remains
-  unreproducible on demand. The deterministic proof of the guard's own
-  comparison logic is `frontend/src/components/reui/filters.test.ts`, not
-  this e2e spec.
-- **The duplicate-chip guard's `===` comparison bypasses object-valued
-  filter options** (`frontend/src/components/reui/filters.tsx`'s
-  `findFilterMatch`, documented in its own module comment): correct for
-  every current filter field (all string-valued), but a future consumer
-  with object-valued filter values would silently fail to dedupe — no
-  current consumer is affected.
-- **`frontend/src/components/reui/filters.test.ts` colocates a
-  Solvro-authored test inside the vendored `reui/` tree**, importing
-  `findFilterMatch` — a `// SOLVRO PATCH` export that a future shadcn/ReUI
-  CLI re-pull of `filters.tsx` would delete, silently breaking this test's
-  import. The `EXPECTED_FILTERS_PATCHES` counter in `.claude/scripts/gates.sh`
-  (currently 18, matching the file) is the only guard that would catch a
-  re-pull stripping the patch; there's no separate guard protecting the test
-  file's import specifically.
-- **Admin Project Overrides tab's reassign `<select>` × row count is a
-  pre-existing scale hazard, now masked by the dev-DB cleanup**
-  (`frontend/src/pages/Admin.tsx`'s `tamCandidates.map(...)` inside the
-  `reassign` column's cell, one `<select>` per row, one `<option>` per
-  candidate; the grid itself has pagination "OFF" by phase-wide convention):
-  harmless at the post-cleanup dev-DB scale (144 projects, 8 users), but a
-  production-scale DB would still render every candidate as an unfiltered
-  `<option>` in every visible row's dropdown — the same shape as the
-  existing "`GET /users` is unpaginated" finding (Kanban → ReUI swap
-  section above), applied to this specific grid.
-
-## Gantt visual refresh — deferred findings (2026-08-03)
-
-User-deferred findings from the Gantt visual refresh phase (T1–T6: toolbar
-navigation, tree status/due columns, hatched bar treatment + squared section
-rollups, floating zoom, per-row action menu, toolbar pill restyle — branch
-`feat/gantt-visual-refresh`). The phase review cleared all blockers; these
-are accepted-as-deferred, not outstanding review items.
-
-- **Screen and PDF export diverge on two bar treatments this phase
-  introduced, both deliberate and out of the phase's scope by plan**
-  (`frontend/src/components/gantt-v2/SolvroBar.tsx` vs.
-  `frontend/src/lib/gantt/exportPdf.ts`): (a) the live Gantt now hatches a
-  task bar's INCOMPLETE portion (`SolvroBar.tsx`'s
-  `progressHatchBackground`), while `exportPdf.ts` still draws the old flat
-  black overlay over the COMPLETED portion (`exportPdf.ts:634-656`,
-  `PROGRESS_OVERLAY_ALPHA`); (b) the live section rollup is now a thin bar
-  with squared end caps (`SolvroBar.tsx`'s `data-rollup`), while the PDF
-  still draws a rounded pill (`exportPdf.ts:561`,
-  `fillRoundedRect(..., 1.5)` corner radius). `exportPdf.ts`'s own in-file
-  comment (~:542-548) documents both as an accepted, unsynced screen/export
-  divergence — not a bug, not scheduled.
-- **`TaskFormModal.tsx`'s create-mode parent picker offers subtasks, which
-  the server then rejects** (`TaskFormModal.tsx:129-131`,
-  `possibleParents`): in edit mode the filter excludes subtasks
-  (`t.parentTaskId === null`), but in create mode (`!editingTask`
-  short-circuits the filter to always-true) every project task is listed,
-  subtasks included — picking one as a parent 400s server-side via
-  `assertValidParent`'s max-depth-1 guard
-  (`backend/src/lib/taskOrdering.ts:134-140`, called from
-  `routes/projects.ts:362`). Pre-existing (predates this phase),
-  independently confirmed by two reviewers during this phase's review.
-  Fix direction: apply the same `t.parentTaskId === null` filter regardless
-  of edit/create mode.
-- **Two shadow-doctrine holdouts remain after this phase's context-menu and
-  export-dropdown fix** (DESIGN.md §4 elevation whitelist): `SolvroGantt.tsx:1671`'s
-  baseline-locked toast still uses raw `shadow-md` (a second property on
-  the same site already flagged for raw `emerald-*` utilities in the
-  2026-07-25 "Final whole-branch review additions" entry above);
-  `frontend/src/components/reui/gantt/gantt-dnd.tsx:310`'s drag-clone
-  element (`barEl.className = "shrink-0 rounded-sm shadow-lg"`) is vendored
-  and carries no `// SOLVRO PATCH` marker. Both are follow-up candidates,
-  not fixed this phase — this phase's shadow work was scoped to the row
-  context menu and export dropdown only. **Narrowed 2026-08-31** (Gantt
-  toolbar one-row phase): the first holdout is moot — the baseline-locked
-  toast (and its raw `shadow-md`) was removed from `SolvroGantt.tsx`
-  entirely, replaced by an inline status line in `RightSidebar.tsx`'s new
-  Baseline section (see the "Final whole-branch review additions" entry
-  above). Only the `gantt-dnd.tsx:310` vendored drag-clone `shadow-lg`
-  still stands.
-  *Updated 2026-09-02 (code check)*: the first holdout is moot (the Baseline section uses an inline `baselineNotice` string, no toast); only `reui/gantt/gantt-dnd.tsx:310` (`shadow-lg` on the drag clone) remains, still without a `// SOLVRO PATCH` marker.
-- **A sortable row's accessible name concatenates every control inside it,
-  and each row carries an extra tab stop.** `reui/sortable.tsx:359` spreads
-  dnd-kit's `attributes` onto the row element, which carry `role="button"` +
-  `tabIndex=0`; the row's computed name is therefore the join of its
-  children's labels. In `TaskPanel.tsx`'s subtask list that now reads
-  "Mark done <title> Rename <title> Reorder subtask", and a real `<button>`
-  sits nested inside a `role="button"`. Surfaced while adding the subtask
-  rename control (2026-08-07); not fixed there because the defect is in the
-  vendored row, and `reui/` is on the spine list — a presentation-only fix
-  would pull an instant opus review onto an otherwise unrelated diff.
-  Fix direction: give the row an explicit `aria-label` (or move the
-  drag attributes onto the handle, which already owns the listeners).
-- **`createTask` is duplicated across e2e specs.** A shared
-  `createTask` now lives in `e2e/fixtures/seed.ts` alongside `getTasks`, but
-  `date-picker.spec.ts:157` and `gantt-parity.spec.ts:57` still carry their
-  own private copies that predate it. Folding them in is mechanical but
-  re-runs two slow specs, so it was left out of the 2026-08-07 subtask-edit
-  phase rather than widening that diff.
-
-## Pipeline module and SA project owner removed (2026-09-22)
-
-The Pipeline module (opportunity tracking, native-ported from Velora) and the
-SA project-owner concept (`Project.saId`, the SA role) were removed from
-backend, frontend, e2e, and docs (user decision 2026-09-22). Every entry below
-this line that concerned the Pipeline module, opportunities, or the SA role
-is now moot — its subject no longer exists in the code — and is struck with a
-`**Moot 2026-09-22**` note rather than deleted, per this file's append-only
-convention.
-
-### Deferred — the Daily Review empty-group prune may now be dead code
-
-`backend/src/routes/dailyReview.ts`'s prune branch (the `projectCustomerIds.has(c.id)`
-removal for a non-owned candidate) existed to drop a customer that passed
-`customerVisibilityFilter` but contributed no project to the page. With the `saId`
-arm gone from `projectVisibilityFilter`, the `candidateCustomers` SQL query appears
-to exclude those customers one step earlier: its second clause requires either
-`tamId: user.sub` or an ACTIVE project matching the project filter, which for an
-attached (non-owned) customer reduces to exactly the condition the later
-`projectWhere` attached-tier bucket uses. No scenario was found in which a customer
-is admitted as a candidate and then pruned. **Not acted on** — removing the branch is
-a route-logic simplification, not part of the removal phase. A regression test for the
-observable behaviour (an unowned customer whose only ACTIVE project belongs to another
-TAM is absent, and does not inflate `coverage[TODAY].total`) was added to
-`backend/test/dailyReview.test.ts`, so the behaviour is pinned either way.
-
-## Pipeline native port — accepted risks & deferred items (2026-08-15)
-
-Collected across the six-milestone native port (branch `velora-integration`); every
-blocking finding was fixed pre-PR — these are the consciously accepted leftovers.
-
-- ~~**`xlsx@0.18.5` ships known npm-audit advisories (prototype pollution, ReDoS) —
-  accepted for v1.** The parse is 100% client-side, in the authenticated user's own
-  tab, on a file that user personally chose; the server never parses a workbook, so
-  there is no remote-attacker path. Upgrade path if a dependency-audit policy ever
-  lands: SheetJS's own 0.20.x registry (not npm). No `npm audit` gate exists in CI
-  today, so this cannot break the merge gate.~~ **Moot 2026-09-22**: `xlsx` and the
-  Excel/CSV import dialog were removed with the Pipeline module.
-- ~~**PRD §2.7's per-PIC Overview summary cards are deliberately omitted** — the
-  Overview panel ships KPI tiles + a stage distribution; the per-PIC drill-down is
-  fully realized on the Executive dashboard instead. Spec deviation on record, not
-  an unimplemented gap.~~ **Moot 2026-09-22**: the Pipeline Overview panel is gone.
-- ~~**App-wide light-theme hover contrast (pre-existing, NOT pipeline)**:
-  `hover:bg-primary-container` paired with `text-on-primary` renders ≈1.3:1 in
-  light theme (white label on pale green) across 15+ sites (Admin, Settings,
-  gantt, DateRangeField…). This is a general cross-cutting issue, not specific to
-  the removed Pipeline pages; fixing it is still one global ticket.~~ **Resolved 2026-11-18**: no `hover:bg-primary-container` is left in `frontend/src`; CHANGELOG "Hover contrast" (commit 46717bf, 2026-11-12).
-- ~~**DealCard on a project's Overview tab reads the full deal list client-side**
-  (`useOpportunities().find(projectId)`) — fine at the PRD's "hundreds of deals"
-  scale and cache-shared, but PRD §3.3's ~2k-deal revisit trigger applies to this
-  call site too.~~ **Moot 2026-09-22**: `DealCard.tsx` was deleted with the
-  Pipeline module.
-- **Backend `tsx watch` inotify staleness** observed once on the dev stack (file
-  edits silently not picked up until `docker compose restart backend`). If the API
-  ignores fresh code, restart the container before debugging deeper. (General
-  backend dev-loop issue, not Pipeline-specific — unaffected by the removal.)
-- ~~**`backend/tsconfig.json` excludes `scripts/` from the typecheck gate**
-  (pre-existing — `create-admin.ts` too). `import-velora.ts` was hand-typechecked
-  clean with the same compiler options; a follow-up could add a scripts tsconfig.~~
-  **Moot 2026-09-22**: `import-velora.ts` no longer exists; `create-admin.ts` is
-  the only script left excluded from the typecheck gate, tracked as its own
-  pre-existing nit, not a Pipeline one.
-- ~~**Import parse polish candidate**: an unparseable Win Probability cell silently
-  defaults to 50 (`importParse.ts` `winProbRaw`) — same shape as the fixed
-  deal-value bug, much lower stakes.~~ **Moot 2026-09-22**: `importParse.ts` was
-  deleted with the Pipeline module.
-- ~~**Cutover checklist — SIMPLIFIED (user decision 2026-08-15: START FRESH, NO
-  DATA MIGRATION).** The Pipeline begins empty in production; the SA team enters
-  or Excel-imports deals fresh. `backend/scripts/import-velora.ts` ships unused —
-  it remains available if historical data is ever wanted BEFORE users start
-  editing (it is a full-overwrite sync; never run it after go-live). Remaining
-  cutover acts, at the user's own pace: retire the standalone `/opt/velora` stack
-  and its GitLab CI deploy; after a soak period, drop the dev `velora-*` compose
-  services and the `../VeloraApp` clone. **Partly resolved 2026-09-21**: the dev
-  `velora-app`/`velora-cron` services, the `velora` logical database and the
-  `../VeloraApp` clone are gone from the dev stack and its documentation (user
-  confirmed nothing remains to use from Velora). Retiring the standalone
-  `/opt/velora` stack and its GitLab CI deploy is infrastructure outside this
-  repository and is not tracked here. Dev-DB fixtures:
-  `qa@solvro.test` (id 707) is ALSO the e2e fixture admin — keep it, password
-  `QaTest1234!` (gates.sh asserts it pre-smoke); the QA project 1408 ("Delta
-  Migration Delivery") + its linked deal are throwaway.~~ **Moot 2026-09-22**: the
-  Pipeline module (and with it, the cutover/import concern) no longer exists.
-
-## Velora integration, Phase 1 ("One address") — deferred findings (2026-08-14)
-
-> **PIVOT 2026-08-14 (same day, later): the native-port decision supersedes most of this section** (see CLAUDE.md standing decisions; PR #146 reverted by #148). Item statuses: the `iss`/`aud` shared-verifier requirement is **moot** (no shared verifier exists in the native port); the cron-timezone decision (keep 23:00 UTC = 06:00 WIB) **carries over** into the native re-implementation of the auto-hold job; the GitLab-CI item **reframes** as: retire the standalone `/opt/velora` deploy once the native port ships and its data is migrated; the compose-profile note still describes the dev stack accurately (the Velora services remain as reference/data source).
-
-User-deferred findings from Phase 1 of the Velora (Pipeline) integration
-(`docs/archive/plans/velora-integration-plan.md`, `docs/archive/plans/velora-integration-prd.md`,
-branch `velora-integration-phase-1`): `docker-compose.yml` gained `velora-app`
-+ `velora-cron` services and a second logical Postgres database (`velora`);
-`frontend/nginx.conf` + `frontend/vite.config.ts` gained the same-origin
-`/pipeline-api` proxy; `setup.sh` gained the matching production provisioning.
-The phase review cleared all blockers; these are accepted-as-deferred or
-routed to a later phase, not outstanding review items.
-
-- ~~**Phase-2 requirement: Velora's `middleware.ts` accepts ANY JWT signed with
-  the shared `JWT_SECRET`, not just Solvro-issued ones.** In the Velora repo
-  (sibling checkout `../VeloraApp`, not this repository), `middleware.ts`
-  only calls `jwtVerify` and checks for a `session_start` claim — it has no
-  issuer/audience check, so any HS256 token signed with the now-shared
-  `JWT_SECRET` verifies successfully regardless of which app minted it. Not a
-  live gap yet (nothing but Solvro's backend holds the secret, and Phase 1
-  ships no route that issues Velora-shaped tokens), but it becomes load-
-  bearing the moment Phase 2's shared sign-in lands. Per
-  `docs/archive/plans/velora-integration-plan.md`'s Phase 2 (`lib/solvro-token.ts`,
-  Velora repo), that verification step must add and check an `iss`/`aud`
-  claim (or equivalent) so a Velora-internal token (if any ever exists) can't
-  be replayed against Solvro, and vice versa. File as a Phase 2 acceptance
-  criterion, not a Phase 1 fix.~~ **Obsolete 2026-09-02**: code check — moot since the 2026-08-14 native-port pivot: no shared-JWT verifier exists in `backend/src`; `../VeloraApp/middleware.ts` is undeployed reference code.
-- ~~**`velora-cron`'s auto-hold job runs on a UTC crontab, inherited unchanged
-  from upstream Velora.** `docker-compose.yml`'s `velora-cron` service (and
-  `setup.sh`'s generated prod equivalent) installs `0 23 * * *` with no `TZ`
-  set, so the container's cron daemon (alpine, UTC by default) fires at
-  23:00 UTC = 06:00 WIB (Asia/Jakarta, UTC+7) the following day. This is the
-  exact schedule the old standalone Velora stack ran, carried over verbatim
-  rather than re-decided. **RESOLVED 2026-08-14**: user confirmed keeping the
-  UTC crontab as-is (auto-hold lands 06:00 WIB); no `TZ` var to be added.~~ **Resolved 2026-09-02**: code check — `docker-compose.yml:154` keeps the `0 23 * * *` crontab per the inline 2026-08-14 decision; the native port additionally enforces the auto-hold invariant on every `/move` (`backend/src/routes/opportunities.ts:646-649`).
-- ~~**Velora's own GitLab CI still deploys a separate standalone stack to
-  `/opt/velora/` on the production VPS.** This integration only changes how
-  *this* repo's `setup.sh` provisions Velora (as `velora-app`/`velora-cron`
-  inside the shared `solvro` stack) — it does not touch or disable
-  Velora's existing GitLab CI pipeline, which is presumed to keep deploying
-  its own independent stack to `/opt/velora/` on pushes to its repo. Running
-  both stacks concurrently means two separate Velora instances (different
-  databases, different ports) with no conflict *today* only because
-  `setup.sh`'s `velora-app` binds loopback-only on `VELORA_PORT` (default
-  3001) while the standalone stack presumably uses its own ports. That
-  GitLab CI pipeline must be stopped or repointed at cutover, or the two
-  stacks will drift and confuse which one is authoritative. User decision
-  due by Phase 2 (tracked in `docs/archive/plans/velora-integration-plan.md`).
-  Related decision already made (2026-08-14): Velora-side *source* work
-  happens on the GitHub repo (`FS3P/VeloraApp`, cloned at `../VeloraApp`),
-  not GitLab. Open consequence: `setup.sh`'s `VELORA_IMAGE` default still
-  points at the GitLab registry image that GitLab CI builds — where prod
-  images build from once development moves to GitHub is part of the same
-  cutover decision.~~ **Obsolete 2026-09-02**: code check — `setup.sh` has zero `velora` references; the separate-service prod provisioning this entry was keyed on was removed with the native-port pivot. The external GitLab pipeline is outside this repo.
-- ~~**Declined reviewer nit, recorded for context: no compose profile gates
-  the Velora services in the dev stack.** The phase reviewer suggested
-  gating `velora-app`/`velora-cron` behind a Docker Compose profile so
-  `docker compose up -d` could still start a Velora-less Solvro without an
-  env var. Declined: the sibling checkout `../VeloraApp` is a hard
-  prerequisite for `docker compose up -d` in dev as of this phase (the
-  `velora-app` service's build context) — integration is default-on, not
-  opt-in, matching production's default-on `setup.sh` behavior (`SKIP_VELORA=1`
-  is the opt-out there). Documented in `docker-compose.yml`'s header comment
-  rather than implemented as a profile.~~ **Moot 2026-09-22**: the `velora-app`/
-  `velora-cron` services were already retired 2026-09-21, and the Pipeline
-  module they backed is now removed entirely.
-
-## Daily Review v2 — deferred findings (2026-08-29)
-
-User-deferred findings from the Daily Review v2 phase (`docs/plans/daily-review-v2-spec.md`,
-branch `feat/daily-review-v2`). The phase review cleared all blockers; these are
-accepted-as-deferred, not outstanding review items.
-
-- **`frontend/src/components/ConfirmModal.tsx:29`** — `confirmTone="warning"`
-  renders raw `bg-amber-500 text-white`, and both footer buttons use
-  `rounded-lg`, instead of the `chip-amber` token pair and DESIGN.md's
-  `rounded-sm` radius convention. Pre-existing (predates this phase), but now
-  has three new consumers: `components/daily-review/ProjectCard.tsx:165`,
-  `WeekNotesEditor.tsx:310`, and `WeeklyUpdateBlock.tsx:288` (all
-  delete-confirmation dialogs). Fix direction: swap the warning branch's
-  classes to the `chip-amber` background/text tokens and `rounded-sm`, and
-  align the two Cancel/border buttons' radius while in the file.
-- **`frontend/src/pages/views/ProjectRisks.tsx`** (probability/impact inline
-  cells, ~lines 381 and 411) — the risk-scale editors are plain `<select>`
-  elements with hand-rolled classes, while the new Daily Review attention
-  lists (`components/daily-review/ProjectCard.tsx`,
-  `OperationsCard.tsx`) use the vendored `ui/select`. Deferred as a
-  consistency nit outside this phase's scope; align `ProjectRisks.tsx` on
-  `ui/select` the next time that file is touched.
-- **`e2e/tests/daily-review.spec.ts`** (see its header comment, lines 29-35) —
-  the spec flips its seeded project ACTIVE and its customer's `tamId` to the
-  admin to bring them into the Daily Review page's scope, and neither
-  `Project` nor `Customer` has a DELETE route, so each run leaves one more
-  ACTIVE project and one more customer in the shared dev database permanently.
-  The spec's stats-tile assertions are baseline-delta (read the tile before
-  the spec's data enters scope, assert the exact delta produced), so
-  correctness doesn't degrade as this accumulates — but the dev DB's junk-row
-  count grows with every run. Fix direction: a cleanup route (test-only,
-  gated out of production) or a dedicated e2e database/reset step would
-  remove the accumulation; tracked here rather than fixed in-phase since it
-  mirrors the pre-existing, already-accepted test-isolation debt above
-  ("Backend test-DB isolation is broken").
-  *Updated 2026-09-02 (code check)*: the premise is outdated — `DELETE /projects/:id` (`backend/src/routes/projects.ts:330`) and `DELETE /customers/:id` (`backend/src/routes/customers.ts:308`) shipped in PR #157. The spec still has no `afterAll`/`afterEach` cleanup calling either, so the junk still accumulates; the spec's header comment (lines 29-33) still claims the routes are missing.
-- ~~**Vendored `ui/*` and `reui/*` still carry the fuller focus form** (`focus-visible:border-primary` + ring): `ui/button.tsx`, `checkbox.tsx`, `input.tsx`, `select.tsx`, `textarea.tsx`, `scroll-area.tsx`, `reui/badge.tsx`, `reui/autocomplete.tsx`, `reui/gantt/gantt-bar.tsx`, `reui/gantt/gantt-view.tsx`, plus `gantt-v2/SolvroGantt.tsx`. `docs/DESIGN.md` §4 now states the reduced form (user decision 2026-08-29). Align opportunistically when a file is next touched; mark each edit `// SOLVRO PATCH` in vendored files.~~ **Moot 2026-11-18**: `docs/DESIGN.md:326` (user decision 2026-11-02) made the fuller form (border-primary plus ring) the app-wide treatment.
-
-## Daily Review collapse & Recent notes — deferred findings (2026-08-31)
-
-User-deferred finding from the phase adding collapsible Daily Review project
-cards/attention lists and the Overview "Recent notes" panel (branch
-`feat/daily-review-collapse`). The phase review (`solvro-reviewer`, instant
-spine review of `frontend/src/lib/queries.ts`) reported 0 blockers; this is
-its one deferred finding, not an outstanding review item.
-
-- **`GET /notes/recent` (`backend/src/routes/notes.ts:62-93`) range-scans
-  `project_notes`/`customer_notes` by `noteDate` alone — no index leads with
-  it.** `ProjectNote` carries `@@index([projectId, createdAt])`,
-  `@@index([authorId])`, `@@index([projectId, noteDate])`
-  (`backend/prisma/schema.prisma:420-422`); `CustomerNote` carries
-  `@@index([customerId, noteDate])`, `@@index([authorId])`
-  (`schema.prisma:442-443`) — neither leads with `noteDate` alone, so the
-  route's `where: { noteDate: { gte, lte }, project/customer: <visibility
-  filter> }` queries plan a Seq Scan + Sort + Limit on the dev DB. Deferred
-  rather than adding a migration to this branch: at dev volume (27/24 rows)
-  and realistic growth (~10k notes/yr) this stays single-digit ms, so the
-  sub-200ms NFR (`backend/CLAUDE.md`) holds for years. Fix when needed:
-  `@@index([noteDate])` on both models, then `docker compose exec -it backend
-  npx prisma migrate dev --name recent_notes_note_date_index`.
-
-## Critical Path mark — deferred findings (2026-09-02)
-
-User-deferred findings from the phase review of the manual Critical Path mark
-(branch `feat/critical-path-mark`, `Task.isCriticalPath` — see `CHANGELOG.md`,
-"Critical Path mark on tasks", and the "Critical-path highlighting" entry
-above). Gates were 17/17 green; these are deferred findings, not outstanding
-review blockers.
-
-- **Material Symbols size utilities are inert app-wide.** Google Fonts'
-  stylesheet (linked `frontend/index.html:20`,
-  `Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0`) sets
-  `.material-symbols-outlined { font-size: 24px }` unlayered, which beats
-  Tailwind v4's layered `text-[Npx]` utilities — every
-  `material-symbols-outlined` glyph in the app renders 24px regardless of a
-  `text-[Npx]` class. This phase worked around it locally with `!important`
-  overrides (`frontend/src/components/CriticalPathMark.tsx:34,63` —
-  `text-[14px]!` / `text-[13px]!`). Fix (one `index.css` change, visible app-
-  wide, awaiting a user decision): import the Google Fonts stylesheet's rule
-  into a Tailwind `@layer` (or otherwise re-declare `.material-symbols-
-  outlined` font-size inside a layer) so `text-[Npx]` applies without
-  `!important` everywhere it's already used.
-- **Three pre-existing flaky e2e tests retried clean during this phase's
-  gate runs** (not caused by this phase's diff — noting for awareness):
-  `e2e/tests/gantt-parity.spec.ts:330-381` (connector-hover "delete
-  dependency" button, case (c) — hover-to-reveal timing); `e2e/tests/kanban-
-  dnd.spec.ts:987` (R3 cross-view row order parity); `e2e/tests/kanban-
-  dnd.spec.ts:1030-1069` (mobile touch-reorder position count, the secondary
-  assertion at :1068 — depends on the shared seeded project's task count
-  staying contiguous, noted as fragile in the test's own comment). Fix
-  direction: none of these are regressions to chase now; if any starts
-  failing consistently, tighten its wait condition (case (c)) or fixture
-  isolation (the other two) at that time.
-- **`CriticalPathMark.tsx`'s compact chip padding is coupled to `Chip`'s DOM
-  shape.** `frontend/src/components/CriticalPathMark.tsx:56` targets
-  `[&>span]:px-1.5` to reach into `Chip`'s root span
-  (`frontend/src/components/StatusChip.tsx:70-78`, a single `<span>`); this
-  breaks silently (no error, just wrong padding) if `Chip` ever gains a
-  wrapper element. Fix direction: if `Chip`'s markup changes, grep
-  `[&>span]:px-1.5` and move the override onto whatever `Chip` renders as its
-  root.
-- **Three narrow task `select`s omit `isCriticalPath`**, so the mark can't be
-  shown on those surfaces without widening them first:
-  `backend/src/routes/dailyReview.ts:237-244`, `backend/src/routes/
-  search.ts:53-59`, `backend/src/lib/portfolio.ts:34-46`. Not needed today —
-  none of those surfaces (Daily Review, global search, the portfolio roll-
-  up) render task-level flags — only relevant if the mark is ever surfaced
-  there.
-- **Two task surfaces outside the plan's per-surface table show no Critical
-  Path mark, unlike every other surface it covers**:
-  `frontend/src/pages/Tasks.tsx:199` renders `PriorityBadge` (compact) in the
-  hidden `/tasks` grid with no accompanying mark; `frontend/src/components/
-  kanban-v2/cards.tsx`'s `SubtaskRow` (from line 177) renders neither
-  `PriorityBadge` nor `CriticalPathMark` for its row — it has no flag icon of
-  any kind today. Fix direction: add `CriticalPathMark variant="glyph"` (or
-  `"chip"` for Tasks.tsx, matching its `PriorityBadge` companion) beside the
-  existing priority indicator if/when either surface's flags are revisited.
-- **`frontend/src/index.css:153`'s comment is stale**: it still calls
-  `chip-violet` "the only chip hue with no status meaning assigned
-  elsewhere," which stopped being true when Alert's `info` tone adopted it
-  and now again with Critical Path. Code comment only, no behavior effect —
-  fix in the next `index.css` touch rather than a docs-only edit.
-- **Dark-theme Gantt bar ring contrast, pending a user decision.** The ring/
-  outline/glyph color is `chip-violet-text`, which resolves to `#ddd6fe`
-  (near-white) in dark mode per the mark's own spec — close in value to the
-  bar's selection outline, so a marked + selected bar in dark mode reads as
-  two similar rings rather than two distinct signals. Undecided between (a)
-  keeping the spec's `chip-violet-text` (consistent with every other chip-
-  paired surface) or (b) introducing a fixed `CRITICAL_PATH_HEX`-style violet
-  used in both themes for the Gantt ring specifically (mirroring what
-  `frontend/src/lib/gantt/palette.ts`'s `CRITICAL_PATH_HEX` already does for
-  the exports, which are light-only). Awaiting the user's call before either
-  is touched.
-
-## Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)
-
-User-deferred findings from the phase review of task/section duplication
-(branch `feat/duplicate-tasks-sections` — see `CHANGELOG.md`'s "Duplicate a
-section from the List view" / "Duplicate a section (API)" / "Duplicate a task
-from the Task panel, subtask rows, and the Gantt row menu" / "Duplicate a task
-or subtask (API)" entries; spec in
-`docs/plans/duplicate-tasks-sections.md`). The phase review cleared
-with no blockers; these are its deferred findings, not outstanding review
-items.
-
-- **TaskPanel's header-menu failure alert renders below the subtasks block,
-  easy to miss on a long task** (solvro-reviewer, phase: task/section
-  duplication, 2026-09-02; pre-existing). `frontend/src/components/
-  TaskPanel.tsx:777-780` — a failed "Delete task" / "Duplicate task" (the
-  header options menu) writes its error to an `Alert` placed after the
-  subtasks list inside the scrollable panel body; on a task with many
-  subtasks the failure lands off-screen with no visible feedback. Fix idea:
-  render the error `Alert` at the top of the scroll container, or scroll to
-  top when a header-menu action sets the error. P3.
-- **`useCreateTask` omits the Daily Review invalidation its sibling
-  mutations carry** (solvro-reviewer, phase: task/section duplication,
-  2026-09-02; pre-existing). `frontend/src/lib/queries.ts:1030-1044` —
-  unlike `useUpdateTask`/`useDeleteTask` (e.g. `:1004-1010`),
-  `useCreateTask`'s `onSuccess` doesn't invalidate `queryKeys.dailyReviewRoot`,
-  so creating an overdue TODO task leaves the Daily Review page's attention
-  lists stale until `staleTime` elapses. Fix idea: add the same
-  `dailyReviewRoot` invalidation. P3.
-- **`DELETE /tasks/:id` never re-packs its sibling list, so positions go
-  sparse after a delete** (solvro-reviewer, phase: task/section duplication,
-  2026-09-02; pre-existing, surfaced by this phase's placement work).
-  `backend/src/routes/tasks.ts:284-292` — a bare `prisma.task.delete` with
-  no `closeGap`/re-pack call; every consumer that treats `position` as an
-  index (an insertAt-based move using a requested position derived from a
-  stored position) is exposed to a sparse list. This phase's duplicate routes
-  route around it deliberately, placing the copy by identity via
-  `insertManyAfter` rather than by stored position (see the doc comment on
-  that function, `backend/src/lib/taskOrdering.ts`). Fix idea: re-pack the
-  sibling list inside the delete transaction (`closeGap`). P2.
-- **`POST /tasks/:id/duplicate` (`task:write`) is a create path, one
-  permission short of the existing create route for the same resource**
-  (solvro-reviewer, phase: task/section duplication, 2026-09-02;
-  spec-settled — record only). `POST /projects/:id/tasks` requires
-  `project:write` (`backend/src/routes/projects.ts:377-379`); seeded roles
-  never grant `task:write` without `project:write`, but an admin-defined
-  custom role could hold one without the other and duplicate tasks it
-  couldn't otherwise create via the form. Settled as Decision 11 in
-  `docs/plans/duplicate-tasks-sections.md` §3 (matches
-  `PATCH`/`DELETE /tasks/:id`, both `task:write`) — not a bug, recorded for
-  awareness only.
-- **`ProjectList.tsx` section-header actions gate on `task:write`, one
-  permission short of what the section routes actually require**
-  (solvro-reviewer, phase: task/section duplication, 2026-09-02;
-  pre-existing pattern, widened by this phase's new Duplicate button).
-  `frontend/src/pages/views/ProjectList.tsx:114` — `canEdit =
-  hasPermission(user, "task:write")` controls Rename, the new Duplicate,
-  Delete (section header) and "Add section", but every section route
-  (`PATCH`/`DELETE`/`POST /:id/duplicate` in `backend/src/routes/
-  sections.ts:119,167,232`) requires `project:write`. Seeded roles never
-  split the two, but a custom role with `task:write` only would see the
-  buttons and get a 403, surfaced in the `actionError` alert. Fix idea:
-  `const canEditSections = hasPermission(user, "project:write")`, applied to
-  the whole header action group in one pass. P3.
-- **`gates.sh` exercises only one e2e spec, so new suites (including this
-  phase's `duplicate.spec.ts`) never run in the mechanical gate**
-  (solvro-reviewer, phase: task/section duplication, 2026-09-02; process
-  gap). `.claude/scripts/gates.sh:93` runs `tests/smoke.spec.ts` only; every
-  other spec lands unexercised by any gate unless run by hand. Fix idea: a
-  gate step that also runs the specs touched by the diff (`git diff
-  --name-only -- e2e/tests`). P2 (process).
-- **`useDuplicateTask`/`useDuplicateSection`'s `isPending` window includes
-  inactive-query refetches** (solvro-reviewer, phase: task/section
-  duplication, 2026-09-02; considered, not taken).
-  `frontend/src/lib/queries.ts:1046-1056` /
-  `:1207-1218` — both `onSuccess` handlers `Promise.all` every invalidation
-  (deliberately, per the inline comment at `:1051-1055`, so `TaskPanel`'s
-  post-duplicate navigation finds the copy already in cache), which also
-  makes `isPending` wait on the inactive `["tasks"]`, overview, and Daily
-  Review queries. Near-zero cost in practice, since an inactive query isn't
-  refetched until it's next observed. Tightening idea, not applied: await
-  only `projectTasks`, fire the rest un-awaited. P3.
-
-## Claim Unassigned Deals — deferred findings (2026-09-08)
-
-User-deferred finding from the phase review of the unassigned-deal PIC-assign
-fix (branch `fix/claim-unassigned-deals` — see `CHANGELOG.md`'s "Pipeline: an
-unassigned deal can be given a PIC" entry). The phase review cleared with no
-blockers; this is its one deferred finding, not an outstanding review item.
-
-- ~~**Material Symbols glyphs fold into accessible names.** App-wide, an icon
-  rendered as `<span className="material-symbols-outlined">person_add</span>`
-  inside a labelled `<button>`/`<Link>` contributes its ligature text to the
-  computed accessible name (e.g. `person_add Assign PIC`, `edit Edit`,
-  `delete Delete`). Grep-verified rough size is 188
-  `material-symbols-outlined` spans across 47 files under `frontend/src`,
-  with roughly 136 of them sitting inside a `<button>` or `<Link>` element.
-  Screen readers announce the glyph name; Playwright locators in `e2e/`
-  compensate by not using `exact: true`. Fix in one sweep: `aria-hidden="true"`
-  on every icon span inside a labelled control (or a shared icon component),
-  then one e2e pass to restore `exact` matching where wanted. Deferred
-  2026-09-08 (phase review, Claim Unassigned Deals) — not fixed piecemeal to
-  avoid one header row with two conventions. **Update 2026-09-22**: the
-  opportunity detail header row cited as the original example
-  (`frontend/src/pages/OpportunityDetail.tsx`) was deleted with the Pipeline
-  module; the general app-wide finding still stands elsewhere and remains
-  open.~~ **Resolved 2026-11-18**: CHANGELOG "Icons are silent for screen readers" (commit 2160be6, 2026-10-24) added `aria-hidden="true"` to the glyphs. The Claim Unassigned Deals feature itself went with the Pipeline module.
-
-## Weekly Sync achievement rows — deferred findings (2026-09-10)
-
-User-deferred finding from the phase review of the Reflection achievement-rows
-phase (branch `feat/weekly-sync-achievement-rows` — see `CHANGELOG.md`'s
-"Weekly Sync: one row per achievement..." entry). The phase review cleared
-with no blockers; this is its one deferred finding, not an outstanding review
-item.
-
-- **The missing-title banner doesn't name the offending card.** Both
-  `MidweekSyncModal.tsx:171` (`setError("Every highlight needs a title.")`)
-  and `ReflectionSyncModal.tsx:202` (`setError("Every achievement needs a
-  title.")`) render the message as one banner at the top of the form
-  (`ReflectionSyncModal.tsx:318-320`, an `AlertDescription`), with no
-  indication of which card is missing its title. The Reflection card is six
-  fields tall, so with several cards on screen the banner sits far from the
-  actual problem — a user has to scan every card to find the blank title.
-  Settled consequence of the achievement form mirroring the Mid-week form's
-  existing pattern (`MidweekSyncModal.tsx`); not blocking either form. Fix
-  direction: mark the offending card itself (e.g. a border in the error
-  tone) or scroll/focus it when the save is blocked.
-
-## iTop integration Phase 1 — deferred findings (2026-09-22)
-
-User-deferred findings from the wave-1 review of the iTop integration's first
-phase (branch `feat/itop-p1-tickets` — see `CHANGELOG.md`'s "iTop
-integration: encrypted secrets at rest, ticket snapshot schema, REST client"
-entry). No fix now; each is a Phase 2/3 follow-up per
-`docs/archive/plans/itop-integration.md`.
-
-- ~~**`itop_tickets` has a low-cardinality `@@index([status])`.**
-  `backend/prisma/schema.prisma:559` (`ItopTicket` model, lines 533-563)
-  indexes `status` alone; `status` has only a handful of distinct values
-  (`new`, `assigned`, `resolved`, `closed`, …), so the index does little to
-  narrow a scan once the table has real volume, while every read in
-  `backend/src/routes/itop.ts` (ongoing/resolved/mine scopes) always filters
-  by `customerId` first. Fix direction: replace it with
-  `@@index([customerId, status])` in the next iTop migration.~~ **Resolved
-  2026-09-22**: done exactly as suggested — migration
-  `20260922182346_itop_time_entries` drops `itop_tickets_status_idx` and adds
-  `@@index([customerId, status])` (`itop_tickets_customer_id_status_idx`).
-- ~~**iTop datetimes are parsed as UTC.** `parseItopDate` in
-  `backend/src/lib/itop/sync.ts:61` treats every date/time string iTop
-  returns (`start_date`, `last_update`, `tto`, `ttr`, `resolution_date`) as
-  UTC with no timezone conversion. If the iTop server itself runs in local
-  (non-UTC) time, every stamp — and the SLA/age math derived from it — is
-  off by the server's UTC offset. Fix direction: a per-install timezone
-  setting (likely on `ItopConfig`) once an iTop admin confirms the source
-  server's zone; no such setting exists yet.~~ **Resolved 2026-09-24**
-  (branch `fix/itop-timezone`): confirmed on the real iTop 3.2.2 (Europe/Paris,
-  2 h skew). `ItopConfig.timezone` (IANA, default `UTC`, Admin › iTop) feeds
-  `lib/itop/timezone.ts`; all reads, OQL cutoffs and writes convert through
-  it, and a zone change forces a full re-sync. Verified live: 8 tickets and
-  their case logs match iTop after the re-sync.
-- **`GET /customers/:id` doesn't type or use `itopOrgId`/`itopOrgName` on
-  the frontend, though the backend response already carries both fields.**
-  `backend/src/routes/customers.ts`'s `GET /:id` calls
-  `prisma.customer.findFirst({ where, include: customerInclude(user) })`
-  with no top-level `select` — Prisma's default behavior for `include`
-  without `select` returns every scalar column of `Customer` (so
-  `itopOrgId`/`itopOrgName` are already on the wire) alongside the included
-  relations. The frontend's `CustomerDetail` type
-  (`frontend/src/lib/queries.ts:83`) doesn't declare either field, and
-  `frontend/src/pages/CustomerDetail.tsx:59-62` instead derives whether a
-  customer is iTop-mapped from the tickets endpoint's own `mapped` flag —
-  its inline comment attributes the omission to a `customers.ts` "select",
-  but the route uses `include`, not `select`, so the fields are just
-  untyped and unread on the frontend, not actually withheld by the backend.
-  Consider typing and using them directly in Phase 2, or explicitly
-  trimming the route's response with a real `select` if withholding them
-  was the intent.
-- **No pino `redact` configuration — defence in depth for the iTop token.**
-  `backend/src/logger.ts` creates the shared pino logger with no `redact`
-  option, though `docs/archive/plans/itop-integration.md` §5 ("Risks") calls for
-  redacting `token` / `Auth-Token` paths. No current code path actually logs
-  the iTop application token — it travels to iTop in a request body that the
-  HTTP request logger (see the next entry) doesn't log — so this is a
-  hardening gap, not a live leak. Fix direction: add a `redact` array
-  (`token`, `Auth-Token`, and the equivalent per-TAM token fields Phase 5
-  introduces) to the `pino()` call in `backend/src/logger.ts`.
-- ~~**Pre-existing: the request logger logs the `Authorization` header
-  (found during this phase's review, unrelated to the iTop diff).**
-  `backend/src/app.ts`'s `app.use(pinoHttp({ logger }))` uses `pino-http`'s
-  default `req` serializer, which logs request headers — including
-  `Authorization` (the caller's bearer JWT) and `Cookie` — at the configured
-  `LOG_LEVEL`. Recommended fix, standalone from the iTop work: add
-  `redact: ["req.headers.authorization", "req.headers.cookie"]` to the pino
-  logger (`backend/src/logger.ts`) so `pino-http` redacts those paths before
-  they're written.~~ **Resolved 2026-11-18**: `SECRET_HEADERS` (including `authorization` and `cookie`) is masked in `backend/src/http/requestLogger.ts:27`, wired in `app.ts`.
-
-Integration complete as of 2026-09-23; the plan is archived at
-`docs/archive/plans/itop-integration.md`.
-
----
-
-## iTop integration Phase 3 — deferred findings (2026-09-22)
-
-- **`TimeSpent` duration unit assumed to be seconds.**
-  `backend/src/lib/itop/types.ts`'s `ITOP_TIME_SPENT_DURATION_IN_SECONDS`
-  (currently `true`) drives `lib/itop/sync.ts`'s `syncTimeEntries`, which
-  divides `TimeSpent.duration` by 60 to get `ItopTimeEntry.durationMinutes`.
-  This is iTop core's own default unit for a duration attribute, but the
-  real install's Time Tracking extension has not been probed yet. Verify
-  with the probe's `TimeSpent` field dump (`output_fields: "*"`, see
-  `client.ts`'s `probe()`) against the real install before go-live — if it
-  reports minutes instead, flip the one constant.
-- ~~**Full-sync removal passes bind one parameter per in-window row —
-  approaches Postgres's bind-parameter ceiling at scale.** In
-  `backend/src/lib/itop/sync.ts`, both full-sync removal passes build an
-  `id: { notIn: [...seenIds] }` clause (ticket removal, line 519; time-entry
-  removal, line 373), which Prisma compiles to one bind parameter per id in
-  `seenIds`. With many mapped users and a wide time-entry window (or many
-  tickets), that set can grow large enough to exceed Postgres's
-  bind-parameter limit; the failure is caught by the surrounding `catch`
-  (lines 381, 551) and logged, so the removal pass is silently skipped
-  rather than surfaced as a sync failure — stale rows accumulate instead of
-  being dropped. Fix direction: stamp rows with a `syncRunId`/`seenAt` during
-  the upsert and delete with `WHERE seenAt < runStart` instead of `notIn`,
-  which needs no per-row parameter regardless of row count.~~ **Resolved 2026-11-18**: both removal passes prune by `syncedAt < startedAt` (`backend/src/lib/itop/sync.ts`), so no per-row bind parameter remains; the remaining `notIn` lists are organisation/user sized.
-
-Integration complete as of 2026-09-23; the plan is archived at
-`docs/archive/plans/itop-integration.md`.
-
----
-
-## iTop integration Phase 4 — deferred findings (2026-09-23)
-
-User-deferred findings from Phase 4 (branch `feat/itop-p4-webhook-taskref` —
-see `CHANGELOG.md`'s "iTop webhook and task ticket links" entry). No fix now;
-each is a follow-up decision.
-
-- **Duplicating a task or section drops its pinned iTop ticket ref.**
-  `backend/src/lib/duplicate.ts`'s `TASK_SELECT` (lines 17-31) does not
-  select `itopTicketRef`, and `copyOne`'s `data` object (lines 42-63) never
-  sets it, so every copy made by `POST /tasks/:id/duplicate` or
-  `POST /sections/:id/duplicate` gets no ref, even when its source task had
-  one pinned. This matches the module's existing "carry verbatim, but reset
-  anything that shouldn't point at the same external state twice" pattern
-  (status resets to `TODO`, baseline dates clear, dependencies and comments
-  never copy) but was never an explicit decision for this field. Decide:
-  should a duplicated task keep pointing at the same ticket, or is dropping
-  the ref (current behaviour) correct — two Solvro tasks pointing at one
-  iTop ticket may itself be undesirable.
-- ~~**A task cannot be created with an iTop ticket ref pre-set.**
-  `createTaskSchema` in `backend/src/routes/projects.ts`
-  (`POST /projects/:id/tasks`, lines 85-103) was not extended with
-  `itopTicketRef` — only the PATCH schema in `backend/src/routes/tasks.ts`
-  (line 48) accepts it. A ref can only be attached after the task exists,
-  via a follow-up `PATCH /tasks/:id`. Decide whether create-time pinning
-  (e.g. from a "Create iTop ticket" flow in a later phase) is worth adding,
-  or whether PATCH-only is fine indefinitely.~~ **Resolved 2026-11-18**: `createTaskSchema` accepts `itopTicketRef` (`backend/src/routes/projects.ts:165`) and the create passes it (`:696`).
-- **Focus treatment sweep needed (codebase-wide, not a Phase 4 regression).**
-  `docs/DESIGN.md` §4 names the one app-wide focus treatment as
-  `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30`
-  and explicitly excludes `focus-visible:border-primary`, yet the older,
-  fuller `focus:border-primary focus:outline-hidden` pattern still appears
-  at roughly 55-58 sites across the frontend — including two new ones this
-  phase added: `frontend/src/components/admin/ItopTab.tsx` (5 sites) and
-  `frontend/src/components/itop/TaskTicketField.tsx:14`, alongside
-  pre-existing ones such as `frontend/src/components/TaskPanel.tsx:466,586`.
-  This is a pre-existing, spreading inconsistency, not something to fix
-  per-PR — file as a one-shot design-system sweep task to align every site
-  to the DESIGN.md-documented form in one pass, rather than drifting further
-  one component at a time.
-- **Export: the Gantt Excel export has no "iTop ticket" column.**
-  `frontend/src/lib/gantt/exportExcel.ts`'s `buildTasksSheet` (columns at
-  lines 72-82) builds Section/Title/Status/Priority/(Critical
-  Path)/Start/Due — no column carries a task's pinned `itopTicketRef`, even
-  though it would be a customer-facing-safe field (the ref is the
-  customer's own iTop reference, not internal Solvro data) and could be
-  useful on a customer-facing export. Adding it needs the field threaded
-  through the Gantt row adapter that produces `Row` (`t.itopTicketRef` isn't
-  currently carried onto the row alongside `t.status`/`t.priority`). Decision
-  item — whether this export should show it — not a bug.
-
-Integration complete as of 2026-09-23; the plan is archived at
-`docs/archive/plans/itop-integration.md`.
-
----
-
-## iTop integration Phase 5 — deferred findings (2026-09-23)
-
-- **Personal-token expiry is best-effort, not guaranteed.** `PUT /itop/me/token`
-  (`backend/src/routes/itopUser.ts`) tries to read the token's expiry via
-  `core/get PersonalToken WHERE user_id = <resolved itopUserId>` using the
-  user's own freshly-saved token, and stores whatever comes back (`expiresAt`
-  left `null` on any failure — unresolved `itopUserId`, the class being
-  unreadable to that profile, or any other iTop error; see the `try/catch`
-  around the `PersonalToken` lookup). Whether an install exposes `PersonalToken`
-  to a plain personal-token holder varies with the profile granted. On an
-  install where it doesn't, `GET /itop/me/token` always reports `expiresAt:
-  null`, so the Settings page has no way to warn a TAM before their token
-  expires — the first sign of expiry is a saved token starting to fail on its
-  next use. No code change proposed; this is a documented limitation of the
-  "read it if iTop allows it" approach chosen for Task 5.1, not a bug to fix.
-- **A token's write capability can't be verified up front.** The same route's
-  write-capability probe calls `client.listOperations()` and checks whether
-  `core/apply_stimulus`/`core/update` appear — but `list_operations` reports
-  what the iTop *server* supports, not what the calling token's *profile* is
-  actually allowed to do, so the probe is logged only (`logger.debug`) and
-  never rejects the token. A TAM who saves a personal token without the
-  `Support Agent` / `Service Desk Agent` write profile therefore passes
-  token-save validation cleanly, and only discovers the gap when their first
-  real action (`POST /itop/tickets/:id/actions` or `/log`) comes back `403
-  itop_token_invalid` or `409 itop_refused` with iTop's own refusal text.
-  Working as designed per Task 5.1's "if you cannot detect rights, skip and
-  say so" rule — noted here so a future UX pass (e.g. a one-time trial
-  `apply_stimulus` dry run, if iTop ever supports one) has the context.
-- **Token-ownership check: residual risk on some iTop installs.** `PUT /itop/me/token`
-  (`backend/src/routes/itopUser.ts`) accepts a pasted personal token only when, used
-  with that token, `SELECT Person WHERE email = <user email>` returns exactly one person
-  AND — when the `PersonalToken` class is readable — `SELECT PersonalToken WHERE
-  user_id = <that person's iTop user>` returns at least one row (iTop scopes that class
-  to the token's own user, so a foreign token sees zero rows and is refused; proven by
-  the imposter test in `backend/test/itop/itopToken.test.ts`). iTop REST 1.3 has no
-  "whoami", so two gaps remain: (a) installs where `PersonalToken` is not readable by
-  the token's profile fall back to the email check alone, and a foreign token that can
-  read Persons would pass; (b) installs where the class is readable beyond the token's
-  own user (e.g. an admin-profile token) also pass. Some iTop versions answer a no-match
-  `core/get` with `code: 100` instead of an empty result; that path is treated as
-  "unreadable" (fail-open) — verify against the real install and record the answer
-  here. Mitigations: grant `PersonalToken` read to the TAM profile, or an iTop-side
-  whoami extension. This is impersonation with a stolen/foreign credential, not
-  privilege escalation: `itopPersonId` is always derived from the caller's own email.
-  *Updated 2026-10-25*: gap (a) and the `code: 100` fail-open path are closed by default: a token that cannot read the Person's iTop `User` or its `PersonalToken` is refused (`itop_token_unverified`) unless `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS=true` is set, which restores the old behaviour. Gap (b) (a class readable beyond the token's own user) is unchanged.
-- ~~**`rounded-full` on filter/tab pills vs DESIGN.md §"Radius".** `docs/DESIGN.md`
-  reserves `full` for status chips and avatars, yet `frontend/src/components/itop/
-  TicketFilters.tsx` and `TicketLog.tsx` use it on toggle buttons (count chips, log tabs).
-  Decide once: sanction the pill-toggle pattern in DESIGN.md, or retire it in both files.~~ **Resolved 2026-11-18**: `rounded-full` no longer appears in `TicketFilters.tsx` or `TicketLog.tsx`.
-
-Integration complete as of 2026-09-23; the plan is archived at
-`docs/archive/plans/itop-integration.md`.
-
----
-
-## iTop integration Phase 6 — deferred findings (2026-09-23)
-
-User-deferred findings from Phase 6 (branch `feat/itop-p6-board` — see
-`CHANGELOG.md`'s "iTop board view and new tickets from Solvro" entry). No fix
-now; each is a follow-up decision.
-
-- ~~**Scope chips stay visible but inert in Board view.**
-    `frontend/src/components/itop/TicketsTab.tsx` renders `TicketFilters`
-    (Ongoing / Resolved this week / Mine) above both the Table and the Board,
-    but only the Table's `useCustomerTickets(scope, cls, ...)` call reads
-    `scope` — `TicketBoard.tsx` always fetches its own fixed `ongoing` +
-    `resolved_week` scopes directly and ignores the `scope` state entirely (it
-    does still respect `cls`). Clicking a scope chip while the Board is active
-    changes nothing on screen, with no indication that the click was a no-op.
-    Fix direction: hide the scope chips (keep the class filter) when
-    `view === "board"` in `TicketFilters.tsx`/`TicketsTab.tsx`.~~ **Resolved 2026-09-23**: `TicketFilters.tsx` gained `showScope`; the Tickets tab hides the scope chips in Board view (class chips stay).
-
-- **The drop lifecycle graph assumes iTop's default stimuli.**
-  `frontend/src/components/itop/board/dropMapper.ts`'s `TRANSITIONS` table
-  hard-codes iTop's default UserRequest/Incident lifecycle (`ev_assign`,
-  `ev_pending`, `ev_resolve`, `ev_close`, `ev_reopen` — decision 10 in
-  `docs/archive/plans/itop-integration.md`). An install with custom states,
-  a narrower state machine, or `ev_reassign`-style semantics instead of plain
-  reassignment will either reject drags the admin actually wants to allow, or
-  let a drag through that `apply_stimulus` then refuses — surfaced only as
-  iTop's own refusal text (`409 itop_refused`), not a Solvro-authored
-  message. No per-install configuration exists for this graph; verify item
-  10 against the real install before relying on Board drag-and-drop there.
-- **Mobile board is a single stacked column with touch drag.**
-  `TicketBoard.tsx`'s `KanbanBoard` uses `grid gap-3 md:grid-cols-5` — below
-  the `md:` breakpoint the five columns stack vertically with drag-and-drop
-  still wired through the same dnd-kit-backed `reui/kanban` engine. This has
-  not been evaluated against real phone use (long stacked scroll to reach a
-  distant column, touch-drag precision across a tall single-column stack);
-  evaluate before treating it as the phone-usable form of the Board, same
-  caution flagged for `kanban-v2`'s task board mobile fallback.
-- ~~**The services pick-list caches for 5 minutes in-process; the cache is now busted on every admin settings change.**
-  `backend/src/routes/itop.ts`'s `GET /services` handler caches
-  `servicesCache` in a module-level variable for `SERVICES_CACHE_TTL_MS` (5
-  minutes). Fixed this round: `bustItopServicesCache()` is called from
-  `routes/itopAdmin.ts` alongside every `bustItopConfigCache()` (settings
-  PATCH, webhook-secret generate/remove, manual sync), so a base-URL/token
-  change no longer leaves a stale or previous-instance service list cached
-  for up to 5 minutes — it re-fetches on the next `GET /services` call.~~ **Resolved 2026-11-18**: already described as fixed in the entry itself: `bustItopServicesCache()` runs on every admin settings change (`routes/itopAdmin.ts:404,436,448,561`).
-- **`GET /itop/services` returns every organisation's services to any authenticated user, with no customer scoping.**
-  `backend/src/routes/itop.ts`'s `GET /services` handler runs `SELECT
-  Service` (no `WHERE`) with the read-only application token and returns
-  every service's `name` and `providerName` (the owning organisation's
-  friendly name) to any signed-in Solvro user, regardless of which
-  customers they can see — `ensureCustomerVisible`/`customerVisibilityFilter`
-  are not applied here, unlike every other `/itop` read. Two consequences:
-  (a) `NewTicketSheet.tsx`'s service picker offers services that don't
-  belong to the customer being ticketed — iTop's own `create` call refuses
-  an entitlement mismatch at submit time, so this is friction, not a write
-  bypass; (b) every iTop organisation name in the install becomes readable
-  through this endpoint by any Solvro user, independent of customer
-  visibility — a narrower information leak than a ticket/customer read, but
-  still not gated the way the rest of `/itop` is. Decision item before this
-  endpoint (or its picker) is reused elsewhere: filter services by the
-  target customer's organisation via iTop's service-entitlement link
-  (`lnkCustomerContractToService` or equivalent) once a `customerId` is
-  known, or accept and document the current organisation-wide visibility.
-
-Integration complete as of 2026-09-23; the plan is archived at
-`docs/archive/plans/itop-integration.md`.
-
----
-
-## iTop integration Phase 7 — deferred findings (2026-09-23)
-
-User-deferred findings from Phase 7, the last phase (branch
-`feat/itop-p7-timer` — see `CHANGELOG.md`'s "Time tracking and task-to-ticket
-from Solvro" entry). No fix now; each is a follow-up decision.
-
-- ~~**The running timer is shared across every user on one browser profile.**
-  `frontend/src/components/itop/useTicketTimer.ts` persists the single
-  running timer in `localStorage["solvro.itopTimer"]` with no user id in the
-  key or the stored shape. Two Solvro accounts signed in from the same
-  browser profile (e.g. a shared kiosk machine, or one TAM covering for
-  another) see and can stop/discard each other's timer, and a Stop always
-  logs the entry under whichever user's session is currently active, not
-  necessarily the one who started it. Fix direction: key the storage entry
-  (or at least gate reads/writes) by the signed-in user's id.~~ **Resolved 2026-11-18**: the timer is stored per user under `solvro.itopTimer.<userId>` (`useTicketTimer.ts`) and logout clears it. `docs/CONFIGURATION.md` (~:388) still describes the old shared key; that file is outside this change.
-- ~~**The Stop-timer response's `myMinutesThisWeek` is UTC-week bucketed; the
-  panel always displays the local-week figure from a separate read.**
-  `POST /itop/tickets/:id/time` (`backend/src/routes/itop.ts`) computes its
-  returned `myMinutesThisWeek` via `currentIsoWeekStart()` (plain UTC
-  Monday), while `TicketTimer.tsx`'s displayed weekly figure comes from
-  `GET /tickets/:id`'s `myMinutesThisWeek`, bucketed by the viewer's local
-  week (`useItopTicket`'s `utcOffsetMinutes`). The two numbers can disagree
-  near a week boundary in a non-UTC timezone. This is already documented in
-  a code comment at the POST handler and in `useLogTicketTimeFor` — the
-  client deliberately never `setQueryData`s the POST response's figure onto
-  the ticket cache, invalidating instead so the next `GET` supplies the
-  correctly-bucketed number. No behavioural bug today, but the mismatched
-  units between the two responses are worth resolving (e.g. have the POST
-  route accept and honor the same `utcOffsetMinutes` the GET route does) so
-  the two payload shapes stop disagreeing on what "this week" means.~~
-  **Resolved 2026-09-23**: `POST /itop/tickets/:id/time` no longer computes
-  or returns `myMinutesThisWeek` at all (`backend/src/routes/itop.ts`'s 201
-  response is now just `{ entry }`) — the route has no `utcOffsetMinutes`
-  input to bucket it correctly by, so the ambiguous figure was dropped
-  rather than fixed to agree. The panel's "this week" figure comes only from
-  `GET /tickets/:id`'s local-week-bucketed value, refetched via
-  `useLogTicketTimeFor`'s invalidation on success — there is no longer a
-  second, differently-bucketed number in play. (Note for a follow-up docs
-  pass: `frontend/src/lib/queries.ts`'s `ItopTimeLogResult` type and its
-  surrounding comments still describe the old `myMinutesThisWeek`-bearing
-  shape as of this writing — worth updating alongside this fix.)
-- **`useItopTicket`'s `utcOffsetMinutes` isn't part of its query key.**
-  `frontend/src/lib/queries.ts`'s `useItopTicket(id)` computes
-  `utcOffsetMinutes` fresh on every render and sends it on the request, but
-  the query key is just `queryKeys.itopTicket(id)` — unlike `useItopDaily`
-  and `useUtilization`, which both fold `utcOffsetMinutes` into their keys.
-  A DST transition (or a laptop's timezone changing mid-session) changes
-  what "this week" means without invalidating the cached response, so the
-  ticket panel's "x h this week" figure can read stale-by-timezone until the
-  query's `staleTime` next elapses on its own. Fix direction: fold
-  `utcOffsetMinutes` into `queryKeys.itopTicket` the same way the other two
-  hooks do.
-- **The `TimeSpent.ticket_ref` attribute name is unverified against the real install.**
-  `POST /itop/tickets/:id/time`'s `core/create TimeSpent` call
-  (`backend/src/routes/itop.ts`) sends `ITOP_TIME_SPENT_TICKET_REF_FIELD`
-  (`backend/src/lib/itop/types.ts`, currently `"ticket_ref"`) to link the new
-  entry back to its ticket. Whether that attribute exists, is spelled that
-  way, and is writable via REST on the real install's Time Tracking
-  extension has not been confirmed — only the fake iTop (`backend/test/itop/
-  fakeItop.ts`) enforces it, by refusing an unknown ref, which is a
-  Solvro-side test stand-in, not evidence about the real server. If the real
-  install accepts the create but silently ignores an unrecognised
-  `ticket_ref` field, the entry still lands in Utilization (time is real and
-  attributed to the right user/customer) but with no ticket link, and the
-  ticket panel's "x h this week on this ticket" figure stays at 0 for every
-  entry logged from Solvro, even though the hours are being counted
-  elsewhere. Action for the iTop admin before go-live: confirm the
-  attribute's name and that it is writable via REST (the same probe
-  discipline already used for `TimeSpent.duration`'s unit, see the Phase 3
-  finding above and `docs/CONFIGURATION.md` §2.16).
-
-Integration complete as of 2026-09-23; the plan is archived at
-`docs/archive/plans/itop-integration.md`.
-
-## iTop integration — real-install findings (2026-09-24)
-
-Tested against a real iTop 3.2.2 (ITIL, default lifecycle). Fixed in code the same day: mandatory `comment` on writes, `pending_reason`, assign from Pending, SLA deadline fields, per-row sync skipping, priority codes. Still open:
-
-- **The application token cannot read iTop's `User` class** (Support Agent profile), and neither can a TAM's personal token. So user matching sets the person link but never `User.itopUserId`, and time logging answers "Your iTop user account is not linked yet". Options once the Time Tracking extension is installed: check whether `TimeSpent.user_id` can be omitted (iTop may default it to the caller), or grant the application token a profile that can read `User`.
-- ~~**`PersonalToken` is not readable by a Support Agent token either.** The token-ownership check therefore falls back to the email match, and token expiry shows as unknown. See the Phase 5 entry above.
-  *Updated 2026-10-25*: the ownership check no longer falls back to the email match. On an install like this one (Support Agent tokens cannot read `User` or `PersonalToken`) a personal token is now refused with `400 itop_token_unverified` unless `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS=true` is set on the backend (default `false`). Re-test the Settings > iTop save against the real install and set the variable if it is refused.~~ **Resolved 2026-11-18**: a token that cannot be verified is refused as `itop_token_unverified` unless `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS=true` (`backend/src/env.ts:96`); the real-install re-test is tracked in the "Go-live iTop setting" bullet below.
-- **Go-live iTop setting:** re-test the Settings > iTop save against the real install and set `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS` if it is refused (still pending). Personal tokens work only for profiles listed in the `authent-token` module setting `personal_tokens_allowed_profiles` (e.g. `array('Support Agent')`); by default only administrators can use them.
-- **Time Tracking extension not bundled** with iTop Community; download it from iTop Hub before the `TimeSpent` checks (duration unit, `ticket_ref` writability) can run.
-- **`pending_reason` is assumed to be free text.** True on the default install; an install that turns it into a list of values will refuse free text, and the user sees iTop's message.
-
-## Professional UI pass — deferred findings (2026-09-29)
-
-- **e2e flakes that pass on retry** (2026-09-29): `e2e/tests/list-dnd.spec.ts:89` (cross-status reorder, Gamma onto Alpha), `e2e/tests/kanban-dnd.spec.ts:1114` (mobile touch append), `e2e/tests/kanban-dnd.spec.ts:1071` (R3 cross-view parity), `e2e/tests/gantt-parity.spec.ts:246` (drag-move). The sidebar now starts expanded at 1440px, which makes the main area 196px narrower; suspect for the desktop drag flakes, not confirmed. Same flake class as the earlier drag/reorder-timing entries above.
-- **`frontend/src/components/Drawer.tsx` has no focus management** (2026-09-29): `Modal` gained focus trap/restore via `frontend/src/hooks/useDialogFocus.ts`; `Drawer` is intentionally non-modal, so whether it should trap, restore, or stay as is needs a decision. **Resolved 2026-11-12:** `Drawer` stays non-modal and now returns focus to the element that was focused when it opened, once it closes or unmounts (no trap, no move on open).
-- **`frontend/src/lib/contrast.ts` `pickContrast` has no callers left** (2026-09-29): label/epic chips now use `on-surface` text over a tint, so nothing needs it. Kept on purpose pending a decision to delete it. **Resolved 2026-11-12:** the file was deleted.
-- **CORS config has no `exposedHeaders`** (2026-09-29): `backend/src/app.ts` (`cors({...})`) does not expose `X-Total-Count` (set in `backend/src/routes/tasks.ts:203`), so cross-origin callers cannot read it. Fine through the same-origin `/api` proxy the app uses; matters only if the API is ever called cross-origin.
-- ~~**`GET /tasks` still caps at 200 rows** (2026-09-29): the `/tasks` page now shows "Showing N of total" (`frontend/src/pages/Tasks.tsx:424`), so truncation is visible, but pagination remains deferred (see the earlier `GET /tasks` window entry).~~ **Resolved 2026-11-18**: offset paging and a "Load more" button shipped (`backend/src/routes/tasks.ts`, `frontend/src/pages/Tasks.tsx`; CHANGELOG "The Tasks page reaches every task").
-
-## Collaboration & sharing, Phase 1 ("Quick wins") — deferred findings (2026-09-29)
-
-- **Flaky e2e: `auth.spec.ts` "an admin page opened right after sign-in stays on the admin page" fails on the `mobile` project** (2026-09-29): `e2e/tests/auth.spec.ts:70`. Fails about 1 run in 2 against the dev server at `:5173` with `--retries=0`. After sign-in and a check that `solvro.token` and `solvro.user` are in localStorage, `page.goto("/admin")` ends on the sign-in page and the H1 "Admin" never appears within 10 s. Reproduced on untouched `origin/develop` (`3749e7c`) on 2026-09-29, so it predates Phase 1. Cause unknown, not investigated; the `desktop` project passes. *Updated 2026-10-09*: the sign-in race fixed in this phase (a sign-in check aborted by the page navigation no longer signs the user out, `frontend/src/lib/auth.tsx`) matches this symptom; not confirmed as the cause, so left open — strike it if the flake stays gone in CI.
-- **`TaskPanel` shows "Loading task…" forever when the project-tasks fetch fails** (2026-09-29): `frontend/src/components/TaskPanel.tsx:182`. When the fetch errors, `tasks` stays undefined and the panel keeps showing the loading text instead of an error state. Predates Phase 1, which only added "Task not found" for the loaded-but-missing case. Minor.
-- **The `eslint-disable-next-line react-hooks/exhaustive-deps` comments have no effect: `frontend/` has no ESLint config** (2026-09-29): 21 occurrences of `react-hooks/exhaustive-deps` under `frontend/src` (verified by grep), including the new ones in `ProjectFormModal.tsx` and `CustomerFormModal.tsx`. The exhaustive-deps discipline they document is not enforced by anything. Same root cause as the earlier "ESLint `exhaustive-deps` disable comment is inert; repo has no lint config" entry under Tech debt; fixing that one (an ESLint config with `react-hooks/exhaustive-deps` plus a lint gate) resolves this too. Minor.
-
-## Collaboration & sharing, Phase 3 ("Conflict warning") — deferred findings (2026-09-30)
-
-- **A hung `PATCH /tasks/:id` blocks every later save of the same task** (2026-09-30): task saves are now applied in order per task (a promise chain in `useUpdateTask`, `frontend/src/lib/queries.ts`), and `apiRequest` (`frontend/src/lib/api.ts`) has no timeout. While one request hangs, optimistic edits keep showing but nothing further is sent. Rare (e.g. a dead tunnel); the fetch eventually errors and the chain resumes. Possible fix: a request timeout in `apiRequest`.
-- **Panel date edits can leave a task with its due date before its start date** (2026-09-30): the task panel now sends only the date that changed (per-field conflict design), so a due-date edit can merge with someone else's later start date. `PATCH /tasks/:id` (`backend/src/routes/tasks.ts`) has no start <= due check; only the edit form validates on the client. Gantt edits could already produce this. Possible fix: a server-side check or clamp.
-- **Flaky backend test: `backend/test/taskOrdering.test.ts` "orders GET /tasks (cross-project)…"** (2026-09-30): fails occasionally in the full parallel run and passes alone. Its assertion reads the `take: 200` window of `GET /tasks`, which other test files fill when running in parallel. Predates Phase 3.
-- **Dev backend container can keep serving stale `backend/src/routes/tasks.ts`** (2026-09-30): observed during Phase 3: after an edit the `tsx watch` process had not reloaded the file, and the container served the previous version until `docker compose restart backend`. Cause not investigated; restart the backend before trusting a backend change on the dev stack.
-- **Per-call `mutate` error callbacks can be lost in `SolvroGantt.tsx`** (2026-09-30): `frontend/src/components/gantt-v2/SolvroGantt.tsx` (~`:561`, `:644`, `:701`, `:746`) passes `onError` to `updateTask.mutate(vars, { onError })`. TanStack Query v5 fires per-call callbacks only for the latest `mutate` on a hook, so a failure is silently swallowed if another update on the same hook follows before it settles; the per-task save queue added in Phase 3 widens that window. The task panel moved to `mutateAsync(...).catch(...)` for this reason. Possible fix: the same change in the Gantt.
-- **Filters popover keeps stealing focus after a filter is chosen** (2026-09-30): on `/tasks`, after picking a filter value and pressing Escape, the Filters popover's focus manager keeps pulling focus back into its "Filter..." search input for a short time. A user who opens a task row right away can type into the popover's search box instead of the task edit form. Seen as CI-only failures in `e2e/tests/task-conflict.spec.ts` on the production build (fast enough to hit the window); the tests now wait for the popover to close. Predates Phase 3; not investigated in the vendored filters component.
-
-## Collaboration & sharing, Phase 4 ("Activity and notifications") — deferred findings (2026-09-30)
-
-- **Mention chips only resolve against the project's TAM and current members** (2026-09-30): `frontend/src/components/CommentMentions.tsx`. Comments store user ids only, so a mentioned person later removed from the project, or a view-all user the server accepted as a mention, renders as plain `@name` text instead of a chip. Known limitation; do not "fix" it by trusting local picker state.
-- **The recipient concurrency tests were never shown to fail without the row lock** (2026-09-30): `backend/test/activity.test.ts` and the "simultaneous identical assign" case in `backend/test/notifications.test.ts`. They cannot fail spuriously, but nobody has confirmed they fail when the row lock is removed, so they may not actually guard it.
-- ~~**Activity feed ordering is by id, while the index is `(project_id, created_at desc)`** (2026-09-30): measured under 1 ms at 200k rows, so no action now. A `(project_id, id desc)` index would match the ordering exactly if it ever matters.~~ **Resolved 2026-11-18**: `ActivityEvent` now has `@@index([projectId, id(sort: Desc)])` (`backend/prisma/schema.prisma`, commit f785bb0).
-- ~~**Project TAM changes are not in the activity log** (2026-09-30): admin TAM reassignment (`PATCH /admin/projects/reassign`) and a project's TAM change through the normal project update produce no activity event. Out of scope for the activity-log work; file a follow-up if the feed should show ownership changes.~~ **Resolved 2026-10-09**: a project's creation and TAM change are recorded in the activity log and notify the new TAM, from both the normal project update and the admin reassignment (`backend/src/routes/projects.ts`, `backend/src/routes/admin.ts`, `recordActivity` / `notifyForEvent`).
-
-## Collaboration & sharing, Phase 6 ("Guest links") — deferred findings (2026-09-30)
-
-- **The guest page still loads Google Fonts from Google** (2026-09-30): the SPA shell served at `/share/<token>` (`frontend/nginx.conf`) pulls its fonts from Google, so a visitor's browser contacts Google when opening a guest link. The `Referrer-Policy: no-referrer` header on the document keeps the token out of those requests. Self-hosting the fonts would remove the third-party request but changes the whole app shell, so it was deferred.
-- ~~**The global `errorHandler` ignores `err.status`, so malformed JSON request bodies return 500 app-wide** (2026-09-30): `backend/src/http/errors.ts` renders a `body-parser` syntax error as an internal error rather than a 400. Pre-existing, not introduced by guest links; the public share router maps its own 400s to the uniform 404, so the guest surface is unaffected.~~ **Resolved 2026-10-09:** `errorHandler` in `backend/src/http/errors.ts` now answers body-parser errors without logging the offending body: 400 `invalid_json` (malformed JSON), 413 `payload_too_large`, and 400 `invalid_request` for other unreadable bodies (covered by `backend/test/bodyParserErrors.test.ts`).
-- **The rate limiter is in-process only** (2026-09-30): `backend/src/http/rateLimit.ts` keeps its counters in memory per backend instance, with no shared store. With more than one backend instance the effective limit is per instance, and counters reset on restart. Fine for the current single-instance deployment; needs a shared store if the backend is ever scaled out.
-- **Guest links use the address the owner is browsing from** (2026-09-30): `frontend/src/components/ProjectShare.tsx` builds the copied link from `window.location.origin`, because the backend has no public base URL setting. An owner signed in through an SSH tunnel or `localhost` gets a link a guest cannot open. Possible fix: a `PUBLIC_BASE_URL` setting used to build the link.
-- **The shared dialog focus trap only wraps from the last focusable element** (2026-09-30): `useDialogFocus` (used by `Modal`) wraps Tab only when focus is on the last tabbable element, so focus that sits on a non-tabbable element with `tabIndex={-1}` (e.g. a heading focused programmatically) can Tab out of the dialog when nothing tabbable follows it. `ProjectShare.tsx` works around it locally on its "Guest links" heading. Pre-existing; the fix belongs in the shared hook.
-
-## Internal sync — deferred findings (2026-10-09)
-
-- **`DELETE /customers/:id` still uses `ensureCustomerOwnerAccess`** (2026-10-09): `backend/src/routes/customers.ts:538`, `backend/src/lib/visibility.ts:191`. Its project-TAM arm is the same weakness class as the customer owner-change finding fixed this phase: on an unowned customer, being the TAM of one project under it is enough to pass, and deleting a customer affects every project under it. `PATCH /customers/:id` now uses a stricter inline rule (current owner, `project:view-all`, or on an unowned customer only the TAM of every project under it). Decide whether delete should apply the same rule.
-- ~~**Concurrent admin creates of case-variant usernames can both pass** (2026-10-09): `backend/src/lib/username.ts`, `POST /admin/users` (`routes/admin.ts`) and first Google sign-in (`routes/auth.ts`) check for an existing name ignoring case and then insert; the database unique constraint on `username` is case-sensitive, so two simultaneous requests for "Ann" and "ann" can both succeed. A unique index on `lower(username)` fixes it, but needs a migration and a duplicate check on existing rows first.~~ **Resolved 2026-11-18**: migration `20261026090000_user_identity_case` adds the unique index `users_username_lower_key` on `lower(username)`.
-- **Epic `ownerId` is not checked against project access** (2026-10-09): `PATCH /epics/:id` (`backend/src/routes/epics.ts:140`) accepts any existing user as an epic owner, including one who cannot see the project. Same finding Solvro Internal deferred (E-4). Possible fix: require the owner to be the project's TAM, a member, or a view-all user.
-- **iTop findings carried over from Solvro Internal's port review** (2026-10-09; each re-verified against this repo):
-  - ~~`POST /admin/itop/test` with only a `baseUrl` sends the stored application token to that host (`backend/src/routes/itopAdmin.ts:423-425`). Possible fix: require the token in the request when `baseUrl` differs from the stored one.~~ **Resolved 2026-11-18**: a different address now requires the token (`app_token_required`, `backend/src/routes/itopAdmin.ts:476-481`).
-  - ~~The personal-token ownership check is best-effort (`backend/src/routes/itopUser.ts`, the `PersonalToken` lookup): when iTop does not expose that class to the token's profile, the token is accepted on the email match alone. See also the real-install finding above.~~ **Resolved 2026-10-25:** a token that cannot read the iTop `User` of its Person and that user's own `PersonalToken` is now refused (`400 itop_token_unverified`); a deployment whose profiles cannot read those classes opts back in with `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS=true` (`backend/src/env.ts`, `docs/CONFIGURATION.md` 2.1). Tokens saved before the change are not re-checked (see "Backend concurrency and roles" below).
-  - ~~The iTop client follows redirects (`backend/src/lib/itop/client.ts`: `fetch` is called without a `redirect` option). Possible fix: `redirect: "error"`.~~ **Resolved 2026-11-18**: the client never follows redirects (`redirect: "error"`, `backend/src/lib/itop/client.ts`).
-  - The GCM auth tag length is not checked when opening a secret (`backend/src/lib/secretBox.ts`: `setAuthTag` without `authTagLength`); a truncated tag would be accepted by Node.
-  - No key rotation for `SECRETS_KEY`: the sealed format (`v1:…`) carries no key id, so rotating the key invalidates every stored token (documented in `docs/CONFIGURATION.md`).
-  - The webhook rate limit is global, not per source (`backend/src/routes/webhook.ts`: one in-process counter); a flood of bad calls can exhaust the budget for legitimate iTop calls.
-- ~~**`backend/scripts/create-admin.ts` resets a password without ending existing sessions** (2026-10-09):~~ **Resolved 2026-10-09** in the same phase: the script's update now increments `tokenVersion`. re-running it for an existing email (the documented password-reset path) updates `passwordHash` but does not increment `User.tokenVersion`, unlike the Admin reset and Settings password change, so the account's old tokens stay valid until they expire. Possible fix: bump `tokenVersion` in the script's update.
-- **Legacy UI-rule exceptions left in place** (2026-10-09): the interface-rule sweep did not touch every file. `frontend/src/components/gantt-v2/SolvroGantt.tsx` toolbar text is 11.5px (`text-[11.5px]`, lines ~1070 and ~1091); arbitrary `text-[12px]` / `text-[13px]` sizes and `uppercase tracking-wider` headings remain in Admin, Settings, ProjectRisks, ProjectServices, ProjectFormModal, CustomerFormModal, AccountOverview, ServiceMappingList, NewTicketSheet and ActionSheet; the success banner in `frontend/src/pages/Settings.tsx:112` uses raw palette classes (`border-emerald-300 bg-emerald-50 text-emerald-800`) instead of design tokens.
-- ~~**Main bundle vs Workbox's 2 MiB precache default** (2026-10-09): `frontend/vite.config.ts` sets no `maximumFileSizeToCacheInBytes`, so a built JS file over 2 MiB is silently left out of the precache (and the service worker build warns). Not measured this phase (no build output at hand). Watch item: when the main bundle passes 2 MiB, raise the limit or code-split.~~ **Resolved 2026-10-24:** pages are now route-level lazy chunks (`frontend/src/App.tsx`); in the build the entry script is 629 kB and the largest chunk (`exceljs`) 939 kB, both far under 2 MiB, and the Workbox `globPatterns` still match every chunk. `vite.config.ts` still sets no size limit, so a single chunk that grows past 2 MiB would again be left out of the precache silently.
-- ~~**Flaky e2e: `e2e/tests/itop-task-ref.spec.ts:241`** ("creates a ticket from the task and pins its ref") failed once in a full run (2026-10-09).~~ **Resolved 2026-10-09:** spec-order pollution that predates the phase — `itop-daily-review.spec.ts` re-parents the worker-shared fixture project onto its own customer, so the test mocked the seed-time customer while the Create-in-iTop gate asked about the current one. The test now reads the project's current customer; the daily-review + task-ref sequence failed before and passes 3×/3× after on desktop and mobile.
-- **A demoted user can see stale controls for up to 30 seconds** (2026-10-09): the client re-reads `/auth/me` on window focus and after a 403 `forbidden`, throttled to once per 30 s (`REFRESH_THROTTLE_MS` in `frontend/src/lib/auth.tsx`). The server enforces the new role on the very next request, so only the UI is stale.
-
-## Outline links, Phase A — deferred findings (2026-10-09)
-
-- **Changing a project's or customer's Outline link is not recorded in the activity log** (2026-10-09): `PATCH /projects/:id` (`backend/src/routes/projects.ts`, the `recordActivity` call after the update) only diffs name, status, customer and TAM, and customers have no activity events at all (`ActivityEvent` is project-scoped), so an `outlineUrl` edit leaves no trace. Consistent with description edits, which are not recorded either. Deferred as a product call: record it only if an audit trail for links is wanted.
-- **Anyone with `project:write` can set the Outline link on an unowned customer** (2026-10-09): `PATCH /customers/:id` (`backend/src/routes/customers.ts`) accepts `outlineUrl` under the same gate as name and description — `project:write` plus visibility of the customer, no ownership check — so for a customer with no TAM any such user can point its link anywhere (http/https only). Same exposure the customer's name and description already have today; deferred together with them rather than gating the link alone.
-
-## Outline B+C — deferred findings (2026-10-09)
-
-- **The Outline webhook has no replay or ordering protection beyond the 5-minute timestamp window** (2026-10-09): `backend/src/routes/webhook.ts` (`POST /webhook/outline`) verifies the HMAC and rejects a timestamp more than 5 minutes off, but a captured valid delivery can be replayed inside that window, and out-of-order deliveries for the same page are applied in arrival order. Only the mentions index is affected (a page's task/project links), which re-converges on the next delivery for that page; no page text is stored. Possible fix: remember recent delivery ids (`payload.id`) or compare `model.updatedAt` before applying.
-- **A user's Outline email is checked only when they connect, not on every token refresh** (2026-10-09): `backend/src/routes/outline.ts` (OAuth callback: `auth.info` email must equal the Solvro email) and `backend/src/lib/outline/tokens.ts` (refresh). Re-checking on each refresh would spend Outline's per-client-IP rate budget, which all Solvro users share. Consequence: if a user's email later changes in Outline, their grant keeps working under the old match until they disconnect or reconnect. Possible fix: re-check at a low frequency (for example once a day on refresh) or when Outline reports a changed user.
-- **Changing a project's or customer's Outline link is still not recorded in the activity log** — carried over unchanged from "Outline links, Phase A" above (`backend/src/routes/projects.ts`); nothing in Phase B or C touched it.
-- **On a phone, a project's active tab can sit off-screen** (2026-10-10): the tab strip in `frontend/src/pages/ProjectDetail.tsx` (`nav` with `overflow-x-auto`) never scrolls the active tab into view, so opening `/projects/<id>/docs` directly on a 390px screen shows Overview…Timeline with Docs hidden to the right. Predates this phase (Risks and Services behave the same); the new Docs tab, being last, shows it most. Possible fix: `scrollIntoView({ inline: "nearest" })` on the active tab after navigation.
-- ~~**Live webhook delivery from the dev Outline was not exercised** (2026-10-09).~~ **Resolved 2026-10-09:** with `ALLOWED_PRIVATE_IP_ADDRESSES` set on the dev Outline (an Outline server setting — Outline refuses webhook delivery to private addresses without it; a deployment whose Solvro sits on a private address needs the same), real deliveries reached `POST /webhook/outline` with status 200: a task link and a project link in a page created both mentions, removing the task link removed only that mention, trashing the page removed all of them, and `lastWebhookAt` updated. The logs held no signature, page text or link.
-
-## Accessibility pass — deferred findings (2026-10-23)
-
-Contrast ratios below were measured against the token values in `frontend/src/index.css` (WCAG 4.5:1 for small text).
-
-- **Light primary pairs still under 4.5:1 after the `#267937` change** (2026-10-23): the `primary/10` chip tint over `surface-container` is 4.00 and over `surface-container-high` 3.76 (for example the status chip in `frontend/src/components/TaskPanel.tsx`, whose panel is `bg-surface-container`); `text-primary` on `surface-container-high` is 4.25; white text on `hover:bg-primary/90` is 4.45 (for example `frontend/src/components/kanban-v2/SolvroKanban.tsx:577`, `frontend/src/pages/views/ProjectList.tsx:504`). Measured option: light primary `#226c31` gives 5.39 as text and 4.70 for the chip on `surface-container`, and 5.15 on the hover; only the chip on `surface-container-high` stays under (4.43). A brand decision for the user. **Note 2026-10-25:** `e2e/tests/axe.spec.ts` leaves these chips out of its contrast pass only (constant `CONTRAST_GAP`, selector `:is(.bg-primary\/10, .bg-primary\/15):is(.text-primary, .text-primary-tint-text)`: the light `primary/10` chip pairs and the `primary/15` `*` chip in Admin > Roles, `frontend/src/pages/Admin.tsx`) so the scan can run, in both themes; every other rule still checks those elements. axe 4.13 measured the `primary/10` pairs at 4.24–4.49:1 over the panel and surface tints on the List, Gantt, project Overview and Customers pages (light theme). When this entry is fixed, remove that `.exclude(...)` from the spec in the same change.
-- ~~**Pre-existing: `hover:bg-primary-container` with `text-on-primary` is white on `#c8e6cf` in light mode, about 1.34:1** (2026-10-23): the button text becomes nearly unreadable on hover. Sites (grep `hover:bg-primary-container`): `frontend/src/components/admin/ItopTab.tsx:425`, `frontend/src/components/services/ServiceMappingList.tsx:262`, `frontend/src/components/itop/TicketLog.tsx:182`, and about 30 more across `Admin.tsx`, `Settings.tsx`, `Customers.tsx`, `Projects.tsx`, the Outline and service components. Dark mode is fine (`on-primary` is dark on `#2d9042`). Possible fix: `hover:bg-primary/90`, or a hover that keeps the contrast.~~ **Resolved 2026-11-18**: no `hover:bg-primary-container` is left in `frontend/src`; replaced by `hover:bg-primary/90` (commit 46717bf, CHANGELOG "Hover contrast").
-- **Remaining axe findings after this phase** (2026-10-23): `region`, `landmark-unique`, `heading-order` and `landmark-one-main` (landmark and heading structure; `page-has-heading-one` was fixed 2026-10-26: every project page now has an sr-only `h1` in `frontend/src/pages/ProjectDetail.tsx`), plus `nested-interactive` in the `TaskPanel` subtask sortable rows (`frontend/src/components/TaskPanel.tsx`, the `SortableItem` rows from ~`:839`, whose handle and controls sit inside the row). **Note 2026-10-25:** `e2e/tests/axe.spec.ts` disables `region`, `landmark-unique` and `heading-order` (the `KNOWN_GAP_RULES` list; `page-has-heading-one` was removed from it 2026-10-26 and is now checked) so the scan can run on eleven pages and every Admin tab, in both themes, on desktop and mobile; `landmark-one-main` is not in that list, so it is checked. When the landmark and heading structure is fixed, remove the rules from `KNOWN_GAP_RULES` in the same change. The scan does not cover the `nested-interactive` finding: it opens no task panel, so the `TaskPanel` subtask rows are not scanned at all. Table rows after the tenth (`tbody tr:nth-child(n+11)`) are excluded from every pass, so results do not depend on database size.
-- **`usePanelFocus` can keep a stale opener** (2026-10-23): `frontend/src/hooks/usePanelFocus.ts` records the opener from `document.activeElement` when the panel takes focus. When a mouse click does not focus a button (Safari, Firefox on macOS, or a row click outside its title), switching the panel from task A to task B keeps A's title as the opener, so closing B returns focus to A. A `focusin` listener recording the last focus outside the panel would fix it. Low priority.
-- ~~**Pre-existing: `frontend/src/pages/Login.tsx` uses inline `fontSize: 10`** (2026-10-23): lines 153, 190, 204 and 328, against `docs/DESIGN.md` §2 "no text under 12px". Inline `fontSize: 12` elsewhere in the file is within the rule.~~ **Resolved 2026-11-18**: no `fontSize: 10` is left in `Login.tsx` (CHANGELOG: "now 12px").
-
-## Frontend usability — deferred findings (2026-10-26)
-
-- **On phones the portfolio timeline hides the dashed "Today" line** (2026-10-26): it would cross the stacked project labels, so `frontend/src/components/portfolio/PortfolioCalendar.tsx` shows it from 768 px up only. Possible follow-up: draw it over the year track only on phones.
-- **`weekly-sync.spec.ts` "customer row, Reflection sync save…" depends on database size** (2026-10-26): `e2e/tests/weekly-sync.spec.ts` walks every customer block (`groupContainingRow`) with two awaits each. On a long-lived dev database with about 500 customers that exceeds the default 5 s poll on the mobile project; it passes with a clean database. Possible fix: a faster locator that does not walk the blocks.
-- **The account menu has no arrow-key navigation** (2026-10-26): `frontend/src/components/layout/TopBar.tsx` uses `role="menu"` / `menuitem` and closes on Escape, but Up/Down/Home/End do not move between items (Tab still does). Either add arrow-key handling or drop the menu roles. **Resolved 2026-11-12:** Up, Down, Home and End now move between the visible items with wrap, ArrowDown on the button opens the menu, and Tab closes it.
-
-## Code splitting — deferred findings (2026-10-24)
-
-- **A project tab's chunk starts downloading only after the project data arrives** (2026-10-24): `frontend/src/pages/ProjectDetail.tsx` returns `ProjectPageSkeleton` while `useProject` loads (`:137`) and renders its `<Outlet />` only after, so the tab's `import()` (`lazyPage` in `frontend/src/App.tsx`) is not requested until then. A cold load therefore runs the ProjectDetail chunk, then the project fetch, then the tab chunk in sequence, with up to three skeletons in a row. One extra round trip, and only for clients without the service worker precache (the precache serves every chunk locally). Possible fix: start the active tab's `import()` early, for example from `ProjectIndexRedirect` in `App.tsx`, or from the tab `NavLink`s' `onMouseEnter` in `ProjectDetail.tsx`.
-- **Pre-existing: `AuthLoading` shows plain "Loading…" text instead of a delayed skeleton** (2026-10-24): `AuthLoading` in `frontend/src/components/AuthGuard.tsx` (lines 22-28) renders a centered "Loading…" `div` while the signed-in user is confirmed, against `docs/DESIGN.md` §2 (the "Loading states are skeletons … shown after a 150 ms delay" rule, line 264). Possible fix: use the shared skeleton region (`PageLoading` in `frontend/src/components/skeletons/`) or another delayed skeleton.
-- **Mobile `smoke.spec.ts` "no horizontal overflow on key pages" reported the Kanban 453px too wide once** (2026-10-24): `e2e/tests/smoke.spec.ts:25`, in a full local run against `vite preview`. Cause unknown; it passed 34/34 on reruns, so it reads as a load-timing flake (layout measured before the lazy Kanban chunk or its data settled is a guess, not confirmed). If it recurs, capture the overflowing element before retrying. The drag flakes seen in the same runs are recorded in the "e2e flake: `list-dnd.spec.ts:171`" entry above.
-
-## Backend concurrency and roles — deferred findings (2026-10-25)
-
-- **`ITOP_ALLOW_PRIVATE_HOSTS` cannot be set on a `setup.sh` deployment** (2026-10-25): `backend/src/env.ts` reads it (default `true`), but the backend `environment:` block of the compose file `setup.sh` writes does not pass it through (it passes `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS` and `TRUST_PROXY`, not this one, and not `ITOP_SYNC_DISABLED` either). An operator who wants `false` (public iTop, internet-facing Solvro) has to edit the generated `~/solvro/docker-compose.yml`, which `setup.sh` rewrites on every re-run. Fix: pass `ITOP_ALLOW_PRIVATE_HOSTS: "${ITOP_ALLOW_PRIVATE_HOSTS:-true}"` (and `ITOP_SYNC_DISABLED`) in `setup.sh`, then update `docs/CONFIGURATION.md` 2.13. `setup.sh` is on the spine list; not touched in this phase.
-- **Deleting a section or an epic can still deadlock with a concurrent reorder** (2026-10-25): `DELETE /sections/:id` (`backend/src/routes/sections.ts:255-266`) and `DELETE /epics/:id` (`backend/src/routes/epics.ts:191-`) null out `Task.sectionId` / `Task.epicId` through `onDelete: SetNull` (`backend/prisma/schema.prisma:452,507`), which rewrites every task row of that section or epic. Neither delete takes the project's order lock (`backend/src/lib/orderLock.ts`), so against a concurrent task reorder (which locks the same task rows in another order) a row-against-row deadlock is still possible. Since this phase Postgres' abort answers `409 concurrent_update` (`backend/src/http/errors.ts`) and is logged, not `500`, so the user can retry. Possible fix: take `lockProjectOrder` (the task list's key) at the start of both deletes. Deferred at phase close; it needs a delete and a reorder of the same project at the same moment.
-- **An iTop full sync that always needs more than the 25-minute budget never finishes** (2026-10-25): `backend/src/lib/itop/sync.ts` (`RUN_BUDGET_MS`, 30-minute transaction minus 5). A run that reaches the budget while pulling tickets stops, records the reason as the last sync result, prunes nothing and leaves `lastFullSyncAt` where it was, so every following run is a full run again and starts from the beginning. A very large iTop would therefore never prune removed tickets and would re-pull everything on each tick. The run duration is logged at `info` ("iTop sync completed", field `ms`), so a deployment drifting toward the budget can be seen before it hits it. Not done: no resumable cursor or per-class budget exists; add one if a real install gets close.
-- **Personal iTop tokens saved before 2026-10-25 are not re-checked** (2026-10-25): **Accepted and documented (user decision 2026-10-25), not open.** They were accepted under the old rule (on the email match alone when the `User` or `PersonalToken` class was unreadable), and `backend/src/routes/itopUser.ts` only validates at save time, so a token saved earlier keeps working until its owner re-saves it. The behaviour is documented in `docs/CONFIGURATION.md` (`ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS`), `docs/guides/itop.md` and `docs/reference/itop-integration-guide.md`. Revisit only if a one-off re-validation (or clearing `User.itopTokenEnc` where `itopTokenExpiresAt` is null and the variable is `false`) is wanted once the real install shows which profiles can read the classes.
-- **A full iTop sync whose time-entry pass is cut short by the budget still counts as a complete full run** (2026-10-25): `backend/src/lib/itop/sync.ts` calls `writeConfigResult(startedAt, true, nonFatalNote, full)` after `syncTimeEntries` returns `stopped`, so `lastSyncOk` stays `true` (the cut-short note goes into `lastSyncError`) and `lastFullSyncAt` advances. The time-entry prune is skipped for that run and therefore waits for the next full run, up to 24 h later (`FULL_SYNC_MAX_AGE_MS`); until then time entries deleted in iTop stay in Solvro. Accepted trade-off: holding `lastFullSyncAt` back would make a run that always overruns repeat the whole full pull on every tick. Not done; revisit with the resumable-cursor idea in the budget entry above.
-
-## Dependency advisories — remaining (2026-10-25)
-
-Left after the lockfile patch recorded in `CHANGELOG.md` ("Patched dependency advisories"). `npm audit --omit=dev --package-lock-only` reports 1 advisory in `backend/` and 4 in `frontend/` (the React Router and `uuid` entries each list a package and its dependent).
-
-- **`zod` 3.x has a memory-exhaustion advisory fixed only in zod >=4.6.6** (2026-10-25): "Zod can exhaust memory while validating oversized constrained collections" (GHSA-mrhx-c7xc-m3w5, high). `zod` is a direct backend dependency (`backend/package.json`, `^3.23.8`) imported in about 35 files under `backend/src/`, so the 4.x migration is its own change. Mitigation today: `express.json({ limit: "1mb" })` (`backend/src/app.ts:76`) caps request bodies. This is the one finding that makes `npm audit --omit=dev --audit-level=high` fail in `backend/`.
-- **React Router advisories fixed only in v7** (2026-10-25; `react-router-dom` is 6.30.6, `frontend/package.json` `^6.28.0`): (1) open redirect through a backslash in `<Link>` / `useNavigate` (GHSA-wrjc-x8rr-h8h6): the only user-controlled navigate target, Login's post-sign-in path, goes through `frontend/src/lib/safeRedirect.ts`, which refuses backslashes (and control characters, `//` and any off-origin URL). (2) Constructor injection through `deserializeErrors()` in SSR hydration (GHSA-337j-9hxr-rhxg): needs a data router with hydration; the app uses `BrowserRouter` (`frontend/src/main.tsx`) and has no `createBrowserRouter` / `RouterProvider`. A v7 upgrade is its own change; both advisories stay in the audit output until then.
-- **`uuid` <11.1.1 inside `exceljs`** (2026-10-25; frontend, loaded lazily by the Gantt Excel export): the advisory (GHSA-w5hq-g745-h8pq, missing buffer bounds check) needs `v3`/`v5`/`v6` called with a caller-supplied buffer. `exceljs` only calls `v4()` (`frontend/node_modules/exceljs/lib/xlsx/xform/sheet/cf-ext/cf-rule-ext-xform.js`), so it is not reachable. npm's suggested fix is a downgrade to `exceljs@3.4.0`; do not apply it.
-- **No CI audit gate yet** (2026-10-25): neither `.github/workflows/ci.yml` nor `.claude/scripts/gates.sh` runs `npm audit`. Adding `npm audit --omit=dev --audit-level=high` would fail today on the `zod` entry above. A gate also turns any new upstream advisory into a red CI on unrelated PRs, so it needs a decision first (for example `--audit-level=critical`, or a scheduled job instead of a PR check). *Updated 2026-11-13*: decided as a report-only step. `ci.yml` now runs the audit in the typecheck job with `continue-on-error`, so advisories show as a warning and never fail CI. A failing gate waits for the `zod` 4 upgrade.
-- **`npm audit fix` fails on the host's npm 10.9.4** (2026-10-25) with "Cannot read properties of null (reading 'edgesOut')" (arborist `#loadPeerSet`). Targeted `npm update <pkg> --package-lock-only` works and keeps the 26 `@esbuild/*` platform entries in both lockfiles.
-
-## iTop and Outline hardening — deferred findings (2026-10-26)
-
-- **The Outline webhook replay set and the iTop Refresh throttle are per process** (2026-10-26): `backend/src/lib/outline/webhookSignature.ts` (`seen`) and the Refresh limits in `backend/src/routes/itop.ts` (`REFRESH_USER_COOLDOWN_MS`, `REFRESH_GLOBAL_FLOOR_MS`) live in memory. With several backend instances each keeps its own, so a captured webhook delivery can be replayed once per instance and the throttle allows one pull per instance. Deferred because Solvro runs a single backend today.
-- **`PATCH /admin/itop/settings` can change the iTop address without the application token** (2026-10-26): `backend/src/routes/itopAdmin.ts`. The stored token is then sent to the new address on the next sync. Admin-only, and the change persists. Test connection now requires the token with an address, but saving does not. Deferred by the user.
-- **An iTop application token saved while no iTop address is set is stored without a probe** (2026-10-26): `backend/src/routes/itopAdmin.ts`. There is nothing to check it against, so a wrong token only shows on the first Test connection or sync.
-- **The Utilization page Refresh shows no error to the user** (2026-10-26): when the request fails (for example the new 429 from the Refresh limits), `frontend/src/pages/Utilization.tsx` shows nothing.
-- **A full sync requested by Refresh is dropped silently while a scheduled sync holds the lock** (2026-10-26): `backend/src/lib/itop/sync.ts`, `backend/src/routes/itop.ts`. The 60 s global window is still used up, so a second Refresh is refused for a minute without the full sync having run.
-- **A customer name clash still answers 409 vs 201** (2026-10-26): creating a customer whose name is taken by a customer the caller cannot see answers 409 instead of 201 (`backend/src/routes/customers.ts`), so a TAM can learn that the name exists. Deferred.
-
-## Data integrity, session and query performance — deferred findings (2026-10-26)
-
-- **Project-deletion records are not shown and are never cleaned up** (2026-10-26): the `customer_activity_events` rows written when a project is deleted (`backend/src/routes/projects.ts`) appear nowhere in the UI, and the 180-day activity cleanup does not cover them. Customer owner changes are still only a log line (`backend/src/routes/customers.ts`) and could be recorded in the same table.
-- **The `/auth/refresh` rate limit is per process and in memory** (2026-10-26): `refreshRateLimiter` in `backend/src/routes/auth.ts`. A restart resets it, and with several backend processes each keeps its own count.
-- **Tasks page offset paging can shift rows between pages** (2026-10-26): `GET /tasks` (`backend/src/routes/tasks.ts`) pages by `offset`, so a concurrent insert or delete can repeat or skip a row across "Load more" pages. The normal offset trade-off; the order itself is stable.
-- **The trigram index test forces the plan** (2026-10-26): `backend/test/indexUsage.test.ts` sets `enable_seqscan = off` to show the new indexes can serve the search queries. At current table sizes the planner still prefers a sequential scan on its own.
-
-## Design compliance fixes — deferred findings (2026-11-02)
-
-- **Gantt bar labels can be hard to read over the unfilled hatch** (2026-11-02): `SolvroBar` in `frontend/src/components/gantt-v2/SolvroGantt.tsx` chooses white label text from the filled fraction of the bar, so on a partly filled bar the part of the label over the pale unfilled hatch is hard to read. Observed in light mode; not verified in a browser. Deferred.
-- **`frontend/src/lib/version.test.ts` fails in the dev container** (2026-11-02): ENOENT on `/VERSION`, because `docker-compose.yml` mounts only `frontend/` into `/app`. It passes in CI. Pre-existing, not a regression. Still failing 2026-11-12 (antislop phase); unchanged by it.
-- **e2e on a dev stack with Google sign-in configured fails two groups of checks** (2026-11-02): the `auth.spec.ts` "Google not configured" cases and the smoke console-error check (GSI "origin not allowed for client ID") assume a seeded QA stack without Google sign-in. They fail by design of that assumption, not through a regression. Deferred.
-  Seen again 2026-11-12 (antislop phase): the Playwright smoke test fails on the dev stack mapped to port 5174 because Google Sign-In rejects that origin; not confirmed against the untouched tree, but the dev compose maps the site to 5174 (`docker-compose.yml`) and the failure matches this entry.
-- **Admin users-table role select renders raw role values in caps and carries a stale comment** (2026-11-02): `frontend/src/pages/Admin.tsx` (the role `<select>` near line 245) uses `text-label-caps uppercase` on a control and shows raw enum values, against the DESIGN.md rule to use `labels.ts` words and sentence case on controls. The comment above it says `font-bold` stays explicit, but no `font-bold` is present. Deferred.
-- `frontend/src/components/ConfirmModal.tsx:29` — the warning-tone confirm button uses raw `bg-amber-500 text-white hover:bg-amber-600`, off-token and not theme-aware (found in the 2026-11-02 design-compliance phase review; outside that phase's scope).
-
-## Antislop port — deferred findings (2026-11-12)
-
-- **Overview and Project Overview loading placeholders are bare pulse blocks** (2026-11-12, stat strip phase review, deferred): `frontend/src/pages/Overview.tsx` (`SkeletonGrid`) and the loading strip in `frontend/src/pages/views/ProjectOverview.tsx` render plain `animate-pulse` blocks, where `docs/DESIGN.md` section 2 asks for skeletons from `frontend/src/components/skeletons/` shown after a 150 ms delay. The blocks predate that phase (it reshaped them, it did not introduce them).
-- **A few touch targets stay under 44px by decision** (2026-11-12): links inside running sentences (enlarging them breaks the line), the Kanban pager dots on phones (6px; the previous and next arrows beside them do the same job), the List and Gantt-tree drag handles (24px; a larger handle changes what a touch drag grabs), the label colour swatches in `LabelPicker` (16px), and the customer and project name links inside each Overview recent-note header. The phone measurement of 2026-11-12 found no other control under 44px on the 23 measured routes and no control whose centre is covered by a neighbour's hit area.
-- **`InstallBanner.tsx` nests a `role="button"` span inside a `<button>`** (2026-11-12): `frontend/src/components/InstallBanner.tsx` (the `deferredPrompt` branch, the dismiss "close" span near line 86 inside the install button). Interactive content inside a button is invalid and the inner control is not keyboard reachable. The iOS-hint branch already uses a sibling `<button>`. Found in the phase review; deferred.
-- **The iTop ticket panel shows "– ago" when `lastUpdate` is null** (2026-11-12): `frontend/src/components/itop/TicketPanel.tsx:290` formats `${ageLabel(ticket.lastUpdate)} ago` unconditionally, and `ageLabel` returns `EMPTY_VALUE` for null, unlike the "Started" fact just above, which guards on `startDate`. Found in the phase review; deferred.
-- **`BTN_PRIMARY` in `frontend/src/components/admin/TaskStatusesTab.tsx` shows only the soft ring on keyboard focus** (2026-11-13): it is `border border-transparent bg-primary` with the bordered focus form, so the focus border turns the same green as the fill and the `ring-primary/30` ring is the only cue (below 3:1). Found in the review of the solid focus ring change; deferred. A fix is the solid ring plus `ring-offset-2` on that button.
+# Known Issues
+
+Open issues, sorted by area and then by severity. Each issue has an ID (`ISS-NNN`) that never changes and is never reused. Code comments and plans cite an issue by its ID.
+
+Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kept verbatim at `docs/archive/ISSUES-2026-11-18-phase-log.md`; the mapping from every old entry to its ID, or to the reason it closed, is the ledger in `docs/archive/plans/issues-restructure.md`.
+
+## How to use this file
+
+- **Severity.** P1: wrong data, a security or privacy exposure, or a break with no workaround; deferring one needs the user's explicit note. P2: a defect with a workaround, a correctness gap, a missing test on a risky path, or a gap in a gate or process. P3: polish, cosmetic issues, stale comments, hygiene.
+- **Type.** `bug` · `debt` · `test-gap` · `watch` (no action until the stated trigger) · `decision` (waits on a user decision; the entry states the question).
+- **Areas**, in this order: Security & auth · Data & performance · Backend/API · Frontend UI · Accessibility & tokens · Gantt · Boards & drag · iTop · Exports & sharing · Tests & CI · Dev env & ops · Docs & process.
+- **New issue:** the next ID is the highest existing ID plus one. Search for an entry with the same root cause first, and update it instead of adding a second one. Keep the body to six lines or fewer.
+- **Closing:** when shipped work fixes or moots an issue (checked against the code, never assumed), delete its body and add one line under `## Closed`: ID, date, commit or CHANGELOG reference, title.
+- **Where** names a symbol and a file; the line number is a hint only. **Verified** shows when the location was last checked.
+
+## Open — Security & auth
+
+### ISS-001 · P2 · Token-ownership check still passes admin-profile tokens that can read other users' tokens
+
+- **Type:** watch · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** token ownership check in backend/src/routes/itopUser.ts (line ~222)
+- **Problem:** iTop has no whoami, so a token whose profile reads PersonalToken beyond its own user still passes the check. This is impersonation by a foreign credential, not privilege escalation.
+- **Why deferred / fix direction:** Grant PersonalToken read narrowly or add an iTop-side whoami extension; verify on the real install.
+- **Source:** snapshot line 2138, section "iTop integration Phase 5 — deferred findings (2026-09-23)"
+
+### ISS-002 · P2 · DELETE /customers/:id lets the TAM of one project delete an unowned customer
+
+- **Type:** decision · **Found:** 2026-10-09 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** DELETE /customers/:id in backend/src/routes/customers.ts (line ~626); ensureCustomerOwnerAccess in backend/src/lib/visibility.ts (line ~229)
+- **Problem:** On an unowned customer, being TAM of one project passes the delete gate, though deleting affects every project under it. PATCH already uses a stricter rule.
+- **Why deferred / fix direction:** Decide whether delete should use the same rule as the owner change (owner, view-all, or TAM of every project).
+- **Source:** snapshot line 2358, section "Internal sync — deferred findings (2026-10-09)"
+
+### ISS-003 · P2 · Epic owner can be a user with no access to the project
+
+- **Type:** bug · **Found:** 2026-10-09 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** PATCH /epics/:id in backend/src/routes/epics.ts (line ~140)
+- **Problem:** ownerId accepts any existing user, including one who cannot see the project.
+- **Why deferred / fix direction:** Require the owner to be the project's TAM, a member, or a view-all user.
+- **Source:** snapshot line 2360, section "Internal sync — deferred findings (2026-10-09)"
+
+### ISS-004 · P2 · zod 3 has a memory-exhaustion advisory fixed only in zod 4
+
+- **Type:** debt · **Found:** 2026-10-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** zod dependency in backend/package.json (line ~37)
+- **Problem:** Oversized constrained collections can exhaust memory (GHSA-mrhx-c7xc-m3w5). Request bodies are capped at 1 MB, and the audit step fails on this finding.
+- **Why deferred / fix direction:** The zod 4 migration touches about 35 files and is its own change.
+- **Source:** snapshot line 2421, section "Dependency advisories — remaining (2026-10-25)"
+
+### ISS-005 · P2 · Saving an iTop address does not require the application token
+
+- **Type:** bug · **Found:** 2026-10-26 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** PATCH /settings in backend/src/routes/itopAdmin.ts (line ~300)
+- **Problem:** An admin can change the iTop address without supplying the token, and the stored token is sent to the new address on the next sync. Test connection already requires the token.
+- **Why deferred / fix direction:** Deferred by the user. Require the token when the address changes.
+- **Source:** snapshot line 2430, section "iTop and Outline hardening — deferred findings (2026-10-26)"
+
+### ISS-006 · P3 · Per-email sign-in lockout can be triggered against a colleague
+
+- **Type:** watch · **Found:** 2026-10-22 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** createFailureThrottle in backend/src/http/loginThrottle.ts (line ~25)
+- **Problem:** Ten wrong passwords for an email block that email's password sign-in for 15 minutes, from any address. The counter table holds 10,000 keys and evicts the oldest.
+- **Why deferred / fix direction:** Accepted by user decision 2026-10-22. Revisit if the app is exposed beyond the LAN or the lockout is abused.
+- **Source:** snapshot line 16, section "Known bugs / inconsistencies"
+
+### ISS-007 · P3 · Label creation needs project:write while label edit needs task:write
+
+- **Type:** bug · **Found:** 2026-07-24 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** POST /:id/labels in backend/src/routes/projects.ts (line ~1311); backend/src/routes/labels.ts (lines 37, 53)
+- **Problem:** Creating a label requires project:write; renaming or deleting one requires task:write. TAM and ADMIN hold both, but a custom role with granular permissions sees the mismatch.
+- **Why deferred / fix direction:** Align label creation to task:write and add vitest coverage.
+- **Source:** snapshot line 529, section "Gantt GH #58 deferred findings (2026-07-24)"
+
+### ISS-008 · P3 · Task duplicate needs task:write while task create needs project:write
+
+- **Type:** watch · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** POST /tasks/:id/duplicate in backend/src/routes/tasks.ts; POST /projects/:id/tasks in backend/src/routes/projects.ts
+- **Problem:** A custom role holding task:write only can duplicate tasks it could not create through the form. This was a deliberate plan decision.
+- **Why deferred / fix direction:** Revisit if custom roles start splitting the two permissions.
+- **Source:** snapshot line 1863, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
+
+### ISS-009 · P3 · Shared pino logger has no redact paths for iTop tokens
+
+- **Type:** debt · **Found:** 2026-09-22 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** pino() call in backend/src/logger.ts (line 4)
+- **Problem:** Nothing logs the iTop token today, but the logger has no redact list as a safety net for token or Auth-Token fields.
+- **Why deferred / fix direction:** Add a redact array for token, Auth-Token and the per-user token fields.
+- **Source:** snapshot line 2001, section "iTop integration Phase 1 — deferred findings (2026-09-22)"
+
+### ISS-010 · P3 · Guest link pages contact Google for fonts
+
+- **Type:** debt · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** font links in frontend/index.html (lines ~13-20)
+- **Problem:** The SPA shell served at /share/<token> loads fonts from Google, so a guest's browser contacts a third party. Referrer-Policy no-referrer keeps the token out of those requests.
+- **Why deferred / fix direction:** Self-host the fonts; deferred because it changes the whole app shell.
+- **Source:** snapshot line 2350, section "Collaboration & sharing, Phase 6 ("Guest links") — deferred findings (2026-09-30)"
+
+### ISS-011 · P3 · Remaining port-review hardening: GCM tag length, iTop webhook limit, key rotation
+
+- **Type:** debt · **Found:** 2026-10-09 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** open() in backend/src/lib/secretBox.ts (line ~53); allCallsAt in backend/src/routes/webhook.ts (line ~46)
+- **Problem:** Three bullets remain: decipher.setAuthTag is used without authTagLength, so a truncated tag is accepted; the iTop webhook rate limit is one global window, so a flood can starve genuine calls; SECRETS_KEY rotation invalidates all stored tokens.
+- **Why deferred / fix direction:** Pass authTagLength and check tag length; key the iTop limiter per IP as the Outline one is; add a key id to the sealed format if rotation is needed.
+- **Source:** snapshot line 2361, section "Internal sync — deferred findings (2026-10-09)"
+
+### ISS-012 · P3 · Any project:write user can set the Outline link of an unowned customer
+
+- **Type:** bug · **Found:** 2026-10-09 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** PATCH /customers/:id in backend/src/routes/customers.ts (line ~582)
+- **Problem:** outlineUrl is set under the same gate as name and description (project:write plus visibility), so for a customer with no TAM any such user can point its link at any http/https URL.
+- **Why deferred / fix direction:** Deferred with name and description; gate all three on ownership together.
+- **Source:** snapshot line 2377, section "Outline links, Phase A — deferred findings (2026-10-09)"
+
+### ISS-013 · P3 · Outline email is not re-checked on token refresh
+
+- **Type:** watch · **Found:** 2026-10-09 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** refresh path in backend/src/lib/outline/tokens.ts; callback in backend/src/routes/outline.ts
+- **Problem:** A user whose Outline email changes later keeps a working grant under the old match until they reconnect. Re-checking on every refresh would spend the shared per-IP rate budget.
+- **Why deferred / fix direction:** Accepted risk; trigger: Outline reports email changes, then re-check at low frequency.
+- **Source:** snapshot line 2382, section "Outline B+C — deferred findings (2026-10-09)"
+
+### ISS-014 · P3 · React Router 6 has two advisories fixed only in v7
+
+- **Type:** debt · **Found:** 2026-10-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** react-router-dom in frontend/package.json (line ~34)
+- **Problem:** Two advisories remain in audit output. The redirect one is blocked by safeRedirect.ts and the SSR one needs a data router the app does not use.
+- **Why deferred / fix direction:** The v7 upgrade is its own change.
+- **Source:** snapshot line 2422, section "Dependency advisories — remaining (2026-10-25)"
+
+### ISS-015 · P3 · uuid advisory inside exceljs is not reachable
+
+- **Type:** watch · **Found:** 2026-10-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** uuid inside exceljs, loaded by the Gantt Excel export
+- **Problem:** The advisory needs v3/v5/v6 with a caller-supplied buffer; exceljs calls only v4(). npm's suggested downgrade is wrong.
+- **Why deferred / fix direction:** Trigger: an exceljs release that bumps uuid. Do not apply npm's suggested downgrade.
+- **Source:** snapshot line 2423, section "Dependency advisories — remaining (2026-10-25)"
+
+### ISS-016 · P3 · Webhook replay set and Refresh throttle are per process
+
+- **Type:** watch · **Found:** 2026-10-26 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** seen in backend/src/lib/outline/webhookSignature.ts (line ~15); REFRESH_* in backend/src/routes/itop.ts (line ~442)
+- **Problem:** Each backend instance keeps its own state, so a captured webhook can be replayed once per instance and the throttle allows one pull per instance.
+- **Why deferred / fix direction:** Trigger: running more than one backend instance. Then move both to shared storage.
+- **Source:** snapshot line 2429, section "iTop and Outline hardening — deferred findings (2026-10-26)"
+
+### ISS-017 · P3 · Creating a customer with a hidden customer's name answers 409
+
+- **Type:** bug · **Found:** 2026-10-26 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** POST / in backend/src/routes/customers.ts (line ~484)
+- **Problem:** A TAM can learn that a customer name exists by getting 409 instead of 201, even for customers they cannot see.
+- **Why deferred / fix direction:** Deferred. Accept as a product trade-off or scope uniqueness by visibility.
+- **Source:** snapshot line 2434, section "iTop and Outline hardening — deferred findings (2026-10-26)"
+
+## Open — Data & performance
+
+### ISS-018 · P2 · GET /users returns every user with no pagination
+
+- **Type:** debt · **Found:** 2026-07-27 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** usersRouter.get('/') in backend/src/routes/users.ts (line ~14)
+- **Problem:** The endpoint lists all users. Pickers render each as an option, which already broke an e2e role query and will not scale.
+- **Why deferred / fix direction:** Paginate or add a search filter; the pickers then need a search-as-you-type mode.
+- **Source:** snapshot line 594, section "Kanban → ReUI swap — deferred findings (2026-07-27)"
+
+### ISS-019 · P3 · ensureTaskVisible adds a second DB round-trip to task mutations
+
+- **Type:** watch · **Found:** 2026-07-15 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** ensureTaskVisible in backend/src/lib/visibility.ts (line ~125)
+- **Problem:** Each task mutation first runs a visibility lookup, then the write. The visibility filter cannot be folded into a Prisma update's unique where.
+- **Why deferred / fix direction:** Trigger: profiling shows the sub-200ms NFR missed. Then try updateMany with a returned-row check.
+- **Source:** snapshot line 347, section "Tech debt / follow-ups from recent work"
+
+### ISS-020 · P3 · Section default color hex is duplicated between schema and frontend
+
+- **Type:** debt · **Found:** 2026-07-22 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** DEFAULT_SECTION_COLOR in frontend/src/lib/gantt/palette.ts (line 32); Section.color in backend/prisma/schema.prisma (line ~622)
+- **Problem:** The slate default exists in the schema and in the frontend constant, and resolveSectionColors compares against it. Changing one without the other stops uncustomized sections being recognised.
+- **Why deferred / fix direction:** Export one shared constant, or add an isCustom boolean on Section.
+- **Source:** snapshot line 419, section "Tech debt / follow-ups from recent work"
+
+### ISS-021 · P3 · Task reorder repack issues one UPDATE per displaced sibling
+
+- **Type:** watch · **Found:** 2026-07-22 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** insertAt and closeGap in backend/src/lib/taskOrdering.ts (line ~49, ~83)
+- **Problem:** A reorder updates each displaced sibling in turn, about 200 round-trips on a 200-task project. A calm host measured 0.196s, inside the 200ms NFR; a loaded host measured 0.20-0.47s.
+- **Why deferred / fix direction:** Trigger: reorder feels slow in real use. Then batch the repack into one UPDATE ... FROM (VALUES ...).
+- **Source:** snapshot line 516, section "Verification debt"
+
+### ISS-022 · P3 · Admin Project Overrides renders every user as an option in every row
+
+- **Type:** watch · **Found:** 2026-08-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** tamCandidates.map in the reassign cell of frontend/src/pages/Admin.tsx (line ~1672)
+- **Problem:** Each project row renders a select with one option per active user, and the grid is not paginated. This is fine at small scale and grows with users times projects.
+- **Why deferred / fix direction:** Filter or virtualise the candidate list if the user count grows large.
+- **Source:** snapshot line 1459, section "Issues Sweep #1 — residuals (2026-08-02)"
+
+### ISS-023 · P3 · GET /notes/recent has no noteDate-leading index
+
+- **Type:** watch · **Found:** 2026-08-31 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** GET /notes/recent in backend/src/routes/notes.ts; indexes at backend/prisma/schema.prisma (lines 728, 748)
+- **Problem:** The route filters both note tables by noteDate alone, so Postgres plans a seq scan plus sort. At current volume this stays in single-digit milliseconds.
+- **Why deferred / fix direction:** Add @@index([noteDate]) to both models via a migration when volume warrants it.
+- **Source:** snapshot line 1736, section "Daily Review collapse & Recent notes — deferred findings (2026-08-31)"
+
+### ISS-024 · P3 · A project tab chunk starts loading only after the project data arrives
+
+- **Type:** debt · **Found:** 2026-10-24 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** ProjectDetail early return in frontend/src/pages/ProjectDetail.tsx (line ~143)
+- **Problem:** The tab's lazy import() is not requested until useProject resolves. A cold load without the service worker runs three loads in sequence, with up to three skeletons.
+- **Why deferred / fix direction:** Start the active tab's import() early, from ProjectIndexRedirect or the tab links' hover.
+- **Source:** snapshot line 2405, section "Code splitting — deferred findings (2026-10-24)"
+
+### ISS-025 · P3 · Project-deletion activity records are never shown or cleaned up
+
+- **Type:** debt · **Found:** 2026-10-26 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** tx.customerActivityEvent.createMany in backend/src/routes/projects.ts (line ~565)
+- **Problem:** customer_activity_events rows appear nowhere in the UI and the 180-day cleanup skips them. Customer owner changes are only a log line.
+- **Why deferred / fix direction:** Show them on the customer, add them to the cleanup, and record owner changes.
+- **Source:** snapshot line 2438, section "Data integrity, session and query performance — deferred findings (2026-10-26)"
+
+### ISS-026 · P3 · Tasks page offset paging can repeat or skip a row
+
+- **Type:** watch · **Found:** 2026-10-26 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** GET /tasks offset in backend/src/routes/tasks.ts (line ~331)
+- **Problem:** A concurrent insert or delete can repeat or skip a row across Load more pages. The order itself is stable.
+- **Why deferred / fix direction:** Normal offset trade-off. Trigger: user reports. Then use cursor paging.
+- **Source:** snapshot line 2440, section "Data integrity, session and query performance — deferred findings (2026-10-26)"
+
+## Open — Backend/API
+
+### ISS-027 · P2 · Deleting a task leaves sparse positions in its sibling list
+
+- **Type:** bug · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** DELETE /:id handler in backend/src/routes/tasks.ts (line ~632)
+- **Problem:** The delete route does not close the gap, so positions go sparse. Any move that treats a stored position as an index is exposed.
+- **Why deferred / fix direction:** Call closeGap inside the delete transaction.
+- **Source:** snapshot line 1852, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
+
+### ISS-028 · P2 · PATCH /tasks/:id accepts a due date before the start date
+
+- **Type:** bug · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** PATCH /tasks/:id handler in backend/src/routes/tasks.ts (line ~549)
+- **Problem:** The panel sends only the changed date, so merging with another user's later edit can store due before start. The server has no start <= due check; only the edit form validates.
+- **Why deferred / fix direction:** Add a server-side check against the merged result (reject or clamp).
+- **Source:** snapshot line 2335, section "Collaboration & sharing, Phase 3 ("Conflict warning") — deferred findings (2026-09-30)"
+
+### ISS-029 · P3 · Inactive users can still be set as TAM, assignee or epic owner
+
+- **Type:** decision · **Found:** 2026-10-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** assertUserExists in backend/src/lib/userRefs.ts (line ~12)
+- **Problem:** The create and update paths check that the user exists but not that the user is active. An inactive user can become a TAM, assignee or epic owner.
+- **Why deferred / fix direction:** Question: reject inactive users (with which error code) or keep accepting them?.
+- **Source:** snapshot line 53, section "Known bugs / inconsistencies"
+
+### ISS-030 · P3 · NUL-byte (22021) errors return 400 without a log line
+
+- **Type:** bug · **Found:** 2026-11-18 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** errorHandler 22021 branch in backend/src/http/errors.ts (line ~111)
+- **Problem:** A Postgres 22021 that skips validate() answers 400 and logs nothing, where the old 500 logged at error. The message also blames the caller when the NUL came from elsewhere.
+- **Why deferred / fix direction:** Log logger.warn({ pgCode }, ...) without err (it carries row data) and use a neutral message.
+- **Source:** snapshot line 60, section "Known bugs / inconsistencies"
+
+### ISS-031 · P3 · Task attachments are not built; storage and visibility are undecided
+
+- **Type:** decision · **Found:** 2026-07-01 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** Task model in backend/prisma/schema.prisma (no attachment model)
+- **Problem:** Solvro has no attachments on tasks or customers. Storage, size limits and export visibility have not been decided.
+- **Why deferred / fix direction:** Question: build attachments, and if so where do files live, what size limit applies, and are they exported?.
+- **Source:** snapshot line 289, section "Pending features (not yet built)"
+
+### ISS-032 · P3 · Daily Review, search and portfolio task selects omit isCriticalPath
+
+- **Type:** watch · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** task selects in backend/src/routes/search.ts, backend/src/lib/portfolio.ts and backend/src/routes/dailyReview.ts
+- **Problem:** These queries do not select isCriticalPath, so the mark cannot appear there. None of those surfaces render task flags today.
+- **Why deferred / fix direction:** Widen the selects if the mark is ever surfaced there.
+- **Source:** snapshot line 1791, section "Critical Path mark — deferred findings (2026-09-02)"
+
+### ISS-033 · P3 · CORS does not expose X-Total-Count
+
+- **Type:** debt · **Found:** 2026-09-29 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** cors({...}) in backend/src/app.ts (line ~57)
+- **Problem:** Cross-origin callers cannot read the X-Total-Count header that GET /tasks sets. The app is unaffected through the same-origin /api proxy.
+- **Why deferred / fix direction:** Add exposedHeaders: ['X-Total-Count'] if the API is ever called cross-origin.
+- **Source:** snapshot line 2323, section "Professional UI pass — deferred findings (2026-09-29)"
+
+### ISS-034 · P3 · Rate limiter counters are per backend instance
+
+- **Type:** watch · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** createRateLimiter in backend/src/http/rateLimit.ts
+- **Problem:** Counters live in memory per instance and reset on restart, so the effective limit multiplies with more than one backend instance.
+- **Why deferred / fix direction:** Trigger: scaling the backend beyond one instance; then add a shared store.
+- **Source:** snapshot line 2352, section "Collaboration & sharing, Phase 6 ("Guest links") — deferred findings (2026-09-30)"; merged duplicates at snapshot lines 2439
+
+### ISS-035 · P3 · Changing an Outline link leaves no activity event
+
+- **Type:** decision · **Found:** 2026-10-09 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** PATCH /projects/:id in backend/src/routes/projects.ts (line ~478)
+- **Problem:** outlineUrl edits on a project or customer are not recorded, consistent with description edits.
+- **Why deferred / fix direction:** Decide whether an audit trail for links is wanted; if yes, add it to the project diff.
+- **Source:** snapshot line 2376, section "Outline links, Phase A — deferred findings (2026-10-09)"; merged duplicates at snapshot lines 2383
+
+### ISS-036 · P3 · Section and epic delete can deadlock with a concurrent task reorder
+
+- **Type:** bug · **Found:** 2026-10-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** sectionsRouter.delete in backend/src/routes/sections.ts (line ~255); epicsRouter.delete in backend/src/routes/epics.ts (line ~198)
+- **Problem:** Both deletes null Task.sectionId/epicId through SetNull without taking the project order lock. A concurrent reorder can deadlock, and the user gets a retryable 409.
+- **Why deferred / fix direction:** Take lockProjectOrder for the task list at the start of both deletes.
+- **Source:** snapshot line 2412, section "Backend concurrency and roles — deferred findings (2026-10-25)"
+
+## Open — Frontend UI
+
+### ISS-037 · P2 · Create-task parent picker lists subtasks the server rejects
+
+- **Type:** bug · **Found:** 2026-08-03 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** possibleParents in frontend/src/components/TaskFormModal.tsx (line ~196)
+- **Problem:** In create mode the filter short-circuits to true, so subtasks appear as parent options. Picking one returns a 400 from the max-depth guard.
+- **Why deferred / fix direction:** Apply the parentTaskId === null filter in both edit and create mode.
+- **Source:** snapshot line 1491, section "Gantt visual refresh — deferred findings (2026-08-03)"
+
+### ISS-038 · P3 · Service-mapping mutations are not optimistic
+
+- **Type:** debt · **Found:** 2026-07-15 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** useUpdateProjectServices and useUpdateCustomerServices in frontend/src/lib/queries.ts (line ~1730, ~1745)
+- **Problem:** Both hooks only invalidate on success. The checkboxes and chips disable while saving, so it is correct but not instant.
+- **Why deferred / fix direction:** Add onMutate snapshot, optimistic services[] patch, onError rollback and onSettled invalidate to both hooks together.
+- **Source:** snapshot line 335, section "Tech debt / follow-ups from recent work"
+
+### ISS-039 · P3 · Inactive services can still be assigned to customers and projects
+
+- **Type:** decision · **Found:** 2026-07-15 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** ServiceMappingList in frontend/src/components/services/ServiceMappingList.tsx (line ~168-195)
+- **Problem:** The mapping picker shows deactivated services dimmed but still toggleable. The project tab's 'Add all subscribed' also carries inactive legacy subscriptions over.
+- **Why deferred / fix direction:** Question: should active: false block new assignments?.
+- **Source:** snapshot line 342, section "Tech debt / follow-ups from recent work"
+
+### ISS-040 · P3 · Uncustomized sections show slate outside the Gantt
+
+- **Type:** bug · **Found:** 2026-07-22 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** section.color use in frontend/src/pages/views/ProjectList.tsx (line ~767), pages/Executive.tsx (~318), components/TaskPanel.tsx (~734)
+- **Problem:** Sections with the default color render vivid presets in the Gantt but legacy slate in the List tab, Executive chips and the task panel dot.
+- **Why deferred / fix direction:** Reuse resolveSectionColors from lib/gantt/palette.ts in those three places, or apply the fallback server-side.
+- **Source:** snapshot line 410, section "Tech debt / follow-ups from recent work"
+
+### ISS-041 · P3 · Duplicate label name shows 'Unique constraint violated'
+
+- **Type:** bug · **Found:** 2026-07-24 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** label create in backend/src/routes/projects.ts (line ~1311); error render in frontend/src/components/LabelPicker.tsx (line ~147)
+- **Problem:** Creating a label with an existing name returns a generic 409 and the picker shows its message verbatim. The user sees a database term.
+- **Why deferred / fix direction:** Catch P2002 in the label route with a clear message such as 'A label with that name already exists'.
+- **Source:** snapshot line 531, section "Gantt GH #58 deferred findings (2026-07-24)"
+
+### ISS-042 · P3 · Comment composer is a single-line input
+
+- **Type:** debt · **Found:** 2026-07-24 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** CommentComposer in frontend/src/components/CommentMentions.tsx (line ~143)
+- **Problem:** The task panel comment box is a one-line input that scrolls sideways for long comments.
+- **Why deferred / fix direction:** Replace with an auto-growing textarea.
+- **Source:** snapshot line 533, section "Gantt GH #58 deferred findings (2026-07-24)"
+
+### ISS-043 · P3 · Popovers near scroll-area bottoms can clip
+
+- **Type:** watch · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** List row dropdowns, Kanban column menu, Risks selects (frontend/src/pages/views/ProjectList.tsx, ProjectKanban.tsx, ProjectRisks.tsx)
+- **Problem:** Absolute-positioned popovers inside the internally scrolling containers can clip at the bottom edge instead of flipping.
+- **Why deferred / fix direction:** Trigger: a user reports clipping. Then move the popovers to a portal with flip logic.
+- **Source:** snapshot line 544, section "Plan B Task 9 deferred findings — ReUI Gantt swap (2026-07-25)"
+
+### ISS-044 · P3 · PWA manifest declares only a 512px maskable icon
+
+- **Type:** debt · **Found:** 2026-07-26 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** icons array in frontend/vite.config.ts (line ~47)
+- **Problem:** Low-DPI Android launchers downscale the 512 maskable icon instead of getting a 192 one.
+- **Why deferred / fix direction:** Generate icon-maskable-192.png and add a manifest entry.
+- **Source:** snapshot line 573, section "PWA icon regeneration — deferred findings (2026-07-25/26)"
+
+### ISS-045 · P3 · Subtask promote and re-parent only exist in the task modal
+
+- **Type:** watch · **Found:** 2026-07-27 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** TaskPanel.tsx (no parent control); Parent field in TaskFormModal.tsx
+- **Problem:** Promoting or re-parenting a subtask needs the modal. No Promote shortcut was built after the dogfood window.
+- **Why deferred / fix direction:** Trigger: users report the modal round-trip as friction.
+- **Source:** snapshot line 613, section "Kanban → ReUI swap — deferred findings (2026-07-27)"
+
+### ISS-046 · P3 · Subtask DONE checkbox in the task modal ignores canEdit
+
+- **Type:** bug · **Found:** 2026-07-27 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** subtask checkbox in frontend/src/components/TaskFormModal.tsx (line ~666)
+- **Problem:** A user without task:write can click the checkbox, though the server rejects the PATCH. The up/down arrows are gated.
+- **Why deferred / fix direction:** Add disabled={!canEdit} to the checkbox.
+- **Source:** snapshot line 630, section "Kanban → ReUI swap — deferred findings (2026-07-27)"
+
+### ISS-047 · P3 · Command palette has dead classes and a hardcoded Mac shortcut glyph
+
+- **Type:** debt · **Found:** 2026-07-27 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** row className in frontend/src/components/CommandPalette.tsx (line ~345); ⌘K in frontend/src/components/layout/TopBar.tsx (line ~189)
+- **Problem:** A highlight class is overpainted by the vendored ::before, the row radius disagrees by 2px, and TopBar always shows the ⌘K glyph for Windows and Linux users too.
+- **Why deferred / fix direction:** Delete the dead class, align the radius, show Ctrl K off macOS. The trigger hover item is already fixed.
+- **Source:** snapshot line 735, section "Global search & ⌘K command palette — deferred findings (2026-07-27)"
+
+### ISS-048 · P3 · Dropdown submenu cannot outrank a modal host
+
+- **Type:** debt · **Found:** 2026-07-28 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** DropdownMenuSubContent in frontend/src/components/ui/dropdown-menu.tsx (line ~262)
+- **Problem:** The submenu Popup carries z-50 on a Positioner with its own stacking context, so it cannot rise above a Modal or Drawer. Tooltip and the main menu content were fixed.
+- **Why deferred / fix direction:** Pass positionerClassName through when a submenu is needed inside a modal.
+- **Source:** snapshot line 815, section "ReUI DateField swap — deferred findings (2026-07-28)"
+
+### ISS-049 · P3 · SectionReorderModal relies on its caller for the permission gate
+
+- **Type:** debt · **Found:** 2026-07-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** frontend/src/components/SectionReorderModal.tsx (whole file); mount in frontend/src/pages/views/ProjectList.tsx (line ~668)
+- **Problem:** The modal checks nothing itself and relies on the entry button's gate. A second entry point would inherit no protection.
+- **Why deferred / fix direction:** Add a canEdit check inside the modal.
+- **Source:** snapshot line 1109, section "Sortable reorder (sections + subtasks) — deferred findings (2026-07-30)"
+
+### ISS-050 · P3 · Filter submenu highlight follows the pointer
+
+- **Type:** watch · **Found:** 2026-07-31 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** filters submenu in frontend/src/components/reui/filters.tsx
+- **Problem:** The row under the cursor wins the initial highlight, so a blind Enter can pick an unexpected row.
+- **Why deferred / fix direction:** Accepted upstream behaviour; revisit only if keyboard users report it.
+- **Source:** snapshot line 1264, section "ReUI Filters phase — deferred findings (2026-07-31)"
+
+### ISS-051 · P3 · Filter toolbar mixes three text sizes
+
+- **Type:** decision · **Found:** 2026-07-31 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** migrated filter rows in frontend/src/components/reui/filters.tsx and the filter toolbars
+- **Problem:** Chip labels, checkbox rows and the Reset control use 15, 13 and 12px.
+- **Why deferred / fix direction:** Question: keep the mixed scale or match the old uniform 12-13px density?.
+- **Source:** snapshot line 1288, section "ReUI Filters phase — deferred findings (2026-07-31)"
+
+### ISS-052 · P3 · Data-grid column controls ignore right-aligned headers
+
+- **Type:** watch · **Found:** 2026-08-01 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** hasControls branch in frontend/src/components/reui/data-grid/data-grid-column-header.tsx (lines ~436-440)
+- **Problem:** The move/pin/visibility branch skips the right-align treatment. No shipped grid reaches it.
+- **Why deferred / fix direction:** Trigger: a column pairs hasControls with a right-aligned header. Then apply the alignEnd treatment.
+- **Source:** snapshot line 1333, section "ReUI Data Grid phase — deferred findings (2026-08-01)"
+
+### ISS-053 · P3 · Sortable data-grid headers cannot be centered
+
+- **Type:** debt · **Found:** 2026-08-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** alignEnd in frontend/src/components/reui/data-grid/data-grid-column-header.tsx (line ~107); Risks columns in frontend/src/pages/views/ProjectRisks.tsx
+- **Problem:** The Probability and Impact columns stay unsortable so their headers can stay centered.
+- **Why deferred / fix direction:** Add alignCenter handling in the vendored header, then enable sorting.
+- **Source:** snapshot line 1425, section "Issues Sweep #1 — residuals (2026-08-02)"
+
+### ISS-054 · P3 · Filter dedupe guard compares values with === (object values would not dedupe)
+
+- **Type:** watch · **Found:** 2026-08-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** findFilterMatch in frontend/src/components/reui/filters.tsx (line ~2330)
+- **Problem:** The duplicate-chip guard uses === to compare filter values. Every current filter field is string-valued, so nothing is affected today.
+- **Why deferred / fix direction:** Compare by value if a consumer adds object-valued filter options.
+- **Source:** snapshot line 1445, section "Issues Sweep #1 — residuals (2026-08-02)"
+
+### ISS-055 · P3 · ProjectRisks probability and impact cells use hand-rolled selects
+
+- **Type:** debt · **Found:** 2026-08-29 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** probability/impact <select> in frontend/src/pages/views/ProjectRisks.tsx (lines ~378, ~409)
+- **Problem:** The inline risk-scale editors use plain selects while newer surfaces use the vendored ui/select.
+- **Why deferred / fix direction:** Move them to ui/select the next time the file is touched.
+- **Source:** snapshot line 1705, section "Daily Review v2 — deferred findings (2026-08-29)"
+
+### ISS-056 · P3 · Material Symbols glyphs ignore text-[Npx] utilities app-wide
+
+- **Type:** decision · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** material-symbols-outlined rule in frontend/src/index.css (line ~347); overrides in frontend/src/components/CriticalPathMark.tsx (lines 34, 63)
+- **Problem:** Google's unlayered font-size: 24px beats Tailwind's layered utilities, so every icon renders 24px. Critical Path works around it with !important.
+- **Why deferred / fix direction:** Re-declare the font-size inside a Tailwind layer; it changes every icon, so it needs a user decision.
+- **Source:** snapshot line 1759, section "Critical Path mark — deferred findings (2026-09-02)"
+
+### ISS-057 · P3 · CriticalPathMark padding override breaks silently if Chip gains a wrapper
+
+- **Type:** watch · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** [&>span]:px-1.5 in frontend/src/components/CriticalPathMark.tsx (line 56)
+- **Problem:** The compact chip reaches into Chip's root span with a child selector. A wrapper element would silently drop the padding.
+- **Why deferred / fix direction:** When Chip's markup changes, grep the selector and retarget the new root.
+- **Source:** snapshot line 1783, section "Critical Path mark — deferred findings (2026-09-02)"
+
+### ISS-058 · P3 · Tasks grid and kanban subtask rows show no Critical Path mark
+
+- **Type:** debt · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** PriorityBadge cell in frontend/src/pages/Tasks.tsx (line 316); SubtaskRow in frontend/src/components/kanban-v2/cards.tsx (line 243)
+- **Problem:** Two task surfaces omit the mark that every other covered surface shows.
+- **Why deferred / fix direction:** Add CriticalPathMark beside the priority indicator if either surface is revisited.
+- **Source:** snapshot line 1798, section "Critical Path mark — deferred findings (2026-09-02)"
+
+### ISS-059 · P3 · TaskPanel header-menu errors appear below the subtasks list
+
+- **Type:** bug · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** error Alert in frontend/src/components/TaskPanel.tsx (line ~1027)
+- **Problem:** A failed Delete or Duplicate task writes its error below the subtasks, off-screen on a task with many subtasks, so the user sees no feedback.
+- **Why deferred / fix direction:** Render the alert at the top of the scroll container or scroll to it.
+- **Source:** snapshot line 1835, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
+
+### ISS-060 · P3 · Creating a task leaves Daily Review attention lists stale
+
+- **Type:** bug · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** useCreateTask in frontend/src/lib/queries.ts (line ~2162)
+- **Problem:** Creating an overdue TODO task does not invalidate the Daily Review query, so its attention lists stay stale until staleTime elapses.
+- **Why deferred / fix direction:** Add the dailyReviewRoot invalidation like the sibling mutations.
+- **Source:** snapshot line 1844, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
+
+### ISS-061 · P3 · Section header actions show for task:write but the routes need project:write
+
+- **Type:** bug · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** canEdit in frontend/src/pages/views/ProjectList.tsx (line 128); routes in backend/src/routes/sections.ts
+- **Problem:** A custom role with task:write only sees the section buttons and gets a 403 in the action error alert. Seeded roles never split the two.
+- **Why deferred / fix direction:** Gate the section actions on project:write.
+- **Source:** snapshot line 1874, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
+
+### ISS-062 · P3 · Duplicate mutations wait on inactive-query invalidations
+
+- **Type:** watch · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** useDuplicateTask and useDuplicateSection onSuccess in frontend/src/lib/queries.ts (lines ~2195, ~2368)
+- **Problem:** isPending also waits on inactive queries. The cost is near zero because inactive queries refetch lazily.
+- **Why deferred / fix direction:** Await only projectTasks and fire the rest if latency ever shows.
+- **Source:** snapshot line 1894, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
+
+### ISS-063 · P3 · Sync modals' missing-title error does not point to the card
+
+- **Type:** debt · **Found:** 2026-09-10 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** setError in frontend/src/components/daily-review/MidweekSyncModal.tsx (line 171) and ReflectionSyncModal.tsx (line 202)
+- **Problem:** The banner at the top of the form says a title is missing but not which card. The Reflection card is tall, so users must scan every card.
+- **Why deferred / fix direction:** Mark or focus the offending card when save is blocked.
+- **Source:** snapshot line 1939, section "Weekly Sync achievement rows — deferred findings (2026-09-10)"
+
+### ISS-064 · P3 · CustomerDetail ignores itopOrgId/itopOrgName the API already returns
+
+- **Type:** debt · **Found:** 2026-09-22 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** CustomerDetail type in frontend/src/lib/queries.ts; comment in frontend/src/pages/CustomerDetail.tsx (lines 49-52)
+- **Problem:** The backend returns both fields, but the frontend does not type or use them and instead derives the mapped state from the tickets endpoint. The in-file comment wrongly blames a select.
+- **Why deferred / fix direction:** Type the fields and fix the comment, or trim the response with a real select.
+- **Source:** snapshot line 1984, section "iTop integration Phase 1 — deferred findings (2026-09-22)"
+
+### ISS-065 · P3 · useItopTicket weekly hours can be stale after a timezone change
+
+- **Type:** watch · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** useItopTicket in frontend/src/lib/queries.ts (line ~3538)
+- **Problem:** utcOffsetMinutes is sent on the request but is not part of queryKeys.itopTicket, so the 'x h this week' figure stays stale until staleTime elapses after a DST or timezone change. The omission is deliberate because other hooks write to the same key.
+- **Why deferred / fix direction:** Accepted: revisit only if stale weekly hours are reported; folding the offset into the key would also require updating the other hooks' cache writes.
+- **Source:** snapshot line 2274, section "iTop integration Phase 7 — deferred findings (2026-09-23)"
+
+### ISS-066 · P3 · TaskPanel spins forever when the project-tasks fetch fails
+
+- **Type:** bug · **Found:** 2026-09-29 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** TaskPanel in frontend/src/components/TaskPanel.tsx (lines ~110, ~262)
+- **Problem:** When the fetch errors, tasks stays undefined and the panel keeps showing 'Loading task…' with aria-busy instead of an error state.
+- **Why deferred / fix direction:** Read isError from useProjectTasks and render an error state with a retry.
+- **Source:** snapshot line 2329, section "Collaboration & sharing, Phase 1 ("Quick wins") — deferred findings (2026-09-29)"
+
+### ISS-067 · P3 · A hung task PATCH blocks every later save of that task
+
+- **Type:** bug · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** serialiseTaskWrite in frontend/src/lib/queries.ts (line ~1907); apiRequestWithHeaders in frontend/src/lib/api.ts (line ~68)
+- **Problem:** Task saves are chained per task and apiRequest has no timeout, so one hung request keeps later edits from being sent while optimistic values still show. The fetch eventually errors and the chain resumes.
+- **Why deferred / fix direction:** Add a request timeout (AbortSignal.timeout) to apiRequest; rare, so deferred.
+- **Source:** snapshot line 2334, section "Collaboration & sharing, Phase 3 ("Conflict warning") — deferred findings (2026-09-30)"
+
+### ISS-068 · P3 · /tasks Filters popover briefly pulls focus back after Escape
+
+- **Type:** watch · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** Filters popover on /tasks (vendored filters component)
+- **Problem:** After choosing a filter and pressing Escape, the popover's focus manager briefly returns focus to its search input, so a fast user can type into it instead of the task form. Only CI on the production build hit it.
+- **Why deferred / fix direction:** Trigger: a user report or a new CI failure; then investigate the vendored component.
+- **Source:** snapshot line 2339, section "Collaboration & sharing, Phase 3 ("Conflict warning") — deferred findings (2026-09-30)"
+
+### ISS-069 · P3 · Mention chips fall back to plain text for removed members
+
+- **Type:** watch · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** frontend/src/components/CommentMentions.tsx
+- **Problem:** Comments store user ids only, so a mentioned person later removed from the project, or a view-all user, renders as plain @name text instead of a chip.
+- **Why deferred / fix direction:** Accepted limitation; revisit only if the server begins returning resolved mention names.
+- **Source:** snapshot line 2343, section "Collaboration & sharing, Phase 4 ("Activity and notifications") — deferred findings (2026-09-30)"
+
+### ISS-070 · P3 · Arbitrary text-[12px]/[13px] sizes remain in six files
+
+- **Type:** debt · **Found:** 2026-10-09 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** text-[12px]/text-[13px] in frontend/src/pages/Admin.tsx, TaskPanel.tsx, EpicPanel.tsx, ServiceMappingList.tsx, kanban-v2/cards.tsx, CriticalPathMark.tsx
+- **Problem:** Arbitrary pixel text sizes still bypass the type scale in six files; the Gantt toolbar, uppercase headings and Settings banner items from the original entry are already clean.
+- **Why deferred / fix direction:** Replace with scale classes during the next pass over those files.
+- **Source:** snapshot line 2369, section "Internal sync — deferred findings (2026-10-09)"
+
+### ISS-071 · P3 · Role changes reach the UI up to 30 seconds late
+
+- **Type:** watch · **Found:** 2026-10-09 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** REFRESH_THROTTLE_MS in frontend/src/lib/auth.tsx (line ~133)
+- **Problem:** The client refreshes /auth/me on focus and after a 403, throttled to once per 30 seconds, so a demoted user may see stale controls; the server already enforces the new role.
+- **Why deferred / fix direction:** Accepted: UI-only lag. Revisit only if the throttle becomes a complaint.
+- **Source:** snapshot line 2372, section "Internal sync — deferred findings (2026-10-09)"
+
+### ISS-072 · P3 · Active project tab can be off-screen on narrow phones
+
+- **Type:** bug · **Found:** 2026-10-10 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** tab nav in frontend/src/pages/ProjectDetail.tsx (line ~322)
+- **Problem:** Opening a tab such as /docs directly on a 390px screen leaves the active tab hidden to the right because the strip never scrolls it into view.
+- **Why deferred / fix direction:** Call scrollIntoView({ inline: 'nearest' }) on the active tab after navigation.
+- **Source:** snapshot line 2384, section "Outline B+C — deferred findings (2026-10-09)"
+
+### ISS-073 · P3 · Portfolio timeline hides the Today line on phones
+
+- **Type:** debt · **Found:** 2026-10-26 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** showTodayLine overlay in frontend/src/components/portfolio/PortfolioCalendar.tsx (line ~177)
+- **Problem:** The dashed Today line is hidden below 768 px because it would cross the stacked project labels. Phone users get no Today marker.
+- **Why deferred / fix direction:** Draw the line over the year track only on phones.
+- **Source:** snapshot line 2399, section "Frontend usability — deferred findings (2026-10-26)"
+
+### ISS-074 · P3 · AuthLoading shows plain text instead of a delayed skeleton
+
+- **Type:** debt · **Found:** 2026-10-24 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** AuthLoading in frontend/src/components/AuthGuard.tsx (line ~28)
+- **Problem:** AuthLoading renders centered 'Loading…' text, against the DESIGN.md rule for delayed skeleton loading states.
+- **Why deferred / fix direction:** Use PageLoading or another delayed skeleton.
+- **Source:** snapshot line 2406, section "Code splitting — deferred findings (2026-10-24)"
+
+### ISS-075 · P3 · Utilization Refresh failure shows no error
+
+- **Type:** bug · **Found:** 2026-10-26 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** useRequestItopRefresh in frontend/src/pages/Utilization.tsx (line ~94)
+- **Problem:** When Refresh fails, for example with a 429 from the rate limits, nothing appears. The user sees no change.
+- **Why deferred / fix direction:** Show the error from the mutation, as the load error already does.
+- **Source:** snapshot line 2432, section "iTop and Outline hardening — deferred findings (2026-10-26)"
+
+### ISS-076 · P3 · Admin role select shows raw uppercase role values
+
+- **Type:** debt · **Found:** 2026-11-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** role select in frontend/src/pages/Admin.tsx (line ~252)
+- **Problem:** The role control uses uppercase caps text and raw enum values, against DESIGN.md. A nearby comment says font-bold stays but none is present.
+- **Why deferred / fix direction:** Use labels.ts words in sentence case and fix the comment.
+- **Source:** snapshot line 2449, section "Design compliance fixes — deferred findings (2026-11-02)"
+
+### ISS-077 · P3 · Overview and Project Overview loaders are bare pulse blocks
+
+- **Type:** debt · **Found:** 2026-11-12 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** SkeletonGrid in frontend/src/pages/Overview.tsx (line ~457); loading strip in frontend/src/pages/views/ProjectOverview.tsx (line ~80)
+- **Problem:** The placeholders are plain animate-pulse blocks, where DESIGN.md asks for skeletons from components/skeletons shown after 150 ms.
+- **Why deferred / fix direction:** Move them onto the shared skeleton region.
+- **Source:** snapshot line 2454, section "Antislop port — deferred findings (2026-11-12)"
+
+## Open — Accessibility & tokens
+
+### ISS-078 · P2 · Keyboard drag does not work on the Kanban board
+
+- **Type:** bug · **Found:** 2026-07-27 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** KanbanItem and KanbanItemHandle in frontend/src/components/reui/kanban.tsx (lines ~796, ~838)
+- **Problem:** dnd-kit attributes land on the item wrapper but listeners only on the inner handle, which is not focusable. Mouse and touch drag work; keyboard drag does not.
+- **Why deferred / fix direction:** Needs a sanctioned SOLVRO PATCH (spine file) or an upstream report.
+- **Source:** snapshot line 582, section "Kanban → ReUI swap — deferred findings (2026-07-27)"
+
+### ISS-079 · P2 · Sortable rows are tab stops with role=button and a joined accessible name
+
+- **Type:** bug · **Found:** 2026-07-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** SortableItem in frontend/src/components/reui/sortable.tsx (line ~359)
+- **Problem:** dnd-kit attributes give every row role=button and tabIndex 0, even for read-only users with no handle. The row name joins its children's labels and a real button nests inside it.
+- **Why deferred / fix direction:** Move the drag attributes to the handle or add an explicit aria-label. reui/ is spine: needs a SOLVRO PATCH, a gates.sh counter bump and an instant review.
+- **Source:** snapshot line 1131, section "Sortable reorder (sections + subtasks) — deferred findings (2026-07-30)"; merged duplicates at snapshot lines 1520
+
+### ISS-080 · P2 · Light primary/10 chip tints still fall under 4.5:1
+
+- **Type:** bug · **Found:** 2026-10-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** primary/10 and primary/15 chips (CONTRAST_GAP in e2e/tests/axe.spec.ts line ~22)
+- **Problem:** The darker primary fixed text and hover pairs, but chip tints measure about 4.0-4.5:1 on surface containers, so axe leaves them out of the contrast pass.
+- **Why deferred / fix direction:** Pick a chip tint or text colour that clears 4.5:1, then remove CONTRAST_GAP from the spec in the same change.
+- **Source:** snapshot line 2391, section "Accessibility pass — deferred findings (2026-10-23)"
+
+### ISS-081 · P2 · Landmark, heading-order and nested-interactive axe gaps remain
+
+- **Type:** debt · **Found:** 2026-10-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** KNOWN_GAP_RULES in e2e/tests/axe.spec.ts (line ~21); SortableItem rows in frontend/src/components/TaskPanel.tsx
+- **Problem:** region, landmark-unique and heading-order are disabled in the axe scan. The TaskPanel subtask rows (handle and controls inside the row) are never scanned for nested-interactive.
+- **Why deferred / fix direction:** Fix the landmark and heading structure, drop those rules from KNOWN_GAP_RULES, and add a task-panel scan.
+- **Source:** snapshot line 2393, section "Accessibility pass — deferred findings (2026-10-23)"
+
+### ISS-082 · P2 · InstallBanner nests a role=button span inside a button
+
+- **Type:** bug · **Found:** 2026-11-12 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** dismiss span in frontend/src/components/InstallBanner.tsx (line ~86)
+- **Problem:** Interactive content inside a button is invalid and the dismiss control is not keyboard reachable.
+- **Why deferred / fix direction:** Use a sibling button, as the iOS-hint branch already does.
+- **Source:** snapshot line 2456, section "Antislop port — deferred findings (2026-11-12)"
+
+### ISS-083 · P3 · Sidebar nav text uses slate greys instead of the warm design grey
+
+- **Type:** debt · **Found:** 2026-07-20 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** nav item classes in frontend/src/components/layout/Sidebar.tsx (line ~42, ~123)
+- **Problem:** Inactive nav items use cool slate-* text instead of DESIGN.md's warm #888780. Contrast is fine; it is a tint mismatch.
+- **Why deferred / fix direction:** Add a small set of fixed always-dark text tokens, since the theme-flipping secondary token renders too dark on the rail.
+- **Source:** snapshot line 351, section "Tech debt / follow-ups from recent work"
+
+### ISS-084 · P3 · Favicon reads weakly on dark browser tab strips
+
+- **Type:** debt · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** favicon link in frontend/index.html (line 6); frontend/public/favicon.png
+- **Problem:** The favicon is the on-light mark; its arc ink is 2.38:1 against Chrome's dark tab background.
+- **Why deferred / fix direction:** Add an SVG favicon with a media query, or a second link with media prefers-color-scheme: dark pointing at the on-dark mark.
+- **Source:** snapshot line 366, section "Tech debt / follow-ups from recent work"
+
+### ISS-085 · P3 · Overview project id uses raw font-mono instead of a type token
+
+- **Type:** debt · **Found:** 2026-07-16 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** project id span in frontend/src/pages/Overview.tsx (line ~297)
+- **Problem:** The P- id uses raw font-mono. The other cited off-token styles (KPI tones, avatar palette, health hexes) are gone.
+- **Why deferred / fix direction:** Switch to the data-mono token (text-data-mono, index.css:107) in the next token pass.
+- **Source:** snapshot line 375, section "Tech debt / follow-ups from recent work"
+
+### ISS-086 · P3 · PortfolioCalendar uses rounded-full bars and raw font-mono
+
+- **Type:** debt · **Found:** 2026-07-16 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** PortfolioCalendar in frontend/src/components/portfolio/PortfolioCalendar.tsx (line ~118, ~272)
+- **Problem:** The timeline bar uses rounded-full, which the design reserves for pills and avatars. The year switcher uses raw font-mono.
+- **Why deferred / fix direction:** Fix once in the shared component; it serves both Executive and Overview.
+- **Source:** snapshot line 405, section "Tech debt / follow-ups from recent work"
+
+### ISS-087 · P3 · IconTile outline variant has no visible fill on the lowest dark surface
+
+- **Type:** watch · **Found:** 2026-07-31 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** outline variant in frontend/src/components/reui/icon-tile.tsx (line ~37)
+- **Problem:** On a surface equal to the background colour, only the dark:bg-input rule gives the tile a fill.
+- **Why deferred / fix direction:** Trigger: reusing the variant on a different surface. Check contrast there first.
+- **Source:** snapshot line 1198, section "ReUI Presentation Set — deferred findings (2026-07-31)"
+
+### ISS-088 · P3 · Badge solid tone variants have unusable contrast
+
+- **Type:** watch · **Found:** 2026-08-01 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** info, success, warning, destructive variants in frontend/src/components/reui/badge.tsx (lines ~31-52)
+- **Problem:** White text on solid tint fills gives about 1.2:1 contrast in dark mode. No component uses these variants and status chips stay on their own pair.
+- **Why deferred / fix direction:** Trigger: anyone wires a solid tone variant. Then pick a solid-fill token family first.
+- **Source:** snapshot line 1305, section "ReUI Data Grid phase — deferred findings (2026-08-01)"
+
+### ISS-089 · P3 · Gantt drag clone uses raw shadow-lg outside the elevation whitelist
+
+- **Type:** debt · **Found:** 2026-08-03 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** barEl.className in frontend/src/components/reui/gantt/gantt-dnd.tsx (line 310)
+- **Problem:** The vendored drag-clone element carries a raw shadow-lg that DESIGN.md's elevation rules do not allow, and it has no SOLVRO PATCH marker.
+- **Why deferred / fix direction:** Patch it with a marker; reui/ is spine, so it needs an instant review.
+- **Source:** snapshot line 1503, section "Gantt visual refresh — deferred findings (2026-08-03)"
+
+### ISS-090 · P3 · ConfirmModal warning tone uses raw bg-amber-500 instead of the chip-amber pair
+
+- **Type:** debt · **Found:** 2026-08-29 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** confirmClass in frontend/src/components/ConfirmModal.tsx (line ~27)
+- **Problem:** The warning confirm button hard-codes amber-500 with white text instead of the chip-amber token pair. Three delete-confirmation dialogs in Daily Review use it.
+- **Why deferred / fix direction:** Swap the warning branch to the chip-amber background and text tokens.
+- **Source:** snapshot line 1696, section "Daily Review v2 — deferred findings (2026-08-29)"; merged duplicates at snapshot lines 2450
+
+### ISS-091 · P3 · Older focus:border-primary pattern persists at about 70 sites
+
+- **Type:** debt · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** focus:border-primary across frontend/src (e.g. components/admin/ItopTab.tsx, components/itop/TaskTicketField.tsx)
+- **Problem:** DESIGN.md names one focus treatment and excludes border-primary, yet the older form still appears at about 70 sites and keeps spreading.
+- **Why deferred / fix direction:** Do one design-system sweep to align every site.
+- **Source:** snapshot line 2081, section "iTop integration Phase 4 — deferred findings (2026-09-23)"
+
+### ISS-092 · P3 · Dialog focus trap lets Tab escape from a tabIndex=-1 element
+
+- **Type:** bug · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** keydown handler in frontend/src/hooks/useDialogFocus.ts (line ~58)
+- **Problem:** Focus on a non-tabbable element such as a programmatically focused heading can Tab out of the dialog when nothing tabbable follows it. ProjectShare works around it locally.
+- **Why deferred / fix direction:** Handle focus outside the item list in the shared hook, then remove the local workaround.
+- **Source:** snapshot line 2354, section "Collaboration & sharing, Phase 6 ("Guest links") — deferred findings (2026-09-30)"
+
+### ISS-093 · P3 · usePanelFocus returns focus to the previous task's opener
+
+- **Type:** bug · **Found:** 2026-10-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** usePanelFocus in frontend/src/hooks/usePanelFocus.ts (line ~23)
+- **Problem:** When a click does not focus a button (Safari, Firefox on macOS), switching the panel from task A to B keeps A's opener, so closing B returns focus to A.
+- **Why deferred / fix direction:** Record the last focus outside the panel with a focusin listener.
+- **Source:** snapshot line 2394, section "Accessibility pass — deferred findings (2026-10-23)"
+
+### ISS-094 · P3 · Task statuses primary button has a weak keyboard focus cue
+
+- **Type:** bug · **Found:** 2026-11-13 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** BTN_PRIMARY in frontend/src/components/admin/TaskStatusesTab.tsx (line ~71)
+- **Problem:** The focus border matches the green fill, so only the ring-primary/30 ring shows, below 3:1 contrast.
+- **Why deferred / fix direction:** Use the solid ring with ring-offset-2 on that button.
+- **Source:** snapshot line 2458, section "Antislop port — deferred findings (2026-11-12)"
+
+## Open — Gantt
+
+### ISS-095 · P2 · Gantt save errors can be swallowed when a later update follows
+
+- **Type:** bug · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** updateTask.mutate(..., { onError }) in frontend/src/components/gantt-v2/SolvroGantt.tsx (lines ~565, ~621, ~649)
+- **Problem:** TanStack Query v5 fires per-call callbacks only for the latest mutate on a hook, so a failed date, reorder or subtask update is silently dropped if another update on the same hook starts first.
+- **Why deferred / fix direction:** Switch to mutateAsync(...).catch(...) as the task panel already does.
+- **Source:** snapshot line 2338, section "Collaboration & sharing, Phase 3 ("Conflict warning") — deferred findings (2026-09-30)"
+
+### ISS-096 · P3 · Narrow viewports can clip the Gantt Dates and color columns
+
+- **Type:** bug · **Found:** 2026-07-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** clampContainer in frontend/src/components/reui/gantt/gantt-view.tsx (line ~976); nameColumnWidth in gantt-v2/SolvroGantt.tsx (line ~456)
+- **Problem:** The engine renders the tree pane narrower than treeWidth below a ~699px container and never reports that width. nameColumnWidth then ignores the clamp and the fixed columns overflow the pane edge.
+- **Why deferred / fix direction:** Clamp nameColumnWidth by the measured pane width (ResizeObserver), or patch the engine to report the clamped width. Rare: Gantt is desktop-first and the default pane (498) only clamps below ~699px.
+- **Source:** snapshot line 73, section "Known bugs / inconsistencies"
+
+### ISS-097 · P3 · Narrowing the Gantt pane below 356px clips the fixed columns
+
+- **Type:** watch · **Found:** 2026-07-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** TREE_FIXED_COLUMNS_WIDTH / name column floor in frontend/src/components/gantt-v2/SolvroGantt.tsx (line ~218)
+- **Problem:** Below a 356px pane the name column floors and the fixed columns clip. This only happens when the user drags the splitter that narrow.
+- **Why deferred / fix direction:** Accepted, not planned. Revisit only if users report it.
+- **Source:** snapshot line 86, section "Known bugs / inconsistencies"
+
+### ISS-098 · P3 · Gantt splitter drag fires width change only on release
+
+- **Type:** bug · **Found:** 2026-07-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** splitter onMove/finish in frontend/src/components/reui/gantt/gantt-view.tsx (line ~1062-1082)
+- **Problem:** During a splitter drag the engine updates the pane width in the DOM but calls onWidthChange on pointerup only. Fixed columns clip while narrowing and snap back on release.
+- **Why deferred / fix direction:** Share the fix with the clamp entry: report live width or measure the pane. Pre-existing and cosmetic.
+- **Source:** snapshot line 90, section "Known bugs / inconsistencies"
+
+### ISS-099 · P3 · Computed critical path is deferred; only the manual mark exists
+
+- **Type:** decision · **Found:** 2026-08-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** Task.isCriticalPath in backend/prisma/schema.prisma (line ~532); frontend/src/components/CriticalPathMark.tsx
+- **Problem:** The manual Critical Path flag shipped. A path computed from TaskDependency does not exist and is deferred by decision.
+- **Why deferred / fix direction:** Question: build a computed path (optionally a 'Suggest from dependencies' action) or leave the manual flag as the only mechanism?.
+- **Source:** snapshot line 301, section "Deferred (explicit, by decision)"
+
+### ISS-100 · P3 · legendEntries sorts sections twice
+
+- **Type:** debt · **Found:** 2026-07-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** legendEntries section branch in frontend/src/lib/gantt/palette.ts (line ~254)
+- **Problem:** resolveSectionColors already sorts by position and id, and legendEntries sorts again with the same comparator. The cost is negligible.
+- **Why deferred / fix direction:** Optional cleanup; flagged for awareness.
+- **Source:** snapshot line 486, section "Tech debt / follow-ups from recent work"
+
+### ISS-101 · P3 · Milestone dependency arrows end at the day-box edge, not the diamond
+
+- **Type:** bug · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** buildConnectorRoute in frontend/src/components/gantt-v2/connector-paths.ts (line ~106); frontend/src/components/gantt-v2/SolvroBar.tsx
+- **Problem:** Connector endpoints for milestone tasks stop at the cell edge rather than the diamond center. The gap is about 30-40px at Week zoom; routing is still correct.
+- **Why deferred / fix direction:** Offset the endpoint to the diamond center for milestones. Cosmetic.
+- **Source:** snapshot line 543, section "Plan B Task 9 deferred findings — ReUI Gantt swap (2026-07-25)"
+
+### ISS-102 · P3 · Gantt bars each attach their own ResizeObserver
+
+- **Type:** watch · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** ResizeObserver in SolvroBar (frontend/src/components/gantt-v2/SolvroBar.tsx line ~103)
+- **Problem:** Each rendered Gantt bar attaches its own ResizeObserver. Fine at current task counts.
+- **Why deferred / fix direction:** Trigger: a project rendering low hundreds of bars or a profiler flag. Then share one observer.
+- **Source:** snapshot line 546, section "Plan B Task 9 deferred findings — ReUI Gantt swap (2026-07-25)"
+
+### ISS-103 · P3 · Gantt section-id parsing lives outside the adapter
+
+- **Type:** debt · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** sectionNodeId in gantt-v2/adapter.ts (line 13) vs section-id parsing in SolvroGantt.tsx (lines ~663, ~842)
+- **Problem:** The adapter formats section ids but SolvroGantt parses them with inline slice and startsWith checks. No defect.
+- **Why deferred / fix direction:** Add parseSectionId to the adapter when the signature lock lifts.
+- **Source:** snapshot line 556, section "Final whole-branch review additions (2026-07-25)"
+
+### ISS-104 · P3 · handleResourceReorder is one long three-branch callback
+
+- **Type:** debt · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** handleResourceReorder in frontend/src/components/gantt-v2/SolvroGantt.tsx (line ~581)
+- **Problem:** The reorder handler spans about 130 lines and three branches, kept to mirror the old engine for diffing.
+- **Why deferred / fix direction:** Split into named helpers in a readability pass.
+- **Source:** snapshot line 557, section "Final whole-branch review additions (2026-07-25)"
+
+### ISS-105 · P3 · GanttDatePicker is unmounted and uses shadow-md
+
+- **Type:** debt · **Found:** 2026-07-28 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** GanttDatePicker in frontend/src/components/reui/gantt/gantt-nav.tsx (line ~358)
+- **Problem:** The component has no consumer in src and its popover uses shadow-md instead of shadow-overlay.
+- **Why deferred / fix direction:** Confirm dead and remove, or align the shadow at first use.
+- **Source:** snapshot line 831, section "ReUI DateField swap — deferred findings (2026-07-28)"
+
+### ISS-106 · P3 · Gantt Dates cell shows the date range twice while editing
+
+- **Type:** bug · **Found:** 2026-07-28 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** TaskDatesCell in frontend/src/components/gantt-v2/TreeCells.tsx (lines ~46-80)
+- **Problem:** The cell button stays visible while the editor opens below it, so the same range appears twice.
+- **Why deferred / fix direction:** Hide the cell button while editing is true.
+- **Source:** snapshot line 972, section "DateRangeField — deferred findings (2026-07-28, Task 3.5)"
+
+### ISS-107 · P3 · Dark-mode Critical Path ring on Gantt bars resembles the selection ring
+
+- **Type:** decision · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** outline-chip-violet-text in frontend/src/components/gantt-v2/SolvroBar.tsx (line ~320)
+- **Problem:** In dark mode a marked and selected bar shows two near-identical light rings, so the signals blur together.
+- **Why deferred / fix direction:** Choose between the spec token and a fixed violet for the Gantt ring.
+- **Source:** snapshot line 1812, section "Critical Path mark — deferred findings (2026-09-02)"
+
+### ISS-108 · P3 · Gantt bar labels may be hard to read over the unfilled hatch
+
+- **Type:** watch · **Found:** 2026-11-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** labelBackgroundHex in frontend/src/components/gantt-v2/SolvroBar.tsx (line ~278)
+- **Problem:** On a partly filled bar the part of the label over the pale hatch may be hard to read. Seen in light mode, not verified in a browser.
+- **Why deferred / fix direction:** Trigger: confirm in a browser on a partly filled bar. Then pick the label colour per segment.
+- **Source:** snapshot line 2445, section "Design compliance fixes — deferred findings (2026-11-02)"
+
+## Open — Boards & drag
+
+### ISS-109 · P3 · Task panel shows the old section chip during a cross-section drag
+
+- **Type:** bug · **Found:** 2026-07-22 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** reorderTasksLocally in frontend/src/lib/queries.ts (line ~1830); task.section use in components/TaskPanel.tsx (~734)
+- **Problem:** During the optimistic window the moved task keeps its old nested section object. An open panel on that task shows the old chip until the refetch.
+- **Why deferred / fix direction:** Recompute the nested section from the sections cache inside reorderTasksLocally. Transient and self-healing.
+- **Source:** snapshot line 434, section "Tech debt / follow-ups from recent work"
+
+### ISS-110 · P3 · Kanban drop on the preview-swapped card can cancel a one-slot move
+
+- **Type:** watch · **Found:** 2026-07-27 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** same-container branch in frontend/src/components/reui/kanban.tsx (lines ~403, ~527)
+- **Problem:** handleDragEnd applies arrayMove to already-shuffled preview state, so a drop on the swapped card can undo the move. It needs precise pointer geometry and was never reproduced.
+- **Why deferred / fix direction:** Trigger: a user or e2e run reproduces a lost one-slot reorder.
+- **Source:** snapshot line 637, section "Kanban → ReUI swap — deferred findings (2026-07-27)"
+
+### ISS-111 · P3 · Subtask drag may flicker back before the reorder commits
+
+- **Type:** watch · **Found:** 2026-07-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** Sortable onValueChange in frontend/src/components/TaskPanel.tsx (line ~844)
+- **Problem:** The list keeps the old order until the optimistic update lands after an await, so a snap-back flash is possible.
+- **Why deferred / fix direction:** Trigger: flicker seen in use. Then mirror the local-order pattern from SectionReorderModal.
+- **Source:** snapshot line 1097, section "Sortable reorder (sections + subtasks) — deferred findings (2026-07-30)"
+
+### ISS-112 · P3 · Failed section PATCH can leave the reorder modal out of sync
+
+- **Type:** watch · **Found:** 2026-07-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** useUpdateSection in frontend/src/lib/queries.ts (lines ~2292-2345)
+- **Problem:** A rollback after a failed PATCH discards optimistic state of queued mutations, and the modal's local order is only re-seeded on open.
+- **Why deferred / fix direction:** Trigger: PATCH /sections/:id fails mid-session in practice. Then re-seed the modal on settle.
+- **Source:** snapshot line 1119, section "Sortable reorder (sections + subtasks) — deferred findings (2026-07-30)"
+
+### ISS-113 · P3 · Section reorder modal can get stuck if a drag never ends
+
+- **Type:** bug · **Found:** 2026-07-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** handleModalClose and the reset effect in frontend/src/components/SectionReorderModal.tsx (lines ~39-72)
+- **Problem:** If a drag-end callback never fires, the guard stays true and blocks every close route; the reset effect only runs when open changes.
+- **Why deferred / fix direction:** Exempt the header X from the guard.
+- **Source:** snapshot line 1145, section "Sortable reorder (sections + subtasks) — deferred findings (2026-07-30)"
+
+## Open — iTop
+
+### ISS-114 · P2 · iTop TimeSpent duration unit is assumed to be seconds
+
+- **Type:** watch · **Found:** 2026-09-22 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** ITOP_TIME_SPENT_DURATION_IN_SECONDS in backend/src/lib/itop/types.ts (line 177)
+- **Problem:** Time sync divides TimeSpent.duration by 60 on the assumption that iTop stores seconds. If the install uses minutes, synced durations would be wrong.
+- **Why deferred / fix direction:** Check the probe's TimeSpent dump on the real install and flip the constant if needed.
+- **Source:** snapshot line 2027, section "iTop integration Phase 3 — deferred findings (2026-09-22)"
+
+### ISS-115 · P2 · GET /itop/services lists every iTop organisation's services to any signed-in user
+
+- **Type:** decision · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** itopRouter.get("/services") in backend/src/routes/itop.ts (line ~1048)
+- **Problem:** The handler runs SELECT Service with the application token and returns service and organisation names to any signed-in user, without customer visibility checks. The New ticket sheet therefore offers services of other customers, and organisation names are readable by everyone.
+- **Why deferred / fix direction:** Decide: filter services by the target customer's entitlement link once a customerId is known, or accept and document organisation-wide visibility.
+- **Source:** snapshot line 2209, section "iTop integration Phase 6 — deferred findings (2026-09-23)"
+
+### ISS-116 · P2 · TimeSpent ticket_ref attribute is unverified on a real iTop install
+
+- **Type:** watch · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** ITOP_TIME_SPENT_TICKET_REF_FIELD in backend/src/lib/itop/types.ts (line ~163)
+- **Problem:** Only the fake iTop enforces ticket_ref; if the real Time Tracking extension ignores it, logged entries land in Utilization without a ticket link and the ticket panel's weekly figure stays at 0.
+- **Why deferred / fix direction:** Needs a probe on the real install once the Time Tracking extension is present; the iTop admin must confirm the attribute name and REST writability before go-live.
+- **Source:** snapshot line 2285, section "iTop integration Phase 7 — deferred findings (2026-09-23)"
+
+### ISS-117 · P2 · Application token cannot read iTop User, so itopUserId is never set
+
+- **Type:** watch · **Found:** 2026-09-24 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** POST /itop/tickets/:id/time guard in backend/src/routes/itop.ts (line ~1364)
+- **Problem:** On the tested install neither the application token nor a TAM's token can read the iTop User class, so user matching never sets User.itopUserId and time logging answers 'Your iTop user account is not linked yet'.
+- **Why deferred / fix direction:** Once Time Tracking is installed, test whether TimeSpent.user_id can be omitted, or grant the application token a profile that can read User.
+- **Source:** snapshot line 2311, section "iTop integration — real-install findings (2026-09-24)"
+
+### ISS-118 · P2 · Re-test Settings > iTop save on the real install before go-live
+
+- **Type:** watch · **Found:** 2026-09-24 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS in backend/src/env.ts (line ~96)
+- **Problem:** Personal tokens work only for profiles in the authent-token setting personal_tokens_allowed_profiles; the save may be refused on the real install until the opt-out env var is set.
+- **Why deferred / fix direction:** Trigger: go-live on the real install; re-test the save and set the env var if refused.
+- **Source:** snapshot line 2314, section "iTop integration — real-install findings (2026-09-24)"
+
+### ISS-119 · P3 · iTop personal-token expiry is only read when iTop allows it
+
+- **Type:** watch · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** PUT /itop/me/token in backend/src/routes/itopUser.ts
+- **Problem:** On installs where PersonalToken is unreadable, expiresAt stays null and Settings cannot warn before the token expires.
+- **Why deferred / fix direction:** Accepted limitation; grant PersonalToken read to the TAM profile if warnings matter.
+- **Source:** snapshot line 2112, section "iTop integration Phase 5 — deferred findings (2026-09-23)"
+
+### ISS-120 · P3 · iTop token write rights are not checked when the token is saved
+
+- **Type:** watch · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** listOperations probe in backend/src/routes/itopUser.ts (line ~202)
+- **Problem:** list_operations shows what the server supports, not what the token's profile may do, so a read-only token saves cleanly and fails on the first write.
+- **Why deferred / fix direction:** Consider a trial dry run if iTop ever offers one.
+- **Source:** snapshot line 2125, section "iTop integration Phase 5 — deferred findings (2026-09-23)"
+
+### ISS-121 · P3 · iTop board drag transitions assume the default lifecycle
+
+- **Type:** watch · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** TRANSITIONS in frontend/src/components/itop/board/dropMapper.ts (line 40)
+- **Problem:** Custom states or stimuli make the board reject wanted drags or pass drags that iTop then refuses with its own text.
+- **Why deferred / fix direction:** Verify against the real install; add per-install config only if it differs.
+- **Source:** snapshot line 2182, section "iTop integration Phase 6 — deferred findings (2026-09-23)"
+
+### ISS-122 · P3 · iTop ticket board on phones is untested stacked columns with touch drag
+
+- **Type:** watch · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** KanbanBoard grid in frontend/src/components/itop/board/TicketBoard.tsx (line 181)
+- **Problem:** Below 768px the five columns stack vertically with drag still wired. Long scrolls and touch precision have not been checked on real devices.
+- **Why deferred / fix direction:** Test on a phone before calling it a phone-usable form.
+- **Source:** snapshot line 2193, section "iTop integration Phase 6 — deferred findings (2026-09-23)"
+
+### ISS-123 · P3 · Time Tracking extension must be installed before TimeSpent checks
+
+- **Type:** watch · **Found:** 2026-09-24 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** TimeSpent sync in backend/src/lib/itop/sync.ts
+- **Problem:** iTop Community does not bundle the Time Tracking extension, so the duration unit and ticket_ref checks cannot run until it is installed from iTop Hub.
+- **Why deferred / fix direction:** Trigger: extension installed on the real install; then run the duration and ticket_ref probes.
+- **Source:** snapshot line 2315, section "iTop integration — real-install findings (2026-09-24)"
+
+### ISS-124 · P3 · pending_reason assumed free text; a list-valued install refuses it
+
+- **Type:** watch · **Found:** 2026-09-24 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** pending_reason in backend/src/routes/itop.ts (line ~853)
+- **Problem:** An install that turns pending_reason into a list of values rejects free text and the user sees iTop's message.
+- **Why deferred / fix direction:** Trigger: an install with a constrained pending_reason; then fetch the allowed values and offer a picker.
+- **Source:** snapshot line 2316, section "iTop integration — real-install findings (2026-09-24)"
+
+### ISS-125 · P3 · An iTop full sync that always exceeds the run budget never completes
+
+- **Type:** watch · **Found:** 2026-10-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** RUN_BUDGET_MS in backend/src/lib/itop/sync.ts (line ~87)
+- **Problem:** A run that hits the budget records the reason, prunes nothing and leaves lastFullSyncAt unchanged. A very large iTop would re-pull everything every tick.
+- **Why deferred / fix direction:** Trigger: logged 'iTop sync completed' ms nearing 25 minutes on a real install. Then add a resumable cursor.
+- **Source:** snapshot line 2413, section "Backend concurrency and roles — deferred findings (2026-10-25)"
+
+### ISS-126 · P3 · Older personal iTop tokens are not re-validated
+
+- **Type:** watch · **Found:** 2026-10-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** validation at save time in backend/src/routes/itopUser.ts
+- **Problem:** Tokens saved under the old rule keep working until their owner re-saves them. The user accepted this and it is documented.
+- **Why deferred / fix direction:** Trigger: real install shows which profiles can read the classes. Then run a one-off re-validation.
+- **Source:** snapshot line 2414, section "Backend concurrency and roles — deferred findings (2026-10-25)"
+
+### ISS-127 · P3 · A budget-cut time-entry pass still counts as a complete full run
+
+- **Type:** watch · **Found:** 2026-10-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** writeConfigResult call in backend/src/lib/itop/sync.ts (line ~999)
+- **Problem:** The time-entry prune is skipped and waits for the next full run, up to 24 h. Time entries deleted in iTop stay in Solvro until then.
+- **Why deferred / fix direction:** Accepted trade-off. Revisit with the resumable-cursor idea.
+- **Source:** snapshot line 2415, section "Backend concurrency and roles — deferred findings (2026-10-25)"
+
+### ISS-128 · P3 · An iTop application token saved before an address is not probed
+
+- **Type:** debt · **Found:** 2026-10-26 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** probeUrl check in backend/src/routes/itopAdmin.ts (line ~323)
+- **Problem:** With no address stored there is nothing to check the token against. A wrong token shows only on the first Test connection or sync.
+- **Why deferred / fix direction:** Probe when the address is later saved with a stored token.
+- **Source:** snapshot line 2431, section "iTop and Outline hardening — deferred findings (2026-10-26)"
+
+### ISS-129 · P3 · A Refresh full sync can be dropped silently while a scheduled sync holds the lock
+
+- **Type:** bug · **Found:** 2026-10-26 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** POST /refresh in backend/src/routes/itop.ts (line ~460); requestSync in backend/src/lib/itop/scheduler.ts (line ~84)
+- **Problem:** The 60 s global window is used up even if the full sync did not run, so a second Refresh is refused for a minute.
+- **Why deferred / fix direction:** Do not consume the window when the lock is held, or tell the user.
+- **Source:** snapshot line 2433, section "iTop and Outline hardening — deferred findings (2026-10-26)"
+
+### ISS-130 · P3 · iTop ticket panel shows '– ago' when lastUpdate is null
+
+- **Type:** bug · **Found:** 2026-11-12 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** Last update Fact in frontend/src/components/itop/TicketPanel.tsx (line ~290)
+- **Problem:** A ticket with no last update shows a dash followed by 'ago'.
+- **Why deferred / fix direction:** Guard on lastUpdate like the Started fact does.
+- **Source:** snapshot line 2457, section "Antislop port — deferred findings (2026-11-12)"
+
+## Open — Exports & sharing
+
+### ISS-131 · P2 · Gantt Excel/PDF downloads blocked on the plain-HTTP production host
+
+- **Type:** watch · **Found:** 2026-07-31 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** Gantt download helpers in frontend/src/lib/gantt/exportExcel.ts and exportPdf.ts (line ~370, ~958)
+- **Problem:** Chromium-family browsers block downloads from an http origin that is not localhost, showing a secure-connection warning. The user can still keep the file from the download item menu.
+- **Why deferred / fix direction:** Reach the app at http://localhost:PORT, or serve HTTPS (internal-CA cert declined 2026-07-31). Not fixable in the export format.
+- **Source:** snapshot line 125, section "Known bugs / inconsistencies"; merged duplicates at snapshot lines 132, 141, 147
+
+### ISS-132 · P2 · Guest links are built from the owner's browser address
+
+- **Type:** bug · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** NewLinkPanel in frontend/src/components/ProjectShare.tsx (line ~244)
+- **Problem:** The copied link uses window.location.origin, so an owner signed in over an SSH tunnel or localhost gets a link a guest cannot open.
+- **Why deferred / fix direction:** Add a PUBLIC_BASE_URL setting and build the link from it.
+- **Source:** snapshot line 2353, section "Collaboration & sharing, Phase 6 ("Guest links") — deferred findings (2026-09-30)"
+
+### ISS-133 · P3 · Excel export revokes its blob URL right after the click
+
+- **Type:** debt · **Found:** 2026-07-31 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** exportGanttExcel download tail in frontend/src/lib/gantt/exportExcel.ts (line ~382)
+- **Problem:** The download helper revokes the object URL synchronously after a.click(). The revoke belongs on a later task so the browser can start the download first.
+- **Why deferred / fix direction:** Move URL.revokeObjectURL into a setTimeout. Not the cause of the blocked-download issue.
+- **Source:** snapshot line 156, section "Known bugs / inconsistencies"
+
+### ISS-134 · P3 · Gantt screen and PDF export differ in progress and rollup bar styling
+
+- **Type:** watch · **Found:** 2026-08-03 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** progress overlay and rollup pill in frontend/src/lib/gantt/exportPdf.ts (lines ~726-840)
+- **Problem:** The live Gantt hatches the incomplete portion and draws a thin squared rollup, while the PDF still draws a flat overlay and a rounded pill. The in-file comment records this as accepted.
+- **Why deferred / fix direction:** Sync the PDF drawing only if customers notice the mismatch.
+- **Source:** snapshot line 1478, section "Gantt visual refresh — deferred findings (2026-08-03)"
+
+### ISS-135 · P3 · Gantt Excel export omits the pinned iTop ticket
+
+- **Type:** decision · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** buildTasksSheet in frontend/src/lib/gantt/exportExcel.ts
+- **Problem:** No column carries a task's itopTicketRef, which would be safe for customers to see. Adding it also means threading the field through the Gantt row adapter.
+- **Why deferred / fix direction:** Decide whether the export should include it; exportExcel.ts is spine, so changes need an instant review.
+- **Source:** snapshot line 2094, section "iTop integration Phase 4 — deferred findings (2026-09-23)"
+
+## Open — Tests & CI
+
+### ISS-136 · P2 · Typecheck skips vite.config.ts and node tsconfig lists deleted files
+
+- **Type:** debt · **Found:** 2026-07-26 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** typecheck script in frontend/package.json; include in frontend/tsconfig.node.json (line 17)
+- **Problem:** Plain tsc --noEmit does not build the node tsconfig reference, so vite.config.ts is never typechecked. The node tsconfig still lists two deleted config files.
+- **Why deferred / fix direction:** Add tsc -p tsconfig.node.json --noEmit to the script and prune the include list.
+- **Source:** snapshot line 571, section "PWA icon regeneration — deferred findings (2026-07-25/26)"
+
+### ISS-137 · P2 · search.spec.ts presses Cmd+K without waiting for the listener
+
+- **Type:** test-gap · **Found:** 2026-07-27 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** page.keyboard.press('ControlOrMeta+k') calls in e2e/tests/search.spec.ts (lines ~75, ~101, ~135)
+- **Problem:** The key press can fire before Shell attaches its listener, which flaked once in CI. The task URL regex is unanchored and one comment cites the wrong file.
+- **Why deferred / fix direction:** Assert the TopBar trigger is visible first, anchor the regex, correct the comment.
+- **Source:** snapshot line 786, section "Global search & ⌘K command palette — deferred findings (2026-07-27)"
+
+### ISS-138 · P2 · Drag e2e specs flake on first attempt and pass on retry
+
+- **Type:** watch · **Found:** 2026-07-28 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** gantt-parity.spec.ts connector test, kanban-dnd.spec.ts cross-view and mobile touch, list-dnd.spec.ts cross-status reorder
+- **Problem:** The same four to five drag cases fail their first attempt and pass on retry. The retry budget has one spare attempt.
+- **Why deferred / fix direction:** Trigger: a fifth case flakes or any case fails through its retry. Then run a flake-hunt pass.
+- **Source:** snapshot line 896, section "ReUI DateField swap — deferred findings (2026-07-28)"; merged duplicates at snapshot lines 2320
+
+### ISS-139 · P2 · Backend typecheck gate skips scripts and tests
+
+- **Type:** debt · **Found:** 2026-07-29 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** include in backend/tsconfig.json (line 17)
+- **Problem:** npx tsc --noEmit only checks src, so backend/scripts and backend/test get no typecheck gate.
+- **Why deferred / fix direction:** Widen include or add a second tsconfig and run it with the gate.
+- **Source:** snapshot line 1079, section "Date contract UTC-midnight unification — deferred findings (2026-07-29)"
+
+### ISS-140 · P2 · gates.sh runs only the smoke e2e spec
+
+- **Type:** debt · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** smoke_gate in .claude/scripts/gates.sh (line 98)
+- **Problem:** New e2e specs never run in the mechanical gate and depend on someone running them by hand.
+- **Why deferred / fix direction:** Add a step that runs the specs changed in the diff.
+- **Source:** snapshot line 1887, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
+
+### ISS-141 · P3 · pwa.spec.ts fails against the Vite dev server
+
+- **Type:** watch · **Found:** 2026-07-22 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** pwa specs in e2e/tests/pwa.spec.ts (line ~16-26); vite-plugin-pwa in frontend/vite.config.ts
+- **Problem:** vite-plugin-pwa emits the manifest and service worker only in build mode, so the specs fail at BASE_URL=http://localhost:5173. They pass on the built CI stack (:8080).
+- **Why deferred / fix direction:** Accepted in e2e/CLAUDE.md. Trigger: running e2e against the dev server. Optional: skip the specs when BASE_URL is :5173.
+- **Source:** snapshot line 216, section "Known bugs / inconsistencies"
+
+### ISS-142 · P3 · Stale comment says the seeded project is per test file
+
+- **Type:** debt · **Found:** 2026-07-22 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** seededProject comment in e2e/fixtures/test.ts (line ~4-7)
+- **Problem:** The comment claims one seeded project per test file. With workers: 1 the whole run shares one project, so earlier specs leave state for later ones.
+- **Why deferred / fix direction:** Correct the comment. Specs should derive state from the API instead of assuming preconditions.
+- **Source:** snapshot line 225, section "Known bugs / inconsistencies"; merged duplicates at snapshot lines 518
+
+### ISS-143 · P3 · No ESLint setup, so the exhaustive-deps guard on TaskFormModal is inert
+
+- **Type:** debt · **Found:** 2026-07-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** eslint-disable comment in frontend/src/components/TaskFormModal.tsx (line ~177)
+- **Problem:** The repo has no ESLint config or lint script, so the directive does nothing. Nothing stops a future edit from re-adding the whole props object to the reset effect deps.
+- **Why deferred / fix direction:** Add ESLint with react-hooks/exhaustive-deps and an npm run lint step in CI.
+- **Source:** snapshot line 476, section "Tech debt / follow-ups from recent work"; merged duplicates at snapshot lines 2330
+
+### ISS-144 · P3 · No e2e test that the Gantt colorBy choice survives a reload
+
+- **Type:** test-gap · **Found:** 2026-07-23 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** e2e/tests/gantt-legend.spec.ts; COLOR_BY_STORAGE_KEY in frontend/src/components/gantt-v2/SolvroGantt.tsx (line 160)
+- **Problem:** The legend spec only switches Status, Section and Priority within a session. It never checks the stored choice after a reload.
+- **Why deferred / fix direction:** Add a case that selects a mode, reloads, and asserts the select and legend are restored.
+- **Source:** snapshot line 494, section "Tech debt / follow-ups from recent work"
+
+### ISS-145 · P3 · Connector hover-delete e2e test flakes rarely
+
+- **Type:** watch · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** connector create/delete test in e2e/tests/gantt-parity.spec.ts (line ~329)
+- **Problem:** The hover-to-delete-connector assertion occasionally fails on the first attempt and passes on retry. The cause is not isolated.
+- **Why deferred / fix direction:** Trigger: it fails in CI more than occasionally. Then run a flake-hunt pass.
+- **Source:** snapshot line 545, section "Plan B Task 9 deferred findings — ReUI Gantt swap (2026-07-25)"
+
+### ISS-146 · P3 · E2E suite uses fixed waitForTimeout sleeps
+
+- **Type:** debt · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** waitForTimeout calls across e2e/tests/*.spec.ts
+- **Problem:** Many specs sleep for a fixed time instead of waiting on a condition or response, which adds slowness and flake risk.
+- **Why deferred / fix direction:** Convert to waitForResponse or selector waits in one hardening pass.
+- **Source:** snapshot line 550, section "Plan B Task 9 deferred findings — ReUI Gantt swap (2026-07-25)"; merged duplicates at snapshot lines 547
+
+### ISS-147 · P3 · No test guards the Login and sidebar always-dark pin
+
+- **Type:** test-gap · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** Login.tsx root wrapper and sidebar rail (frontend/src/pages/Login.tsx, layout sidebar); no spec in e2e/tests
+- **Problem:** Nothing checks that Login and the sidebar stay dark when the theme is light. A Tailwind theme change could reintroduce the bug.
+- **Why deferred / fix direction:** Add an assertion with the theme forced to light via localStorage.
+- **Source:** snapshot line 565, section "Login/Sidebar always-dark-pin fix — deferred findings (2026-07-25)"
+
+### ISS-148 · P3 · Search contract tests miss the length cap, ordering and the underscore case
+
+- **Type:** test-gap · **Found:** 2026-07-27 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** backend/test/search.test.ts (lines ~116, ~195); cap in backend/src/routes/search.ts:14
+- **Problem:** No test sends q over 100 chars, checks result order, or caps projects and tasks at 8. The LIKE-escape test is named for % and _ but only covers %.
+- **Why deferred / fix direction:** Add the three assertions and a literal underscore case, or rename the test.
+- **Source:** snapshot line 663, section "Global search & ⌘K command palette — deferred findings (2026-07-27)"
+
+### ISS-149 · P3 · No e2e drag test for section reorder or subtask drag
+
+- **Type:** test-gap · **Found:** 2026-07-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** SectionReorderModal and TaskPanel subtask Sortable; e2e/tests has no covering spec
+- **Problem:** Neither reorder surface has a spec exercising the drag gesture; the smoke gate only checks rendering.
+- **Why deferred / fix direction:** Add drag specs next to the existing Gantt and Kanban drag specs.
+- **Source:** snapshot line 1158, section "Sortable reorder (sections + subtasks) — deferred findings (2026-07-30)"
+
+### ISS-150 · P3 · Duplicate-chip e2e spec cannot reproduce the upstream race
+
+- **Type:** watch · **Found:** 2026-08-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** e2e/tests/filters-duplicate-chip.spec.ts; frontend/src/components/reui/filters.test.ts
+- **Problem:** The spec proves at most one chip per field but not the upstream double-fire. The unit test covers the guard logic.
+- **Why deferred / fix direction:** Trigger: the upstream Base UI double-fire becomes reproducible. Then add a discriminating spec.
+- **Source:** snapshot line 1436, section "Issues Sweep #1 — residuals (2026-08-02)"
+
+### ISS-151 · P3 · filters.test.ts depends on a patch export a vendor re-pull would delete
+
+- **Type:** watch · **Found:** 2026-08-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** findFilterMatch import in frontend/src/components/reui/filters.test.ts
+- **Problem:** The test imports findFilterMatch, a SOLVRO PATCH export. A re-pull of filters.tsx would drop it and break the import; only the patch-count gate catches that, with no check for the test file itself.
+- **Why deferred / fix direction:** Keep the patch-count gate; revisit if the vendor is re-pulled.
+- **Source:** snapshot line 1451, section "Issues Sweep #1 — residuals (2026-08-02)"
+
+### ISS-152 · P3 · Two e2e specs keep private copies of createTask
+
+- **Type:** debt · **Found:** 2026-08-03 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** createTask in e2e/tests/date-picker.spec.ts (line 151) and e2e/tests/gantt-parity.spec.ts (line 51)
+- **Problem:** Both specs predate the shared createTask in e2e/fixtures/seed.ts and still carry their own copies.
+- **Why deferred / fix direction:** Replace them with the shared helper the next time either spec is touched.
+- **Source:** snapshot line 1532, section "Gantt visual refresh — deferred findings (2026-08-03)"
+
+### ISS-153 · P3 · daily-review e2e spec leaves junk rows in the shared dev DB each run
+
+- **Type:** test-gap · **Found:** 2026-08-29 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** header comment and missing cleanup in e2e/tests/daily-review.spec.ts (lines 29-36)
+- **Problem:** Each run flips a project ACTIVE and a customer's TAM permanently. DELETE routes now exist but the spec never calls them, and its header comment still claims they are missing.
+- **Why deferred / fix direction:** Delete the seeded project and customer in a teardown and correct the comment.
+- **Source:** snapshot line 1712, section "Daily Review v2 — deferred findings (2026-08-29)"
+
+### ISS-154 · P3 · Three e2e specs flaked once and passed on retry
+
+- **Type:** watch · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** gantt-parity.spec.ts connector-hover test and two tests in e2e/tests/kanban-dnd.spec.ts
+- **Problem:** A hover-to-reveal timing test and two shared-seed order tests failed once and retried clean. None are regressions.
+- **Why deferred / fix direction:** Tighten the wait condition or fixture isolation if one fails repeatedly.
+- **Source:** snapshot line 1772, section "Critical Path mark — deferred findings (2026-09-02)"
+
+### ISS-155 · P3 · auth.spec 'admin page right after sign-in' flakes on mobile project
+
+- **Type:** watch · **Found:** 2026-09-29 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** 'an admin page opened right after sign-in stays on the admin page' in e2e/tests/auth.spec.ts (line ~70)
+- **Problem:** The test failed about 1 run in 2 on the mobile project: after sign-in, goto('/admin') landed on the sign-in page. A later sign-in race fix (frontend/src/lib/auth.tsx) matches the symptom but is not confirmed as the cause.
+- **Why deferred / fix direction:** Trigger: strike it if the flake stays gone across several CI runs; otherwise investigate.
+- **Source:** snapshot line 2328, section "Collaboration & sharing, Phase 1 ("Quick wins") — deferred findings (2026-09-29)"
+
+### ISS-156 · P3 · taskOrdering cross-project test flakes in the parallel run
+
+- **Type:** test-gap · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** 'orders GET /tasks (cross-project)…' in backend/test/taskOrdering.test.ts (line ~103)
+- **Problem:** The test reads the take: 200 window of GET /tasks, which other test files fill when run in parallel, so the two tasks can fall outside it.
+- **Why deferred / fix direction:** Filter the request to the test's own project or fetch by id instead of the global list.
+- **Source:** snapshot line 2336, section "Collaboration & sharing, Phase 3 ("Conflict warning") — deferred findings (2026-09-30)"
+
+### ISS-157 · P3 · Concurrency tests for activity and notification recipients are unproven
+
+- **Type:** test-gap · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** backend/test/activity.test.ts (line ~229); backend/test/notifications.test.ts (line ~129)
+- **Problem:** The simultaneous-assign tests cannot fail spuriously, but nobody has confirmed they fail when the row lock is removed, so they may not guard it.
+- **Why deferred / fix direction:** Temporarily remove the lock and confirm both tests fail; if not, strengthen them.
+- **Source:** snapshot line 2344, section "Collaboration & sharing, Phase 4 ("Activity and notifications") — deferred findings (2026-09-30)"
+
+### ISS-158 · P3 · Weekly Sync e2e test times out on a database with hundreds of customers
+
+- **Type:** watch · **Found:** 2026-10-26 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** groupContainingRow in e2e/tests/weekly-sync.spec.ts (line ~72)
+- **Problem:** The helper walks every customer block with two awaits each. With about 500 customers it exceeds the 5 s poll on the mobile project.
+- **Why deferred / fix direction:** Trigger: a long-lived dev database. Fix with a locator that does not walk the blocks.
+- **Source:** snapshot line 2400, section "Frontend usability — deferred findings (2026-10-26)"
+
+### ISS-159 · P3 · Mobile smoke overflow check reported Kanban 453px too wide once
+
+- **Type:** watch · **Found:** 2026-10-24 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** no horizontal overflow test in e2e/tests/smoke.spec.ts (line ~25)
+- **Problem:** The check failed once in a full local run against vite preview and passed 34/34 on reruns. Cause unknown.
+- **Why deferred / fix direction:** Trigger: recurrence. Capture the overflowing element before retrying.
+- **Source:** snapshot line 2407, section "Code splitting — deferred findings (2026-10-24)"
+
+### ISS-160 · P3 · CI npm audit step is report-only, not a gate
+
+- **Type:** watch · **Found:** 2026-10-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** npm audit step in .github/workflows/ci.yml (line ~142)
+- **Problem:** The audit runs with a warning and never fails CI, by decision. A failing gate would fail today on the zod advisory.
+- **Why deferred / fix direction:** Trigger: the zod 4 upgrade. Then make the step fail.
+- **Source:** snapshot line 2424, section "Dependency advisories — remaining (2026-10-25)"
+
+### ISS-161 · P3 · Trigram index test forces the plan instead of proving it is chosen
+
+- **Type:** test-gap · **Found:** 2026-10-26 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** indexUsage test in backend/test/indexUsage.test.ts (line ~28)
+- **Problem:** The test turns off sequential scans, so it shows the indexes can serve the queries but not that the planner picks them at current sizes.
+- **Why deferred / fix direction:** Re-test with realistic row counts when tables grow.
+- **Source:** snapshot line 2441, section "Data integrity, session and query performance — deferred findings (2026-10-26)"
+
+### ISS-162 · P3 · e2e fails on a dev stack with Google sign-in configured
+
+- **Type:** watch · **Found:** 2026-11-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** Google-not-configured cases in e2e/tests/auth.spec.ts (line ~10); console-error check in e2e/tests/smoke.spec.ts (line ~45)
+- **Problem:** The tests assume the seeded QA stack with no Google sign-in. They fail on a stack with a client ID or an origin Google rejects.
+- **Why deferred / fix direction:** Trigger: running e2e outside the seeded QA stack. Run against the QA stack.
+- **Source:** snapshot line 2447, section "Design compliance fixes — deferred findings (2026-11-02)"
+
+## Open — Dev env & ops
+
+### ISS-163 · P2 · setup.sh does not pass ITOP_ALLOW_PRIVATE_HOSTS or ITOP_SYNC_DISABLED
+
+- **Type:** debt · **Found:** 2026-10-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** backend environment block in setup.sh (line ~290)
+- **Problem:** Operators of a public iTop cannot set ITOP_ALLOW_PRIVATE_HOSTS=false without editing a compose file that setup.sh rewrites on every run.
+- **Why deferred / fix direction:** Pass both variables through in setup.sh and update docs/CONFIGURATION.md. setup.sh is on the spine list.
+- **Source:** snapshot line 2411, section "Backend concurrency and roles — deferred findings (2026-10-25)"
+
+### ISS-164 · P2 · setup.sh: no registry-login preflight on a fresh install; CORS falls back to `*`
+
+- **Type:** debt · **Found:** 2026-09-18 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** setup.sh: the docker pull -q "$IMAGE_PREFIX-backend:stable" check in cmd_update (line ~447); CORS_ORIGIN in write_compose_file (line ~282)
+- **Problem:** Only solvro update pulls first and explains a failed pull; a fresh install fails at docker compose pull with Docker's raw error. CORS_ORIGIN is "${APP_URL:-*}", so it becomes * when APP_URL is unset.
+- **Why deferred / fix direction:** Leftovers of docs/archive/plans/setup-sh-hardening.md (never approved). Pull the backend image before the first compose pull and print the docker login ghcr.io hint on 401/403; refuse or warn when APP_URL is empty.
+- **Source:** new at the restructure, from `docs/archive/plans/setup-sh-hardening.md` (proposed 2026-09-18)
+
+### ISS-165 · P3 · Icons and favicon have no explicit Cache-Control
+
+- **Type:** debt · **Found:** 2026-07-26 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** location blocks in frontend/nginx.conf (lines ~138-170)
+- **Problem:** Only /assets/, index.html, sw.js and the manifest set cache headers. Icon requests get no directive.
+- **Why deferred / fix direction:** Add a short Cache-Control for /icons/ and = /favicon.png.
+- **Source:** snapshot line 572, section "PWA icon regeneration — deferred findings (2026-07-25/26)"
+
+### ISS-166 · P3 · Dev backend tsx watch sometimes misses file edits
+
+- **Type:** watch · **Found:** 2026-08-15 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** dev script in backend/package.json (line 8)
+- **Problem:** The tsx watch process occasionally keeps serving stale code after an edit on the dev stack.
+- **Why deferred / fix direction:** Run `docker compose restart backend`; investigate only if it recurs often.
+- **Source:** snapshot line 1591, section "Pipeline native port — accepted risks & deferred items (2026-08-15)"; merged duplicates at snapshot lines 2337
+
+### ISS-167 · P3 · npm audit fix crashes on the host with an arborist error
+
+- **Type:** watch · **Found:** 2026-10-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** host npm 10.9.4 arborist #loadPeerSet
+- **Problem:** npm audit fix fails with 'Cannot read properties of null (reading edgesOut)'. Targeted npm update with --package-lock-only works.
+- **Why deferred / fix direction:** Trigger: npm upgrade. Use targeted npm update inside the container meanwhile.
+- **Source:** snapshot line 2425, section "Dependency advisories — remaining (2026-10-25)"
+
+### ISS-168 · P3 · version.test.ts fails in the dev container because VERSION is not mounted
+
+- **Type:** watch · **Found:** 2026-11-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** readFileSync of VERSION in frontend/src/lib/version.test.ts (line ~11)
+- **Problem:** The dev compose mounts only frontend/, so the repo VERSION file is missing and the test fails with ENOENT. It passes in CI.
+- **Why deferred / fix direction:** Trigger: dev container mounts change. Or skip the check when the file is absent.
+- **Source:** snapshot line 2446, section "Design compliance fixes — deferred findings (2026-11-02)"
+
+## Open — Docs & process
+
+### ISS-169 · P3 · Re-pulling vendored ReUI files overwrites SOLVRO PATCH edits
+
+- **Type:** watch · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** SOLVRO PATCH markers across frontend/src/components/reui and ui
+- **Problem:** Running shadcn add or a registry pull on a vendored file overwrites hand edits and their markers.
+- **Why deferred / fix direction:** Rule: diff before any re-pull and re-apply every marker. Revisit only if a re-pull is planned.
+- **Source:** snapshot line 548, section "Plan B Task 9 deferred findings — ReUI Gantt swap (2026-07-25)"
+
+### ISS-170 · P3 · DESIGN.md says theme_default dark but the code defaults to system
+
+- **Type:** bug · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** theme_default in docs/DESIGN.md (line 3) vs default in frontend/src/lib/theme.tsx (line ~27)
+- **Problem:** The design doc frontmatter names dark as the default theme; the app uses the system preference. The user chose to keep system.
+- **Why deferred / fix direction:** Correct the frontmatter to system in a docs-only change.
+- **Source:** snapshot line 563, section "Login/Sidebar always-dark-pin fix — deferred findings (2026-07-25)"
+
+### ISS-171 · P3 · Vendored autocomplete header, hash and override gaps
+
+- **Type:** debt · **Found:** 2026-07-27 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** frontend/src/components/reui/autocomplete.tsx (header lines 1-8); AutocompleteInput className in frontend/src/components/CommandPalette.tsx (line ~299)
+- **Problem:** The header does not state a marker count, no registry hash is stored for any vendored engine, and the palette input overrides base styling with nothing guarding it.
+- **Why deferred / fix direction:** Record exact counts and hashes in vendor headers; add a computed-style or class snapshot test.
+- **Source:** snapshot line 685, section "Global search & ⌘K command palette — deferred findings (2026-07-27)"
+
+### ISS-172 · P3 · index.css comment about chip-violet is out of date
+
+- **Type:** debt · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** comment above the Alert tone tokens in frontend/src/index.css (line ~157)
+- **Problem:** The comment says chip-violet has no meaning assigned elsewhere, but Alert info and Critical Path both use it.
+- **Why deferred / fix direction:** Reword the comment in the next index.css edit.
+- **Source:** snapshot line 1807, section "Critical Path mark — deferred findings (2026-09-02)"
+
+## Closed
+
+No issue has been closed since the 2026-11-18 restructure. Entries closed during the restructure are in the ledger in `docs/archive/plans/issues-restructure.md`, not here.

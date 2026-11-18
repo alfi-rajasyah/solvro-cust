@@ -77,7 +77,7 @@ describe("PUT /customers/:id/weekly-updates/:weekStart", () => {
   });
 
   // DONE needs both health and at least one achievement (D7 in
-  // docs/plans/weekly-sync-achievement-rows.md). The accept case (health +
+  // docs/archive/plans/weekly-sync-achievement-rows.md). The accept case (health +
   // an achievement → 200/201) is covered by "accepts DONE once health and
   // at least one achievement are present" below.
   it("rejects DONE without health: 400 weekly_update_incomplete", async () => {
@@ -359,7 +359,7 @@ describe("PUT /customers/:id/weekly-updates/:weekStart", () => {
 
   // DONE needs health AND at least one achievement — the list the body
   // sends when present, else the count already stored (D7 in
-  // docs/plans/weekly-sync-achievement-rows.md).
+  // docs/archive/plans/weekly-sync-achievement-rows.md).
   it("accepts DONE once health and at least one achievement are present", async () => {
     const customerId = await createCustomer();
     const monday = "2026-08-24";

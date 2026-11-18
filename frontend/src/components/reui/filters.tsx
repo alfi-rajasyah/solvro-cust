@@ -1812,7 +1812,7 @@ export function Filters<T = unknown>({
   )
 
   // SOLVRO PATCH — idempotence guard (duplicate-chip mouse race, see
-  // docs/ISSUES.md's "Duplicate-chip mouse race" entry): Base UI's
+  // the "Duplicate-chip mouse race" entry in docs/archive/ISSUES-2026-11-18-phase-log.md): Base UI's
   // useMenuItemCommonProps fires a programmatic `itemRef.current.click()` on
   // mouseup once a trigger press has been held long enough (submenus share
   // the parent trigger's ref, so this reaches value-submenu clicks too), and
