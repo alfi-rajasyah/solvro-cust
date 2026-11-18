@@ -26,7 +26,7 @@ cited files; entries marked *code check* below carry the result).
   flood of distinct emails from many addresses can evict a target's counter;
   the per-address limit still applies. Same design as the public-share limiter.
 
-### ~~Unknown user id: 400 on create, 404 on update (2026-10-23)~~ — fixed 2026-11-18 (inactive-user bullet below stays open)
+### ~~Unknown user id: 400 on create, 404 on update (2026-10-23)~~ — fixed 2026-11-18
 - Creating a project, task or epic with an unknown `tamId`, `assignedToId` or
   `ownerId` answers 400 `tam_not_found` / `assignee_not_found` /
   `owner_not_found` (`backend/src/lib/userRefs.ts`). The update routes
@@ -36,7 +36,6 @@ cited files; entries marked *code check* below carry the result).
   500, but a 404 for a body field blurs the rule that 404 means a hidden
   resource. Fix: call `assertUserExists` on the three update paths and change
   the 404 expectation in `backend/test/taskAssigneeMembers.test.ts`.
-- Both paths still accept an inactive user as TAM, assignee or epic owner.
 
 ### ~~A NUL byte in a text field answers 500 (2026-10-23)~~ — fixed 2026-11-18 (`validate()` rejects U+0000 in body/query/params with 400; errors.ts maps Postgres 22021 to 400 as a safety net)
 - A string containing `\u0000` passes every Zod `z.string()` check, then
@@ -48,6 +47,23 @@ cited files; entries marked *code check* below carry the result).
   (reject or strip NUL in a shared string schema, or map 22021 to 400) must
   give those tests another late-failure trigger, for example a `vi.spyOn` on
   the transaction's `task.create` / `task.update`.
+
+### Inactive user accepted as TAM, assignee or epic owner (2026-10-23)
+- The create and update paths for `tamId`, `assignedToId` and `ownerId` check
+  that the user exists (`backend/src/lib/userRefs.ts`) but not that the user is
+  active, so an inactive user can still be set as TAM, assignee or epic owner.
+  Waits for Alfi's decision on whether to reject them (and with which error
+  code) or keep accepting them.
+
+### A Postgres 22021 reaching the error handler answers a misleading 400 and logs nothing (2026-11-18)
+- `backend/src/http/errors.ts:111` maps a Postgres 22021 to 400 "Text must not
+  contain NUL characters" with no log line. Validated routes reject NUL earlier
+  (`http/validate.ts`), so a 22021 that still reaches the handler can only come
+  from server-fetched text, for example the iTop re-pull at
+  `routes/itop.ts:808` (`upsertTicketFromItop`). The user then sees a 400 about
+  text they never sent, and nothing is logged. Fix: `logger.warn({ pgCode }, ...)`
+  without `err` (the message carries row data) and a neutral message.
+  (Deferred from the SVC-2 phase review, nit 1.)
 
 ### Gantt tree pane — residual clipping after the #118 fix (2026-07-30)
 - **Engine container clamp can re-clip the Dates/color columns.** The vendored
