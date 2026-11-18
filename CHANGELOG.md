@@ -15,7 +15,7 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
-### Docs — 2026-11-18 — Issue ledger and plan housekeeping
+### Changed — 2026-11-18 — Issue ledger and plan housekeeping
 
 - `docs/ISSUES.md` strikes 23 entries that already shipped or no longer apply. Each one has a dated note and the evidence (code location, commit or CHANGELOG line). The Gantt pane-clamp bullet gets a 2026-11-18 code check with the current figures (default pane 498, clamp below a ~699px container). The real-install re-test of Settings > iTop save moves to the open "Go-live iTop setting" bullet.
 - Eight shipped plans move from `docs/plans/` to `docs/archive/plans/`: customer visibility, date contract, Gantt visual refresh, internal sync, issues sweep, Outline integration, `solvro update`, and task panel subtask edit. The Outline knowledge-base idea and the date-contract prompt move to `docs/archive/ideas/` and `docs/archive/prompts/`. Code comments that cited the old paths point at the new ones. `docs/plans/setup-sh-hardening.md` stays, as its work is still open.
