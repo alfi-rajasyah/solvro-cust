@@ -4,7 +4,7 @@ Copy-paste the block below into a fresh session to execute the phase.
 
 ---
 
-Execute the phase planned in `/Users/alfirajasyah/Documents/Solvro/docs/plans/date-contract-utc-midnight.md` (read it first, in full).
+Execute the phase planned in `/Users/alfirajasyah/Documents/Solvro/docs/archive/plans/date-contract-utc-midnight.md` (read it first, in full).
 
 Context: task dates picked via `DateField`/`DateRangeField` walk back one day east of UTC — `isoFromDay` writes local-midnight ISO while the Gantt and all canonical readers take the UTC date-part. The plan unifies on one rule: a task date's calendar day is the UTC date-part of its stored instant; writers emit `T00:00:00.000Z`, readers go through `dayFromIso`.
 
