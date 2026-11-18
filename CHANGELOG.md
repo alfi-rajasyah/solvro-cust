@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-18 — Reply-style rules load at session start
+
+- `.claude/settings.local.json`: the SessionStart hook now prints `.claude/reply-style.md` with `cat`. The old hook called `/usr/local/bin/node`, which does not exist on this host, so the rules never loaded. `.claude/hooks/reply-style.js` is deleted. The workflow reference pages in `docs/reference/` describe the new hook.
+
 ### Fixed — 2026-11-13 — Focus returns to the task button after closing the drawer
 
 - Closing the task drawer (**`frontend/src/components/Drawer.tsx`**) now returns focus to the control that opened it. The task form focuses its title field when it opens, and the drawer had remembered that field instead of the opener, so focus was lost on close.
