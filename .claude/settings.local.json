@@ -35,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/local/bin/node \"$CLAUDE_PROJECT_DIR/.claude/hooks/reply-style.js\"",
+            "command": "cat \"$CLAUDE_PROJECT_DIR/.claude/reply-style.md\" 2>/dev/null || true",
             "timeout": 5,
             "statusMessage": "Loading reply-style rules"
           }

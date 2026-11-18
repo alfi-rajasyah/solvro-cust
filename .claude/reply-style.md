@@ -26,20 +26,7 @@ Write every reply to the user in ASD-STE100 (Simplified Technical English) style
 
 - Do not use the ASD-STE100 approved word list. The list blocks exact code identifiers, and it is licensed. Do not claim full ASD-STE100 compliance.
 - Technical names stay as they are: Prisma, Kanban, GHCR, webhook, `npm run typecheck`.
-- Long output goes behind an offer. Write "Full diff — want it?" instead of pasting it.
 
 **Why:** The user is a visual thinker. Walls of text bury the point. Short, exact, unambiguous text is faster to read and leaves no second meaning.
 
----
-
-## How this file reaches you (do not undo it)
-
-- **Source of truth:** `<repo>/.claude/reply-style.md`. Edit this file to change a rule. Nothing else needs a change.
-- **Delivery:** a `SessionStart` hook runs `/usr/local/bin/node <repo>/.claude/hooks/reply-style.js`, which emits this text as `additionalContext`.
-- **Registered in:** `<repo>/.claude/settings.local.json`. Everything lives inside the repo. `~/.claude` holds nothing about reply style — that is deliberate, decided 2026-07-29. To use these rules in another repo, copy `reply-style.md`, `hooks/reply-style.js`, and the hook entry into that repo's `.claude/`.
-
-**Why a hook, and not a `CLAUDE.md`:** `SessionStart` fires for the main session only, and its `additionalContext` does not reach subagents. Every `CLAUDE.md` in the hierarchy does reach them — the built-in Explore and Plan agents are the only exceptions. A subagent's output is data for the orchestrator, not chat for the user. Rule 1 would cut `file:line` evidence out of a reviewer's findings, because a subagent gets no follow-up turn to supply the detail.
-
-**Do not** copy these rules into any `CLAUDE.md`, into a `.claude/rules/` directory, or into an auto-memory file. All three reach subagents. An auto-memory `MEMORY.md` index line reaches them too — that was measured on 2026-07-29 and contradicts the documentation.
-
-**Verified 2026-07-29:** a subagent spawned from a fresh session reported no reply-style rules in its context; a fresh session in this repo quoted rule 6 verbatim; a fresh session outside the repo answered `NO_RULES`.
+Do not copy these rules into a `CLAUDE.md`, a `.claude/rules/` file, or an auto-memory file. All three reach subagents, and a subagent's output is data for the orchestrator, not chat for the user.
