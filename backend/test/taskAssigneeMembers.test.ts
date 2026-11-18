@@ -2,7 +2,7 @@
 // user who is neither the project's TAM nor a member adds them as a member in
 // the same transaction as the task write.
 import "./env.js";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
@@ -33,11 +33,36 @@ async function fixture() {
   return { tam, assignee, project };
 }
 
-// Passes validation, then Postgres refuses it at the INSERT/UPDATE (a text
-// column cannot hold a NUL byte) — a write that fails after the assignee
-// helper already ran. (An out-of-range date was the trigger before dates were
-// range-checked at validation; see test/inputValidation.test.ts.)
-const UNSTORABLE_TITLE = "bad\u0000title";
+// Makes the transaction client's `task.<method>` throw: a write that fails
+// after the assignee helper already ran inside the same transaction.
+function failTaskWrite(method: "create" | "update") {
+  const real = prisma.$transaction.bind(prisma) as (...args: unknown[]) => Promise<unknown>;
+  return vi.spyOn(prisma, "$transaction").mockImplementation(((fn: unknown, ...rest: unknown[]) => {
+    if (typeof fn !== "function") return real(fn, ...rest);
+    return real((tx: any) =>
+      fn(
+        new Proxy(tx, {
+          get(target, key) {
+            if (key !== "task") return target[key];
+            return new Proxy(target.task, {
+              get(model, name) {
+                if (name === method) {
+                  return () => {
+                    throw new Error("simulated task write failure");
+                  };
+                }
+                return model[name];
+              },
+            });
+          },
+        }),
+      ), ...rest);
+  }) as never);
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const memberRows = (projectId: number) =>
   prisma.projectMember.findMany({ where: { projectId } });
@@ -95,13 +120,14 @@ describe("POST /projects/:id/tasks — assignee becomes a member", () => {
 
   it("rolls the membership back when the task insert fails after the helper ran", async () => {
     const { tam, assignee, project } = await fixture();
-    // Passes validation and the assignee helper, then the INSERT itself fails
-    // (a title Postgres cannot store) — so the membership row was really
-    // written inside the transaction before being rolled back.
+    // The assignee helper runs, then the task INSERT throws — so the
+    // membership row was really written inside the transaction before being
+    // rolled back.
+    failTaskWrite("create");
     const res = await request(app)
       .post(`/projects/${project.id}/tasks`)
       .set(auth(tam.token))
-      .send({ title: UNSTORABLE_TITLE, assignedToId: assignee.userId });
+      .send({ title: "Fails", assignedToId: assignee.userId });
     expect(res.status).toBe(500);
     expect(await memberRows(project.id)).toHaveLength(0);
     expect(await prisma.task.count({ where: { projectId: project.id } })).toBe(0);
@@ -176,24 +202,26 @@ describe("PATCH /tasks/:id — assignee becomes a member", () => {
     expect(await memberRows(project.id)).toHaveLength(1);
   });
 
-  it("an unknown assignee still 404s and adds no membership", async () => {
+  it("an unknown assignee answers 400 assignee_not_found and adds no membership", async () => {
     const { tam, project } = await fixture();
     const task = await newTask(project.id);
     const res = await request(app)
       .patch(`/tasks/${task.id}`)
       .set(auth(tam.token))
       .send({ assignedToId: 2_000_000_000 });
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("assignee_not_found");
     expect(await memberRows(project.id)).toHaveLength(0);
   });
 
   it("rolls the membership back when the task update fails after the helper ran", async () => {
     const { tam, assignee, project } = await fixture();
     const task = await newTask(project.id);
+    failTaskWrite("update");
     const res = await request(app)
       .patch(`/tasks/${task.id}`)
       .set(auth(tam.token))
-      .send({ assignedToId: assignee.userId, title: UNSTORABLE_TITLE });
+      .send({ assignedToId: assignee.userId, title: "Fails" });
     expect(res.status).toBe(500);
     expect(await memberRows(project.id)).toHaveLength(0);
     const after = await prisma.task.findUniqueOrThrow({ where: { id: task.id } });

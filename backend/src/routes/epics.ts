@@ -11,6 +11,7 @@ import { ensureProjectVisible } from "../lib/visibility.js";
 import { recordActivity, shortLabel } from "../lib/activity.js";
 import { diffEpicChanges, epicSnapshotSelect } from "../lib/epicActivity.js";
 import { lockProjectOrder } from "../lib/orderLock.js";
+import { assertUserExists } from "../lib/userRefs.js";
 import { statusDefInclude } from "../lib/taskStatuses.js";
 
 // Resolve the epic's owning project and 404 if the caller can't see it.
@@ -135,6 +136,10 @@ epicsRouter.patch(
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
     const body = req.body as z.infer<typeof updateEpicSchema>;
     const { projectId } = await ensureEpicVisible(req.user!, id);
+
+    if (body.ownerId != null) {
+      await assertUserExists(prisma, body.ownerId, "owner_not_found", "Epic owner not found");
+    }
 
     const data: Prisma.EpicUpdateInput = {};
     if (body.title !== undefined) data.title = body.title;
