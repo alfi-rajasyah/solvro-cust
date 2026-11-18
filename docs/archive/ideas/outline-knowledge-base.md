@@ -415,4 +415,4 @@ the gap, and what cannot? Verified against Outline `main` source (v1.10.1 era).
 ## 12. Plan
 
 2026-10-09: the user approved the mockup (links + Tier 1 + Tier 2). Plan:
-`docs/plans/outline-integration.md` (Phases A, B, C).
+`docs/archive/plans/outline-integration.md` (Phases A, B, C).

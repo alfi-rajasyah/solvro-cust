@@ -66,7 +66,7 @@ searchRouter.get("/", validate("query", searchQuerySchema), async (req, res) => 
       take: GROUP_LIMIT,
     }),
     !hasPermission(req.user!, "customer:read") ? Promise.resolve([]) : prisma.customer.findMany({
-      // Customer Visibility (docs/plans/customer-visibility-spec.md §5.4,
+      // Customer Visibility (docs/archive/plans/customer-visibility-spec.md §5.4,
       // Decision 11): a search hit must obey the same rule as every other
       // customer read — a customer owned by another TAM with no project of
       // the caller's must not surface here either.

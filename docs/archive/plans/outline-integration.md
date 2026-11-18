@@ -2,7 +2,7 @@
 
 - **Date:** 2026-10-09
 - **Status:** approved 2026-10-09 (mockup and §2 decisions). Phase A shipped (PR #27). Phases B and C ship together as ONE branch and PR, `feat/outline-api-embed` (user decision 2026-10-09); tasks keep their B/C ids and run in waves.
-- **Research:** `docs/ideas/outline-knowledge-base.md` §10 (link-out decision), §11 (gap research).
+- **Research:** `docs/archive/ideas/outline-knowledge-base.md` §10 (link-out decision), §11 (gap research).
 - **Mockup (approved look, 2026-10-09):** https://claude.ai/artifact/Vhf62KES65HwWN6qLC2tfj —
   page 1 "Link-only plan" = Phase A, page 2 "Closing the gap" = Phases B (Tier 1) and C (Tier 2).
 - **Code comments cite:** `docs/archive/plans/outline-integration.md`.
