@@ -34,6 +34,8 @@ import {
 
 export interface SyncSummary {
   ran: boolean;
+  /** `ran` is false because another run holds the advisory lock (not because iTop is unconfigured). `requestSync` re-queues a full request on this. */
+  busy?: boolean;
   full: boolean;
   startedAt: Date;
   finishedAt: Date;
@@ -833,6 +835,7 @@ export async function syncTickets(
   const startedAt = new Date();
   const checkDeadline = runDeadline(opts.budgetMs ?? RUN_BUDGET_MS);
   let ran = false;
+  let busy = false;
   let full = Boolean(opts.full);
   let orgs = 0;
   let upserted = 0;
@@ -863,6 +866,7 @@ export async function syncTickets(
         Array<{ locked: boolean }>
       >`SELECT pg_try_advisory_xact_lock(hashtext(${ADVISORY_LOCK_KEY})) AS locked`;
       if (!lockRows[0]?.locked) {
+        busy = true;
         return;
       }
 
@@ -1034,6 +1038,7 @@ export async function syncTickets(
 
   return {
     ran,
+    busy,
     full,
     startedAt,
     finishedAt: new Date(),

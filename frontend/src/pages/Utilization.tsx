@@ -177,6 +177,16 @@ export function Utilization() {
         </div>
       </div>
 
+      {refresh.isError && (
+        <Alert variant="destructive" data-testid="utilization-refresh-error">
+          <AlertDescription>
+            {refresh.error instanceof ApiError
+              ? refresh.error.message
+              : "Could not reach the server to refresh. Check your connection and try again."}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {(!authResolved || isLoading) && (
         <div className="space-y-2">
           {[0, 1, 2].map((i) => (

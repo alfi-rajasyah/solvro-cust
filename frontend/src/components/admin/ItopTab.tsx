@@ -153,6 +153,10 @@ function ConnectionCard() {
 
   const patch = buildItopSettingsPatch(form, settings);
   const dirty = Object.keys(patch).length > 0;
+  // Mirrors the server: a new iTop address is only accepted with the token in
+  // the same save (the stored token is never sent to a typed address).
+  const tokenRequired =
+    typeof patch.baseUrl === "string" && settings.appTokenSet && patch.appToken === undefined;
   const testData = testConnection.data;
   const totalProbes = testData?.probes.length ?? 0;
   const passedProbes = testData?.probes.filter((p) => p.ok).length ?? 0;
@@ -286,6 +290,15 @@ function ConnectionCard() {
             autoComplete="off"
             className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
           />
+          {tokenRequired ? (
+            <span className="mt-1 block text-meta text-on-surface-variant">
+              Enter the token again to save a new URL.
+            </span>
+          ) : settings.appTokenUnverified ? (
+            <span className="mt-1 block text-meta text-on-surface-variant">
+              The saved token has not been checked. Enter it with the iTop URL to verify it.
+            </span>
+          ) : null}
         </label>
       </div>
 
@@ -422,7 +435,7 @@ function ConnectionCard() {
         <button
           type="button"
           onClick={() => void handleSave()}
-          disabled={!dirty || updateSettings.isPending}
+          disabled={!dirty || tokenRequired || updateSettings.isPending}
           className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary/90 disabled:opacity-50"
         >
           {updateSettings.isPending ? "Saving…" : "Save"}

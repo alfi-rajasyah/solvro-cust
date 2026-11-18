@@ -926,9 +926,16 @@ describe("PATCH /admin/itop/settings — a baseUrl change disconnects every pers
     const a = await userWithToken();
     const b = await userWithToken();
     const { userId: untouched } = await createUserWithRole("TAM"); // never connected
+    // An address change needs the token in the same PATCH; it is probed
+    // against the new address, so let iTop accept it.
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ code: 0, operations: [] }), { status: 200, headers: { "content-type": "application/json" } }));
+    afterEachRestore(fetchSpy);
 
     const res = await call("patch", "/admin/itop/settings", adminToken).send({
       baseUrl: "https://itop-new.example.com/",
+      appToken: "token-for-the-new-address",
     });
     expect(res.status).toBe(200);
     expect(res.body.baseUrl).toBe("https://itop-new.example.com");
@@ -1031,5 +1038,94 @@ describe("app token is verified before it is stored; /test never sends the store
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("app_token_required");
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("an address change needs the application token in the same PATCH", () => {
+  const iTopReply = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+
+  async function storeTokenWithoutAddress(): Promise<void> {
+    await prisma.itopConfig.upsert({
+      where: { id: "default" },
+      create: { id: "default", baseUrl: null, appTokenEnc: seal("stored-token") },
+      update: { baseUrl: null, appTokenEnc: seal("stored-token") },
+    });
+    bustItopConfigCache();
+  }
+
+  it("saving a token with no address stays allowed and the response says it is unverified", async () => {
+    await clearItopConfig();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    afterEachRestore(fetchSpy);
+    const res = await call("patch", "/admin/itop/settings", adminToken).send({ appToken: "typed-before-address" });
+    expect(res.status).toBe(200);
+    expect(res.body.appTokenSet).toBe(true);
+    expect(res.body.appTokenUnverified).toBe(true);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("setting an address after a token was saved without one answers 400 itop_token_required, makes no outbound call and saves nothing", async () => {
+    await storeTokenWithoutAddress();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    afterEachRestore(fetchSpy);
+
+    const res = await call("patch", "/admin/itop/settings", adminToken).send({ baseUrl: "https://itop.example.com" });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("itop_token_required");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const row = await prisma.itopConfig.findUniqueOrThrow({ where: { id: "default" } });
+    expect(row.baseUrl).toBeNull();
+  });
+
+  it("changing the address with a token stored answers 400 itop_token_required and never contacts the new host", async () => {
+    await configureItop("https://itop-old.example.com");
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    afterEachRestore(fetchSpy);
+
+    const res = await call("patch", "/admin/itop/settings", adminToken).send({ baseUrl: "https://attacker.example.com" });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("itop_token_required");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const row = await prisma.itopConfig.findUniqueOrThrow({ where: { id: "default" } });
+    expect(row.baseUrl).toBe("https://itop-old.example.com");
+  });
+
+  it("an address with a token iTop refuses answers 400 itop_token_rejected and saves nothing", async () => {
+    await storeTokenWithoutAddress();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(iTopReply({ code: 1, message: "Invalid login" }));
+    afterEachRestore(fetchSpy);
+
+    const res = await call("patch", "/admin/itop/settings", adminToken).send({
+      baseUrl: "https://itop.example.com",
+      appToken: "typo-token",
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("itop_token_rejected");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const row = await prisma.itopConfig.findUniqueOrThrow({ where: { id: "default" } });
+    expect(row.baseUrl).toBeNull();
+    expect(open(row.appTokenEnc as string)).toBe("stored-token");
+  });
+
+  it("an address with a token iTop accepts is saved with the new token, and the unverified flag clears", async () => {
+    await storeTokenWithoutAddress();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(iTopReply({ code: 0, operations: [] }));
+    afterEachRestore(fetchSpy);
+
+    const res = await call("patch", "/admin/itop/settings", adminToken).send({
+      baseUrl: "https://itop.example.com",
+      appToken: "good-token",
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.baseUrl).toBe("https://itop.example.com");
+    expect(res.body.appTokenUnverified).toBe(false);
+    const row = await prisma.itopConfig.findUniqueOrThrow({ where: { id: "default" } });
+    expect(open(row.appTokenEnc as string)).toBe("good-token");
+  });
+
+  it("repeating the stored address without a token is not an address change and needs no token", async () => {
+    await configureItop("https://itop.example.com");
+    const res = await call("patch", "/admin/itop/settings", adminToken).send({ baseUrl: "https://itop.example.com/", refreshMinutes: 9 });
+    expect(res.status).toBe(200);
   });
 });

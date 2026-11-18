@@ -154,6 +154,10 @@ export interface ProjectServiceAssignment {
 }
 
 export interface CustomerDetail extends CustomerSummary {
+  // iTop organisation this customer is mapped to; both null when unmapped.
+  // GET /customers/:id returns every Customer scalar, so these are on the wire.
+  itopOrgId: number | null;
+  itopOrgName: string | null;
   projects: ProjectSummary[];
   services: CustomerServiceAssignment[];
 }
@@ -4297,6 +4301,7 @@ export interface ItopProbeResult {
 export interface ItopSettings {
   baseUrl: string | null;
   appTokenSet: boolean;
+  appTokenUnverified: boolean;
   webhookSecretSet: boolean;
   refreshMinutes: number;
   readClasses: ItopReadClass[];
@@ -4720,6 +4725,8 @@ export function useMapItopCustomer() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: adminQueryKeys.itopCustomers });
       qc.invalidateQueries({ queryKey: adminQueryKeys.itopOrganizations });
+      // `itopOrgId` lives on the customer record: refresh the customer list and detail (prefix ["customers"]).
+      qc.invalidateQueries({ queryKey: queryKeys.customers });
     },
   });
 }
@@ -4736,6 +4743,8 @@ export function useAutomatchItopCustomers() {
       qc.setQueryData(adminQueryKeys.itopCustomers, fresh.customers);
       qc.invalidateQueries({ queryKey: adminQueryKeys.itopCustomers });
       qc.invalidateQueries({ queryKey: adminQueryKeys.itopOrganizations });
+      // `itopOrgId` lives on the customer record: refresh the customer list and detail (prefix ["customers"]).
+      qc.invalidateQueries({ queryKey: queryKeys.customers });
     },
   });
 }

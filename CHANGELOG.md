@@ -15,6 +15,15 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-18 — iTop hardening: log redaction, address token check, Refresh, services scope
+
+- The shared server logger now redacts secret-shaped fields (iTop application and personal tokens, `Authorization` and `Auth-Token` in any letter case listed, OAuth tokens, passwords and secrets) as `[Redacted]`, at the top level and up to two levels deep (`backend/src/logger.ts`).
+- Setting or changing the iTop address in Admin > iTop now requires the application token in the same save, and iTop must accept it (`itop_token_required`, `itop_token_rejected`). The stored token is no longer sent to an address typed in the request. A token saved before any address is set is still accepted; the settings response reports `appTokenUnverified` and the iTop tab asks for the token again together with the address.
+- A full sync requested by Refresh while another sync holds the lock is now retried every 30 s, for up to 30 minutes, instead of being dropped (`backend/src/lib/itop/scheduler.ts`).
+- The Utilization page shows an error when Refresh fails: the server's message (for example the rate limit), or a connection message.
+- `GET /itop/services` no longer returns every organisation's services to any signed-in user. It lists the services provided by, or covered by a customer contract of, the iTop organisations mapped to customers the caller can see. `project:view-all` and `customer:view-all` holders keep the full list.
+- The customer page decides whether to show the Tickets tab from the customer's `itopOrgId` and `itopOrgName`, instead of a separate tickets request on every load.
+
 ### Added — 2026-11-18 — PR hygiene check and archive-path plan citations
 
 - New workflow **`.github/workflows/pr-hygiene.yml`**: its `attribution` job runs on every pull request into `develop` or `main`, docs-only ones included, and again when the description is edited. It fails when the description or a commit new to the pull request carries an AI attribution line or the hidden attribution comment some tools insert.
