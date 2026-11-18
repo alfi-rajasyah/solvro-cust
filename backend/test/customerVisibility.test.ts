@@ -1,4 +1,4 @@
-// Customer visibility (docs/plans/customer-visibility-spec.md §3, §5.2, §8
+// Customer visibility (docs/archive/plans/customer-visibility-spec.md §3, §5.2, §8
 // criteria 1-4). Fixtures write directly via `prisma` for the "attached" /
 // "unrelated" scenarios (needs full control over Customer.tamId and
 // Project.tamId independent of the caller), and through the HTTP API where

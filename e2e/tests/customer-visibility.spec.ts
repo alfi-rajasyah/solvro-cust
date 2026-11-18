@@ -1,7 +1,7 @@
 import { apiBase, expect, loginViaUi, test } from "../fixtures/test";
 import { login } from "../fixtures/seed";
 
-// Customer Visibility (docs/plans/customer-visibility-spec.md §8 criterion
+// Customer Visibility (docs/archive/plans/customer-visibility-spec.md §8 criterion
 // 9): the admin API creates two TAM users, one customer per TAM (`tamId`
 // set), and one ACTIVE project under each customer (so each customer also
 // shows on the Daily Review per Decision 8/9). TAM A then logs in through

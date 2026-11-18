@@ -5,7 +5,7 @@ import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { seedRoles, createAdminAndToken, createUserWithRole } from "./testAuth.js";
 
-// Customer Visibility (docs/plans/customer-visibility-spec.md §5.5,
+// Customer Visibility (docs/archive/plans/customer-visibility-spec.md §5.5,
 // Decision 7): POST /projects and PATCH /projects/:id (when customerId is
 // present) must reject a customerId the caller can't see with 400
 // customer_not_found, instead of letting it through to a Prisma FK error
