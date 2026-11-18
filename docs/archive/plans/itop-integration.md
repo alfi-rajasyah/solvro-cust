@@ -105,7 +105,7 @@ Checkpoint P1: gates green; dev stack + `scripts/fake-itop.ts`: admin maps 2 cus
 
 ### Phase 2 — Daily Review strip (`feat/itop-p2-daily-review`)
 
-**Task 2.1 Daily API.** `GET /itop/daily?date=YYYY-MM-DD` in `routes/itop.ts`: per visible customer (`customerVisibilityFilter`) → `{ newToday, resolvedToday, slaBreached, ongoing, recent: 3 tickets by lastUpdate, syncedAt }`. Day boundaries follow the date contract (`lib/dateField.ts`, UTC midnight decision `docs/plans/date-contract-utc-midnight.md`). Tests.
+**Task 2.1 Daily API.** `GET /itop/daily?date=YYYY-MM-DD` in `routes/itop.ts`: per visible customer (`customerVisibilityFilter`) → `{ newToday, resolvedToday, slaBreached, ongoing, recent: 3 tickets by lastUpdate, syncedAt }`. Day boundaries follow the date contract (`lib/dateField.ts`, UTC midnight decision `docs/archive/plans/date-contract-utc-midnight.md`). Tests.
 Acceptance: counts match fixtures across the day boundary. Deps: P1. Files: 1 + test. Size S.
 
 **Task 2.2 Strip UI + Add to note.** `components/itop/DailyItopStrip.tsx` rendered in `daily-review/CustomerGroup.tsx` on the operations card (above `OperationsCard`); "Add to note" appends `"<ref> <title>"` to the day's operations note draft (extend `WeekNotesEditor`/`OperationsCard` with an `appendText(text)` handle; writes nothing to iTop). Hook `useItopDaily(date)`. Playwright spec.

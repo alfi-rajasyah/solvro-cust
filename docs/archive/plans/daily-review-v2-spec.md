@@ -63,7 +63,7 @@ The Daily Review page (`frontend/src/pages/DailyReview.tsx`, route `/daily-revie
 
 ## 4. Data model (`backend/prisma/schema.prisma`)
 
-All date-picked columns are calendar days stored as `@db.Date`; Prisma serialises them as `T00:00:00.000Z` instants, which the frontend reads via `dayFromIso` — consistent with the date contract (`docs/plans/date-contract-utc-midnight.md`). Backend validators accept `"yyyy-MM-dd"` (`isValidDayString`) and convert via `utcMidnightOfDayString` (`backend/src/lib/dateBoundary.ts`).
+All date-picked columns are calendar days stored as `@db.Date`; Prisma serialises them as `T00:00:00.000Z` instants, which the frontend reads via `dayFromIso` — consistent with the date contract (`docs/archive/plans/date-contract-utc-midnight.md`). Backend validators accept `"yyyy-MM-dd"` (`isValidDayString`) and convert via `utcMidnightOfDayString` (`backend/src/lib/dateBoundary.ts`).
 
 ```prisma
 model Customer {
