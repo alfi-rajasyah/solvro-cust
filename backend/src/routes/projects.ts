@@ -468,6 +468,10 @@ projectsRouter.patch(
       }
     }
 
+    if (body.tamId !== undefined) {
+      await assertUserExists(prisma, body.tamId, "tam_not_found", "TAM not found");
+    }
+
     const data: Prisma.ProjectUpdateInput = {};
     if (body.name !== undefined) data.name = body.name;
     if (body.description !== undefined) data.description = body.description;

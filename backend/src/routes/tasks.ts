@@ -27,6 +27,7 @@ import { assertEpicNotOnSubtask, assertValidEpic } from "../lib/epics.js";
 import { duplicateTaskTree } from "../lib/duplicate.js";
 import { lockStatusListShared, resolveStatusWrite, statusDefInclude } from "../lib/taskStatuses.js";
 import { ensureAssigneeIsMember } from "../lib/projectMembers.js";
+import { assertUserExists } from "../lib/userRefs.js";
 import { diffTaskChanges, recordActivity } from "../lib/activity.js";
 import { filterActiveUsersWhoCanSeeProject, notifyForEvent } from "../lib/notifications.js";
 
@@ -511,6 +512,10 @@ tasksRouter.patch(
         epicIdUpdate = body.epicId;
       } else if (body.parentTaskId !== undefined && body.parentTaskId !== null) {
         epicIdUpdate = null;
+      }
+
+      if (body.assignedToId != null) {
+        await assertUserExists(tx, body.assignedToId, "assignee_not_found", "Assignee not found");
       }
 
       // Assigning someone who cannot see the project adds them as a member

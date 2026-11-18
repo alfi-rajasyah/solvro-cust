@@ -26,7 +26,7 @@ cited files; entries marked *code check* below carry the result).
   flood of distinct emails from many addresses can evict a target's counter;
   the per-address limit still applies. Same design as the public-share limiter.
 
-### Unknown user id: 400 on create, 404 on update (2026-10-23)
+### ~~Unknown user id: 400 on create, 404 on update (2026-10-23)~~ — fixed 2026-11-18 (inactive-user bullet below stays open)
 - Creating a project, task or epic with an unknown `tamId`, `assignedToId` or
   `ownerId` answers 400 `tam_not_found` / `assignee_not_found` /
   `owner_not_found` (`backend/src/lib/userRefs.ts`). The update routes
@@ -38,7 +38,7 @@ cited files; entries marked *code check* below carry the result).
   the 404 expectation in `backend/test/taskAssigneeMembers.test.ts`.
 - Both paths still accept an inactive user as TAM, assignee or epic owner.
 
-### A NUL byte in a text field answers 500 (2026-10-23)
+### ~~A NUL byte in a text field answers 500 (2026-10-23)~~ — fixed 2026-11-18 (`validate()` rejects U+0000 in body/query/params with 400; errors.ts maps Postgres 22021 to 400 as a safety net)
 - A string containing `\u0000` passes every Zod `z.string()` check, then
   Postgres refuses it at the write (error 22021, a
   `PrismaClientUnknownRequestError`), which the error handler answers as 500.
