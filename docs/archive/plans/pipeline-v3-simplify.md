@@ -23,7 +23,8 @@ Ported from the source repository (`alfi-rajasyah/solvro`, PR #240, plan of the 
 8. `gates.sh` gains `docs-plan-citations` and `docs-plans-status`, and skips smoke on a test-only frontend diff.
 9. `docs/ISSUES.md` becomes a triaged ledger with stable `ISS-NNN` IDs (`docs/archive/plans/issues-restructure.md`).
 
-## Left for the user
+## GitHub settings (applied 2026-11-18, matching the upstream repo)
 
-- GitHub settings: restrict merge methods to match decision 6 (today squash, merge and rebase are all allowed), and add `attribution` as a required check on `develop` and `main`.
-- A `develop` ruleset that blocks force-push and deletion and requires a PR (today only `main` has a ruleset). Agent pushes to `develop` or `main` are a written rule only; no permission entry denies them.
+- Ruleset `protect-develop`: blocks deletion and force-push, requires a PR, allows squash and merge commit (merge commit for a hotfix merge-back), requires the `attribution` check.
+- Ruleset `Protect Main`: blocks deletion and force-push, requires a PR, allows merge commit only, requires `typecheck`, `backend-tests` and `attribution`. The e2e checks stay off the list: `ci.yml` skips e2e on PRs into `main`, so those checks never report there.
+- Direct pushes to `develop` and `main` are blocked by the rulesets, not by permission deny entries, the same as upstream. The deny list covers merges only.
