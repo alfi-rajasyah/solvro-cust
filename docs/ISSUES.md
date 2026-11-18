@@ -62,6 +62,7 @@ cited files; entries marked *code check* below carry the result).
   or patch the engine to surface the clamped width with a `// SOLVRO PATCH`
   marker. Rare in practice: the Gantt is desktop-first and the default pane
   (364) never triggers the clamp at supported widths.
+  *Updated 2026-11-18 (code check)*: default pane 498 (`SolvroGantt.tsx:209`); the clamp engages below a ~699px container (498 + `MIN_TIMELINE_WIDTH` 200 + 1, `gantt-view.tsx:213`); the ResizeObserver fix is still deferred.
 - **A pane narrowed below 256px clips the fixed columns** (name column floors
   at 100px; 100 + 156 > pane). Deliberate user narrowing — accepted, not
   planned for a fix.
@@ -98,7 +99,7 @@ cited files; entries marked *code check* below carry the result).
   migrate −60), and the deliberate-narrowing threshold is 356px
   (`256 + 100`). The clamp-at-default observation in (a) still holds
   directionally — the 498 default engages `clampContainer` under a ~699px
-  container — and the deferred ResizeObserver fix remains worth re-weighing.~~ **Moot 2026-11-18**: restates the first bullet of this section with newer figures; the current 256/356/498/774 numbers live in the code-checked bullets above (`SolvroGantt.tsx:199,205,237-240`).
+  container — and the deferred ResizeObserver fix remains worth re-weighing.~~ **Moot 2026-11-18**: the figures are superseded by the update on the first bullet of this section (default pane 498 at `SolvroGantt.tsx:209`, max 774 at `:215`, fixed columns at `:247`).
 
 ### Gantt Excel/PDF export downloads blocked in production (2026-07-31)
 - **Cause: Chromium insecure-download blocking, keyed on the origin scheme.**
@@ -337,7 +338,7 @@ cited files; entries marked *code check* below carry the result).
 - ~~**Caps-label variants not migrated to the token:** 4× `text-[11px] uppercase`
   (no bold) and 1× `text-[11px] font-semibold uppercase` were left as-is
   (adopting the 700-weight `text-label-caps` token would change their weight).
-  Decide whether to align them.~~ **Resolved 2026-11-18**: `grep -rn 'text-\[11px\]' frontend/src` returns nothing; the caps labels were migrated in the antislop port (commit 46717bf, 2026-11-12).
+  Decide whether to align them.~~ **Resolved 2026-11-18**: `grep -rn 'text-\[11px\]' frontend/src` returns nothing; commit 489b0a4 (2026-09-29) removed all 150 occurrences; CHANGELOG `### Changed — 2026-09-29 — Professional UI pass`.
 - **`ProjectOverview` KPI value uses `font-body`**, not the reviewer-suggested
   `text-data-mono` (that token's fixed 13px would shrink the `text-3xl` stat and
   its weight 500 would fight `font-bold`). Working as intended — noted in case a
@@ -2289,8 +2290,8 @@ Tested against a real iTop 3.2.2 (ITIL, default lifecycle). Fixed in code the sa
 
 - **The application token cannot read iTop's `User` class** (Support Agent profile), and neither can a TAM's personal token. So user matching sets the person link but never `User.itopUserId`, and time logging answers "Your iTop user account is not linked yet". Options once the Time Tracking extension is installed: check whether `TimeSpent.user_id` can be omitted (iTop may default it to the caller), or grant the application token a profile that can read `User`.
 - ~~**`PersonalToken` is not readable by a Support Agent token either.** The token-ownership check therefore falls back to the email match, and token expiry shows as unknown. See the Phase 5 entry above.
-  *Updated 2026-10-25*: the ownership check no longer falls back to the email match. On an install like this one (Support Agent tokens cannot read `User` or `PersonalToken`) a personal token is now refused with `400 itop_token_unverified` unless `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS=true` is set on the backend (default `false`). Re-test the Settings > iTop save against the real install and set the variable if it is refused.~~ **Resolved 2026-11-18**: a token that cannot be verified is refused as `itop_token_unverified` unless `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS=true` (`backend/src/env.ts:96`); see the update line below.
-- **Go-live iTop setting:** personal tokens work only for profiles listed in the `authent-token` module setting `personal_tokens_allowed_profiles` (e.g. `array('Support Agent')`); by default only administrators can use them.
+  *Updated 2026-10-25*: the ownership check no longer falls back to the email match. On an install like this one (Support Agent tokens cannot read `User` or `PersonalToken`) a personal token is now refused with `400 itop_token_unverified` unless `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS=true` is set on the backend (default `false`). Re-test the Settings > iTop save against the real install and set the variable if it is refused.~~ **Resolved 2026-11-18**: a token that cannot be verified is refused as `itop_token_unverified` unless `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS=true` (`backend/src/env.ts:96`); the real-install re-test is tracked in the "Go-live iTop setting" bullet below.
+- **Go-live iTop setting:** re-test the Settings > iTop save against the real install and set `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS` if it is refused (still pending). Personal tokens work only for profiles listed in the `authent-token` module setting `personal_tokens_allowed_profiles` (e.g. `array('Support Agent')`); by default only administrators can use them.
 - **Time Tracking extension not bundled** with iTop Community; download it from iTop Hub before the `TimeSpent` checks (duration unit, `ticket_ref` writability) can run.
 - **`pending_reason` is assumed to be free text.** True on the default install; an install that turns it into a list of values will refuse free text, and the user sees iTop's message.
 
