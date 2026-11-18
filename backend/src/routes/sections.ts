@@ -161,7 +161,7 @@ sectionsRouter.patch(
 
 // Duplicate a section — its own name/color plus every top-level task
 // (sectionId = id, parentTaskId = null) and each of THEIR subtasks — no
-// body. See docs/plans/duplicate-tasks-sections.md §3-4 for the settled
+// body. See docs/archive/plans/duplicate-tasks-sections.md §3-4 for the settled
 // field rules (status -> TODO, baseline cleared, dependencies dropped,
 // comments never copied) implemented by duplicateTaskTree — the same
 // engine POST /tasks/:id/duplicate uses. The new section carries the

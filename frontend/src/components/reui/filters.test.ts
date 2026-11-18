@@ -3,7 +3,7 @@ import { createFilter, findFilterMatch, type Filter } from "./filters";
 
 /**
  * Deterministic regression proof for the duplicate-chip idempotence guard
- * (docs/ISSUES.md's "Duplicate-chip mouse race" entry): Base UI's
+ * (the "Duplicate-chip mouse race" entry in docs/archive/ISSUES-2026-11-18-phase-log.md): Base UI's
  * useMenuItemCommonProps can fire a programmatic click on mouseup on top of
  * the natural one, so a single user interaction can invoke a chip-creating
  * handler twice. `findFilterMatch` is the pure comparison core every

@@ -378,7 +378,7 @@ function UsersTab() {
     getRowId: (row) => String(row.id),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    // Pagination stays OFF (docs/plans/reui-data-grid.md Checkpoint B,
+    // Pagination stays OFF (docs/archive/plans/reui-data-grid.md Checkpoint B,
     // binding for every DataGrid table this phase): no
     // getPaginationRowModel, so the full sorted row model renders.
     // `pageSize` here only sizes the loading-skeleton row count.

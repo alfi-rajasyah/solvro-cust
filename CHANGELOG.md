@@ -15,6 +15,13 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-18 — PR hygiene check and archive-path plan citations
+
+- New workflow **`.github/workflows/pr-hygiene.yml`**: its `attribution` job runs on every pull request into `develop` or `main`, docs-only ones included, and again when the description is edited. It fails when the description or a commit new to the pull request carries an AI attribution line or the hidden attribution comment some tools insert.
+- New **`.claude/settings.json`** turns off the attribution lines that the coding assistant would otherwise add to commits and pull requests.
+- Code and test comments in 28 files under `backend/`, `frontend/` and `e2e/` now cite plans at their archive path (`docs/archive/plans/…`, `docs/archive/prompts/…`) instead of the old `docs/plans/` path. Comment text only; no behaviour changes.
+- Code and test comments that cited a `docs/ISSUES.md` entry by its title now cite its `ISS-NNN` id, or the archived snapshot `docs/archive/ISSUES-2026-11-18-phase-log.md` when the entry has closed. Comment text only.
+
 ### Fixed — 2026-11-18 — Unknown user ids and NUL bytes answer 400
 
 - Updating a project's TAM, a task's assignee or an epic's owner to a user id that does not exist now answers 400 (`tam_not_found`, `assignee_not_found`, `owner_not_found`), matching the create routes, instead of 404.

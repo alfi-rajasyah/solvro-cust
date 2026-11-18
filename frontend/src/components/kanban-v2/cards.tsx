@@ -1,6 +1,6 @@
 // Copied from the legacy frontend/src/pages/views/ProjectKanban.tsx (TaskCard
 // lines 874-1021, SubtaskRow lines 1057-1121, the old "N Days" duration,
-// pre-T11 cutover) per Architecture Decision 2 (docs/plans/kanban-reui-swap/
+// pre-T11 cutover) per Architecture Decision 2 (docs/archive/plans/kanban-reui-swap/
 // plan.md): copy, don't extract. The legacy file is gone as of T11 cutover
 // (git history preserves it) — this duplication is now permanent, not
 // temporary.

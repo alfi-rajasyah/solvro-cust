@@ -1,5 +1,7 @@
 # setup.sh hardening — the 4 changes before the first customer install
 
+Status: superseded 2026-11-18. The version pin (change 2) and the wipe guard (change 4) shipped through the 1.0.0 and later `setup.sh` changes (CHANGELOG). The registry-login preflight on a fresh install and the `CORS_ORIGIN` fallback to `*` stay open in `docs/ISSUES.md`.
+
 Status: proposed 2026-09-18, **not approved**. Proposal page: https://claude.ai/artifact/XKDfct2hvMMHM7PtHedGae (section 6). Ships as one PR in this repository, tested on a fresh VM.
 
 `setup.sh` was copied from the source repository unchanged on 2026-09-21. Today it pulls `:latest` with `pull_policy: always`, sets `CORS_ORIGIN: "*"`, has no registry-login step, and wipes `solvro_pgdata` on any run without `~/solvro/.env`.

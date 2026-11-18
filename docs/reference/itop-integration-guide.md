@@ -13,7 +13,8 @@ exposed** — so the next implementation gets it right the first time.
 - **Source documents:** the original proposal
   `docs/archive/plans/itop-integration-spec.md`; the phase plan with task
   acceptance criteria `docs/archive/plans/itop-integration.md`; deferred
-  findings in `docs/ISSUES.md` ("iTop integration …" sections); operator
+  findings in `docs/ISSUES.md` (the "Open — iTop" area; the older per-phase
+  sections are in `docs/archive/ISSUES-2026-11-18-phase-log.md`); operator
   config in `docs/CONFIGURATION.md` §2.16; shipped detail in `CHANGELOG.md`.
 - **Rule for the reader:** this guide describes the implementation as of
   2026-09-24. Before relying on a file, route, or field name, confirm it in
@@ -393,7 +394,7 @@ iTop's history should show each step with the `Solvro: … by <email>` comment.
 
 ## 10. Known limitations and deferred work
 
-See `docs/ISSUES.md` for the full list. The ones a re-implementation should
+See the "Open — iTop" area of `docs/ISSUES.md` for the full list. The ones a re-implementation should
 decide up front:
 
 - `User` and `PersonalToken` unreadable with Support Agent profiles → no `itopUserId`, unknown token expiry.

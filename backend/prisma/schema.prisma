@@ -629,7 +629,7 @@ model Section {
 }
 
 // Jira-style Epic: a named grouping of a project's top-level tasks ("stories"
-// in Jira's vocabulary — Solvro keeps the Task name, see docs/plans/
+// in Jira's vocabulary — Solvro keeps the Task name, see docs/archive/plans/
 // epics-spec.md §3 non-goals). Distinct from Section (a phase/track axis);
 // an epic is a scope axis. Deleting an epic keeps its tasks (Task.epicId
 // SetNull, mirroring section delete). Status is manual, like Jira; progress

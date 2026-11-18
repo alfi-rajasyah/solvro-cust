@@ -310,7 +310,7 @@ export function ProjectList() {
     }
   }
 
-  // One click, no confirm dialog (Decision 7, docs/plans/duplicate-tasks-sections.md) —
+  // One click, no confirm dialog (Decision 7, docs/archive/plans/duplicate-tasks-sections.md) —
   // same error-surfacing pattern as handleDeleteSection above.
   async function handleDuplicateSection(s: Section) {
     setActionError(null);

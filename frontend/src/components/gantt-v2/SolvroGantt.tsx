@@ -230,7 +230,7 @@ const TREE_PANEL_MAX_WIDTH = 774;
 // the default — was 256px pre-T2), and on narrow desktop viewports the
 // engine renders the pane narrower than `treeWidth` without reporting it
 // (clampContainer, gantt-view.tsx:977-987), so a wide persisted width can
-// still clip the columns there — docs/ISSUES.md.
+// still clip the columns there — docs/ISSUES.md ISS-096, ISS-097.
 const TREE_DATES_COLUMN_WIDTH = 132;
 const TREE_COLOR_COLUMN_WIDTH = 24;
 // Height-style Status chip column. 100px comfortably fits the widest chip

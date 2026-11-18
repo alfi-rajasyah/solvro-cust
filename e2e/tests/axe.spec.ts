@@ -5,7 +5,7 @@ import { expect, loginViaUi, test } from "../fixtures/test";
 // Automated accessibility check on the main pages (WCAG 2.1 A/AA plus axe's
 // best practices), in the light and the dark theme, on desktop and mobile. It
 // guards what is fixed today; known gaps are excluded explicitly and are
-// listed in docs/ISSUES.md:
+// listed in docs/ISSUES.md (ISS-081 and ISS-080):
 // - region, landmark-unique, heading-order: the page
 //   landmark and heading structure is not done yet.
 // - contrast of `bg-primary/10` and `bg-primary/15` chips with `text-primary`

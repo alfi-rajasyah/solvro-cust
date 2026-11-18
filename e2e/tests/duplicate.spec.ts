@@ -2,7 +2,7 @@ import { test, expect, loginViaUi, apiBase } from "../fixtures/test";
 import { createTask, createSection, isoDateOffset } from "../fixtures/seed";
 import type { Locator, Page } from "@playwright/test";
 
-// Coverage for docs/plans/duplicate-tasks-sections.md's four v1 surfaces
+// Coverage for docs/archive/plans/duplicate-tasks-sections.md's four v1 surfaces
 // (§3 Decision 12): the Task panel's "Duplicate task" menu item, a
 // subtask row's "Duplicate <title>" button, the Gantt row context menu's
 // "Duplicate" item, and the List view section header's "Duplicate section"

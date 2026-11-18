@@ -659,7 +659,7 @@ tasksRouter.delete(
 // Duplicate a task (and, when it's a top-level task, its subtasks) — no
 // body. A top-level source copies with its subtasks nested under the copy;
 // a subtask source copies just that one row under the same parentTaskId.
-// See docs/plans/duplicate-tasks-sections.md §3-4 for the settled field
+// See docs/archive/plans/duplicate-tasks-sections.md §3-4 for the settled field
 // rules (status -> TODO, baseline cleared, dependencies dropped, comments
 // never copied) implemented by duplicateTaskTree.
 tasksRouter.post(
