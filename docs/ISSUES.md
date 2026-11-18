@@ -55,15 +55,17 @@ cited files; entries marked *code check* below carry the result).
   Waits for Alfi's decision on whether to reject them (and with which error
   code) or keep accepting them.
 
-### A Postgres 22021 reaching the error handler answers a misleading 400 and logs nothing (2026-11-18)
-- `backend/src/http/errors.ts:111` maps a Postgres 22021 to 400 "Text must not
-  contain NUL characters" with no log line. Validated routes reject NUL earlier
-  (`http/validate.ts`), so a 22021 that still reaches the handler can only come
-  from server-fetched text, for example the iTop re-pull at
-  `routes/itop.ts:808` (`upsertTicketFromItop`). The user then sees a 400 about
-  text they never sent, and nothing is logged. Fix: `logger.warn({ pgCode }, ...)`
-  without `err` (the message carries row data) and a neutral message.
-  (Deferred from the SVC-2 phase review, nit 1.)
+### A Postgres 22021 reaching the error handler is not logged (2026-11-18)
+- `backend/src/http/errors.ts:111` answers 400 "Text must not contain NUL
+  characters" and logs nothing, where the 500 it replaced logged at `error`.
+  Validated routes reject NUL earlier (`http/validate.ts`). Only paths that
+  skip `validate()` can still reach this branch: the signed webhooks, multipart
+  routes, and server-side writes that no try/catch wraps. The iTop re-reads
+  after a write are wrapped (`reReadAfterWrite`, `readAndUpsertNewTicket`,
+  `readAndUpsertNewTimeEntry`), log a `warn` and do not reach it. When the NUL
+  comes from something other than the caller's own text, the message blames the
+  caller. Fix: `logger.warn({ pgCode }, ...)` without `err` (it carries row
+  data), plus a neutral message.
 
 ### Gantt tree pane — residual clipping after the #118 fix (2026-07-30)
 - **Engine container clamp can re-clip the Dates/color columns.** The vendored
