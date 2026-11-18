@@ -15,6 +15,11 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-18 — Unknown user ids and NUL bytes answer 400
+
+- Updating a project's TAM, a task's assignee or an epic's owner to a user id that does not exist now answers 400 (`tam_not_found`, `assignee_not_found`, `owner_not_found`), matching the create routes, instead of 404.
+- A NUL character (`\u0000`) in any validated request body, query or path parameter now answers 400 `validation_error` instead of 500; a Postgres 22021 error that still reaches the error handler is also answered as 400.
+
 ### Changed — 2026-11-18 — Issue ledger and plan housekeeping
 
 - `docs/ISSUES.md` strikes 23 entries that already shipped or no longer apply. Each one has a dated note and the evidence (code location, commit or CHANGELOG line). The Gantt pane-clamp bullet gets a 2026-11-18 code check with the current figures (default pane 498, clamp below a ~699px container). The real-install re-test of Settings > iTop save moves to the open "Go-live iTop setting" bullet.

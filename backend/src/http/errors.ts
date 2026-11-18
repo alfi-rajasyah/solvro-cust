@@ -105,6 +105,14 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     return;
   }
 
+  // 22021: a string with a NUL byte reached a text column. Validated routes
+  // reject it earlier (http/validate.ts); this covers the rest. No details:
+  // the message carries row data.
+  if (pgCode === "22021") {
+    res.status(400).json({ error: "Text must not contain NUL characters", code: "validation_error" });
+    return;
+  }
+
   logger.error({ err }, "unhandled error");
   res.status(500).json({ error: "Internal server error", code: "internal_error" });
 };
