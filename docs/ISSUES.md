@@ -293,14 +293,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 
 ## Open — Frontend UI
 
-### ISS-038 · P3 · Service-mapping mutations are not optimistic
-
-- **Type:** debt · **Found:** 2026-07-15 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** useUpdateProjectServices and useUpdateCustomerServices in frontend/src/lib/queries.ts (line ~1730, ~1745)
-- **Problem:** Both hooks only invalidate on success. The checkboxes and chips disable while saving, so it is correct but not instant.
-- **Why deferred / fix direction:** Add onMutate snapshot, optimistic services[] patch, onError rollback and onSettled invalidate to both hooks together.
-- **Source:** snapshot line 335, section "Tech debt / follow-ups from recent work"
-
 ### ISS-039 · P3 · Inactive services can still be assigned to customers and projects
 
 - **Type:** decision · **Found:** 2026-07-15 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -445,14 +437,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Add CriticalPathMark beside the priority indicator if either surface is revisited.
 - **Source:** snapshot line 1798, section "Critical Path mark — deferred findings (2026-09-02)"
 
-### ISS-060 · P3 · Creating a task leaves Daily Review attention lists stale
-
-- **Type:** bug · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** useCreateTask in frontend/src/lib/queries.ts (line ~2162)
-- **Problem:** Creating an overdue TODO task does not invalidate the Daily Review query, so its attention lists stay stale until staleTime elapses.
-- **Why deferred / fix direction:** Add the dailyReviewRoot invalidation like the sibling mutations.
-- **Source:** snapshot line 1844, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
-
 ### ISS-062 · P3 · Duplicate mutations wait on inactive-query invalidations
 
 - **Type:** watch · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -469,14 +453,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Mark or focus the offending card when save is blocked.
 - **Source:** snapshot line 1939, section "Weekly Sync achievement rows — deferred findings (2026-09-10)"
 
-
-### ISS-067 · P3 · A hung task PATCH blocks every later save of that task
-
-- **Type:** bug · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** serialiseTaskWrite in frontend/src/lib/queries.ts (line ~1907); apiRequestWithHeaders in frontend/src/lib/api.ts (line ~68)
-- **Problem:** Task saves are chained per task and apiRequest has no timeout, so one hung request keeps later edits from being sent while optimistic values still show. The fetch eventually errors and the chain resumes.
-- **Why deferred / fix direction:** Add a request timeout (AbortSignal.timeout) to apiRequest; rare, so deferred.
-- **Source:** snapshot line 2334, section "Collaboration & sharing, Phase 3 ("Conflict warning") — deferred findings (2026-09-30)"
 
 ### ISS-068 · P3 · /tasks Filters popover briefly pulls focus back after Escape
 
@@ -565,6 +541,14 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** A task that has subtasks can pick a parent, which would make a three-level tree that the server depth guard rejects.
 - **Why deferred / fix direction:** The server refuses it with a 400. Fix: hide the parent picker, or exclude parents, when the edited task has subtasks.
 - **Source:** phase review of `docs/archive/plans/task-ui-fixes.md`
+
+### ISS-185 · P3 · Service-list saves still invalidate every project and customer query
+
+- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 3 review
+- **Where:** onSettled of useUpdateProjectServices and useUpdateCustomerServices in frontend/src/lib/queries.ts
+- **Problem:** The carried-over ["projects"] and customers prefix invalidations refetch every project subquery after each save, now also on error.
+- **Why deferred / fix direction:** Correct, only wasteful. Fix: narrow to the detail and list keys, as invalidateProjectHealth does.
+- **Source:** phase review of `docs/archive/plans/query-cache-and-timeouts.md`
 
 ## Open — Accessibility & tokens
 
@@ -787,14 +771,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Source:** phase review of `docs/archive/plans/task-ui-fixes.md`
 
 ## Open — Boards & drag
-
-### ISS-109 · P3 · Task panel shows the old section chip during a cross-section drag
-
-- **Type:** bug · **Found:** 2026-07-22 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** reorderTasksLocally in frontend/src/lib/queries.ts (line ~1830); task.section use in components/TaskPanel.tsx (~734)
-- **Problem:** During the optimistic window the moved task keeps its old nested section object. An open panel on that task shows the old chip until the refetch.
-- **Why deferred / fix direction:** Recompute the nested section from the sections cache inside reorderTasksLocally. Transient and self-healing.
-- **Source:** snapshot line 434, section "Tech debt / follow-ups from recent work"
 
 ### ISS-110 · P3 · Kanban drop on the preview-swapped card can cancel a one-slot move
 
@@ -1227,19 +1203,23 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-028 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · PATCH /tasks/:id accepts a due date before the start date
 - ISS-036 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · Section and epic delete can deadlock with a concurrent task reorder
 - ISS-037 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Create-task parent picker lists subtasks the server rejects
+- ISS-038 · 2026-11-19 · CHANGELOG "Service lists, Daily Review refresh, request timeouts, section chip" · Service-mapping mutations are not optimistic
 - ISS-041 · 2026-11-19 · CHANGELOG "Label permissions and duplicate label names" · Duplicate label name shows 'Unique constraint violated'
 - ISS-046 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Subtask DONE checkbox in the task modal ignores canEdit
 - ISS-059 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · TaskPanel header-menu errors appear below the subtasks list
+- ISS-060 · 2026-11-19 · CHANGELOG "Service lists, Daily Review refresh, request timeouts, section chip" · Creating a task leaves Daily Review attention lists stale
 - ISS-061 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Section header actions show for task:write but the routes need project:write
 - ISS-064 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · CustomerDetail ignores itopOrgId/itopOrgName the API already returns
 - ISS-065 · 2026-11-18 · accepted by the user: the offset stays out of the query key on purpose (comment in `queries.ts`) · useItopTicket weekly hours can be stale after a timezone change
 - ISS-066 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · TaskPanel spins forever when the project-tasks fetch fails
+- ISS-067 · 2026-11-19 · CHANGELOG "Service lists, Daily Review refresh, request timeouts, section chip" · A hung task PATCH blocks every later save of that task
 - ISS-075 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · Utilization Refresh failure shows no error
 - ISS-082 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · InstallBanner nests a role=button span inside a button
 - ISS-090 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · ConfirmModal warning tone uses raw bg-amber-500 instead of the chip-amber pair
 - ISS-092 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · Dialog focus trap lets Tab escape from a tabIndex=-1 element
 - ISS-093 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · usePanelFocus returns focus to the previous task's opener
 - ISS-094 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · Task statuses primary button has a weak keyboard focus cue
+- ISS-109 · 2026-11-19 · CHANGELOG "Service lists, Daily Review refresh, request timeouts, section chip" · Task panel shows the old section chip during a cross-section drag
 - ISS-115 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · GET /itop/services lists every iTop organisation's services to any signed-in user
 - ISS-119 · 2026-11-18 · accepted by the user: iTop limits what Solvro can read; no code change · iTop personal-token expiry is only read when iTop allows it
 - ISS-120 · 2026-11-18 · accepted by the user: iTop cannot report token rights up front · iTop token write rights are not checked when the token is saved

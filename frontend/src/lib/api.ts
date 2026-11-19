@@ -45,7 +45,25 @@ interface RequestOptions {
   body?: unknown;
   signal?: AbortSignal;
   auth?: boolean;
+  /**
+   * Give up after this many ms. Defaults to `DEFAULT_TIMEOUT_MS`; pass a larger
+   * value for a call that is expected to run long. Covers headers and body.
+   */
+  timeoutMs?: number;
 }
+
+/**
+ * Every request is JSON, so 30 s is far beyond any normal answer. Without a
+ * limit a hung request never settles, and the per-task save chain in
+ * queries.ts (`serialiseTaskWrite`) would hold every later edit of that task.
+ */
+export const DEFAULT_TIMEOUT_MS = 30_000;
+/**
+ * For writes that call out to iTop and keep running server-side; matches the
+ * nginx proxy_read_timeout (frontend/nginx.conf), past which the proxy would
+ * cut the request anyway.
+ */
+export const LONG_TIMEOUT_MS = 60_000;
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   return (await apiRequestWithHeaders<T>(path, options)).data;
@@ -57,7 +75,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
  */
 export async function apiRequestWithHeaders<T>(
   path: string,
-  { method = "GET", body, signal, auth = true }: RequestOptions = {},
+  { method = "GET", body, signal, auth = true, timeoutMs = DEFAULT_TIMEOUT_MS }: RequestOptions = {},
 ): Promise<{ data: T; headers: Headers }> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -65,14 +83,47 @@ export async function apiRequestWithHeaders<T>(
   const token = auth ? getToken() : null;
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal,
-  });
+  // The caller's signal (query cancellation) and the timeout feed one
+  // controller, so a caller abort still surfaces as the caller's AbortError
+  // while a timeout becomes a plain ApiError below.
+  const controller = new AbortController();
+  let timedOut = false;
+  const onCallerAbort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) onCallerAbort();
+  else signal?.addEventListener("abort", onCallerAbort, { once: true });
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
 
-  const text = await res.text();
+  let res: Response;
+  let text: string;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
+    });
+    text = await res.text();
+  } catch (err) {
+    if (timedOut && !signal?.aborted) {
+      // Not a 401/403: a timeout must never sign the user out.
+      // A write may still be applied after we stop waiting, so its message
+      // must not invite a blind retry.
+      throw new ApiError(
+        408,
+        method === "GET"
+          ? "The server took too long to respond. Check your connection and try again."
+          : "The server did not answer in time. Check whether the change was saved before trying again.",
+        null,
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onCallerAbort);
+  }
   const parsed: unknown = text ? safeJsonParse(text) : null;
 
   if (!res.ok) {

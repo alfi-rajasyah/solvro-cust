@@ -9,7 +9,14 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { ApiError, apiRequest, apiRequestWithHeaders, setToken, setTokenRotating } from "./api";
+import {
+  ApiError,
+  LONG_TIMEOUT_MS,
+  apiRequest,
+  apiRequestWithHeaders,
+  setToken,
+  setTokenRotating,
+} from "./api";
 import { useAuth, type Role } from "./auth";
 import { dateToDay, dayFromIso, isoFromDay } from "./dateField";
 import { shouldPauseRefresh, subscribeDragActivity } from "./dragActivity";
@@ -1437,6 +1444,15 @@ export function useProjectLabels(id: number | null) {
 const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const isDayKey = (v: unknown): boolean => typeof v === "string" && DAY_KEY_RE.test(v);
 
+// The cached detail queries (`useProject` / `useCustomer`), told apart from
+// their subqueries by key shape.
+function isProjectDetailKey(k: readonly unknown[], id: number): boolean {
+  return k[0] === "projects" && k[1] === id && k.length === 3 && isDayKey(k[2]);
+}
+function isCustomerDetailKey(k: readonly unknown[], id: number): boolean {
+  return k[0] === "customers" && k[1] === id && k.length === 3 && isDayKey(k[2]);
+}
+
 // Every write the activity log records refreshes the log at once (all person
 // filters, via the key prefix).
 function invalidateProjectActivity(qc: QueryClient, projectId: number) {
@@ -1731,6 +1747,34 @@ export interface ServiceAssignmentInput {
   tools: string[];
 }
 
+/**
+ * The `services[]` an optimistic assignment save should show: an existing
+ * assignment keeps its row and takes the new tools, a newly added service is
+ * built from the catalogue cache (a service missing from it is left out until
+ * the refetch), and a removed one drops out.
+ */
+export function applyServiceAssignments<
+  A extends { id: number; serviceId: number; service: Service; tools: string[]; createdAt: string },
+>(
+  current: A[],
+  assignments: ServiceAssignmentInput[],
+  catalogue: Service[] | undefined,
+  make: (serviceId: number, service: Service, tools: string[]) => A,
+): A[] {
+  const out: A[] = [];
+  assignments.forEach((a, i) => {
+    const existing = current.find((c) => c.serviceId === a.serviceId);
+    if (existing) {
+      out.push({ ...existing, tools: a.tools });
+      return;
+    }
+    const service = catalogue?.find((s) => s.id === a.serviceId);
+    // Negative id: never collides with a real row, replaced by the refetch.
+    if (service) out.push({ ...make(a.serviceId, service, a.tools), id: -(i + 1) });
+  });
+  return out;
+}
+
 export function useUpdateCustomerServices(customerId: number) {
   const qc = useQueryClient();
   return useMutation({
@@ -1739,8 +1783,38 @@ export function useUpdateCustomerServices(customerId: number) {
         method: "PUT",
         body: { assignments },
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.customer(customerId) });
+    onMutate: async (assignments) => {
+      const filters = { predicate: (q: { queryKey: readonly unknown[] }) => isCustomerDetailKey(q.queryKey, customerId) };
+      await qc.cancelQueries(filters);
+      const prev = qc.getQueriesData<CustomerDetail>(filters);
+      const catalogue = qc.getQueryData<Service[]>(["services"]);
+      qc.setQueriesData<CustomerDetail>(filters, (old) =>
+        old
+          ? {
+              ...old,
+              services: applyServiceAssignments(
+                old.services,
+                assignments,
+                catalogue,
+                (serviceId, service, tools) => ({
+                  id: 0,
+                  customerId,
+                  serviceId,
+                  service,
+                  tools,
+                  createdAt: new Date().toISOString(),
+                }),
+              ),
+            }
+          : old,
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      for (const [key, data] of ctx?.prev ?? []) qc.setQueryData(key, data);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ predicate: (q) => isCustomerDetailKey(q.queryKey, customerId) });
       qc.invalidateQueries({ queryKey: queryKeys.customers });
     },
   });
@@ -1754,8 +1828,38 @@ export function useUpdateProjectServices(projectId: number) {
         method: "PUT",
         body: { assignments },
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.project(projectId) });
+    onMutate: async (assignments) => {
+      const filters = { predicate: (q: { queryKey: readonly unknown[] }) => isProjectDetailKey(q.queryKey, projectId) };
+      await qc.cancelQueries(filters);
+      const prev = qc.getQueriesData<ProjectDetail>(filters);
+      const catalogue = qc.getQueryData<Service[]>(["services"]);
+      qc.setQueriesData<ProjectDetail>(filters, (old) =>
+        old
+          ? {
+              ...old,
+              services: applyServiceAssignments(
+                old.services,
+                assignments,
+                catalogue,
+                (serviceId, service, tools) => ({
+                  id: 0,
+                  projectId,
+                  serviceId,
+                  service,
+                  tools,
+                  createdAt: new Date().toISOString(),
+                }),
+              ),
+            }
+          : old,
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      for (const [key, data] of ctx?.prev ?? []) qc.setQueryData(key, data);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ predicate: (q) => isProjectDetailKey(q.queryKey, projectId) });
       qc.invalidateQueries({ queryKey: ["projects"] });
     },
   });
@@ -1819,6 +1923,22 @@ function siblingListId(t: Pick<Task, "parentTaskId" | "status">): string {
 }
 
 /**
+ * The nested `section` object for a task moving to `nextSectionId`: the one it
+ * has when the id is unchanged, else rebuilt from the sections cache. Null when
+ * the target is not cached, so a stale chip never outlives the move.
+ */
+export function sectionForTask(
+  current: Pick<Task, "sectionId" | "section">,
+  nextSectionId: number | null,
+  sections: Section[] | undefined,
+): Task["section"] {
+  if (nextSectionId === current.sectionId) return current.section;
+  if (nextSectionId === null) return null;
+  const s = sections?.find((x) => x.id === nextSectionId);
+  return s ? { id: s.id, name: s.name, position: s.position, color: s.color } : null;
+}
+
+/**
  * Reorders/re-parents `id` inside a locally-cached task list exactly the way
  * the backend's moveTaskWithinSiblings does: remove from the old sibling
  * list (re-packing it), then insert into the new sibling list at the
@@ -1835,6 +1955,7 @@ export function reorderTasksLocally(
   tasks: Task[],
   id: number,
   patch: Pick<UpdateTaskInput, "status" | "parentTaskId" | "position" | "sectionId">,
+  sections?: Section[],
 ): Task[] {
   const current = tasks.find((t) => t.id === id);
   if (!current) return tasks;
@@ -1849,6 +1970,9 @@ export function reorderTasksLocally(
     status: nextStatus,
     parentTaskId: nextParentTaskId,
     sectionId: nextSectionId,
+    // The nested object travels with the id, so an open task panel shows the
+    // new section at once instead of the old chip until the refetch.
+    section: sectionForTask(current, nextSectionId, sections),
     // Mirror the backend: re-parenting under a parent clears epicId in the
     // same transaction (§4) — a subtask never carries its own epic link.
     epicId: nextParentTaskId !== null ? null : current.epicId,
@@ -1979,12 +2103,26 @@ export function useUpdateTask(projectId: number) {
             });
         const touchesOrdering = patch.position !== undefined || listChanged;
         const next = touchesOrdering
-          ? reorderTasksLocally(prev, id, patch)
+          ? reorderTasksLocally(
+              prev,
+              id,
+              patch,
+              qc.getQueryData<Section[]>(queryKeys.projectSections(projectId)),
+            )
           : prev.map((t) =>
               t.id === id
                 ? ({
                     ...t,
                     ...patch,
+                    ...(patch.sectionId !== undefined
+                      ? {
+                          section: sectionForTask(
+                            t,
+                            patch.sectionId,
+                            qc.getQueryData<Section[]>(queryKeys.projectSections(projectId)),
+                          ),
+                        }
+                      : {}),
                     // Same server mirror as reorderTasksLocally above, for
                     // whichever plain-merge patch also touches parentTaskId.
                     ...(patch.parentTaskId != null ? { epicId: null } : {}),
@@ -2177,6 +2315,8 @@ export function useCreateTask(projectId: number) {
       qc.invalidateQueries({ queryKey: queryKeys.overview });
       invalidateProjectHealth(qc, projectId);
       invalidateProjectActivity(qc, projectId);
+      // A new overdue or unassigned task joins the Daily Review attention lists.
+      qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
       // Same as useUpdateTask: an assignee who is not yet a member becomes one.
       if (variables.assignedToId != null) {
         qc.invalidateQueries({ queryKey: queryKeys.projectMembers(projectId) });
@@ -3623,6 +3763,7 @@ export function useLogTicketTimeFor() {
       apiRequest<ItopTimeLogWriteResult>(`/itop/tickets/${ticketId}/time`, {
         method: "POST",
         body: { startedAt, endedAt, ...(title ? { title } : {}) },
+        timeoutMs: LONG_TIMEOUT_MS,
       }),
     onSuccess: (_result, variables) => {
       // No `setQueryData` here (see the module comment above) — the ticket
@@ -3677,6 +3818,7 @@ export function useTicketActionFor(customerId: number) {
       apiRequest<ItopTicketWriteResult>(`/itop/tickets/${ticketId}/actions`, {
         method: "POST",
         body: { action, fields },
+        timeoutMs: LONG_TIMEOUT_MS,
       }),
     onSuccess: (fresh, variables) => {
       if (fresh.staleAfterWrite) {
@@ -3721,6 +3863,7 @@ export function useAddTicketLog(ticketId: number, customerId: number) {
       apiRequest<ItopTicketWriteResult>(`/itop/tickets/${ticketId}/log`, {
         method: "POST",
         body: input,
+        timeoutMs: LONG_TIMEOUT_MS,
       }),
     onSuccess: (fresh) => {
       if (fresh.staleAfterWrite) {
@@ -3812,7 +3955,11 @@ export function useCreateTicket(customerId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateTicketInput) =>
-      apiRequest<ItopTicketCreateResult>("/itop/tickets", { method: "POST", body: input }),
+      apiRequest<ItopTicketCreateResult>("/itop/tickets", {
+        method: "POST",
+        body: input,
+        timeoutMs: LONG_TIMEOUT_MS,
+      }),
     onSuccess: (result) => {
       // 201 only — a 202 stale create's shape has no ticket fields to seed
       // the cache with yet (see `ItopTicketCreateStale`). Seeding this
@@ -4612,6 +4759,7 @@ export function useUpdateItopSettings() {
       apiRequest<ItopSettings>("/admin/itop/settings", {
         method: "PATCH",
         body: input,
+        timeoutMs: LONG_TIMEOUT_MS,
       }),
     onSuccess: (fresh) => {
       qc.setQueryData(adminQueryKeys.itopSettings, fresh);
@@ -4664,6 +4812,7 @@ export function useTestItopConnection() {
       apiRequest<ItopTestResult>("/admin/itop/test", {
         method: "POST",
         body: input,
+        timeoutMs: LONG_TIMEOUT_MS,
       }),
   });
 }
@@ -4763,6 +4912,7 @@ export function useMatchItopPersons() {
     mutationFn: () =>
       apiRequest<ItopPersonsResponse>("/admin/itop/persons/match", {
         method: "POST",
+        timeoutMs: LONG_TIMEOUT_MS,
       }),
     onSuccess: (fresh) => {
       qc.setQueryData(adminQueryKeys.itopPersons, fresh);
