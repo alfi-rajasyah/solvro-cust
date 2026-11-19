@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-19 — Task description in the task panel
+
+- The task panel shows the task description under the title, with line breaks kept. People who can edit tasks change it in place: it saves when you click away, Escape cancels, and clearing it removes the description. Everyone else sees it read-only. (#88)
+
 ### Fixed — 2026-11-19 — Chip contrast, sidebar text, loading and shortcut hints
 
 - Light-theme green chips (customer primary mark, account overview and service mapping tags, comment mentions, customer avatars, Admin chips) are readable on tinted panels: their text uses the darker `primary-tint-text` token, 4.76:1 or better on every surface in both themes, and the remove icon on service mapping chips uses the same token. The accessibility scan no longer excludes these chips.

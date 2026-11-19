@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { resolveSectionColors } from "@/lib/gantt/palette";
 import { usePanelFocus } from "@/hooks/usePanelFocus";
 import { AssigneeAvatar } from "./AssigneeAvatar";
@@ -28,6 +28,7 @@ import { hasPermission, useAuth } from "@/lib/auth";
 import { CommentBody, CommentComposer } from "@/components/CommentMentions";
 import { fmtAgo, fmtRange } from "@/lib/formatDate";
 import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
+import { isApplePlatform } from "@/lib/platform";
 import { PRIORITY_LABEL } from "@/lib/labels";
 import {
   buildExpected,
@@ -175,6 +176,8 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const [menuOpen, setMenuOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionDraft, setDescriptionDraft] = useState("");
   const [editingDates, setEditingDates] = useState(false);
   const [editingAssignee, setEditingAssignee] = useState(false);
   const [editingSection, setEditingSection] = useState(false);
@@ -215,6 +218,11 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const renameSettledRef = useRef(false);
   // Same guard for the panel's own title editor; reset when it opens.
   const titleSettledRef = useRef(false);
+  // And for the description editor: blur and Escape can both end one edit.
+  const descriptionSettledRef = useRef(false);
+  const descriptionId = useId();
+  const descriptionButtonRef = useRef<HTMLButtonElement | null>(null);
+  const focusDescriptionRef = useRef(false);
   // The task as it was when a title or date edit began. Those editors stay open
   // for a while and the 30 s live refresh can land meanwhile; `expected` and the
   // "did anything change" check must measure against what the user started
@@ -245,6 +253,8 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
 
   useEffect(() => {
     setEditingTitle(false);
+    setEditingDescription(false);
+    descriptionSettledRef.current = true;
     setEditingDates(false);
     setEditingAssignee(false);
     setEditingSection(false);
@@ -254,6 +264,14 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     setError(null);
     setConflict(null);
   }, [taskId]);
+
+  // After Escape, hand focus back to the button that opened the editor.
+  useEffect(() => {
+    if (!editingDescription && focusDescriptionRef.current) {
+      focusDescriptionRef.current = false;
+      descriptionButtonRef.current?.focus();
+    }
+  }, [editingDescription]);
 
   if (!task) {
     // `tasks` undefined = still loading; once it has loaded, a missing task was
@@ -350,6 +368,29 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     setEditingTitle(false);
     const base = editBase ?? task!;
     if (trimmed && trimmed !== base.title) patch({ title: trimmed }, base);
+  }
+
+  // Blur saves, Escape cancels (handled in the textarea's onKeyDown). Clearing
+  // the text saves null. Line breaks are kept; only the outer whitespace goes.
+  function commitDescription() {
+    if (descriptionSettledRef.current) return;
+    // The panel moved to another task mid-edit: the draft belongs to the old one.
+    if (editBase && task && editBase.id !== task.id) {
+      descriptionSettledRef.current = true;
+      setEditingDescription(false);
+      return;
+    }
+    descriptionSettledRef.current = true;
+    setEditingDescription(false);
+    const base = editBase ?? task!;
+    const next = descriptionDraft.trim() || null;
+    if (next !== (base.description?.trim() || null)) patch({ description: next }, base);
+  }
+
+  function cancelDescription() {
+    descriptionSettledRef.current = true;
+    focusDescriptionRef.current = true;
+    setEditingDescription(false);
   }
 
   async function handleAddSubtask(e: FormEvent) {
@@ -589,6 +630,89 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
           )}
           {task.section && (
             <p className="mt-0.5 text-meta text-on-surface-variant">in {sectionName}</p>
+          )}
+
+          {/* Description: under the title so List and Gantt users can read it.
+              Read-only users get the text or nothing (label included); editors
+              get a placeholder. */}
+          {(task.description || canEdit) && (
+            <div className="mt-3">
+              {editingDescription ? (
+                <label
+                  htmlFor={descriptionId}
+                  className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant"
+                >
+                  Description
+                </label>
+              ) : (
+                <p className="mb-1 font-display text-label-caps uppercase text-on-surface-variant">
+                  Description
+                </p>
+              )}
+              {editingDescription ? (
+                <>
+                  <textarea
+                    id={descriptionId}
+                    autoFocus
+                    value={descriptionDraft}
+                    onChange={(e) => setDescriptionDraft(e.target.value)}
+                    onBlur={commitDescription}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        if (e.nativeEvent.isComposing) return;
+                        // Cancel this edit only; the panel-level Escape listener must not close the panel.
+                        e.stopPropagation();
+                        cancelDescription();
+                      } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        // Keyboard save: focus goes back to the button (not on blur-save).
+                        focusDescriptionRef.current = true;
+                        commitDescription();
+                      }
+                    }}
+                    maxLength={2000}
+                    placeholder="Add a description"
+                    className="field-sizing-content min-h-24 max-h-64 w-full resize-y rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-base leading-snug text-on-surface placeholder:text-on-surface-variant focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:text-sm"
+                  />
+                  <p className="mt-1 text-meta text-on-surface-variant">
+                    Saves when you click away.
+                    <span className="hidden md:[@media(pointer:fine)]:inline">
+                      {" "}
+                      {isApplePlatform() ? "⌘Enter" : "Ctrl+Enter"} saves, Esc cancels.
+                    </span>
+                  </p>
+                </>
+              ) : canEdit ? (
+                <button
+                  ref={descriptionButtonRef}
+                  type="button"
+                  aria-label={task.description ? "Edit description" : undefined}
+                  aria-describedby={task.description ? `${descriptionId}-text` : undefined}
+                  onClick={() => {
+                    descriptionSettledRef.current = false;
+                    setEditBase(task);
+                    setDescriptionDraft(task.description ?? "");
+                    setEditingDescription(true);
+                  }}
+                  className="[@media(pointer:coarse)]:min-h-11 -mx-2 block w-[calc(100%+1rem)] rounded-sm border border-transparent px-2 py-1 text-left text-base leading-snug outline-hidden hover:bg-surface-container-high focus-visible:ring-2 focus-visible:ring-primary md:text-sm"
+                >
+                  <span
+                    id={`${descriptionId}-text`}
+                    className={`block ${
+                      task.description
+                        ? "whitespace-pre-wrap wrap-break-word text-on-surface"
+                        : "text-on-surface-variant"
+                    }`}
+                  >
+                    {task.description || "Add a description"}
+                  </span>
+                </button>
+              ) : (
+                <p className="whitespace-pre-wrap wrap-break-word text-base leading-snug text-on-surface md:text-sm">
+                  {task.description}
+                </p>
+              )}
+            </div>
           )}
 
           {/* Meta grid */}

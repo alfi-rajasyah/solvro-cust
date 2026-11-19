@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { TaskPanel } from "./TaskPanel";
 
 const refetch = vi.fn();
 const duplicateMutateAsync = vi.fn();
+const updateMutateAsync = vi.fn();
+const authPerms = { current: ["task:write"] as string[] };
 const tasksQuery = { current: {} as Record<string, unknown> };
 
 vi.mock("@/lib/auth", async (importOriginal) => {
@@ -16,7 +18,7 @@ vi.mock("@/lib/auth", async (importOriginal) => {
     useAuth: () => ({
       status: "authenticated",
       userVerified: true,
-      user: { id: 1, email: "a@solvro.pl", name: "A", role: "TAM", permissions: ["task:write"] },
+      user: { id: 1, email: "a@solvro.pl", name: "A", role: "TAM", permissions: authPerms.current },
     }),
   };
 });
@@ -46,7 +48,7 @@ vi.mock("@/lib/queries", async (importOriginal) => {
     useComments: empty,
     useAddComment: mutation,
     useCreateTask: mutation,
-    useUpdateTask: mutation,
+    useUpdateTask: () => ({ mutate: vi.fn(), mutateAsync: updateMutateAsync, isPending: false }),
     useDeleteTask: mutation,
     useDuplicateTask: () => ({ mutate: vi.fn(), mutateAsync: duplicateMutateAsync, isPending: false }),
   };
@@ -77,6 +79,8 @@ afterEach(() => {
   cleanup();
   refetch.mockReset();
   duplicateMutateAsync.mockReset();
+  updateMutateAsync.mockReset();
+  authPerms.current = ["task:write"];
 });
 
 describe("TaskPanel load states", () => {
@@ -126,5 +130,169 @@ describe("TaskPanel action errors", () => {
     const wrapper = alert.parentElement!;
     expect(wrapper.parentElement?.className).toContain("overflow-y-auto");
     expect(wrapper.parentElement?.firstElementChild).toBe(wrapper);
+  });
+});
+
+describe("TaskPanel hook order", () => {
+  it("renders loading first and then the loaded task without a hook-order error", () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    tasksQuery.current = { data: undefined, isError: false, error: null, refetch };
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } });
+    const ui = () => (
+      <QueryClientProvider client={client}>
+        <TaskPanel {...props} />
+      </QueryClientProvider>
+    );
+    const { rerender } = rtlRender(ui());
+    expect(screen.getByText("Loading task…")).toBeTruthy();
+    tasksQuery.current = {
+      data: [
+        {
+          id: 5,
+          title: "Parent",
+          description: null,
+          status: "TODO",
+          priority: "MEDIUM",
+          position: 0,
+          parentTaskId: null,
+          labels: [],
+          section: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      isError: false,
+      error: null,
+      refetch,
+    };
+    expect(() => rerender(ui())).not.toThrow();
+    expect(screen.getByRole("button", { name: "Add a description" })).toBeTruthy();
+    const hookErrors = err.mock.calls.filter((c) => /hooks/i.test(String(c[0])));
+    expect(hookErrors).toEqual([]);
+    err.mockRestore();
+  });
+});
+
+describe("TaskPanel description", () => {
+  const base = {
+    id: 5,
+    title: "Parent",
+    description: "Line one\nLine two",
+    status: "TODO",
+    priority: "MEDIUM",
+    position: 0,
+    parentTaskId: null,
+    labels: [],
+    section: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  function open(over: Record<string, unknown> = {}) {
+    tasksQuery.current = { data: [{ ...base, ...over }], isError: false, error: null, refetch };
+    updateMutateAsync.mockResolvedValue({});
+    render(<TaskPanel {...props} />);
+  }
+
+  it("shows the description with its line breaks", () => {
+    open();
+    const el = screen.getByText(/Line one/);
+    expect(el.textContent).toBe("Line one\nLine two");
+    expect(el.className).toContain("whitespace-pre-wrap");
+  });
+
+  it("saves an edit on blur through the stale-write check", () => {
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Edit description" }));
+    const box = screen.getByRole("textbox", { name: "Description" });
+    fireEvent.change(box, { target: { value: "New text\nsecond" } });
+    fireEvent.blur(box);
+    expect(updateMutateAsync).toHaveBeenCalledTimes(1);
+    expect(updateMutateAsync.mock.calls[0][0]).toMatchObject({
+      id: 5,
+      patch: { description: "New text\nsecond" },
+      expected: { description: "Line one\nLine two" },
+    });
+  });
+
+  it("saves null when the text is cleared", () => {
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Edit description" }));
+    const box = screen.getByRole("textbox", { name: "Description" });
+    fireEvent.change(box, { target: { value: "  " } });
+    fireEvent.blur(box);
+    expect(updateMutateAsync.mock.calls[0][0].patch).toEqual({ description: null });
+  });
+
+  it("does not save an unchanged description", () => {
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Edit description" }));
+    fireEvent.blur(screen.getByRole("textbox", { name: "Description" }));
+    expect(updateMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("Escape cancels without saving and does not close the panel", () => {
+    const onClose = vi.fn();
+    tasksQuery.current = { data: [base], isError: false, error: null, refetch };
+    render(<TaskPanel {...props} onClose={onClose} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit description" }));
+    const box = screen.getByRole("textbox", { name: "Description" });
+    fireEvent.change(box, { target: { value: "discard me" } });
+    // One batch: the textarea is still mounted when the blur lands, as when a
+    // browser blurs the field while it is being removed.
+    act(() => {
+      fireEvent.keyDown(box, { key: "Escape" });
+      fireEvent.blur(box);
+    });
+    expect(screen.queryByRole("textbox", { name: "Description" })).toBeNull();
+    expect(updateMutateAsync).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByText(/Line one/)).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit description" }));
+  });
+
+  it("Ctrl+Enter saves", () => {
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Edit description" }));
+    const box = screen.getByRole("textbox", { name: "Description" });
+    fireEvent.change(box, { target: { value: "via keys" } });
+    fireEvent.keyDown(box, { key: "Enter", ctrlKey: true });
+    fireEvent.blur(box);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit description" }));
+    expect(updateMutateAsync).toHaveBeenCalledTimes(1);
+    expect(updateMutateAsync.mock.calls[0][0].patch).toEqual({ description: "via keys" });
+  });
+
+  it("drops the draft when the panel moves to another task mid-edit", () => {
+    const other = { ...base, id: 6, title: "Other", description: "Other text" };
+    tasksQuery.current = { data: [base, other], isError: false, error: null, refetch };
+    const { rerender } = render(<TaskPanel {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit description" }));
+    const box = screen.getByRole("textbox", { name: "Description" });
+    fireEvent.change(box, { target: { value: "half typed" } });
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <TaskPanel {...props} taskId={6} />
+      </QueryClientProvider>,
+    );
+    fireEvent.blur(box);
+    expect(updateMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("shows an Add a description placeholder to editors when empty", () => {
+    open({ description: null });
+    expect(screen.getByRole("button", { name: "Add a description" })).toBeTruthy();
+  });
+
+  it("is read-only without task:write, and shows nothing when empty", () => {
+    authPerms.current = [];
+    open();
+    const el = screen.getByText(/Line one/);
+    expect(el.tagName).toBe("P");
+    expect(screen.getByText("Description")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit description" })).toBeNull();
+    cleanup();
+    open({ description: null });
+    expect(screen.queryByText("Add a description")).toBeNull();
+    expect(screen.queryByText("Description")).toBeNull();
   });
 });
