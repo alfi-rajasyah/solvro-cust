@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { DeleteProjectDialog } from "@/components/DeleteProjectDialog";
 import { ProjectFormModal } from "@/components/ProjectFormModal";
+import { Alert, AlertDescription } from "@/components/reui/alert";
 import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import { Chip, ProjectStatusChip } from "@/components/StatusChip";
 import {
@@ -10,10 +12,17 @@ import {
   type FilterFieldConfig,
 } from "@/components/reui/filters";
 import { useNewParam } from "@/hooks/useNewParam";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { hasPermission, useAuth } from "@/lib/auth";
+import { canOwnProject, saveErrorMessage } from "@/lib/ownerAccess";
 import { fmtRange } from "@/lib/formatDate";
 import { TOOLBAR_BUTTON_PRIMARY } from "@/lib/utils";
-import { type ProjectSummary, useCustomers, useProjects } from "@/lib/queries";
+import { type ProjectSummary, useCustomers, useDeleteProject, useProjects } from "@/lib/queries";
 
 const CUSTOMER_FILTER_FIELD = "customerId";
 
@@ -29,6 +38,27 @@ export function Projects() {
     customerFilter ? { customerId: customerFilter } : {},
   );
   const [createOpen, setCreateOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<ProjectSummary | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteProject = useDeleteProject();
+
+  // Same rule as the project page's ⋯ menu: project:write plus owner access
+  // (TAM, owner of a linked customer, or project:view-all).
+  const canWrite = hasPermission(user, "project:write");
+  const canDeleteProject = (p: ProjectSummary) =>
+    canWrite && canOwnProject(user, p, p.customers.map((c) => c.tamId));
+
+  async function confirmDelete() {
+    const target = pendingDelete;
+    if (!target) return;
+    setPendingDelete(null);
+    setDeleteError(null);
+    try {
+      await deleteProject.mutateAsync(target.id);
+    } catch (err) {
+      setDeleteError(saveErrorMessage(err, "Delete failed."));
+    }
+  }
 
   const canCreate = hasPermission(user, "project:write");
   useNewParam("1", canCreate, () => setCreateOpen(true));
@@ -130,6 +160,13 @@ export function Projects() {
         )}
       </div>
 
+      {deleteError && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{deleteError}</AlertDescription>
+        </Alert>
+      )}
+
+
       {isLoading && <SkeletonGrid />}
 
       {isError && (
@@ -143,7 +180,12 @@ export function Projects() {
       {projects && projects.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {projects.map((p) => (
-            <ProjectCard key={p.id} project={p} />
+            <ProjectCard
+              key={p.id}
+              project={p}
+              onDelete={canDeleteProject(p) ? () => setPendingDelete(p) : undefined}
+              deleting={deleteProject.isPending}
+            />
           ))}
         </div>
       )}
@@ -152,11 +194,27 @@ export function Projects() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
       />
+
+      <DeleteProjectDialog
+        open={pendingDelete !== null}
+        project={pendingDelete}
+        busy={deleteProject.isPending}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={() => void confirmDelete()}
+      />
     </div>
   );
 }
 
-function ProjectCard({ project }: { project: ProjectSummary }) {
+function ProjectCard({
+  project,
+  onDelete,
+  deleting = false,
+}: {
+  project: ProjectSummary;
+  onDelete?: () => void;
+  deleting?: boolean;
+}) {
   const tamInit = project.tam.username.slice(0, 2).toUpperCase();
   const idBadge = `P-${String(project.id).padStart(3, "0")}`;
   const health = project.health;
@@ -167,101 +225,143 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
   const openRisks = health?.openRiskCount ?? 0;
   const hasDates = health !== undefined && (health.startDate !== null || health.endDate !== null);
 
+  // The link and the row menu are siblings: a button inside the <a> would be
+  // nested interactive content. The menu floats over the link's top-right
+  // corner; DOM order gives the tab order link, then its ⋯ button.
   return (
-    <Link
-      to={`/projects/${project.id}`}
-      className="group flex flex-col rounded-sm border border-outline-variant bg-surface-container-lowest p-4 transition-colors hover:border-primary"
-    >
-      {/* ID + status row */}
-      <div className="mb-1.5 flex items-start justify-between gap-2">
-        <span className="font-mono text-meta text-on-surface-variant">{idBadge}</span>
-        <ProjectStatusChip status={project.status} />
-      </div>
-
-      {/* Title */}
-      <h3 className="mb-1 truncate font-display text-sm font-bold leading-tight text-on-surface group-hover:text-primary">
-        {project.name}
-      </h3>
-
-      {/* Description */}
-      <p className="mb-3 line-clamp-2 min-h-[2.4rem] text-meta leading-snug text-on-surface-variant">
-        {project.description ?? "No description."}
-      </p>
-
-      {/* Bottom row: customer + avatar stack + task count */}
-      <div className="mt-auto flex items-center justify-between gap-2 text-meta text-on-surface-variant">
-        <span className="flex min-w-0 flex-1 items-center gap-1.5">
-          {project.primaryCustomer ? (
-            <>
-              <span className="min-w-0 truncate">{project.primaryCustomer.name}</span>
-              {project.customers.length > 1 && (
-                <span
-                  className="shrink-0"
-                  title={project.customers.map((c) => c.name).join(", ")}
-                >
-                  +{project.customers.length - 1}
-                </span>
-              )}
-            </>
-          ) : (
-            <em className="opacity-70">No customer</em>
-          )}
-        </span>
-        <div className="flex -space-x-1.5">
-          <span
-            title={`TAM: ${project.tam.username}`}
-            className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-surface-container-lowest bg-primary text-meta font-bold text-on-primary"
-          >
-            {tamInit}
-          </span>
+    <div className="group relative">
+      <Link
+        to={`/projects/${project.id}`}
+        className="flex h-full flex-col rounded-sm border border-outline-variant bg-surface-container-lowest p-4 transition-colors group-hover:border-primary"
+      >
+        {/* ID + status row; right padding keeps the chip clear of the menu button */}
+        <div className={`mb-1.5 flex items-start justify-between gap-2 ${onDelete ? "pr-8" : ""}`}>
+          <span className="font-mono text-meta text-on-surface-variant">{idBadge}</span>
+          <ProjectStatusChip status={project.status} />
         </div>
-      </div>
 
-      {/* Progress + health footer */}
-      <div className="mt-3 border-t border-outline-variant pt-2 text-meta text-on-surface-variant">
-        {total > 0 ? (
-          <div className="flex items-center gap-2">
-            <div
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={pct}
-              aria-label="Project progress"
-              className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-container-high"
+        {/* Title */}
+        <h3 className="mb-1 truncate font-display text-sm font-bold leading-tight text-on-surface group-hover:text-primary">
+          {project.name}
+        </h3>
+
+        {/* Description */}
+        <p className="mb-3 line-clamp-2 min-h-[2.4rem] text-meta leading-snug text-on-surface-variant">
+          {project.description ?? "No description."}
+        </p>
+
+        {/* Bottom row: customer + avatar stack + task count */}
+        <div className="mt-auto flex items-center justify-between gap-2 text-meta text-on-surface-variant">
+          <span className="flex min-w-0 flex-1 items-center gap-1.5">
+            {project.primaryCustomer ? (
+              <>
+                <span className="min-w-0 truncate">{project.primaryCustomer.name}</span>
+                {project.customers.length > 1 && (
+                  <span
+                    className="shrink-0"
+                    title={project.customers.map((c) => c.name).join(", ")}
+                  >
+                    +{project.customers.length - 1}
+                  </span>
+                )}
+              </>
+            ) : (
+              <em className="opacity-70">No customer</em>
+            )}
+          </span>
+          <div className="flex -space-x-1.5">
+            <span
+              title={`TAM: ${project.tam.username}`}
+              className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-surface-container-lowest bg-primary text-meta font-bold text-on-primary"
             >
-              <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
-            </div>
-            <span className="shrink-0 whitespace-nowrap tabular-nums">
-              {pct}% · {done} of {total}
+              {tamInit}
             </span>
           </div>
-        ) : (
-          <span>No tasks yet</span>
-        )}
+        </div>
 
-        {(hasDates || overdue > 0 || openRisks > 0 || project.baselineLockedAt) && (
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {overdue > 0 && <Chip tone="rose">{overdue} overdue</Chip>}
-            {openRisks > 0 && (
-              <Chip tone="amber">
-                {openRisks} open {openRisks === 1 ? "risk" : "risks"}
-              </Chip>
-            )}
-            {project.baselineLockedAt && (
-              <span className="flex items-center gap-1" title="Baseline locked">
-                <span aria-hidden="true" className="material-symbols-outlined text-[14px] text-primary">bookmark</span>
-                Baseline locked
+        {/* Progress + health footer */}
+        <div className="mt-3 border-t border-outline-variant pt-2 text-meta text-on-surface-variant">
+          {total > 0 ? (
+            <div className="flex items-center gap-2">
+              <div
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={pct}
+                aria-label="Project progress"
+                className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-container-high"
+              >
+                <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+              </div>
+              <span className="shrink-0 whitespace-nowrap tabular-nums">
+                {pct}% · {done} of {total}
               </span>
-            )}
-            {hasDates && (
-              <span className="ml-auto whitespace-nowrap tabular-nums">
-                {fmtRange(health.startDate, health.endDate)}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-    </Link>
+            </div>
+          ) : (
+            <span>No tasks yet</span>
+          )}
+
+          {(hasDates || overdue > 0 || openRisks > 0 || project.baselineLockedAt) && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {overdue > 0 && <Chip tone="rose">{overdue} overdue</Chip>}
+              {openRisks > 0 && (
+                <Chip tone="amber">
+                  {openRisks} open {openRisks === 1 ? "risk" : "risks"}
+                </Chip>
+              )}
+              {project.baselineLockedAt && (
+                <span className="flex items-center gap-1" title="Baseline locked">
+                  <span aria-hidden="true" className="material-symbols-outlined text-[14px] text-primary">bookmark</span>
+                  Baseline locked
+                </span>
+              )}
+              {hasDates && (
+                <span className="ml-auto whitespace-nowrap tabular-nums">
+                  {fmtRange(health.startDate, health.endDate)}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </Link>
+      {onDelete && (
+        <div className="absolute right-2 top-3.5 z-10">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={`Actions for ${project.name}`}
+                  title="More project actions"
+                  className="tap-target inline-flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <span className="material-symbols-outlined text-base" aria-hidden="true">
+                    more_horiz
+                  </span>
+                </button>
+              }
+            />
+            <DropdownMenuContent
+              align="end"
+              className="w-44 bg-surface-container-lowest shadow-overlay!"
+              positionerClassName="z-50"
+            >
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={deleting}
+                onClick={onDelete}
+                className="text-xs"
+              >
+                <span className="material-symbols-outlined text-base" aria-hidden="true">
+                  delete
+                </span>
+                Delete project
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+    </div>
   );
 }
 

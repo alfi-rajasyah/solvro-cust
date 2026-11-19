@@ -15,6 +15,11 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-19 — Delete a project from the Projects list
+
+- Each project card on the Projects list has a ⋯ menu with "Delete project", shown to the people who can delete a project from its page (the project's TAM, the owner of a linked customer, or anyone with view-all access, with project write access). It opens the same confirmation dialog as the project page, and the list updates in place. (#95)
+- Project cards no longer nest controls inside one link: the card link and its actions menu are separate controls.
+
 ### Added — 2026-11-19 — Task description in the task panel
 
 - The task panel shows the task description under the title, with line breaks kept. People who can edit tasks change it in place: it saves when you click away, Escape cancels, and clearing it removes the description. Everyone else sees it read-only. (#88)
