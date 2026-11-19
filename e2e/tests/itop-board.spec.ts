@@ -1,5 +1,5 @@
 import type { Page, Request } from "@playwright/test";
-import { center, expect, gripFor, loginViaUi, mouseDrag, test, touchDrag } from "../fixtures/test";
+import { center, expect, gripFor, loginViaUi, mouseDrag, test, touchDrag, mockCustomerOrgMapping } from "../fixtures/test";
 
 // Tickets tab Board view (Task 6.1, docs/archive/plans/itop-integration.md
 // — mockup "5 · The Tickets tab gets a Board" in
@@ -129,6 +129,7 @@ async function mockMyToken(page: Page, set: boolean): Promise<void> {
  * post-action refetch (triggered by TicketBoard's own cache invalidation)
  * picks up the new status without a second route registration. */
 async function mockCustomerTickets(page: Page, tickets: MockTicket[]): Promise<void> {
+  await mockCustomerOrgMapping(page);
   await page.route("**/api/itop/customers/*/tickets*", (route) =>
     route.fulfill({
       status: 200,
@@ -196,8 +197,8 @@ async function captureActionRequests(
 async function openBoard(page: Page, customerId: number): Promise<void> {
   // Plain navigate + explicit tab/switch clicks (same convention as
   // itop-tickets.spec.ts / itop-ticket-panel.spec.ts) rather than a
-  // `?tab=tickets&view=board` deep link — avoids racing the mapped-customer
-  // gate query that decides whether "Tickets" even appears in `TAB_ITEMS`
+  // `?tab=tickets&view=board` deep link — avoids racing the customer read
+  // whose `itopOrgId` decides whether "Tickets" even appears in `TAB_ITEMS`
   // on first render (CustomerDetail.tsx).
   await page.goto(`/customers/${customerId}`, { waitUntil: "networkidle" });
   await page.waitForTimeout(500);

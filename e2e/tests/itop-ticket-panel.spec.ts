@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, loginViaUi, test } from "../fixtures/test";
+import { expect, loginViaUi, test, mockCustomerOrgMapping } from "../fixtures/test";
 
 // Ticket panel + action sheet (docs/archive/plans/itop-integration.md Task
 // 5.4): every iTop route is intercepted via page.route, so this spec never
@@ -105,6 +105,7 @@ async function mockMyToken(page: Page, set: boolean): Promise<void> {
 }
 
 async function mockCustomerTickets(page: Page): Promise<void> {
+  await mockCustomerOrgMapping(page);
   await page.route("**/api/itop/customers/*/tickets*", (route) =>
     route.fulfill({
       status: 200,
