@@ -31,6 +31,7 @@ function task(over: Partial<Task> & { id: number }): Task {
     dueDate: null,
     isMilestone: false,
     isCriticalPath: false,
+    storyPoints: null,
     baselineStartDate: null,
     baselineDueDate: null,
     assignedToId: null,

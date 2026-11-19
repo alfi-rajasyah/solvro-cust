@@ -27,6 +27,7 @@ function makeTask(over: Partial<Task> = {}): Task {
     dueDate: "2026-10-05T00:00:00.000Z",
     isMilestone: false,
     isCriticalPath: false,
+    storyPoints: null,
     baselineStartDate: null,
     baselineDueDate: null,
     assignedToId: 3,

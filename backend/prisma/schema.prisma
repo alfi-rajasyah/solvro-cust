@@ -530,6 +530,8 @@ model Task {
   // TAM. Independent of priority; NOT computed from dependencies — the
   // computed critical path (Kahn sort + longest path) stays deferred.
   isCriticalPath    Boolean          @default(false) @map("is_critical_path")
+  // Optional size estimate, whole numbers 0-100 (validated in the routes).
+  storyPoints       Int?             @map("story_points")
   baselineStartDate DateTime?        @map("baseline_start_date")
   baselineDueDate   DateTime?        @map("baseline_due_date")
   assignedToId      Int?             @map("assigned_to")

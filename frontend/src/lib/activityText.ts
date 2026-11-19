@@ -90,6 +90,7 @@ const FIELD_NOUN: Record<string, string> = {
   color: "color",
   owner: "owner",
   itopTicketRef: "iTop ticket",
+  storyPoints: "story points",
   probability: "probability",
   impact: "impact",
   category: "category",
@@ -233,6 +234,13 @@ function taskFieldSentence(field: string, raw: unknown, label: string | null): P
       return [txt("unassigned "), subject, ...(from && from !== "none" ? [txt(` (was ${from})`)] : [])];
     }
     return [txt("changed the assignee of "), subject];
+  }
+  if (field === "storyPoints" && d) {
+    const from = valueText(field, "task", d.from);
+    const to = valueText(field, "task", d.to);
+    if (to === "none") return [txt("cleared the story points of "), subject, ...(from && from !== "none" ? [txt(` (was ${from})`)] : [])];
+    if (from === "none" && to !== null) return [txt("set the story points of "), subject, txt(` to ${to}`)];
+    if (from !== null && to !== null) return [txt("changed the story points of "), subject, txt(` from ${from} to ${to}`)];
   }
   if (d && /date$/i.test(field)) {
     const noun = fieldNoun(field);

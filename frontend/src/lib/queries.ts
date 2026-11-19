@@ -374,6 +374,7 @@ export interface Task {
   dueDate: string | null;
   isMilestone: boolean;
   isCriticalPath: boolean;
+  storyPoints: number | null;
   baselineStartDate: string | null;
   baselineDueDate: string | null;
   assignedToId: number | null;

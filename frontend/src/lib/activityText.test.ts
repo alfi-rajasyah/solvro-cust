@@ -90,6 +90,21 @@ describe("describeActivity - tasks", () => {
     );
   });
 
+  it("story points: set, changed, cleared, and in a multi-field event", () => {
+    const sp = (from: number | null, to: number | null) =>
+      text(ev({ action: "updated", changes: { storyPoints: { from, to } } }));
+    expect(sp(null, 5)).toBe("maya.putri set the story points of Configure backup jobs to 5");
+    expect(sp(3, 8)).toBe("maya.putri changed the story points of Configure backup jobs from 3 to 8");
+    expect(sp(5, null)).toBe("maya.putri cleared the story points of Configure backup jobs (was 5)");
+    expect(sp(0, null)).toBe("maya.putri cleared the story points of Configure backup jobs (was 0)");
+    expect(sp(null, 0)).toBe("maya.putri set the story points of Configure backup jobs to 0");
+    const multi = ev({
+      action: "updated",
+      changes: { storyPoints: { from: 3, to: 8 }, priority: { from: "LOW", to: "HIGH" } },
+    });
+    expect(text(multi)).toMatch(/^maya\.putri updated Configure backup jobs: story points from 3 to 8, priority from /);
+  });
+
   it("description changes never show text", () => {
     const e = ev({
       action: "updated",
