@@ -219,7 +219,7 @@ function CustomersTable({
           <div className="flex min-w-0 items-center gap-2.5">
             <span
               aria-hidden="true"
-              className="grid h-7 w-7 shrink-0 place-items-center rounded-sm bg-primary/10 font-display text-xs font-bold text-primary"
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-sm bg-primary/10 font-display text-xs font-bold text-primary-tint-text"
             >
               {initialsOf(row.original.name)}
             </span>

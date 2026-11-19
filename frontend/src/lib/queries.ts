@@ -462,7 +462,7 @@ export interface PortfolioProjectRow {
   isOverdue: boolean;
   daysOverdue: number;
   updatedAt: string;
-  sections: { id: number; name: string; color: string }[];
+  sections: { id: number; name: string; color: string; position: number }[];
 }
 
 export interface OverviewResponse {

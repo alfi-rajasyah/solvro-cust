@@ -90,6 +90,19 @@ export const WEEKLY_HEALTH_LABEL: Record<WeeklyHealth, string> = {
   RED: "Red",
 };
 
+/** The four built-in roles. */
+const ROLE_LABEL: Record<string, string> = {
+  ADMIN: "Admin",
+  TAM: "TAM",
+  STAKEHOLDER: "Stakeholder",
+  PENDING: "Pending",
+};
+
+/** Words for a built-in role; a custom role (operator-entered `[A-Z0-9_]+`, e.g. "PMO") shows as stored. */
+export function roleLabel(role: string): string {
+  return ROLE_LABEL[role] ?? role;
+}
+
 export interface LabelOption<T extends string> {
   value: T;
   label: string;

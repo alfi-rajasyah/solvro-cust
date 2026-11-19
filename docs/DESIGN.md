@@ -58,7 +58,7 @@ colors:
     on-primary: '#ffffff'
     primary-container: '#c8e6cf'
     on-primary-container: '#0f2b16'
-    primary-tint-text: '#1f7533'
+    primary-tint-text: '#175f26'
     inverse-primary: '#3aae51'
     secondary: '#5f5e57'
     on-secondary: '#ffffff'
@@ -95,6 +95,9 @@ fixed:
   ink: '#191919'
   ink-hover: '#2e2e2e'
   sidebar: '#232321'
+  rail-text: '#a8a69f'
+  rail-text-hover: '#f0ede8'
+  rail-text-muted: '#9c9a93'
 typography:
   family: Source Sans 3
   aliases: [font-display, font-body]
@@ -170,9 +173,9 @@ Every token is a CSS custom property in `index.css` (`--token-name`, space-separ
 | `on-primary` | `#0f2b16` | `#ffffff` | |
 | `primary-container` | `#2d9042` | `#c8e6cf` | |
 | `on-primary-container` | `#e8f7eb` | `#0f2b16` | |
-| `primary-tint-text` | `#6dd183` | `#1f7533` | text of the StatusChip "blue" tone on its `primary/20` tint; lighter than `primary` in dark so it holds 4.5:1 up to `surface-container-highest` (user decision 2026-11-13); pinned by `tokenContrast.test.ts` |
+| `primary-tint-text` | `#6dd183` | `#175f26` | text of chips on `primary/10`, `primary/15` and `primary/20` tints (StatusChip "blue" tone, PrimaryChip, mention and count chips); holds at least 4.5:1 up to `surface-container-highest` in both themes. Lighter than `primary` in dark (user decision 2026-11-13); in light, darker than `primary` (`#1f7533` was 3.52:1 on the tint over `surface-container-highest`, `#175f26` is 4.76:1); the dark value is pinned by `tokenContrast.test.ts` |
 | `inverse-primary` | `#1f7533` | `#3aae51` | dark value equals the light `primary` (aligned 2026-11-12, user decision D-06); it is the green used on an inverted (light) surface |
-| `secondary` | `#888780` | `#5f5e57` | inactive sidebar icons |
+| `secondary` | `#888780` | `#5f5e57` | secondary text and icons; not used on the sidebar rail (`#888780` is 4.37:1 on `#232321`) — the rail uses the fixed `rail-text*` tokens |
 | `on-secondary` | `#1a1a18` | `#ffffff` | |
 | `secondary-container` | `#323230` | `#e0dfd8` | |
 | `on-secondary-container` | `#b0ada8` | `#323230` | |
@@ -224,6 +227,9 @@ The light text shades (emerald, amber, rose; changed 2026-10-23) are the lightes
 | `ink` | `#191919` | always-dark brand chrome: login hero panel, primary sign-in button |
 | `ink-hover` | `#2e2e2e` | hover state for `ink` surfaces |
 | `sidebar` | `#232321` | the left nav rail — **fixed in both themes**, see §5 |
+| `rail-text` | `#a8a69f` | inactive nav item text and icons on the rail (6.46:1 on `sidebar`, 5.59:1 on the `white/5` hover) |
+| `rail-text-hover` | `#f0ede8` | rail text base colour and hover state (13.48:1 on `sidebar`) |
+| `rail-text-muted` | `#9c9a93` | tertiary rail glyphs, e.g. the external-link icon on the Outline item (5.59:1 on `sidebar`) |
 
 ---
 
@@ -315,10 +321,10 @@ This value is **fixed** — it does not flip between themes (unlike every color 
 | Task detail panel | `TaskPanel.tsx` |
 | Ticket detail panel | `TicketPanel.tsx` (right-side iTop ticket panel on the customer Tickets tab, `fixed right-0 top-14 bottom-0` same as the task panel) |
 | Epic detail panel | `EpicPanel.tsx` (right-side panel on the Epics tab, deep-linked via `?epic=<id>`, `fixed right-0 top-14 bottom-0` same shell as the task and ticket panels; added in the Epics phase, 2026-09-24) |
-| Dropdown menus | `TopBar.tsx` user menu, `layout/NotificationBell.tsx` notifications popover (TopBar bell; base-ui Popover via `ui/popover.tsx` on `bg-popover`, `shadow-overlay!` because the vendored popup ships `shadow-md`, Phase 4 "Activity and notifications", 2026-09-30), `ProjectList.tsx` filter/sort menus, `itop/RowTicketCell.tsx`'s ticket menu (`ui/dropdown-menu.tsx` popup, `shadow-overlay!`), `SolvroGantt.tsx`'s Export (Excel/PDF) dropdown (hand-rolled `absolute top-full` popover, restyled from `shadow-lg` in the Gantt visual refresh phase, 2026-08-03) and its `DropdownMenuContent` actions menu (`shadow-overlay!`), `SolvroKanban.tsx`'s row menu (~`:126`) and filter popover (~`:477`), `TaskPanel.tsx`'s ⋯ options menu, `components/StatusSelect.tsx`'s grouped status popup (`ui/select.tsx` popup, `shadow-overlay!` so the stock `shadow-md` does not win), `components/admin/TaskStatusesTab.tsx`'s two `DropdownMenuContent` menus (`shadow-overlay!`), and the ⋯ action menus on `pages/ProjectDetail.tsx` (project actions), `pages/Customers.tsx` (row menu) and `components/customer/AccountHeader.tsx` — those three are `ui/dropdown-menu.tsx` popups using `shadow-overlay!` (`!` for the same reason as `DateRangeField.tsx`: the vendored popup's stock `shadow-md` must not win) |
+| Dropdown menus | `TopBar.tsx` user menu, `layout/NotificationBell.tsx` notifications popover (TopBar bell; base-ui Popover via `ui/popover.tsx` on `bg-popover`, `shadow-overlay!` because the vendored popup ships `shadow-md`, Phase 4 "Activity and notifications", 2026-09-30), `ProjectList.tsx` filter/sort menus, `pages/views/ProjectRisks.tsx`'s Prob/Impact `ScaleSelect` (`ui/select.tsx` popup, `shadow-overlay!` so the stock `shadow-md` does not win), `itop/RowTicketCell.tsx`'s ticket menu (`ui/dropdown-menu.tsx` popup, `shadow-overlay!`), `SolvroGantt.tsx`'s Export (Excel/PDF) dropdown (hand-rolled `absolute top-full` popover, restyled from `shadow-lg` in the Gantt visual refresh phase, 2026-08-03) and its `DropdownMenuContent` actions menu (`shadow-overlay!`), `SolvroKanban.tsx`'s row menu (~`:126`) and filter popover (~`:477`), `TaskPanel.tsx`'s ⋯ options menu, `components/StatusSelect.tsx`'s grouped status popup (`ui/select.tsx` popup, `shadow-overlay!` so the stock `shadow-md` does not win), `components/admin/TaskStatusesTab.tsx`'s two `DropdownMenuContent` menus (`shadow-overlay!`), and the ⋯ action menus on `pages/ProjectDetail.tsx` (project actions), `pages/Customers.tsx` (row menu) and `components/customer/AccountHeader.tsx` — those three are `ui/dropdown-menu.tsx` popups using `shadow-overlay!` (`!` for the same reason as `DateRangeField.tsx`: the vendored popup's stock `shadow-md` must not win) |
 | Context menu | `ui/context-menu.tsx` (`ContextMenuContent` and `ContextMenuSubContent`, both — z-index moved onto the Positioner per the Popover z-index convention below) — Gantt tree row action menu (Edit/Add subtask/Delete), first consumed by `SolvroGantt.tsx`'s `renderResourceMenu` (right-click or hover "…" button); restyled from `shadow-lg`/`shadow-md` in the Gantt visual refresh phase, 2026-08-03 |
-| Popovers | `TreeCells.tsx`'s `SectionColorCell` color picker (corrected 2026-08-03 — the old `GanttListRow.tsx` this row used to cite no longer exists), `DateField.tsx` calendar popover, `DateRangeField.tsx` calendar popover (paired START/DUE between-style range picker, user add-on 2026-07-28, plan Task 3.5; mounted via the now-shell-less `InlineDateRangeEditor.tsx` wrapper in `TaskPanel.tsx`'s DATES editor and the Gantt tree's `TreeCells.tsx`, and directly in `TaskFormModal.tsx`'s merged "Dates" row) — uses `shadow-overlay!` (`!important`, added in a fix round so the sanctioned shadow doesn't silently lose to the vendored Popover's default `shadow-md` depending on stylesheet load order); `DateField.tsx`'s own popup was deliberately left as plain `shadow-overlay` (out of scope for that fix round) — a known parity gap between the two sibling components; `CommentMentions.tsx`'s @mention picker listbox (task-panel comment composer; hand-rolled `absolute bottom-full` div on `bg-surface-container-lowest` with `border-outline-variant`, `rounded-sm`, plain `shadow-overlay`, Phase 4, 2026-09-30); `ProjectEpics.tsx`'s `ColorDot` color picker (its `shadow-overlay` div — a clone of `TreeCells.tsx`'s `SectionColorCell` popover pattern, added in the Epics phase, 2026-09-24) |
-| Drag overlay | dragging card state: `ProjectKanban.tsx` (via `kanban-v2/cards.tsx`); the iTop ticket board's `TicketCard.tsx` (`components/itop/board/`, on the vendored `reui/kanban` engine — columns are iTop's own lifecycle, not Solvro's To do / In progress / Done, and escalation renders as a chip on the card, never its own column; no optimistic move — a card only moves once the mapped iTop action succeeds) |
+| Popovers | `TreeCells.tsx`'s `SectionColorCell` color picker (corrected 2026-08-03 — the old `GanttListRow.tsx` this row used to cite no longer exists), `reui/gantt/gantt-nav.tsx`'s `GanttDatePicker` calendar popover (`shadow-overlay!`; the vendored popup ships `shadow-md`), `DateField.tsx` calendar popover, `DateRangeField.tsx` calendar popover (paired START/DUE between-style range picker, user add-on 2026-07-28, plan Task 3.5; mounted via the now-shell-less `InlineDateRangeEditor.tsx` wrapper in `TaskPanel.tsx`'s DATES editor and the Gantt tree's `TreeCells.tsx`, and directly in `TaskFormModal.tsx`'s merged "Dates" row) — uses `shadow-overlay!` (`!important`, added in a fix round so the sanctioned shadow doesn't silently lose to the vendored Popover's default `shadow-md` depending on stylesheet load order); `DateField.tsx`'s own popup was deliberately left as plain `shadow-overlay` (out of scope for that fix round) — a known parity gap between the two sibling components; `CommentMentions.tsx`'s @mention picker listbox (task-panel comment composer; hand-rolled `absolute bottom-full` div on `bg-surface-container-lowest` with `border-outline-variant`, `rounded-sm`, plain `shadow-overlay`, Phase 4, 2026-09-30); `ProjectEpics.tsx`'s `ColorDot` color picker (its `shadow-overlay` div — a clone of `TreeCells.tsx`'s `SectionColorCell` popover pattern, added in the Epics phase, 2026-09-24) |
+| Drag overlay | dragging card state: `ProjectKanban.tsx` (via `kanban-v2/cards.tsx`); the Gantt bar drag clone (`reui/gantt/gantt-dnd.tsx`, patched from `shadow-lg`); the iTop ticket board's `TicketCard.tsx` (`components/itop/board/`, on the vendored `reui/kanban` engine — columns are iTop's own lifecycle, not Solvro's To do / In progress / Done, and escalation renders as a chip on the card, never its own column; no optimistic move — a card only moves once the mapped iTop action succeeds) |
 | Right context panel | `RightSidebar.tsx` |
 
 > Implementation note: `RightSidebar.tsx` is in the whitelist by design intent (it's a floating overlay layer, same as Drawer), but as of this writing it does **not** apply the `shadow-overlay` class — it relies on `border-l border-outline-variant` over an opaque `bg-surface-container-low` only (no backdrop blur). Don't flag this as a violation; flag it as a gap if you're implementing elevation work in that file.
@@ -336,7 +342,7 @@ Nothing else gets a shadow. No card shadows, no hover-lift shadows, no focus-rin
 | **Sidebar is fixed-dark** | `bg-sidebar` (`#232321`) in **both** themes — a literal hex (`--color-sidebar: #232321;`) in the `@theme` block of `index.css`, not a CSS-var-routed token. The rail never flips to light, even in light mode. |
 | **Login always renders dark** | `Login.tsx`'s root is a `main` landmark that hard-pins the `dark` class regardless of the user's theme preference. Left hero panel uses `bg-background` (`#1a1a18`), right form panel uses `bg-surface` (`#232321`) — both resolved through the forced `.dark` scope, so they land on the dark values above. The brand panel keeps its look (eyebrow, two-line headline, three outlined pills reading Project tracking, Daily notes and Weekly sync, three decorative rings) by owner decision 2026-11-12, a sanctioned override of the antislop filter's findings on it. |
 | **Primary is Elitery Green — never blue** | `#3aae51` dark / `#1f7533` light. This is the only accent color in the app: CTAs, active nav state, focus rings, links. Blue never appears as a primary/CTA color. |
-| **`IN_PROGRESS` chip tone is misleadingly named "blue"** | `TaskStatusChip`'s `blue` tone renders `bg-primary/10 text-primary dark:bg-primary/20` — it is **green-tinted**, not literal blue. Same for `ProjectStatusChip`'s `PLANNING`/`COMPLETED` tones, which also use the `blue` tone class. Don't "fix" this by pointing it at an actual blue token — it's intentional, per `StatusChip.tsx`. |
+| **`IN_PROGRESS` chip tone is misleadingly named "blue"** | `TaskStatusChip`'s `blue` tone renders `bg-primary/10 text-primary-tint-text dark:bg-primary/20` — it is **green-tinted**, not literal blue. Same for `ProjectStatusChip`'s `PLANNING`/`COMPLETED` tones, which also use the `blue` tone class. Don't "fix" this by pointing it at an actual blue token — it's intentional, per `StatusChip.tsx`. |
 | **`.ai-glow` is retired, not reserved** | Amber (`#f59e0b`) inner-border + outer glow was reserved exclusively for blueprint-generated (AI Breakdown) task cards; that concept is cancelled along with the Secure Ingestion Port. `.ai-glow` does not exist anywhere in `frontend/src/` — do not introduce it for other status highlights without a new design decision. |
 | **Icons are Material Symbols Outlined** | Loaded via Google Fonts in `index.html` (`opsz,wght,FILL,GRAD@24,400,0,0`), rendered with the `.material-symbols-outlined` class (variation settings pinned in `index.css`). Design/mockup tooling that can't render icon-font ligatures (e.g. Paper canvases) must substitute inline SVGs — this does not change the in-app convention. **Accessibility:** a decorative glyph span carries `aria-hidden="true"` (otherwise a screen reader reads the ligature word aloud, e.g. "drag_indicator"); an icon-only control carries an `aria-label`; a toggle's state goes in `aria-pressed` / `aria-expanded` / `aria-current`, never in the glyph alone. |
 | **Compact data-grid mode** | Implemented via the vendored data grid's `tableLayout={{ dense: true }}` (`frontend/src/components/reui/data-grid/`), used on the Admin Users, Tasks, and CustomerDetail Overview grids: reduced cell padding/row height, and dense body/footer cells step down to `text-xs` (13px); the sanctioned 12px sentence-case token is `text-meta` (`text-label-caps` is reserved for uppercase labels). Column headers always render at `text-label-caps` (12px/700/uppercase) regardless of dense/default. Any hand-rolled table still needs this pattern applied by hand — check the specific component before assuming it's wired. |
@@ -358,13 +364,13 @@ Nothing else gets a shadow. No card shadows, no hover-lift shadows, no focus-rin
 
 | Chip | Status | Tone | Renders as |
 |---|---|---|---|
-| `ProjectStatusChip` | PLANNING | blue | `bg-primary/10 text-primary` |
+| `ProjectStatusChip` | PLANNING | blue | `bg-primary/10 text-primary-tint-text` |
 | | ACTIVE | emerald | `bg-chip-emerald-bg text-chip-emerald-text` |
 | | ON_HOLD | amber | `bg-chip-amber-bg text-chip-amber-text` |
-| | COMPLETED | blue | `bg-primary/10 text-primary` |
+| | COMPLETED | blue | `bg-primary/10 text-primary-tint-text` |
 | | CANCELLED | rose | `bg-chip-rose-bg text-chip-rose-text` |
 | `TaskStatusChip` | TODO | gray | `bg-surface-container-high text-on-surface-variant` |
-| | IN_PROGRESS | blue | `bg-primary/10 text-primary` |
+| | IN_PROGRESS | blue | `bg-primary/10 text-primary-tint-text` |
 | | DONE | emerald | `bg-chip-emerald-bg text-chip-emerald-text` |
 
 A workspace task status carries a tone key (`TaskStatusDef.color`); `TaskStatusChip` given a `def` renders the status's own name in that tone (`statusToneClass`), and without one falls back to the category rows above. Pickers and the Gantt tree use a matching dot (`STATUS_TONE_DOT_CLASS`).
@@ -372,12 +378,12 @@ A workspace task status carries a tone key (`TaskStatusDef.color`); `TaskStatusC
 | Tone key | Chip classes | Dot |
 |---|---|---|
 | `gray` | `bg-surface-container-high text-on-surface-variant` | `bg-on-surface-variant` (a container tone vanishes on the dark popover/column) |
-| `primary` | `bg-primary/10 text-primary dark:bg-primary/20` | `bg-primary` |
+| `primary` | `bg-primary/10 text-primary-tint-text dark:bg-primary/20` | `bg-primary` |
 | `emerald` | `bg-chip-emerald-bg text-chip-emerald-text` | `bg-chip-emerald-text` |
 | `amber` | `bg-chip-amber-bg text-chip-amber-text` | `bg-chip-amber-text` |
 | `violet` | `bg-chip-violet-bg text-chip-violet-text` | `bg-chip-violet-text` |
 
-`customer/PrimaryChip.tsx` (the "Primary" marker on a project's primary customer, shown when a project has several) is a bespoke chip on the `primary` tone pair: `rounded-sm bg-primary/10 px-1.5 py-0.5 text-meta text-primary dark:bg-primary/20`.
+`customer/PrimaryChip.tsx` (the "Primary" marker on a project's primary customer, shown when a project has several) is a bespoke chip on the `primary` tone pair: `rounded-sm bg-primary/10 px-1.5 py-0.5 text-meta text-primary-tint-text dark:bg-primary/20`.
 
 `LabelChip.tsx` and `EpicChip.tsx` are not tone chips: the user-chosen colour is a 8px dot plus a `color-mix(… 14%, transparent)` background tint, and the text is always `text-on-surface` (so any stored colour stays readable in both themes). Both use the same `text-meta font-semibold leading-[18px]` rhythm as `CHIP_BASE`; `EpicChip` also truncates at `max-w-[160px]`.
 

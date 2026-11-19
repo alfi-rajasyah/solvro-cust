@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
 import {
@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/reui/alert";
 import { ProjectStatusChip } from "@/components/StatusChip";
 import { fmtDateTime, fmtDay, fmtRange } from "@/lib/formatDate";
 import { EMPTY_VALUE } from "@/lib/emptyValue";
+import { resolveSectionColors } from "@/lib/gantt/palette";
 import { type PortfolioProjectRow, useExecutiveReport } from "@/lib/queries";
 
 // Executive dashboard — org-wide portfolio roll-up. Two blocks: an
@@ -264,6 +265,7 @@ function PortfolioList({ projects }: { projects: PortfolioProjectRow[] }) {
 function TimelineRow({ project: p }: { project: PortfolioProjectRow }) {
   const hasSchedule = p.start !== null && p.end !== null;
   const fillTone = p.isOverdue ? "bg-error" : "bg-primary";
+  const sectionColors = useMemo(() => resolveSectionColors(p.sections), [p.sections]);
 
   return (
     <div className="space-y-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-4 py-3">
@@ -315,7 +317,7 @@ function TimelineRow({ project: p }: { project: PortfolioProjectRow }) {
             >
               <span
                 className="h-1.5 w-1.5 rounded-full"
-                style={{ backgroundColor: s.color }}
+                style={{ backgroundColor: sectionColors.get(s.id) ?? s.color }}
               />
               {s.name}
             </span>

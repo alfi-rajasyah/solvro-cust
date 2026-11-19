@@ -462,7 +462,7 @@ function ProfileSection({
                         a.tools.map((t, i) => (
                           <span
                             key={`${t}-${i}`}
-                            className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-meta text-primary"
+                            className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-meta text-primary-tint-text"
                           >
                             {t}
                           </span>

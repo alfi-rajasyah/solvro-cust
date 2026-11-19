@@ -56,11 +56,11 @@ export function CriticalPathMark({
     <span className={cn("flex [&>span]:px-1.5", className)}>
       <Chip tone="violet">
         {/* Same unlayered-font-size cascade issue as the glyph variant
-            above — `!` forces the 13px size instead of Google Fonts'
+            above — `!` forces the 13px size (text-xs) instead of Google Fonts'
             24px default. */}
         <span
           aria-hidden="true"
-          className="material-symbols-outlined inline-flex items-center text-[13px]! leading-none"
+          className="material-symbols-outlined inline-flex items-center text-xs! leading-none"
         >
           {CRITICAL_PATH_GLYPH}
         </span>

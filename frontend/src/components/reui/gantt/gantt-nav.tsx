@@ -391,7 +391,8 @@ function GanttDatePicker({ className }: GanttDatePickerProps) {
           <path d="M3 10h18" />
         </svg>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-auto p-0!">
+      {/* SOLVRO PATCH: shadow-overlay! (DESIGN.md elevation whitelist); the popup ships shadow-md */}
+      <PopoverContent align="start" className="w-auto p-0! shadow-overlay!">
         <Calendar
           mode="single"
           selected={zoned}

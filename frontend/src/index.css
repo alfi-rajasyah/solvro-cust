@@ -63,6 +63,12 @@
   --color-ink: #191919;
   --color-ink-hover: #2e2e2e;
   --color-sidebar: #232321;
+  /* Text on the always-dark rail (Sidebar.tsx, pinned `dark`). Fixed warm greys
+     on #232321, never theme-flipping: `secondary` (#888780) is 4.37:1 there,
+     these are 6.46 / 5.59 (on white/5 hover) / 5.59 and 13.48. */
+  --color-rail-text: #a8a69f;
+  --color-rail-text-hover: #f0ede8;
+  --color-rail-text-muted: #9c9a93;
 
   /* — Radius: v4 defaults already match DESIGN.md after the Task 1 renames
        (rounded-xs .125 / rounded-sm .25 / md .375 / lg .5 / xl .75).
@@ -209,7 +215,9 @@
     --primary-container: 200 230 207;
     --on-primary-container: 15 43 22;
     --inverse-primary: 58 174 81;
-    --primary-tint-text: 31 117 51;
+    /* Darker than --primary: text on primary/10 and primary/15 chip tints over
+       surface-container-highest is 4.76:1 (plain primary there is 3.52:1). */
+    --primary-tint-text: 23 95 38;
     --secondary: 95 94 87;
     --on-secondary: 255 255 255;
     --secondary-container: 224 223 216;

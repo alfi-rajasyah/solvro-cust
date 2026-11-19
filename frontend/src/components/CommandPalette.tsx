@@ -342,7 +342,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                         key={item.value}
                         value={item}
                         onClick={() => handleSelect(item)}
-                        className="flex [@media(pointer:coarse)]:min-h-11 cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-xs text-on-surface data-highlighted:bg-surface-container"
+                        className="flex [@media(pointer:coarse)]:min-h-11 cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-xs text-on-surface"
                       >
                         {item.outline ? (
                           <span

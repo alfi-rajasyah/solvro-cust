@@ -14,6 +14,8 @@ import {
 } from "recharts";
 import { useProjectContext } from "../ProjectDetail";
 import { hasPermission, useAuth } from "@/lib/auth";
+import { SkeletonRegion } from "@/components/skeletons/SkeletonRegion";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { StatStrip, type StatItem } from "@/components/StatStrip";
 import { RiskScoreChip } from "@/components/RiskScoreChip";
@@ -76,14 +78,14 @@ export function ProjectOverview() {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        <div className="h-16 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low md:h-12" />
-        <div className="h-72 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low" />
+      <SkeletonRegion className="space-y-4">
+        <Skeleton className="h-16 rounded-sm border border-outline-variant bg-surface-container-low md:h-12" />
+        <Skeleton className="h-72 rounded-sm border border-outline-variant bg-surface-container-low" />
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="h-48 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low" />
-          <div className="h-48 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low" />
+          <Skeleton className="h-48 rounded-sm border border-outline-variant bg-surface-container-low" />
+          <Skeleton className="h-48 rounded-sm border border-outline-variant bg-surface-container-low" />
         </div>
-      </div>
+      </SkeletonRegion>
     );
   }
 

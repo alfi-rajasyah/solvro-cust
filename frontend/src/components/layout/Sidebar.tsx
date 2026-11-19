@@ -39,7 +39,7 @@ function NavItem({
     [
       "tap-target group relative flex items-center rounded-sm transition-colors duration-150",
       expanded ? "gap-2.5 px-3 py-2 text-xs" : "h-10 w-10 justify-center",
-      isActive ? "bg-primary/20 text-white" : "text-slate-400 hover:bg-white/5 hover:text-slate-100",
+      isActive ? "bg-primary/20 text-white" : "text-rail-text hover:bg-white/5 hover:text-rail-text-hover",
     ].join(" ");
 
   const content = ({ isActive }: { isActive: boolean }) => (
@@ -120,7 +120,7 @@ function OutlineNavItem({
   onNavigate: () => void;
 }) {
   const linkClass = [
-    "tap-target group relative flex items-center rounded-sm transition-colors duration-150 text-slate-400 hover:bg-white/5 hover:text-slate-100",
+    "tap-target group relative flex items-center rounded-sm transition-colors duration-150 text-rail-text hover:bg-white/5 hover:text-rail-text-hover",
     expanded ? "gap-2.5 px-3 py-2 text-xs" : "h-10 w-10 justify-center",
   ].join(" ");
 
@@ -133,7 +133,7 @@ function OutlineNavItem({
       {expanded && (
         <span
           aria-hidden
-          className="material-symbols-outlined ml-auto text-base text-slate-500 group-hover:text-slate-300"
+          className="material-symbols-outlined ml-auto text-base text-rail-text-muted group-hover:text-rail-text-hover"
         >
           open_in_new
         </span>
@@ -213,7 +213,7 @@ export function Sidebar() {
           // `dark` is pinned so the rail renders dark in both themes (fixed
           // brand element per DESIGN.md): token-based accents like `bg-primary`
           // resolve to their `.dark` values even when the app is in light mode.
-          "dark fixed left-0 top-0 z-50 h-screen flex-col overflow-hidden border-r border-black/30 font-display text-slate-300 transition-[width] duration-200 ease-out",
+          "dark fixed left-0 top-0 z-50 h-screen flex-col overflow-hidden border-r border-black/30 font-display text-rail-text-hover transition-[width] duration-200 ease-out",
           SIDEBAR_BG,
           expanded ? "flex w-sidebar" : "hidden w-sidebar-collapsed md:flex",
         ].join(" ")}
@@ -236,7 +236,7 @@ export function Sidebar() {
             type="button"
             onClick={toggle}
             aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
-            className="tap-target flex h-8 w-8 items-center justify-center rounded-sm text-slate-400 hover:bg-white/5 hover:text-slate-100"
+            className="tap-target flex h-8 w-8 items-center justify-center rounded-sm text-rail-text hover:bg-white/5 hover:text-rail-text-hover"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-lg">
               {expanded ? "menu_open" : "menu"}

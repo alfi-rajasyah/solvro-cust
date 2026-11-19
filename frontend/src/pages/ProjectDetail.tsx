@@ -1,4 +1,4 @@
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import {
   Link,
   NavLink,
@@ -88,6 +88,24 @@ export function ProjectDetail() {
   const { feedback: copyFeedback, copy: copyLink } = useCopyLinkFeedback();
 
   const { data: project, isLoading, isError, error, refetch } = useProject(projectId);
+
+  // On a narrow phone the tab strip scrolls sideways; bring the active tab into
+  // view after navigation. Sets scrollLeft only (scrollIntoView would also scroll
+  // the page's <main> vertically and runs where nothing overflows), and aims 32px
+  // short of the right edge to clear the fade. Never touches focus.
+  const tabNavRef = useRef<HTMLElement>(null);
+  const tabsMounted = !!project;
+  useEffect(() => {
+    const nav = tabNavRef.current;
+    if (!nav || nav.scrollWidth <= nav.clientWidth) return;
+    const tab = nav.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!tab) return;
+    const FADE = 32;
+    const left = tab.offsetLeft;
+    const right = left + tab.offsetWidth + FADE;
+    if (left < nav.scrollLeft) nav.scrollLeft = left;
+    else if (right > nav.scrollLeft + nav.clientWidth) nav.scrollLeft = right - nav.clientWidth;
+  }, [location.pathname, tabsMounted, embedAvailable]);
 
   // Task side panel is deep-linked via ?task=<id> so it works the same way
   // from the Kanban and List views (and survives a page refresh / share).
@@ -319,7 +337,7 @@ export function ProjectDetail() {
       {/* Below md the tab row scrolls sideways; the right-edge fade hints at
           the tabs off-screen. */}
       <div className="relative mb-6">
-        <nav className="flex gap-6 overflow-x-auto overflow-y-clip whitespace-nowrap border-b border-outline-variant">
+        <nav ref={tabNavRef} className="flex gap-6 overflow-x-auto overflow-y-clip whitespace-nowrap border-b border-outline-variant">
           {TABS.filter((tab) => tab.to !== "docs" || embedAvailable).map((tab) => (
             <NavLink
               key={tab.to}

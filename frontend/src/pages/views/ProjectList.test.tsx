@@ -109,4 +109,14 @@ describe("ProjectList section actions", () => {
     expect(screen.getAllByRole("button", { name: "Duplicate section" }).length).toBeGreaterThan(0);
     expect(screen.getAllByTitle("Delete section").length).toBeGreaterThan(0);
   });
+
+  it("section dots use the Gantt's resolved color, not legacy slate", () => {
+    const { container } = render(<ProjectList />);
+    const dots = Array.from(container.querySelectorAll<HTMLElement>("span.h-2.w-2.rounded-full"));
+    expect(dots.length).toBe(2);
+    // Mocked sections carry no color, so the Gantt fallback presets apply.
+    expect(dots[0].style.backgroundColor).not.toBe("");
+    expect(dots[0].style.backgroundColor).not.toBe("rgb(148, 163, 184)");
+    expect(dots[0].style.backgroundColor).not.toBe(dots[1].style.backgroundColor);
+  });
 });

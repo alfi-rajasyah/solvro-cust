@@ -269,14 +269,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Question: should active: false block new assignments?.
 - **Source:** snapshot line 342, section "Tech debt / follow-ups from recent work"
 
-### ISS-040 · P3 · Uncustomized sections show slate outside the Gantt
-
-- **Type:** bug · **Found:** 2026-07-22 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** section.color use in frontend/src/pages/views/ProjectList.tsx (line ~767), pages/Executive.tsx (~318), components/TaskPanel.tsx (~734)
-- **Problem:** Sections with the default color render vivid presets in the Gantt but legacy slate in the List tab, Executive chips and the task panel dot.
-- **Why deferred / fix direction:** Reuse resolveSectionColors from lib/gantt/palette.ts in those three places, or apply the fallback server-side.
-- **Source:** snapshot line 410, section "Tech debt / follow-ups from recent work"
-
 ### ISS-042 · P3 · Comment composer is a single-line input
 
 - **Type:** debt · **Found:** 2026-07-24 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -308,14 +300,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** Promoting or re-parenting a subtask needs the modal. No Promote shortcut was built after the dogfood window.
 - **Why deferred / fix direction:** Trigger: users report the modal round-trip as friction.
 - **Source:** snapshot line 613, section "Kanban → ReUI swap — deferred findings (2026-07-27)"
-
-### ISS-047 · P3 · Command palette has dead classes and a hardcoded Mac shortcut glyph
-
-- **Type:** debt · **Found:** 2026-07-27 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** row className in frontend/src/components/CommandPalette.tsx (line ~345); ⌘K in frontend/src/components/layout/TopBar.tsx (line ~189)
-- **Problem:** A highlight class is overpainted by the vendored ::before, the row radius disagrees by 2px, and TopBar always shows the ⌘K glyph for Windows and Linux users too.
-- **Why deferred / fix direction:** Delete the dead class, align the radius, show Ctrl K off macOS. The trigger hover item is already fixed.
-- **Source:** snapshot line 735, section "Global search & ⌘K command palette — deferred findings (2026-07-27)"
 
 ### ISS-048 · P3 · Dropdown submenu cannot outrank a modal host
 
@@ -365,14 +349,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Compare by value if a consumer adds object-valued filter options.
 - **Source:** snapshot line 1445, section "Issues Sweep #1 — residuals (2026-08-02)"
 
-### ISS-055 · P3 · ProjectRisks probability and impact cells use hand-rolled selects
-
-- **Type:** debt · **Found:** 2026-08-29 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** probability/impact <select> in frontend/src/pages/views/ProjectRisks.tsx (lines ~378, ~409)
-- **Problem:** The inline risk-scale editors use plain selects while newer surfaces use the vendored ui/select.
-- **Why deferred / fix direction:** Move them to ui/select the next time the file is touched.
-- **Source:** snapshot line 1705, section "Daily Review v2 — deferred findings (2026-08-29)"
-
 ### ISS-056 · P3 · Material Symbols glyphs ignore text-[Npx] utilities app-wide
 
 - **Type:** decision · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -389,14 +365,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** When Chip's markup changes, grep the selector and retarget the new root.
 - **Source:** snapshot line 1783, section "Critical Path mark — deferred findings (2026-09-02)"
 
-### ISS-058 · P3 · Tasks grid and kanban subtask rows show no Critical Path mark
-
-- **Type:** debt · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** PriorityBadge cell in frontend/src/pages/Tasks.tsx (line 316); SubtaskRow in frontend/src/components/kanban-v2/cards.tsx (line 243)
-- **Problem:** Two task surfaces omit the mark that every other covered surface shows.
-- **Why deferred / fix direction:** Add CriticalPathMark beside the priority indicator if either surface is revisited.
-- **Source:** snapshot line 1798, section "Critical Path mark — deferred findings (2026-09-02)"
-
 ### ISS-062 · P3 · Duplicate mutations wait on inactive-query invalidations
 
 - **Type:** watch · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -404,15 +372,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** isPending also waits on inactive queries. The cost is near zero because inactive queries refetch lazily.
 - **Why deferred / fix direction:** Await only projectTasks and fire the rest if latency ever shows.
 - **Source:** snapshot line 1894, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
-
-### ISS-063 · P3 · Sync modals' missing-title error does not point to the card
-
-- **Type:** debt · **Found:** 2026-09-10 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** setError in frontend/src/components/daily-review/MidweekSyncModal.tsx (line 171) and ReflectionSyncModal.tsx (line 202)
-- **Problem:** The banner at the top of the form says a title is missing but not which card. The Reflection card is tall, so users must scan every card.
-- **Why deferred / fix direction:** Mark or focus the offending card when save is blocked.
-- **Source:** snapshot line 1939, section "Weekly Sync achievement rows — deferred findings (2026-09-10)"
-
 
 ### ISS-068 · P3 · /tasks Filters popover briefly pulls focus back after Escape
 
@@ -430,14 +389,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Accepted limitation; revisit only if the server begins returning resolved mention names.
 - **Source:** snapshot line 2343, section "Collaboration & sharing, Phase 4 ("Activity and notifications") — deferred findings (2026-09-30)"
 
-### ISS-070 · P3 · Arbitrary text-[12px]/[13px] sizes remain in six files
-
-- **Type:** debt · **Found:** 2026-10-09 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** text-[12px]/text-[13px] in frontend/src/pages/Admin.tsx, TaskPanel.tsx, EpicPanel.tsx, ServiceMappingList.tsx, kanban-v2/cards.tsx, CriticalPathMark.tsx
-- **Problem:** Arbitrary pixel text sizes still bypass the type scale in six files; the Gantt toolbar, uppercase headings and Settings banner items from the original entry are already clean.
-- **Why deferred / fix direction:** Replace with scale classes during the next pass over those files.
-- **Source:** snapshot line 2369, section "Internal sync — deferred findings (2026-10-09)"
-
 ### ISS-071 · P3 · Role changes reach the UI up to 30 seconds late
 
 - **Type:** watch · **Found:** 2026-10-09 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -445,46 +396,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** The client refreshes /auth/me on focus and after a 403, throttled to once per 30 seconds, so a demoted user may see stale controls; the server already enforces the new role.
 - **Why deferred / fix direction:** Accepted: UI-only lag. Revisit only if the throttle becomes a complaint.
 - **Source:** snapshot line 2372, section "Internal sync — deferred findings (2026-10-09)"
-
-### ISS-072 · P3 · Active project tab can be off-screen on narrow phones
-
-- **Type:** bug · **Found:** 2026-10-10 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** tab nav in frontend/src/pages/ProjectDetail.tsx (line ~322)
-- **Problem:** Opening a tab such as /docs directly on a 390px screen leaves the active tab hidden to the right because the strip never scrolls it into view.
-- **Why deferred / fix direction:** Call scrollIntoView({ inline: 'nearest' }) on the active tab after navigation.
-- **Source:** snapshot line 2384, section "Outline B+C — deferred findings (2026-10-09)"
-
-### ISS-073 · P3 · Portfolio timeline hides the Today line on phones
-
-- **Type:** debt · **Found:** 2026-10-26 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** showTodayLine overlay in frontend/src/components/portfolio/PortfolioCalendar.tsx (line ~177)
-- **Problem:** The dashed Today line is hidden below 768 px because it would cross the stacked project labels. Phone users get no Today marker.
-- **Why deferred / fix direction:** Draw the line over the year track only on phones.
-- **Source:** snapshot line 2399, section "Frontend usability — deferred findings (2026-10-26)"
-
-### ISS-074 · P3 · AuthLoading shows plain text instead of a delayed skeleton
-
-- **Type:** debt · **Found:** 2026-10-24 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** AuthLoading in frontend/src/components/AuthGuard.tsx (line ~28)
-- **Problem:** AuthLoading renders centered 'Loading…' text, against the DESIGN.md rule for delayed skeleton loading states.
-- **Why deferred / fix direction:** Use PageLoading or another delayed skeleton.
-- **Source:** snapshot line 2406, section "Code splitting — deferred findings (2026-10-24)"
-
-### ISS-076 · P3 · Admin role select shows raw uppercase role values
-
-- **Type:** debt · **Found:** 2026-11-02 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** role select in frontend/src/pages/Admin.tsx (line ~252)
-- **Problem:** The role control uses uppercase caps text and raw enum values, against DESIGN.md. A nearby comment says font-bold stays but none is present.
-- **Why deferred / fix direction:** Use labels.ts words in sentence case and fix the comment.
-- **Source:** snapshot line 2449, section "Design compliance fixes — deferred findings (2026-11-02)"
-
-### ISS-077 · P3 · Overview and Project Overview loaders are bare pulse blocks
-
-- **Type:** debt · **Found:** 2026-11-12 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** SkeletonGrid in frontend/src/pages/Overview.tsx (line ~457); loading strip in frontend/src/pages/views/ProjectOverview.tsx (line ~80)
-- **Problem:** The placeholders are plain animate-pulse blocks, where DESIGN.md asks for skeletons from components/skeletons shown after 150 ms.
-- **Why deferred / fix direction:** Move them onto the shared skeleton region.
-- **Source:** snapshot line 2454, section "Antislop port — deferred findings (2026-11-12)"
 
 ### ISS-185 · P3 · Service-list saves still invalidate every project and customer query
 
@@ -502,15 +413,31 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Cosmetic until ISS-029 is decided. Fix: filter inactive users from the picker.
 - **Source:** phase review of `docs/archive/plans/panels-forms-board-a11y.md`
 
+### ISS-195 · P3 · The Portfolio Today line disappears over an active bar
+
+- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 5 review
+- **Where:** Today overlays in frontend/src/components/portfolio/PortfolioCalendar.tsx (~187 desktop, ~298 phone)
+- **Problem:** The line is border-primary and active bars are bg-primary, so only short stubs show where today falls inside an active project.
+- **Why deferred / fix direction:** The legend and month grid still orient the user. Fix: a marker that stays visible over a bg-primary bar, shared by both overlays.
+- **Source:** phase review of `docs/archive/plans/design-cleanup.md`
+
+### ISS-196 · P3 · Two bare pulse blocks remain in Project Overview, and the Risks Status cell is still native
+
+- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 5 review
+- **Where:** animate-pulse blocks in frontend/src/pages/views/ProjectOverview.tsx (~304, ~349); Status select in frontend/src/pages/views/ProjectRisks.tsx (~443)
+- **Problem:** The sub-section loaders skip the shared skeleton, and one Risks row mixes a native select (focus: style) with the new ui/select cells.
+- **Why deferred / fix direction:** Cosmetic. Fix: move both loaders to SkeletonRegion and the Status cell to ui/select.
+- **Source:** phase review of `docs/archive/plans/design-cleanup.md`
+
+### ISS-197 · P3 · Admin still has an uppercase Needs-role chip and fixed 14px icons
+
+- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 5 review
+- **Where:** "Needs role" chip (~275) and text-[14px] icons (~1285, ~1515) in frontend/src/pages/Admin.tsx
+- **Problem:** The chip uses uppercase text-label-caps and two icons keep arbitrary sizes.
+- **Why deferred / fix direction:** Cosmetic. Fix: sentence-case chip text and scale classes (icons bound by ISS-056).
+- **Source:** phase review of `docs/archive/plans/design-cleanup.md`
+
 ## Open — Accessibility & tokens
-
-### ISS-080 · P2 · Light primary/10 chip tints still fall under 4.5:1
-
-- **Type:** bug · **Found:** 2026-10-23 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** primary/10 and primary/15 chips (CONTRAST_GAP in e2e/tests/axe.spec.ts line ~22)
-- **Problem:** The darker primary fixed text and hover pairs, but chip tints measure about 4.0-4.5:1 on surface containers, so axe leaves them out of the contrast pass.
-- **Why deferred / fix direction:** Pick a chip tint or text colour that clears 4.5:1, then remove CONTRAST_GAP from the spec in the same change.
-- **Source:** snapshot line 2391, section "Accessibility pass — deferred findings (2026-10-23)"
 
 ### ISS-081 · P2 · Landmark, heading-order and nested-interactive axe gaps remain
 
@@ -520,14 +447,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Fix the landmark and heading structure, drop those rules from KNOWN_GAP_RULES, and add a task-panel scan.
 - **Source:** snapshot line 2393, section "Accessibility pass — deferred findings (2026-10-23)"
 
-### ISS-083 · P3 · Sidebar nav text uses slate greys instead of the warm design grey
-
-- **Type:** debt · **Found:** 2026-07-20 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** nav item classes in frontend/src/components/layout/Sidebar.tsx (line ~42, ~123)
-- **Problem:** Inactive nav items use cool slate-* text instead of DESIGN.md's warm #888780. Contrast is fine; it is a tint mismatch.
-- **Why deferred / fix direction:** Add a small set of fixed always-dark text tokens, since the theme-flipping secondary token renders too dark on the rail.
-- **Source:** snapshot line 351, section "Tech debt / follow-ups from recent work"
-
 ### ISS-084 · P3 · Favicon reads weakly on dark browser tab strips
 
 - **Type:** debt · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -535,22 +454,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** The favicon is the on-light mark; its arc ink is 2.38:1 against Chrome's dark tab background.
 - **Why deferred / fix direction:** Add an SVG favicon with a media query, or a second link with media prefers-color-scheme: dark pointing at the on-dark mark.
 - **Source:** snapshot line 366, section "Tech debt / follow-ups from recent work"
-
-### ISS-085 · P3 · Overview project id uses raw font-mono instead of a type token
-
-- **Type:** debt · **Found:** 2026-07-16 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** project id span in frontend/src/pages/Overview.tsx (line ~297)
-- **Problem:** The P- id uses raw font-mono. The other cited off-token styles (KPI tones, avatar palette, health hexes) are gone.
-- **Why deferred / fix direction:** Switch to the data-mono token (text-data-mono, index.css:107) in the next token pass.
-- **Source:** snapshot line 375, section "Tech debt / follow-ups from recent work"
-
-### ISS-086 · P3 · PortfolioCalendar uses rounded-full bars and raw font-mono
-
-- **Type:** debt · **Found:** 2026-07-16 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** PortfolioCalendar in frontend/src/components/portfolio/PortfolioCalendar.tsx (line ~118, ~272)
-- **Problem:** The timeline bar uses rounded-full, which the design reserves for pills and avatars. The year switcher uses raw font-mono.
-- **Why deferred / fix direction:** Fix once in the shared component; it serves both Executive and Overview.
-- **Source:** snapshot line 405, section "Tech debt / follow-ups from recent work"
 
 ### ISS-087 · P3 · IconTile outline variant has no visible fill on the lowest dark surface
 
@@ -568,14 +471,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Trigger: anyone wires a solid tone variant. Then pick a solid-fill token family first.
 - **Source:** snapshot line 1305, section "ReUI Data Grid phase — deferred findings (2026-08-01)"
 
-### ISS-089 · P3 · Gantt drag clone uses raw shadow-lg outside the elevation whitelist
-
-- **Type:** debt · **Found:** 2026-08-03 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** barEl.className in frontend/src/components/reui/gantt/gantt-dnd.tsx (line 310)
-- **Problem:** The vendored drag-clone element carries a raw shadow-lg that DESIGN.md's elevation rules do not allow, and it has no SOLVRO PATCH marker.
-- **Why deferred / fix direction:** Patch it with a marker; reui/ is spine, so it needs an instant review.
-- **Source:** snapshot line 1503, section "Gantt visual refresh — deferred findings (2026-08-03)"
-
 ### ISS-091 · P3 · Older focus:border-primary pattern persists at about 70 sites
 
 - **Type:** debt · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -583,6 +478,14 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** DESIGN.md names one focus treatment and excludes border-primary, yet the older form still appears at about 70 sites and keeps spreading.
 - **Why deferred / fix direction:** Do one design-system sweep to align every site.
 - **Source:** snapshot line 2081, section "iTop integration Phase 4 — deferred findings (2026-09-23)"
+
+### ISS-194 · P2 · Primary text on primary tints still fails 4.5:1 in a few active states
+
+- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 5 review
+- **Where:** selected toggles in frontend/src/pages/ProjectDetail.tsx (~312), pages/views/ProjectList.tsx (~478), kanban-v2/SolvroKanban.tsx (~617); hover in admin/TaskStatusesTab.tsx (~263); reui/badge.tsx primary-light; the Gantt today pill in reui/gantt/gantt-view.tsx
+- **Problem:** These still pair text-primary with primary/10 (3.97–4.76:1 light). The axe scan misses them only because they appear in states that are off by default.
+- **Why deferred / fix direction:** Fix: switch them to text-primary-tint-text (SOLVRO PATCH on the reui files) and add an axe scan of the active states.
+- **Source:** phase review of `docs/archive/plans/design-cleanup.md`
 
 ## Open — Gantt
 
@@ -657,14 +560,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** The reorder handler spans about 130 lines and three branches, kept to mirror the old engine for diffing.
 - **Why deferred / fix direction:** Split into named helpers in a readability pass.
 - **Source:** snapshot line 557, section "Final whole-branch review additions (2026-07-25)"
-
-### ISS-105 · P3 · GanttDatePicker is unmounted and uses shadow-md
-
-- **Type:** debt · **Found:** 2026-07-28 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** GanttDatePicker in frontend/src/components/reui/gantt/gantt-nav.tsx (line ~358)
-- **Problem:** The component has no consumer in src and its popover uses shadow-md instead of shadow-overlay.
-- **Why deferred / fix direction:** Confirm dead and remove, or align the shadow at first use.
-- **Source:** snapshot line 831, section "ReUI DateField swap — deferred findings (2026-07-28)"
 
 ### ISS-107 · P3 · Dark-mode Critical Path ring on Gantt bars resembles the selection ring
 
@@ -1109,25 +1004,42 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-036 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · Section and epic delete can deadlock with a concurrent task reorder
 - ISS-037 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Create-task parent picker lists subtasks the server rejects
 - ISS-038 · 2026-11-19 · CHANGELOG "Service lists, Daily Review refresh, request timeouts, section chip" · Service-mapping mutations are not optimistic
+- ISS-040 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · Uncustomized sections show slate outside the Gantt
 - ISS-041 · 2026-11-19 · CHANGELOG "Label permissions and duplicate label names" · Duplicate label name shows 'Unique constraint violated'
 - ISS-046 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Subtask DONE checkbox in the task modal ignores canEdit
+- ISS-047 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · Command palette has dead classes and a hardcoded Mac shortcut glyph
 - ISS-049 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · SectionReorderModal relies on its caller for the permission gate
+- ISS-055 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · ProjectRisks probability and impact cells use hand-rolled selects
+- ISS-058 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · Tasks grid and kanban subtask rows show no Critical Path mark
 - ISS-059 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · TaskPanel header-menu errors appear below the subtasks list
 - ISS-060 · 2026-11-19 · CHANGELOG "Service lists, Daily Review refresh, request timeouts, section chip" · Creating a task leaves Daily Review attention lists stale
 - ISS-061 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Section header actions show for task:write but the routes need project:write
+- ISS-063 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · Sync modals' missing-title error does not point to the card
 - ISS-064 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · CustomerDetail ignores itopOrgId/itopOrgName the API already returns
 - ISS-065 · 2026-11-18 · accepted by the user: the offset stays out of the query key on purpose (comment in `queries.ts`) · useItopTicket weekly hours can be stale after a timezone change
 - ISS-066 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · TaskPanel spins forever when the project-tasks fetch fails
 - ISS-067 · 2026-11-19 · CHANGELOG "Service lists, Daily Review refresh, request timeouts, section chip" · A hung task PATCH blocks every later save of that task
+- ISS-070 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) (icon spans stay bound by ISS-056) · Arbitrary text-[12px]/[13px] sizes remain in six files
+- ISS-072 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · Active project tab can be off-screen on narrow phones
+- ISS-073 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · Portfolio timeline hides the Today line on phones
+- ISS-074 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · AuthLoading shows plain text instead of a delayed skeleton
 - ISS-075 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · Utilization Refresh failure shows no error
+- ISS-076 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · Admin role select shows raw uppercase role values
+- ISS-077 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · Overview and Project Overview loaders are bare pulse blocks
 - ISS-078 · 2026-11-19 · CHANGELOG "Keyboard drag on boards and reorder lists" · Keyboard drag does not work on the Kanban board
 - ISS-079 · 2026-11-19 · CHANGELOG "Keyboard drag on boards and reorder lists" · Sortable rows are tab stops with role=button and a joined accessible name
+- ISS-080 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) (remaining pairs outside the touched chips: ISS-194) · Light primary/10 chip tints still fall under 4.5:1
 - ISS-082 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · InstallBanner nests a role=button span inside a button
+- ISS-083 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · Sidebar nav text uses slate greys instead of the warm design grey
+- ISS-085 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · Overview project id uses raw font-mono instead of a type token
+- ISS-086 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · PortfolioCalendar uses rounded-full bars and raw font-mono
+- ISS-089 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · Gantt drag clone uses raw shadow-lg outside the elevation whitelist
 - ISS-090 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · ConfirmModal warning tone uses raw bg-amber-500 instead of the chip-amber pair
 - ISS-092 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · Dialog focus trap lets Tab escape from a tabIndex=-1 element
 - ISS-093 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · usePanelFocus returns focus to the previous task's opener
 - ISS-094 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · Task statuses primary button has a weak keyboard focus cue
 - ISS-095 · 2026-11-19 · CHANGELOG "Gantt errors, Dates cell and section permissions" · Gantt save errors can be swallowed when a later update follows
+- ISS-105 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) (shadow aligned; component still unused) · GanttDatePicker is unmounted and uses shadow-md
 - ISS-106 · 2026-11-19 · CHANGELOG "Gantt errors, Dates cell and section permissions" · Gantt Dates cell shows the date range twice while editing
 - ISS-109 · 2026-11-19 · CHANGELOG "Service lists, Daily Review refresh, request timeouts, section chip" · Task panel shows the old section chip during a cross-section drag
 - ISS-113 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Section reorder modal can get stuck if a drag never ends

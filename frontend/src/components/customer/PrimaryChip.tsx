@@ -5,7 +5,7 @@ export function PrimaryChip({ className }: { className?: string }) {
   return (
     <span
       className={[
-        "inline-flex shrink-0 items-center rounded-sm bg-primary/10 px-1.5 py-0.5 text-meta text-primary dark:bg-primary/20",
+        "inline-flex shrink-0 items-center rounded-sm bg-primary/10 px-1.5 py-0.5 text-meta text-primary-tint-text dark:bg-primary/20",
         className,
       ]
         .filter(Boolean)

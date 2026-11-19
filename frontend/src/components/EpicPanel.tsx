@@ -414,7 +414,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
           )}
           {canEdit && (
             <form onSubmit={(e) => void handleAddStory(e)} className="mt-1.5 flex items-center gap-1.5">
-              <span aria-hidden="true" className="material-symbols-outlined text-[13px] text-primary">add</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-xs text-primary">add</span>
               <input
                 type="text"
                 value={newStory}

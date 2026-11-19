@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-table";
 import { AssigneeAvatar } from "@/components/AssigneeAvatar";
 import { LabelChip } from "@/components/LabelChip";
+import { CRITICAL_PATH_LABEL, CriticalPathMark } from "@/components/CriticalPathMark";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import { Tabs } from "@/components/Tabs";
@@ -313,7 +314,19 @@ export function Tasks() {
         id: "priority",
         accessorFn: (row) => PRIORITY_ORDER[row.priority],
         header: ({ column }) => <DataGridColumnHeader column={column} title="Priority" />,
-        cell: ({ row }) => <PriorityBadge priority={row.original.priority} compact />,
+        cell: ({ row }) => (
+          <span className="inline-flex items-center gap-1.5">
+            <PriorityBadge priority={row.original.priority} compact />
+            {row.original.isCriticalPath && (
+              <>
+                <span aria-hidden="true" className="inline-flex shrink-0">
+                  <CriticalPathMark variant="glyph" />
+                </span>
+                <span className="sr-only">{CRITICAL_PATH_LABEL}</span>
+              </>
+            )}
+          </span>
+        ),
         meta: { skeleton: <Skeleton className="h-4 w-10 rounded-full" /> },
       },
       {
