@@ -82,7 +82,8 @@ jobs:
 
       - name: Typecheck backend
         working-directory: backend
-        run: npx tsc --noEmit
+        # src, test and scripts (tsconfig.check.json); the build config is unchanged.
+        run: npm run typecheck
 
       - name: npm ci (frontend, retry once on failure)
         working-directory: frontend

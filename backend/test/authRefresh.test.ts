@@ -13,7 +13,7 @@ import { createUserWithRole, seedRoles } from "./testAuth.js";
 const app = createApp();
 
 function decode(token: string) {
-  return jwt.decode(token, { complete: true }) as {
+  return jwt.decode(token, { complete: true }) as unknown as {
     header: { alg: string };
     payload: { sub: number; ver: number; exp: number; iat: number; auth_time?: number };
   };

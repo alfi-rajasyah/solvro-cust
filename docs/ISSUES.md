@@ -962,22 +962,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 
 ## Open — Tests & CI
 
-### ISS-136 · P2 · Typecheck skips vite.config.ts and node tsconfig lists deleted files
-
-- **Type:** debt · **Found:** 2026-07-26 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** typecheck script in frontend/package.json; include in frontend/tsconfig.node.json (line 17)
-- **Problem:** Plain tsc --noEmit does not build the node tsconfig reference, so vite.config.ts is never typechecked. The node tsconfig still lists two deleted config files.
-- **Why deferred / fix direction:** Add tsc -p tsconfig.node.json --noEmit to the script and prune the include list.
-- **Source:** snapshot line 571, section "PWA icon regeneration — deferred findings (2026-07-25/26)"
-
-### ISS-137 · P2 · search.spec.ts presses Cmd+K without waiting for the listener
-
-- **Type:** test-gap · **Found:** 2026-07-27 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** page.keyboard.press('ControlOrMeta+k') calls in e2e/tests/search.spec.ts (lines ~75, ~101, ~135)
-- **Problem:** The key press can fire before Shell attaches its listener, which flaked once in CI. The task URL regex is unanchored and one comment cites the wrong file.
-- **Why deferred / fix direction:** Assert the TopBar trigger is visible first, anchor the regex, correct the comment.
-- **Source:** snapshot line 786, section "Global search & ⌘K command palette — deferred findings (2026-07-27)"
-
 ### ISS-138 · P2 · Drag e2e specs flake on first attempt and pass on retry
 
 - **Type:** watch · **Found:** 2026-07-28 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -985,14 +969,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** The same four to five drag cases fail their first attempt and pass on retry. The retry budget has one spare attempt.
 - **Why deferred / fix direction:** Trigger: a fifth case flakes or any case fails through its retry. Then run a flake-hunt pass.
 - **Source:** snapshot line 896, section "ReUI DateField swap — deferred findings (2026-07-28)"; merged duplicates at snapshot lines 2320
-
-### ISS-139 · P2 · Backend typecheck gate skips scripts and tests
-
-- **Type:** debt · **Found:** 2026-07-29 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** include in backend/tsconfig.json (line 17)
-- **Problem:** npx tsc --noEmit only checks src, so backend/scripts and backend/test get no typecheck gate.
-- **Why deferred / fix direction:** Widen include or add a second tsconfig and run it with the gate.
-- **Source:** snapshot line 1079, section "Date contract UTC-midnight unification — deferred findings (2026-07-29)"
 
 ### ISS-140 · P2 · gates.sh runs only the smoke e2e spec
 
@@ -1009,14 +985,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** vite-plugin-pwa emits the manifest and service worker only in build mode, so the specs fail at BASE_URL=http://localhost:5173. They pass on the built CI stack (:8080).
 - **Why deferred / fix direction:** Accepted in e2e/CLAUDE.md. Trigger: running e2e against the dev server. Optional: skip the specs when BASE_URL is :5173.
 - **Source:** snapshot line 216, section "Known bugs / inconsistencies"
-
-### ISS-142 · P3 · Stale comment says the seeded project is per test file
-
-- **Type:** debt · **Found:** 2026-07-22 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** seededProject comment in e2e/fixtures/test.ts (line ~4-7)
-- **Problem:** The comment claims one seeded project per test file. With workers: 1 the whole run shares one project, so earlier specs leave state for later ones.
-- **Why deferred / fix direction:** Correct the comment. Specs should derive state from the API instead of assuming preconditions.
-- **Source:** snapshot line 225, section "Known bugs / inconsistencies"; merged duplicates at snapshot lines 518
 
 ### ISS-143 · P3 · No ESLint setup, so the exhaustive-deps guard on TaskFormModal is inert
 
@@ -1058,14 +1026,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Add an assertion with the theme forced to light via localStorage.
 - **Source:** snapshot line 565, section "Login/Sidebar always-dark-pin fix — deferred findings (2026-07-25)"
 
-### ISS-148 · P3 · Search contract tests miss the length cap, ordering and the underscore case
-
-- **Type:** test-gap · **Found:** 2026-07-27 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** backend/test/search.test.ts (lines ~116, ~195); cap in backend/src/routes/search.ts:14
-- **Problem:** No test sends q over 100 chars, checks result order, or caps projects and tasks at 8. The LIKE-escape test is named for % and _ but only covers %.
-- **Why deferred / fix direction:** Add the three assertions and a literal underscore case, or rename the test.
-- **Source:** snapshot line 663, section "Global search & ⌘K command palette — deferred findings (2026-07-27)"
-
 ### ISS-149 · P3 · No e2e drag test for section reorder or subtask drag
 
 - **Type:** test-gap · **Found:** 2026-07-30 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -1089,14 +1049,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** The test imports findFilterMatch, a SOLVRO PATCH export. A re-pull of filters.tsx would drop it and break the import; only the patch-count gate catches that, with no check for the test file itself.
 - **Why deferred / fix direction:** Keep the patch-count gate; revisit if the vendor is re-pulled.
 - **Source:** snapshot line 1451, section "Issues Sweep #1 — residuals (2026-08-02)"
-
-### ISS-152 · P3 · Two e2e specs keep private copies of createTask
-
-- **Type:** debt · **Found:** 2026-08-03 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** createTask in e2e/tests/date-picker.spec.ts (line 151) and e2e/tests/gantt-parity.spec.ts (line 51)
-- **Problem:** Both specs predate the shared createTask in e2e/fixtures/seed.ts and still carry their own copies.
-- **Why deferred / fix direction:** Replace them with the shared helper the next time either spec is touched.
-- **Source:** snapshot line 1532, section "Gantt visual refresh — deferred findings (2026-08-03)"
 
 ### ISS-153 · P3 · daily-review e2e spec leaves junk rows in the shared dev DB each run
 
@@ -1178,6 +1130,22 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** The tests assume the seeded QA stack with no Google sign-in. They fail on a stack with a client ID or an origin Google rejects.
 - **Why deferred / fix direction:** Trigger: running e2e outside the seeded QA stack. Run against the QA stack.
 - **Source:** snapshot line 2447, section "Design compliance fixes — deferred findings (2026-11-02)"
+
+### ISS-182 · P3 · prisma/seed.ts is outside the backend typecheck
+
+- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 2 review
+- **Where:** include in backend/tsconfig.check.json; import in backend/prisma/seed.ts (line 2)
+- **Problem:** The seed entry is not typechecked, and its extensionless import of ./builtInRoles would fail under NodeNext.
+- **Why deferred / fix direction:** The seed is small and fails loudly at db:seed. Fix: add prisma/**/*.ts to the include and use ./builtInRoles.js.
+- **Source:** phase review of `docs/archive/plans/typecheck-and-test-hygiene.md`
+
+### ISS-183 · P3 · frontend/vitest.config.ts is not typechecked
+
+- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 2 review
+- **Where:** include in frontend/tsconfig.node.json
+- **Problem:** Only vite.config.ts is in the node tsconfig, so vitest.config.ts is covered by neither config.
+- **Why deferred / fix direction:** Vitest fails at load on a broken config anyway. Fix: add vitest.config.ts to the include.
+- **Source:** phase review of `docs/archive/plans/typecheck-and-test-hygiene.md`
 
 ## Open — Dev env & ops
 
@@ -1295,3 +1263,9 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-128 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · An iTop application token saved before an address is not probed
 - ISS-129 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · A Refresh full sync can be dropped silently while a scheduled sync holds the lock
 - ISS-135 · 2026-11-18 · decided by the user: customer exports do not show iTop ticket refs · Gantt Excel export omits the pinned iTop ticket
+- ISS-136 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · Typecheck skips vite.config.ts and node tsconfig lists deleted files
+- ISS-137 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · search.spec.ts presses Cmd+K without waiting for the listener
+- ISS-139 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · Backend typecheck gate skips scripts and tests
+- ISS-142 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · Stale comment says the seeded project is per test file
+- ISS-148 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · Search contract tests miss the length cap, ordering and the underscore case
+- ISS-152 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · Two e2e specs keep private copies of createTask

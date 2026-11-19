@@ -99,7 +99,7 @@ smoke_gate() {
 }
 
 if [ "$F_BACK" -eq 1 ]; then
-  run_gate backend-typecheck docker compose exec -T backend npx tsc --noEmit
+  run_gate backend-typecheck docker compose exec -T backend npm run typecheck  # src, test, scripts
   run_gate backend-vitest backend_vitest
 fi
 if [ "$F_FRONT" -eq 1 ]; then

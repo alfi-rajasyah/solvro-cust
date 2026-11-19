@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-19 — Wider typechecks and test hygiene
+
+- The frontend typecheck now also checks `vite.config.ts`, and the node tsconfig no longer lists deleted config files.
+- The backend has `npm run typecheck` (new `tsconfig.check.json`), which typechecks tests and scripts as well as `src`; CI uses it. Three loose type casts in backend tests were corrected.
+- The search API tests cover the 100-character query limit, result ordering, the 8-result cap for projects and tasks, and a literal underscore in the search escape. The search end-to-end test waits for the search button before pressing Ctrl/Cmd+K, and the date-picker and Gantt tests use the shared task-seeding helper.
+
 ### Fixed — 2026-11-19 — Label permissions and duplicate label names
 
 - Creating a project label now needs the same permission as renaming or deleting one (`task:write` instead of `project:write`). A duplicate label name, on create or rename, now answers "A label with that name already exists" instead of a database error.

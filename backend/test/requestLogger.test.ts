@@ -153,7 +153,7 @@ describe("redactSerializedResponse", () => {
     const out = redactSerializedResponse({
       statusCode: 200,
       headers: { "set-cookie": ["sid=abc"], "content-type": "application/json" },
-    } as Parameters<typeof redactSerializedResponse>[0]);
+    } as unknown as Parameters<typeof redactSerializedResponse>[0]);
     expect(out.headers["set-cookie"]).toBe("[redacted]");
     expect(out.headers["content-type"]).toBe("application/json");
     expect(out.statusCode).toBe(200);

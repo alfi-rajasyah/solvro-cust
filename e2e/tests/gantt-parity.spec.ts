@@ -1,5 +1,5 @@
 import { test, expect, loginViaUi, apiBase, mouseDrag, gripFor, center } from "../fixtures/test";
-import { getTasks, isoDateOffset, type SeededTask } from "../fixtures/seed";
+import { createTask, getTasks, isoDateOffset, type SeededTask } from "../fixtures/seed";
 import type { Locator, Page } from "@playwright/test";
 
 // Plan B Task 8 — new-engine parity coverage for the ReUI-engined Gantt
@@ -37,31 +37,6 @@ function stamp(): string {
 // of sprinkling `as string` everywhere.
 function dateOf(task: SeededTask, field: "startDate" | "dueDate"): string {
   return task[field] as string;
-}
-
-interface CreateTaskInput {
-  title: string;
-  status?: string;
-  startDate?: string | null;
-  dueDate?: string | null;
-  isMilestone?: boolean;
-  sectionId?: number;
-}
-
-async function createTask(
-  base: string,
-  token: string,
-  projectId: number,
-  input: CreateTaskInput,
-): Promise<SeededTask> {
-  const res = await fetch(`${base}/api/projects/${projectId}/tasks`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  const body = await res.text();
-  expect(res.ok, `createTask(${input.title}) failed: ${res.status} ${body}`).toBe(true);
-  return JSON.parse(body) as SeededTask;
 }
 
 /**

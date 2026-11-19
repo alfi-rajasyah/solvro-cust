@@ -167,7 +167,7 @@ describe("session revocation", () => {
     const spy = ((args: Parameters<typeof original>[0]) => {
       if (args.select && "tokenVersion" in args.select) lookups += 1;
       return original(args);
-    }) as typeof original;
+    }) as unknown as typeof original;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (prisma.user as any).findUnique = spy;
     try {
