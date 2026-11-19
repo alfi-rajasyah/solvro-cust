@@ -47,22 +47,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** The zod 4 migration touches about 35 files and is its own change.
 - **Source:** snapshot line 2421, section "Dependency advisories — remaining (2026-10-25)"
 
-### ISS-005 · P2 · Saving an iTop address does not require the application token
-
-- **Type:** bug · **Found:** 2026-10-26 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** PATCH /settings in backend/src/routes/itopAdmin.ts (line ~300)
-- **Problem:** An admin can change the iTop address without supplying the token, and the stored token is sent to the new address on the next sync. Test connection already requires the token.
-- **Why deferred / fix direction:** Deferred by the user. Require the token when the address changes.
-- **Source:** snapshot line 2430, section "iTop and Outline hardening — deferred findings (2026-10-26)"
-
-### ISS-009 · P2 · Shared pino logger has no redact paths for iTop tokens
-
-- **Type:** debt · **Found:** 2026-09-22 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** pino() call in backend/src/logger.ts (line 4)
-- **Problem:** Nothing logs the iTop token today, but the logger has no redact list as a safety net for token or Auth-Token fields.
-- **Why deferred / fix direction:** Raised to P2 by the user 2026-11-18: it guards the iTop and OAuth tokens. Add a redact array for token, Auth-Token and the per-user token fields.
-- **Source:** snapshot line 2001, section "iTop integration Phase 1 — deferred findings (2026-09-22)"
-
 ### ISS-006 · P3 · Per-email sign-in lockout can be triggered against a colleague
 
 - **Type:** watch · **Found:** 2026-10-22 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -525,13 +509,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Mark or focus the offending card when save is blocked.
 - **Source:** snapshot line 1939, section "Weekly Sync achievement rows — deferred findings (2026-09-10)"
 
-### ISS-064 · P3 · CustomerDetail ignores itopOrgId/itopOrgName the API already returns
-
-- **Type:** debt · **Found:** 2026-09-22 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** CustomerDetail type in frontend/src/lib/queries.ts; comment in frontend/src/pages/CustomerDetail.tsx (lines 49-52)
-- **Problem:** The backend returns both fields, but the frontend does not type or use them and instead derives the mapped state from the tickets endpoint. The in-file comment wrongly blames a select.
-- **Why deferred / fix direction:** Type the fields and fix the comment, or trim the response with a real select.
-- **Source:** snapshot line 1984, section "iTop integration Phase 1 — deferred findings (2026-09-22)"
 
 ### ISS-066 · P3 · TaskPanel spins forever when the project-tasks fetch fails
 
@@ -604,14 +581,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** AuthLoading renders centered 'Loading…' text, against the DESIGN.md rule for delayed skeleton loading states.
 - **Why deferred / fix direction:** Use PageLoading or another delayed skeleton.
 - **Source:** snapshot line 2406, section "Code splitting — deferred findings (2026-10-24)"
-
-### ISS-075 · P3 · Utilization Refresh failure shows no error
-
-- **Type:** bug · **Found:** 2026-10-26 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** useRequestItopRefresh in frontend/src/pages/Utilization.tsx (line ~94)
-- **Problem:** When Refresh fails, for example with a 429 from the rate limits, nothing appears. The user sees no change.
-- **Why deferred / fix direction:** Show the error from the mutation, as the load error already does.
-- **Source:** snapshot line 2432, section "iTop and Outline hardening — deferred findings (2026-10-26)"
 
 ### ISS-076 · P3 · Admin role select shows raw uppercase role values
 
@@ -933,14 +902,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Check the probe's TimeSpent dump on the real install and flip the constant if needed.
 - **Source:** snapshot line 2027, section "iTop integration Phase 3 — deferred findings (2026-09-22)"
 
-### ISS-115 · P2 · GET /itop/services lists every iTop organisation's services to any signed-in user
-
-- **Type:** decision · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** itopRouter.get("/services") in backend/src/routes/itop.ts (line ~1048)
-- **Problem:** The handler runs SELECT Service with the application token and returns service and organisation names to any signed-in user, without customer visibility checks. The New ticket sheet therefore offers services of other customers, and organisation names are readable by everyone.
-- **Why deferred / fix direction:** Decide: filter services by the target customer's entitlement link once a customerId is known, or accept and document organisation-wide visibility.
-- **Source:** snapshot line 2209, section "iTop integration Phase 6 — deferred findings (2026-09-23)"
-
 ### ISS-116 · P2 · TimeSpent ticket_ref attribute is unverified on a real iTop install
 
 - **Type:** watch · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -1013,22 +974,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Accepted trade-off. Revisit with the resumable-cursor idea.
 - **Source:** snapshot line 2415, section "Backend concurrency and roles — deferred findings (2026-10-25)"
 
-### ISS-128 · P3 · An iTop application token saved before an address is not probed
-
-- **Type:** debt · **Found:** 2026-10-26 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** probeUrl check in backend/src/routes/itopAdmin.ts (line ~323)
-- **Problem:** With no address stored there is nothing to check the token against. A wrong token shows only on the first Test connection or sync.
-- **Why deferred / fix direction:** Probe when the address is later saved with a stored token.
-- **Source:** snapshot line 2431, section "iTop and Outline hardening — deferred findings (2026-10-26)"
-
-### ISS-129 · P3 · A Refresh full sync can be dropped silently while a scheduled sync holds the lock
-
-- **Type:** bug · **Found:** 2026-10-26 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** POST /refresh in backend/src/routes/itop.ts (line ~460); requestSync in backend/src/lib/itop/scheduler.ts (line ~84)
-- **Problem:** The 60 s global window is used up even if the full sync did not run, so a second Refresh is refused for a minute.
-- **Why deferred / fix direction:** Do not consume the window when the lock is held, or tell the user.
-- **Source:** snapshot line 2433, section "iTop and Outline hardening — deferred findings (2026-10-26)"
-
 ### ISS-130 · P3 · iTop ticket panel shows '– ago' when lastUpdate is null
 
 - **Type:** bug · **Found:** 2026-11-12 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -1036,6 +981,14 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** A ticket with no last update shows a dash followed by 'ago'.
 - **Why deferred / fix direction:** Guard on lastUpdate like the Started fact does.
 - **Source:** snapshot line 2457, section "Antislop port — deferred findings (2026-11-12)"
+
+### ISS-173 · P3 · A repeated Refresh resets the iTop full-sync retry cap
+
+- **Type:** debt · **Found:** 2026-11-18 · **Verified:** 2026-11-18 @ `fix/itop-findings-redo`
+- **Where:** requestSync / runRequested in backend/src/lib/itop/scheduler.ts (line ~58)
+- **Problem:** Each new Refresh starts the retry loop at attempt 0, so a Refresh about once a minute keeps the 30-minute retry window alive while the lock is held.
+- **Why deferred / fix direction:** The lock holder is time-boxed by RUN_BUDGET_MS and Refresh by its 60 s window. Fix: keep one deadline in module state instead of a per-call attempt counter.
+- **Source:** phase review of `docs/archive/plans/itop-findings-redo.md`
 
 ## Open — Exports & sharing
 
@@ -1377,8 +1330,15 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 
 Entries closed during the 2026-11-18 restructure are in the ledger in `docs/archive/plans/issues-restructure.md`, not here.
 
+- ISS-005 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · Saving an iTop address does not require the application token
+- ISS-009 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · Shared pino logger has no redact paths for iTop tokens
+- ISS-064 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · CustomerDetail ignores itopOrgId/itopOrgName the API already returns
 - ISS-065 · 2026-11-18 · accepted by the user: the offset stays out of the query key on purpose (comment in `queries.ts`) · useItopTicket weekly hours can be stale after a timezone change
+- ISS-075 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · Utilization Refresh failure shows no error
+- ISS-115 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · GET /itop/services lists every iTop organisation's services to any signed-in user
 - ISS-119 · 2026-11-18 · accepted by the user: iTop limits what Solvro can read; no code change · iTop personal-token expiry is only read when iTop allows it
 - ISS-120 · 2026-11-18 · accepted by the user: iTop cannot report token rights up front · iTop token write rights are not checked when the token is saved
 - ISS-124 · 2026-11-18 · accepted by the user: the user sees iTop's own refusal text · pending_reason assumed free text; a list-valued install refuses it
+- ISS-128 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · An iTop application token saved before an address is not probed
+- ISS-129 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · A Refresh full sync can be dropped silently while a scheduled sync holds the lock
 - ISS-135 · 2026-11-18 · decided by the user: customer exports do not show iTop ticket refs · Gantt Excel export omits the pinned iTop ticket

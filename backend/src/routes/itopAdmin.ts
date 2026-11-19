@@ -161,6 +161,8 @@ function serializeConfig(
   return {
     baseUrl: config.baseUrl,
     appTokenSet: Boolean(config.appTokenEnc),
+    // A stored token with no address to check it against has never been probed.
+    appTokenUnverified: Boolean(config.appTokenEnc) && !config.baseUrl,
     webhookSecretSet: Boolean(config.webhookSecretEnc),
     timezone: config.timezone,
     refreshMinutes: config.refreshMinutes,
@@ -316,24 +318,55 @@ itopAdminRouter.patch(
     // https without userinfo, and — when ITOP_ALLOW_PRIVATE_HOSTS=false — a
     // public host only (lib/itop/validateBaseUrl.ts).
     if (typeof body.baseUrl === "string") await assertPublicItopUrl(body.baseUrl);
+    // The stored application token is never sent to an address this request
+    // names: it could be any host the admin (or a stolen admin session) types.
+    // Setting or changing the address while a token is stored therefore needs
+    // the token again in the same PATCH, and that body token is what is probed.
+    const currentForProbe = await getItopConfig();
+    if (
+      typeof body.baseUrl === "string" &&
+      body.baseUrl !== currentForProbe.baseUrl &&
+      currentForProbe.appTokenEnc &&
+      body.appToken === undefined
+    ) {
+      throw new HttpError(
+        400,
+        "itop_token_required",
+        "Enter the application token together with a new iTop address.",
+      );
+    }
+    // Prove a token works before sealing it: a typo would otherwise be stored
+    // and break every sync until someone notices. The token is probed against
+    // the address that will be stored (the new one, else the current). A token
+    // saved with no address has nothing to be checked against and stays
+    // unverified until an address is set.
+    let tokenToProbe: string | undefined;
+    let probeUrl: string | undefined;
     if (typeof body.appToken === "string") {
-      // Prove the new token works before sealing it: a typo would otherwise
-      // be stored and break every sync until someone notices. The probe goes
-      // to the address that will be stored (the new one, else the current).
-      const probeUrl = typeof body.baseUrl === "string" ? body.baseUrl : body.baseUrl === null ? undefined : (await getItopConfig()).baseUrl;
-      if (probeUrl) {
-        try {
-          await makeItopClient(probeUrl, body.appToken).listOperations();
-        } catch (err) {
-          const refused =
-            err instanceof ItopError && (typeof err.code === "number" || err.status === 401 || err.status === 403);
-          if (refused) {
-            throw new HttpError(400, "itop_token_rejected", "iTop refused this application token. Check it and try again.");
-          }
-          await callItop(async () => {
-            throw err;
-          });
+      tokenToProbe = body.appToken;
+      probeUrl =
+        typeof body.baseUrl === "string"
+          ? body.baseUrl
+          : body.baseUrl === null
+            ? undefined
+            : (currentForProbe.baseUrl ?? undefined);
+    }
+    if (tokenToProbe && probeUrl) {
+      try {
+        await makeItopClient(probeUrl, tokenToProbe).listOperations();
+      } catch (err) {
+        const refused =
+          err instanceof ItopError && (typeof err.code === "number" || err.status === 401 || err.status === 403);
+        if (refused) {
+          throw new HttpError(
+            400,
+            "itop_token_rejected",
+            "iTop refused this application token. Check it and try again.",
+          );
         }
+        await callItop(async () => {
+          throw err;
+        });
       }
     }
     if (body.baseUrl !== undefined) data.baseUrl = body.baseUrl;

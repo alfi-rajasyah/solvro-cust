@@ -186,6 +186,7 @@ describe("formStateFromSettings", () => {
     const settings: ItopSettings = {
       baseUrl: "https://itop.example.com",
       appTokenSet: true,
+      appTokenUnverified: false,
       webhookSecretSet: false,
       refreshMinutes: 5,
       readClasses: ["UserRequest", "Incident"],
@@ -214,6 +215,7 @@ describe("formStateFromSettings", () => {
     const settings: ItopSettings = {
       baseUrl: null,
       appTokenSet: false,
+      appTokenUnverified: false,
       webhookSecretSet: false,
       refreshMinutes: 5,
       readClasses: ["UserRequest"],
