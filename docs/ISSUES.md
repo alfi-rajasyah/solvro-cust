@@ -31,14 +31,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Decide whether delete should use the same rule as the owner change (owner, view-all, or TAM of every project).
 - **Source:** snapshot line 2358, section "Internal sync — deferred findings (2026-10-09)"
 
-### ISS-003 · P2 · Epic owner can be a user with no access to the project
-
-- **Type:** bug · **Found:** 2026-10-09 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** PATCH /epics/:id in backend/src/routes/epics.ts (line ~140)
-- **Problem:** ownerId accepts any existing user, including one who cannot see the project.
-- **Why deferred / fix direction:** Require the owner to be the project's TAM, a member, or a view-all user.
-- **Source:** snapshot line 2360, section "Internal sync — deferred findings (2026-10-09)"
-
 ### ISS-004 · P2 · zod 3 has a memory-exhaustion advisory fixed only in zod 4
 
 - **Type:** debt · **Found:** 2026-10-25 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -209,23 +201,15 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Normal offset trade-off. Trigger: user reports. Then use cursor paging.
 - **Source:** snapshot line 2440, section "Data integrity, session and query performance — deferred findings (2026-10-26)"
 
+### ISS-175 · P3 · Task delete re-packs siblings with one UPDATE per row
+
+- **Type:** watch · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 1 review
+- **Where:** closeGap in backend/src/lib/taskOrdering.ts (line ~42), called from DELETE /tasks/:id
+- **Problem:** Delete now rewrites every remaining sibling, including rows before the gap; the top-level list is every top-level task in the project.
+- **Why deferred / fix direction:** Trigger: a delete above the 200 ms target. Fix: one set-based UPDATE, or shift only rows after the deleted one.
+- **Source:** phase review of `docs/archive/plans/task-integrity.md`
+
 ## Open — Backend/API
-
-### ISS-027 · P2 · Deleting a task leaves sparse positions in its sibling list
-
-- **Type:** bug · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** DELETE /:id handler in backend/src/routes/tasks.ts (line ~632)
-- **Problem:** The delete route does not close the gap, so positions go sparse. Any move that treats a stored position as an index is exposed.
-- **Why deferred / fix direction:** Call closeGap inside the delete transaction.
-- **Source:** snapshot line 1852, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
-
-### ISS-028 · P2 · PATCH /tasks/:id accepts a due date before the start date
-
-- **Type:** bug · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** PATCH /tasks/:id handler in backend/src/routes/tasks.ts (line ~549)
-- **Problem:** The panel sends only the changed date, so merging with another user's later edit can store due before start. The server has no start <= due check; only the edit form validates.
-- **Why deferred / fix direction:** Add a server-side check against the merged result (reject or clamp).
-- **Source:** snapshot line 2335, section "Collaboration & sharing, Phase 3 ("Conflict warning") — deferred findings (2026-09-30)"
 
 ### ISS-029 · P3 · Inactive users can still be set as TAM, assignee or epic owner
 
@@ -283,13 +267,21 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Decide whether an audit trail for links is wanted; if yes, add it to the project diff.
 - **Source:** snapshot line 2376, section "Outline links, Phase A — deferred findings (2026-10-09)"; merged duplicates at snapshot lines 2383
 
-### ISS-036 · P3 · Section and epic delete can deadlock with a concurrent task reorder
+### ISS-176 · P3 · Epic delete and admin status save can still deadlock with task writes
 
-- **Type:** bug · **Found:** 2026-10-25 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** sectionsRouter.delete in backend/src/routes/sections.ts (line ~255); epicsRouter.delete in backend/src/routes/epics.ts (line ~198)
-- **Problem:** Both deletes null Task.sectionId/epicId through SetNull without taking the project order lock. A concurrent reorder can deadlock, and the user gets a retryable 409.
-- **Why deferred / fix direction:** Take lockProjectOrder for the task list at the start of both deletes.
-- **Source:** snapshot line 2412, section "Backend concurrency and roles — deferred findings (2026-10-25)"
+- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 1 review
+- **Where:** epicsRouter.delete in backend/src/routes/epics.ts; status save in backend/src/lib/taskStatuses.ts
+- **Problem:** Epic delete vs a PATCH that sets epicId can deadlock through the epic and task rows; the admin status save takes no task-order lock, so it can deadlock with a re-pack.
+- **Why deferred / fix direction:** Both predate the task-order lock change and are rare. Fix: take the task-order lock in both paths.
+- **Source:** phase review of `docs/archive/plans/task-integrity.md`
+
+### ISS-177 · P3 · Epic owner check is copied into two routes
+
+- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 1 review
+- **Where:** owner check in backend/src/routes/epics.ts (line ~143) and backend/src/routes/projects.ts (line ~822)
+- **Problem:** The same 11-line check sits in both routes, and it calls filterActiveUsersWhoCanSeeProject with activeOnly false, which reads as a contradiction.
+- **Why deferred / fix direction:** Fix: one shared assertEpicOwnerCanSeeProject helper, and a clearer name for the filter.
+- **Source:** phase review of `docs/archive/plans/task-integrity.md`
 
 ## Open — Frontend UI
 
@@ -597,6 +589,14 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** The placeholders are plain animate-pulse blocks, where DESIGN.md asks for skeletons from components/skeletons shown after 150 ms.
 - **Why deferred / fix direction:** Move them onto the shared skeleton region.
 - **Source:** snapshot line 2454, section "Antislop port — deferred findings (2026-11-12)"
+
+### ISS-174 · P3 · Epic owner picker lists users the server now refuses
+
+- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 1 review
+- **Where:** EpicPanel owner select in frontend/src/components/EpicPanel.tsx (line ~271)
+- **Problem:** The picker lists every user, but the server refuses an owner who cannot see the project (`owner_no_project_access`), so picking one shows a 400.
+- **Why deferred / fix direction:** The server enforces the rule and the error shows inline. Fix: limit options to users who can see the project, or mark the others disabled with a reason.
+- **Source:** phase review of `docs/archive/plans/task-integrity.md`
 
 ## Open — Accessibility & tokens
 
@@ -1192,6 +1192,7 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Where:** 'orders GET /tasks (cross-project)…' in backend/test/taskOrdering.test.ts (line ~103)
 - **Problem:** The test reads the take: 200 window of GET /tasks, which other test files fill when run in parallel, so the two tasks can fall outside it.
 - **Why deferred / fix direction:** Filter the request to the test's own project or fetch by id instead of the global list.
+- **Also seen 2026-11-19:** `epics.test.ts` "returns epicId on GET /projects/:id/tasks and GET /tasks" failed once in the full run and passed in the next two; same cross-project GET /tasks pattern.
 - **Source:** snapshot line 2336, section "Collaboration & sharing, Phase 3 ("Conflict warning") — deferred findings (2026-09-30)"
 
 ### ISS-157 · P3 · Concurrency tests for activity and notification recipients are unproven
@@ -1330,8 +1331,12 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 
 Entries closed during the 2026-11-18 restructure are in the ledger in `docs/archive/plans/issues-restructure.md`, not here.
 
+- ISS-003 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · Epic owner can be a user with no access to the project
 - ISS-005 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · Saving an iTop address does not require the application token
 - ISS-009 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · Shared pino logger has no redact paths for iTop tokens
+- ISS-027 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · Deleting a task leaves sparse positions in its sibling list
+- ISS-028 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · PATCH /tasks/:id accepts a due date before the start date
+- ISS-036 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · Section and epic delete can deadlock with a concurrent task reorder
 - ISS-064 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · CustomerDetail ignores itopOrgId/itopOrgName the API already returns
 - ISS-065 · 2026-11-18 · accepted by the user: the offset stays out of the query key on purpose (comment in `queries.ts`) · useItopTicket weekly hours can be stale after a timezone change
 - ISS-075 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · Utilization Refresh failure shows no error

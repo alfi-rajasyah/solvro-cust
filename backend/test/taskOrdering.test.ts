@@ -522,3 +522,99 @@ describe("cross-project section / label validation", () => {
     expect(res.body.code).toBe("invalid_label");
   });
 });
+
+describe("DELETE /tasks/:id closes the gap", () => {
+  it("re-packs the remaining top-level siblings to 0..n-1", async () => {
+    const a = await createTask({ title: "A" });
+    const b = await createTask({ title: "B" });
+    const c = await createTask({ title: "C" });
+    const res = await request(app).delete(`/tasks/${b.id}`).set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(204);
+    const rows = await prisma.task.findMany({ where: { projectId }, orderBy: { position: "asc" } });
+    expect(rows.map((r) => [r.id, r.position])).toEqual([
+      [a.id, 0],
+      [c.id, 1],
+    ]);
+  });
+
+  it("re-packs a subtask list without touching the top-level one", async () => {
+    const parent = await createTask({ title: "P" });
+    const other = await createTask({ title: "Q" });
+    const s0 = await createTask({ title: "S0", parentTaskId: parent.id });
+    const s1 = await createTask({ title: "S1", parentTaskId: parent.id });
+    const s2 = await createTask({ title: "S2", parentTaskId: parent.id });
+    const res = await request(app).delete(`/tasks/${s0.id}`).set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(204);
+    const subs = await prisma.task.findMany({ where: { parentTaskId: parent.id }, orderBy: { position: "asc" } });
+    expect(subs.map((r) => [r.id, r.position])).toEqual([
+      [s1.id, 0],
+      [s2.id, 1],
+    ]);
+    const top = await prisma.task.findMany({ where: { projectId, parentTaskId: null }, orderBy: { position: "asc" } });
+    expect(top.map((r) => [r.id, r.position])).toEqual([
+      [parent.id, 0],
+      [other.id, 1],
+    ]);
+  });
+});
+
+describe("PATCH /tasks/:id start/due ordering against the stored row", () => {
+  async function dated(start: string | null, due: string | null): Promise<TaskRow> {
+    const t = await createTask({ title: "Dated" });
+    await prisma.task.update({
+      where: { id: t.id },
+      data: { startDate: start ? new Date(start) : null, dueDate: due ? new Date(due) : null },
+    });
+    return t;
+  }
+
+  it("rejects a due date earlier than the stored start date with 400 validation_error", async () => {
+    const t = await dated("2026-06-10", null);
+    const res = await patchTask(t.id, { dueDate: "2026-06-01" });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("validation_error");
+    expect(res.body.details.fieldErrors.dueDate).toBeDefined();
+    const after = await prisma.task.findUniqueOrThrow({ where: { id: t.id } });
+    expect(after.dueDate).toBeNull();
+  });
+
+  it("rejects a start date later than the stored due date", async () => {
+    const t = await dated(null, "2026-06-01");
+    const res = await patchTask(t.id, { startDate: "2026-06-10" });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("validation_error");
+  });
+
+  it("accepts equal dates, a valid range, and an unrelated edit of a legacy inverted row", async () => {
+    const t = await dated("2026-06-10", null);
+    expect((await patchTask(t.id, { dueDate: "2026-06-10" })).status).toBe(200);
+    expect((await patchTask(t.id, { dueDate: "2026-06-20" })).status).toBe(200);
+    await prisma.task.update({ where: { id: t.id }, data: { dueDate: new Date("2026-06-01") } });
+    expect((await patchTask(t.id, { title: "Renamed" })).status).toBe(200);
+  });
+
+  it("compares calendar days: a same-day due before a non-midnight stored start passes", async () => {
+    const t = await createTask({ title: "Same day" });
+    await prisma.task.update({
+      where: { id: t.id },
+      data: { startDate: new Date("2026-06-10T15:30:00.000Z") },
+    });
+    expect((await patchTask(t.id, { dueDate: "2026-06-10" })).status).toBe(200);
+    expect((await patchTask(t.id, { dueDate: "2026-06-09" })).status).toBe(400);
+  });
+
+  it("exempts a milestone: its start follows its due date", async () => {
+    const t = await dated("2026-06-10", null);
+    const res = await patchTask(t.id, { isMilestone: true, dueDate: "2026-06-01" });
+    expect(res.status).toBe(200);
+    const after = await prisma.task.findUniqueOrThrow({ where: { id: t.id } });
+    expect(after.startDate?.toISOString().slice(0, 10)).toBe("2026-06-01");
+  });
+
+  it("lets a patch clear one date of an inverted row", async () => {
+    const t = await dated("2026-06-10", "2026-06-01");
+    expect((await patchTask(t.id, { dueDate: null })).status).toBe(200);
+    const u = await dated("2026-06-10", "2026-06-01");
+    expect((await patchTask(u.id, { startDate: null })).status).toBe(200);
+  });
+});

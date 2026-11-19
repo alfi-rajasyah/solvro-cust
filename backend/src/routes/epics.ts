@@ -8,6 +8,7 @@ import { HttpError } from "../http/errors.js";
 import { dateInput } from "../lib/dateInput.js";
 import { validate } from "../http/validate.js";
 import { ensureProjectVisible } from "../lib/visibility.js";
+import { filterActiveUsersWhoCanSeeProject } from "../lib/notifications.js";
 import { recordActivity, shortLabel } from "../lib/activity.js";
 import { diffEpicChanges, epicSnapshotSelect } from "../lib/epicActivity.js";
 import { lockProjectOrder } from "../lib/orderLock.js";
@@ -139,6 +140,18 @@ epicsRouter.patch(
 
     if (body.ownerId != null) {
       await assertUserExists(prisma, body.ownerId, "owner_not_found", "Epic owner not found");
+      // The owner must be someone who can see the project (TAM, linked
+      // customer's owner, member, view-all). Inactive users are not rejected.
+      const visible = await filterActiveUsersWhoCanSeeProject(prisma, projectId, [body.ownerId], {
+        activeOnly: false,
+      });
+      if (!visible.has(body.ownerId)) {
+        throw new HttpError(
+          400,
+          "owner_no_project_access",
+          "Epic owner must be the project's TAM, a member, or have access to all projects",
+        );
+      }
     }
 
     const data: Prisma.EpicUpdateInput = {};
@@ -206,6 +219,8 @@ epicsRouter.delete(
     // (docs/archive/plans/epics-spec.md §4) — they keep their data. The event
     // snapshots the title and how many tasks lost the link.
     await prisma.$transaction(async (tx) => {
+      // SetNull on Task.epicId updates task rows; serialise with a reorder.
+      await lockProjectOrder(tx, "tasks", projectId);
       const epic = await tx.epic.findUnique({ where: { id }, select: { title: true } });
       if (!epic) throw new HttpError(404, "not_found", "Epic not found");
       const taskCount = await tx.task.count({ where: { epicId: id } });
