@@ -642,14 +642,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 
 ## Open — Gantt
 
-### ISS-095 · P2 · Gantt save errors can be swallowed when a later update follows
-
-- **Type:** bug · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** updateTask.mutate(..., { onError }) in frontend/src/components/gantt-v2/SolvroGantt.tsx (lines ~565, ~621, ~649)
-- **Problem:** TanStack Query v5 fires per-call callbacks only for the latest mutate on a hook, so a failed date, reorder or subtask update is silently dropped if another update on the same hook starts first.
-- **Why deferred / fix direction:** Switch to mutateAsync(...).catch(...) as the task panel already does.
-- **Source:** snapshot line 2338, section "Collaboration & sharing, Phase 3 ("Conflict warning") — deferred findings (2026-09-30)"
-
 ### ISS-096 · P3 · Narrow viewports can clip the Gantt Dates and color columns
 
 - **Type:** bug · **Found:** 2026-07-30 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -730,14 +722,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Confirm dead and remove, or align the shadow at first use.
 - **Source:** snapshot line 831, section "ReUI DateField swap — deferred findings (2026-07-28)"
 
-### ISS-106 · P3 · Gantt Dates cell shows the date range twice while editing
-
-- **Type:** bug · **Found:** 2026-07-28 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** TaskDatesCell in frontend/src/components/gantt-v2/TreeCells.tsx (lines ~46-80)
-- **Problem:** The cell button stays visible while the editor opens below it, so the same range appears twice.
-- **Why deferred / fix direction:** Hide the cell button while editing is true.
-- **Source:** snapshot line 972, section "DateRangeField — deferred findings (2026-07-28, Task 3.5)"
-
 ### ISS-107 · P3 · Dark-mode Critical Path ring on Gantt bars resembles the selection ring
 
 - **Type:** decision · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -754,13 +738,13 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Trigger: confirm in a browser on a partly filled bar. Then pick the label colour per segment.
 - **Source:** snapshot line 2445, section "Design compliance fixes — deferred findings (2026-11-02)"
 
-### ISS-178 · P3 · Gantt section actions show for task:write but the routes need project:write
+### ISS-189 · P3 · Gantt section colour and duplicate still swallow errors
 
-- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 1 review
-- **Where:** canEdit in frontend/src/components/gantt-v2/SolvroGantt.tsx (line ~354): Add section (~1086), section reorder (~583), section color (~760)
-- **Problem:** The same mismatch ISS-061 fixed in the list view: a custom role with task:write only sees the actions and gets a 403.
-- **Why deferred / fix direction:** Seeded roles never split the two permissions. Fix: gate the three actions on project:write (spine file, instant review).
-- **Source:** phase review of `docs/archive/plans/task-ui-fixes.md`
+- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 3 review
+- **Where:** handleSetSectionColor (line ~742) and duplicateTask.mutate (line ~1574) in frontend/src/components/gantt-v2/SolvroGantt.tsx
+- **Problem:** A failed colour change reverts with no message; duplicate still uses a per-call onError, so a second duplicate drops the first error (the ISS-095 race).
+- **Why deferred / fix direction:** Cosmetic field and a rare double action. Fix: mutateAsync(...).catch(setActionError ...) at both sites.
+- **Source:** phase review of `docs/archive/plans/gantt-errors-dates-sections.md`
 
 ## Open — Boards & drag
 
@@ -1229,6 +1213,8 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-092 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · Dialog focus trap lets Tab escape from a tabIndex=-1 element
 - ISS-093 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · usePanelFocus returns focus to the previous task's opener
 - ISS-094 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · Task statuses primary button has a weak keyboard focus cue
+- ISS-095 · 2026-11-19 · CHANGELOG "Gantt errors, Dates cell and section permissions" · Gantt save errors can be swallowed when a later update follows
+- ISS-106 · 2026-11-19 · CHANGELOG "Gantt errors, Dates cell and section permissions" · Gantt Dates cell shows the date range twice while editing
 - ISS-109 · 2026-11-19 · CHANGELOG "Service lists, Daily Review refresh, request timeouts, section chip" · Task panel shows the old section chip during a cross-section drag
 - ISS-115 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · GET /itop/services lists every iTop organisation's services to any signed-in user
 - ISS-119 · 2026-11-18 · accepted by the user: iTop limits what Solvro can read; no code change · iTop personal-token expiry is only read when iTop allows it
@@ -1246,3 +1232,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-163 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · setup.sh does not pass ITOP_ALLOW_PRIVATE_HOSTS or ITOP_SYNC_DISABLED
 - ISS-164 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · setup.sh: no registry-login preflight on a fresh install; CORS falls back to `*`
 - ISS-165 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · Icons and favicon have no explicit Cache-Control
+- ISS-178 · 2026-11-19 · CHANGELOG "Gantt errors, Dates cell and section permissions" · Gantt section actions show for task:write but the routes need project:write

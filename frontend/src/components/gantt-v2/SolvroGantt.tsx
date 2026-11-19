@@ -352,6 +352,12 @@ export function SolvroGantt(props: SolvroGanttProps) {
   const { user } = useAuth();
   // Ported verbatim from GanttFrame.tsx:86-87.
   const canEdit = hasPermission(user, "task:write");
+  // Section routes (create, reorder, color) need project:write, not task:write
+  // — a custom role holding only task:write would see the action and get a 403.
+  // Gantt section reorder needs BOTH task:write and project:write: the row grip
+  // is a tree-wide control gated on task:write, and section rows then also need
+  // project:write (canReorderResource).
+  const canManageSections = hasPermission(user, "project:write");
   // Pauses the project queries' 30 s refresh while a bar move/resize, row
   // reorder or connect-dot drag is live (the vendored engine has no
   // start/end callbacks) — docs/archive/plans/collaboration-and-sharing.md.
@@ -562,10 +568,8 @@ export function SolvroGantt(props: SolvroGanttProps) {
       const patch = eventPatch(update);
       if (!patch) return false;
       setActionError(null);
-      updateTask.mutate(patch, {
-        onError: (err) => {
-          setActionError(err instanceof ApiError ? err.message : "Could not update task dates.");
-        },
+      updateTask.mutateAsync(patch).catch((err: unknown) => {
+        setActionError(err instanceof ApiError ? err.message : "Could not update task dates.");
       });
       return true;
     },
@@ -578,6 +582,12 @@ export function SolvroGantt(props: SolvroGanttProps) {
   // Returns `false` to reject; per gantt.tsx:127 the real contract is
   // `void | false` (never `true` — unlike onEventUpdate's GanttUpdateResult,
   // there is no accept-with-adjustment form here).
+  const canReorderResource = useCallback(
+    (proposal: GanttResourceReorder) =>
+      !proposal.resourceId.startsWith("section-") || canManageSections,
+    [canManageSections],
+  );
+
   const handleResourceReorder = useCallback(
     (proposal: GanttResourceReorder): void | false => {
       if (!canEdit) return false;
@@ -585,6 +595,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
 
       // ---- Section-group reorder (root level only) ----
       if (resourceId.startsWith("section-")) {
+        if (!canManageSections) return false;
         // The "(No section)" pseudo-group has no backing Section row — old
         // engine only starts a section drag when `sectionId !== null`
         // (GanttFrame.tsx:539).
@@ -614,16 +625,11 @@ export function SolvroGantt(props: SolvroGanttProps) {
 
         if (patches.length === 0) return false; // no-op — nothing actually moved
         setActionError(null);
-        patches.forEach(({ id, position }) =>
-          updateSection.mutate(
-            { id, patch: { position } },
-            {
-              onError: (err) => {
-                setActionError(err instanceof ApiError ? err.message : "Could not reorder sections.");
-              },
-            },
-          ),
-        );
+        patches.forEach(({ id, position }) => {
+          updateSection.mutateAsync({ id, patch: { position } }).catch((err: unknown) => {
+            setActionError(err instanceof ApiError ? err.message : "Could not reorder sections.");
+          });
+        });
         return;
       }
 
@@ -643,14 +649,9 @@ export function SolvroGantt(props: SolvroGanttProps) {
         if (parentId !== taskNodeId(moved.parentTaskId)) return false;
         if (index === moved.position) return false; // no-op
         setActionError(null);
-        updateTask.mutate(
-          { id: taskId, patch: { position: index } },
-          {
-            onError: (err) => {
-              setActionError(err instanceof ApiError ? err.message : "Could not reorder subtask.");
-            },
-          },
-        );
+        updateTask.mutateAsync({ id: taskId, patch: { position: index } }).catch((err: unknown) => {
+          setActionError(err instanceof ApiError ? err.message : "Could not reorder subtask.");
+        });
         return;
       }
 
@@ -700,17 +701,12 @@ export function SolvroGantt(props: SolvroGanttProps) {
       if (crossSection) patch.sectionId = targetSectionId;
       if (position !== undefined) patch.position = position;
       setActionError(null);
-      updateTask.mutate(
-        { id: taskId, patch },
-        {
-          onError: (err) => {
-            setActionError(err instanceof ApiError ? err.message : "Could not move task.");
-          },
-        },
-      );
+      updateTask.mutateAsync({ id: taskId, patch }).catch((err: unknown) => {
+        setActionError(err instanceof ApiError ? err.message : "Could not move task.");
+      });
       return;
     },
-    [canEdit, resources, sections, tasks, taskById, updateTask, updateSection],
+    [canEdit, canManageSections, resources, sections, tasks, taskById, updateTask, updateSection],
   );
 
   // Plan B Task 6 — connector create/delete, wired into GanttOverlay as
@@ -721,10 +717,8 @@ export function SolvroGantt(props: SolvroGanttProps) {
   const handleCreateDependency = useCallback(
     (input: CreateDependencyInput) => {
       setActionError(null);
-      createDependency.mutate(input, {
-        onError: (err) => {
-          setActionError(err instanceof ApiError ? err.message : "Could not create dependency.");
-        },
+      createDependency.mutateAsync(input).catch((err: unknown) => {
+        setActionError(err instanceof ApiError ? err.message : "Could not create dependency.");
       });
     },
     [createDependency],
@@ -733,10 +727,8 @@ export function SolvroGantt(props: SolvroGanttProps) {
   const handleDeleteDependency = useCallback(
     (id: number) => {
       setActionError(null);
-      deleteDependency.mutate(id, {
-        onError: (err) => {
-          setActionError(err instanceof ApiError ? err.message : "Could not delete dependency.");
-        },
+      deleteDependency.mutateAsync(id).catch((err: unknown) => {
+        setActionError(err instanceof ApiError ? err.message : "Could not delete dependency.");
       });
     },
     [deleteDependency],
@@ -745,14 +737,11 @@ export function SolvroGantt(props: SolvroGanttProps) {
   const handleUpdateDates = useCallback(
     (taskId: number, startISO: string | null, dueISO: string | null) => {
       setActionError(null);
-      updateTask.mutate(
-        { id: taskId, patch: { startDate: startISO, dueDate: dueISO } },
-        {
-          onError: (err) => {
-            setActionError(err instanceof ApiError ? err.message : "Could not update dates.");
-          },
-        },
-      );
+      updateTask
+        .mutateAsync({ id: taskId, patch: { startDate: startISO, dueDate: dueISO } })
+        .catch((err: unknown) => {
+          setActionError(err instanceof ApiError ? err.message : "Could not update dates.");
+        });
     },
     [updateTask],
   );
@@ -848,14 +837,14 @@ export function SolvroGantt(props: SolvroGanttProps) {
             <SectionColorCell
               sectionId={sectionId}
               color={sectionColors.get(sectionId) ?? DEFAULT_SECTION_COLOR}
-              canEdit={canEdit}
+              canEdit={canManageSections}
               onPick={handleSetSectionColor}
             />
           );
         },
       },
     ];
-  }, [sections, taskById, canEdit, handleUpdateDates, handleSetSectionColor, todayDay]);
+  }, [sections, taskById, canEdit, canManageSections, handleUpdateDates, handleSetSectionColor, todayDay]);
 
   // Plan B Task 7 — register Excel/PDF export handlers in the shared context
   // (`GanttExportProvider`, mounted by ProjectDetail.tsx around the whole
@@ -1083,33 +1072,37 @@ export function SolvroGantt(props: SolvroGanttProps) {
           ))}
         </div>
 
-        {canEdit && (
+        {(canEdit || canManageSections) && (
           <>
             <span className="mx-1 h-4 w-px bg-outline-variant" aria-hidden />
             {/* T6 — segmented shell mirrored from the scale-pill group above. */}
             <div className="inline-flex overflow-hidden rounded-md bg-surface-container-low p-0.5">
-              <button
-                type="button"
-                onClick={() => onCreateTaskOpen(null)}
-                className={cn(
-                  TOOLBAR_ITEM_HEIGHT,
-                  "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium text-on-surface outline-hidden transition-colors hover:text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary",
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => onCreateTaskOpen(null)}
+                  className={cn(
+                    TOOLBAR_ITEM_HEIGHT,
+                    "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium text-on-surface outline-hidden transition-colors hover:text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary",
                 )}
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-[15px]">add</span>
-                Task
-              </button>
-              <button
-                type="button"
-                onClick={() => setAddingSection(true)}
-                className={cn(
-                  TOOLBAR_ITEM_HEIGHT,
-                  "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary",
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-[15px]">add</span>
+                  Task
+                </button>
+              )}
+              {canManageSections && (
+                <button
+                  type="button"
+                  onClick={() => setAddingSection(true)}
+                  className={cn(
+                    TOOLBAR_ITEM_HEIGHT,
+                    "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary",
                 )}
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-[15px]">add</span>
-                Section
-              </button>
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-[15px]">add</span>
+                  Section
+                </button>
+              )}
             </div>
           </>
         )}
@@ -1614,21 +1607,18 @@ export function SolvroGantt(props: SolvroGanttProps) {
                         <ContextMenuItem
                           className="text-xs"
                           onClick={() =>
-                            updateTask.mutate(
-                              {
+                            updateTask
+                              .mutateAsync({
                                 id: task.id,
                                 patch: { isCriticalPath: !task.isCriticalPath },
-                              },
-                              {
-                                onError: (err) => {
-                                  setActionError(
-                                    err instanceof ApiError
-                                      ? err.message
-                                      : "Could not update the Critical Path mark.",
-                                  );
-                                },
-                              },
-                            )
+                              })
+                              .catch((err: unknown) => {
+                                setActionError(
+                                  err instanceof ApiError
+                                    ? err.message
+                                    : "Could not update the Critical Path mark.",
+                                );
+                              })
                           }
                         >
                           <span
@@ -1719,6 +1709,9 @@ export function SolvroGantt(props: SolvroGanttProps) {
             // not this.
             onEventUpdate={handleEventUpdate}
             onResourceReorder={canEdit ? handleResourceReorder : undefined}
+            // Section rows are refused (red indicator, no commit) without
+            // project:write; the grip itself is tree-wide, so it still shows.
+            canReorderResource={canReorderResource}
           >
             <GanttView />
             {/* T1 (fix round) — see GanttNavTitleSync's doc comment above. */}
