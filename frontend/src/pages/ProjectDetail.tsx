@@ -9,7 +9,7 @@ import {
   useSearchParams,
   useLocation,
 } from "react-router-dom";
-import { ConfirmModal } from "@/components/ConfirmModal";
+import { DeleteProjectDialog } from "@/components/DeleteProjectDialog";
 import { CopyLinkStatus, useCopyLinkFeedback } from "@/components/CopyLinkButton";
 import { RightSidebar } from "@/components/layout/RightSidebar";
 import { OutlineLinkButton } from "@/components/OutlineLinkButton";
@@ -388,16 +388,11 @@ export function ProjectDetail() {
           canCreateGuestLink={canEdit && isOwner}
         />
       )}
-      <ConfirmModal
+      <DeleteProjectDialog
         open={confirmDeleteOpen}
+        project={project}
         onClose={() => setConfirmDeleteOpen(false)}
         onConfirm={() => void handleDelete()}
-        title="Delete project"
-        body={`Delete project "${project.name}"? This permanently removes its ${project._count.tasks} ${
-          project._count.tasks === 1 ? "task" : "tasks"
-        }, sections, labels, notes, risks and reviews. There is no undo.`}
-        confirmLabel="Delete"
-        confirmTone="danger"
         busy={deleteProject.isPending}
       />
 
