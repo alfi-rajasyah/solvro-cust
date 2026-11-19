@@ -1149,30 +1149,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 
 ## Open — Dev env & ops
 
-### ISS-163 · P2 · setup.sh does not pass ITOP_ALLOW_PRIVATE_HOSTS or ITOP_SYNC_DISABLED
-
-- **Type:** debt · **Found:** 2026-10-25 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** backend environment block in setup.sh (line ~290)
-- **Problem:** Operators of a public iTop cannot set ITOP_ALLOW_PRIVATE_HOSTS=false without editing a compose file that setup.sh rewrites on every run.
-- **Why deferred / fix direction:** Pass both variables through in setup.sh and update docs/CONFIGURATION.md. setup.sh is on the spine list.
-- **Source:** snapshot line 2411, section "Backend concurrency and roles — deferred findings (2026-10-25)"
-
-### ISS-164 · P2 · setup.sh: no registry-login preflight on a fresh install; CORS falls back to `*`
-
-- **Type:** debt · **Found:** 2026-09-18 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** setup.sh: the docker pull -q "$IMAGE_PREFIX-backend:stable" check in cmd_update (line ~447); CORS_ORIGIN in write_compose_file (line ~282)
-- **Problem:** Only solvro update pulls first and explains a failed pull; a fresh install fails at docker compose pull with Docker's raw error. CORS_ORIGIN is "${APP_URL:-*}", so it becomes * when APP_URL is unset.
-- **Why deferred / fix direction:** Leftovers of docs/archive/plans/setup-sh-hardening.md (never approved). Pull the backend image before the first compose pull and print the docker login ghcr.io hint on 401/403; refuse or warn when APP_URL is empty.
-- **Source:** new at the restructure, from `docs/archive/plans/setup-sh-hardening.md` (proposed 2026-09-18)
-
-### ISS-165 · P3 · Icons and favicon have no explicit Cache-Control
-
-- **Type:** debt · **Found:** 2026-07-26 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** location blocks in frontend/nginx.conf (lines ~138-170)
-- **Problem:** Only /assets/, index.html, sw.js and the manifest set cache headers. Icon requests get no directive.
-- **Why deferred / fix direction:** Add a short Cache-Control for /icons/ and = /favicon.png.
-- **Source:** snapshot line 572, section "PWA icon regeneration — deferred findings (2026-07-25/26)"
-
 ### ISS-166 · P3 · Dev backend tsx watch sometimes misses file edits
 
 - **Type:** watch · **Found:** 2026-08-15 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -1196,6 +1172,14 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** The dev compose mounts only frontend/, so the repo VERSION file is missing and the test fails with ENOENT. It passes in CI.
 - **Why deferred / fix direction:** Trigger: dev container mounts change. Or skip the check when the file is absent.
 - **Source:** snapshot line 2446, section "Design compliance fixes — deferred findings (2026-11-02)"
+
+### ISS-184 · P3 · solvro config cannot set the new iTop variables
+
+- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 2 review
+- **Where:** CONFIG_KEYS / config_effective in setup.sh (line ~513)
+- **Problem:** ITOP_ALLOW_PRIVATE_HOSTS and ITOP_SYNC_DISABLED can be set only by editing ~/solvro/.env by hand.
+- **Why deferred / fix direction:** Hand-editing .env works and is documented. Fix: add both to CONFIG_KEYS with a true/false validator.
+- **Source:** phase review of `docs/archive/plans/setup-and-nginx.md`
 
 ## Open — Docs & process
 
@@ -1269,3 +1253,6 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-142 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · Stale comment says the seeded project is per test file
 - ISS-148 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · Search contract tests miss the length cap, ordering and the underscore case
 - ISS-152 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · Two e2e specs keep private copies of createTask
+- ISS-163 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · setup.sh does not pass ITOP_ALLOW_PRIVATE_HOSTS or ITOP_SYNC_DISABLED
+- ISS-164 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · setup.sh: no registry-login preflight on a fresh install; CORS falls back to `*`
+- ISS-165 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · Icons and favicon have no explicit Cache-Control

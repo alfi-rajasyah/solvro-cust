@@ -8,6 +8,7 @@
 #   volume exists, no FORCE_FRESH   -> exit 1, no `volume rm`, no file written
 #   volume exists, FORCE_FRESH=1    -> `volume rm` runs (explicit wipe)
 #   volume absent                   -> `volume rm` runs (genuinely fresh server)
+#   registry pull fails             -> exit 1, no `volume rm`, no .env (re-run is still fresh)
 #   daemon unreachable              -> exit 1, nothing written (not read as "no volume")
 #
 # Usage: ci/check-setup-guard.sh          (from the repository root)
@@ -25,6 +26,7 @@ echo "docker $*" >> "$SHIM_LOG"
 case "$1 ${2:-}" in
   "info ")          [[ "${SHIM_DAEMON_DOWN:-0}" == "1" ]] && exit 1 || exit 0 ;;
   "volume inspect") [[ "${SHIM_VOLUME_EXISTS:-0}" == "1" ]] && exit 0 || exit 1 ;;
+  "pull "*|"pull")  [[ "${SHIM_PULL_FAIL:-0}" == "1" ]] && exit 1 || exit 0 ;;
   "compose exec")   echo "Admin user ready (shim)"; exit 0 ;;
 esac
 exit 0
@@ -35,13 +37,13 @@ chmod +x "$WORK/bin/docker" "$WORK/bin/curl"
 
 FAILED=0
 
-# run <label> <volume-exists 0|1> <force-fresh "" | 1> [daemon-down 0|1]
+# run <label> <volume-exists 0|1> <force-fresh "" | 1> [daemon-down 0|1] [pull-fails 0|1]
 run() {
-  local label="$1" exists="$2" force="$3" down="${4:-0}"
+  local label="$1" exists="$2" force="$3" down="${4:-0}" pullfail="${5:-0}"
   local home="$WORK/home-$RANDOM" log="$WORK/calls-$RANDOM.log"
   mkdir -p "$home"; : > "$log"
   # Every prompt has a value so no read from /dev/tty is attempted.
-  HOME="$home" PATH="$WORK/bin:$PATH" SHIM_LOG="$log" SHIM_VOLUME_EXISTS="$exists" SHIM_DAEMON_DOWN="$down" \
+  HOME="$home" PATH="$WORK/bin:$PATH" SHIM_LOG="$log" SHIM_VOLUME_EXISTS="$exists" SHIM_DAEMON_DOWN="$down" SHIM_PULL_FAIL="$pullfail" \
     FORCE_FRESH="$force" \
     ADMIN_EMAIL=ci@example.com ADMIN_PASSWORD=ci-password-1234 \
     BIND_ADDR=127.0.0.1 FRONTEND_PORT=80 BACKEND_PORT=3000 POSTGRES_PORT=5432 \
@@ -70,6 +72,7 @@ check "volume-exists-refuses"      1 0 0 "$(run volume-exists-refuses 1 "")"
 check "volume-exists-force-wipes"  0 1 1 "$(run volume-exists-force-wipes 1 1)"
 check "no-volume-fresh-wipes"      0 1 1 "$(run no-volume-fresh-wipes 0 "")"
 check "daemon-down-refuses"        1 0 0 "$(run daemon-down-refuses 0 "" 1)"
+check "pull-fails-writes-nothing"  1 0 0 "$(run pull-fails-writes-nothing 0 "" 0 1)"
 
 # The compose file a fresh install writes must keep the API local-only and
 # carry the hygiene blocks (health check, log rotation, proxy trust).
@@ -84,6 +87,8 @@ compose_has   "API bound to 127.0.0.1"      '"127.0.0.1:${BACKEND_PORT:-3000}:30
 compose_lacks "API never bound to BIND_ADDR" '${BIND_ADDR:-127.0.0.1}:${BACKEND_PORT:-3000}'
 compose_has   "proxy trust default"         'TRUST_PROXY: "${TRUST_PROXY:-loopback, uniquelocal}"'
 compose_has   "CORS from APP_URL"           'CORS_ORIGIN: "${APP_URL:-*}"'
+compose_has   "iTop private hosts passed"   'ITOP_ALLOW_PRIVATE_HOSTS: "${ITOP_ALLOW_PRIVATE_HOSTS:-true}"'
+compose_has   "iTop sync switch passed"     'ITOP_SYNC_DISABLED: "${ITOP_SYNC_DISABLED:-false}"'
 compose_has   "backend health check"        "fetch('http://127.0.0.1:3000/health')"
 compose_has   "frontend waits for health"   "condition: service_healthy"
 compose_has   "log rotation"                'max-size: "10m"'

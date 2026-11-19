@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-19 — setup.sh and nginx
+
+- `setup.sh` passes `ITOP_ALLOW_PRIVATE_HOSTS` and `ITOP_SYNC_DISABLED` from `~/solvro/.env` to the backend, so they can be set without editing the generated compose file. Unset keeps the previous defaults.
+- A fresh install pulls the backend image first and, when the registry needs a login, stops with a `docker login ghcr.io` hint instead of Docker's raw error, before anything is changed on the server. `setup.sh` also warns when `APP_URL` is empty, because the API then accepts cross-origin requests from any website (`CORS_ORIGIN` falls back to `*`).
+- `frontend/nginx.conf` serves `/icons/` and `/favicon.png` with `Cache-Control: public, max-age=86400`.
+
 ### Changed — 2026-11-19 — Wider typechecks and test hygiene
 
 - The frontend typecheck now also checks `vite.config.ts`, and the node tsconfig no longer lists deleted config files.
