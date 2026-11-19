@@ -291,9 +291,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     await expect(panel.getByText("Sub two", { exact: true })).toBeVisible();
 
     // Sub one seeds at position 0, Sub two at 1 → Sub two owns the second
-    // "Reorder subtask" handle in the panel's subtask list. exact: true —
-    // dnd-kit also puts role="button" on each row, whose accessible name
-    // CONTAINS the handle's label (docs/ISSUES.md ISS-079).
+    // "Reorder subtask" handle in the panel's subtask list.
     const handles = panel.getByRole("button", { name: "Reorder subtask", exact: true });
     await expect(handles).toHaveCount(2);
     const subTwoHandle = handles.nth(1);
@@ -510,29 +508,9 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // `arrayMove` swap cancels the move outright (zero PATCH — the captured
     // failure this fix addresses).
     //
-    // The prescribed fix is a KEYBOARD drag — dnd-kit's KeyboardSensor +
-    // sortableKeyboardCoordinates ARE wired in reui/kanban.tsx (`useSensors`
-    // includes `useSensor(KeyboardSensor, ...)`), and `KeyboardSensor
-    // .activators` is `[{ eventName: "onKeyDown", ... }]`. Investigated
-    // interactively against the running dev server before writing this:
-    // `attributes` (role="button", tabIndex=0 — what makes an element
-    // focusable/Tab-reachable) is spread only onto `KanbanItem`'s OUTER
-    // wrapper (reui/kanban.tsx ~line 796, `[data-slot="kanban-item"]`),
-    // while `listeners` (the actual onKeyDown activator) reaches only
-    // `KanbanItemHandle` via `ItemContext` (~line 838) and carries no
-    // tabIndex/role of its own. Confirmed via direct DOM inspection: the
-    // handle (`[aria-label="Drag to reorder"]`) has neither `tabindex` nor
-    // `role`, so it can never become `document.activeElement` — and pressing
-    // Space on the outer wrapper never set `data-dragging` because the
-    // wrapper has no onKeyDown listener. (Since 2026-10-23 the Solvro layer
-    // drops those wrapper attributes, so the wrapper takes no focus at all;
-    // a card opens from the keyboard via its title button instead.) With
-    // `attributes` and `listeners` split across two different
-    // DOM nodes, no real keyboard interaction (Tab, click-then-Space) can
-    // ever reach the sensor's activator — keyboard drag is a dead end here,
-    // not a gesture-timing issue. Falling back to the prescribed mouse
-    // alternative: drag PAST the target's card so the pointer lands solidly
-    // below the post-reshuffle boundary rather than riding it.
+    // This case stays a mouse test; the keyboard path is covered by the
+    // keyboard drag case above. Drag PAST the target's card so the pointer
+    // lands solidly below the post-reshuffle boundary rather than riding it.
     //
     // T10 stabilization: a height-*multiplied* overshoot (originally 1.5x)
     // doesn't scale safely — against a real 3-card TODO column where the
@@ -560,6 +538,59 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     const targetIndexAfter = after.findIndex((t) => t.id === target.id);
     expect(movedIndexAfter).toBeGreaterThan(movedIndexBefore);
     expect(movedIndexAfter).toBeGreaterThan(targetIndexAfter);
+  });
+
+  // ISS-078: dnd-kit's button role, tab stop and key listener now sit on the
+  // grip together, so a card can be moved without a pointer.
+  test("keyboard drag: focus the grip, Space, ArrowDown, Space moves a card one slot (ISS-078)", async ({
+    page,
+    seededProject,
+  }) => {
+    const base = apiBase(test.info());
+    await openKanban(page, seededProject.projectId);
+
+    const before = globalTopLevel(await getTasks(base, seededProject.token, seededProject.projectId));
+    const todoSorted = before.filter((t) => t.status === "TODO");
+    expect(todoSorted.length, "need at least two TODO tasks").toBeGreaterThanOrEqual(2);
+    const [moved, target] = todoSorted;
+
+    const card = page.locator('[data-slot="kanban-item"]', { hasText: moved.title }).first();
+    const grip = card.getByRole("button", { name: "Drag to reorder" });
+    await expect(grip).toHaveAttribute("tabindex", "0");
+    // The card wrapper itself is not a tab stop or a button.
+    await expect(card).not.toHaveAttribute("tabindex", /.*/);
+    await grip.focus();
+    await expect(grip).toBeFocused();
+
+    const status = page.locator('[id^="DndLiveRegion"]');
+    await page.keyboard.press("Space");
+    await expect(status).not.toBeEmpty();
+
+    const requests = await captureTaskRequests(page, async () => {
+      // The live preview reorders the column as the card moves, so the move
+      // is observable as the lifted card (data-dragging) sitting after the
+      // target in DOM order. The sensor is attached by now (live region
+      // non-empty above), so a single press is enough.
+      await page.keyboard.press("ArrowDown");
+      await expect
+        .poll(() =>
+          page.evaluate(
+            ({ m, t }) => {
+              const ids = Array.from(document.querySelectorAll('[data-slot="kanban-item"]')).map((e) =>
+                e.getAttribute("data-value"),
+              );
+              return ids.indexOf(m) > ids.indexOf(t);
+            },
+            { m: String(moved.id), t: String(target.id) },
+          ),
+        )
+        .toBe(true);
+      await page.keyboard.press("Space");
+    });
+
+    expect(requests.length).toBe(1);
+    const after = globalTopLevel(await getTasks(base, seededProject.token, seededProject.projectId));
+    expect(after.findIndex((t) => t.id === moved.id)).toBeGreaterThan(after.findIndex((t) => t.id === target.id));
   });
 
   test("G3: drop-in-place fires no request (SC-3/NO-1)", async ({ page, seededProject }) => {

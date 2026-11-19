@@ -58,11 +58,11 @@ export function TicketCard({
       <div className="mb-1 flex items-center gap-1.5">
         {canDrag && (
           <KanbanItemHandle
-            // Pointer and touch only (it cannot take focus), so it is hidden from
-            // assistive tech; the label stays for tests and hover tooling.
-            aria-hidden="true"
+            // Focusable: the engine puts dnd-kit's button role, tab stop and
+            // key listener here, so Space and arrows move a ticket.
+            aria-hidden={dragging || undefined}
             aria-label="Drag ticket"
-            className="inline-flex shrink-0 touch-none items-center text-on-surface-variant/80"
+            className="rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary inline-flex shrink-0 touch-none items-center text-on-surface-variant/80"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-[16px]">drag_indicator</span>
           </KanbanItemHandle>
