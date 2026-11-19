@@ -68,7 +68,7 @@ const CATEGORY_MEANING: Record<TaskStatus, string> = {
 const BORDERED_FOCUS =
   "focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
 const BTN_SECONDARY = `[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface disabled:opacity-50 ${BORDERED_FOCUS}`;
-const BTN_PRIMARY = `[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1.5 rounded-sm border border-transparent bg-primary px-4 py-1.5 text-xs font-bold text-on-primary transition-colors hover:bg-primary/90 disabled:opacity-50 ${BORDERED_FOCUS}`;
+const BTN_PRIMARY = `[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1.5 rounded-sm border border-transparent bg-primary px-4 py-1.5 text-xs font-bold text-on-primary transition-colors hover:bg-primary/90 disabled:opacity-50 outline-hidden focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background`;
 
 const HOW_IT_WORKS = [
   "Every status belongs to one of three categories. Overdue, progress and Done counts read the category, so renaming a status never changes them.",

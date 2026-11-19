@@ -58,6 +58,25 @@ export function useDialogFocus(open: boolean): {
     const first = items[0];
     const last = items[items.length - 1];
     const active = document.activeElement;
+    // Focus on something that is not in the tabbable list (a programmatically
+    // focused heading, tabIndex=-1) would otherwise Tab straight out of the
+    // dialog. Wrap by document position: a forward Tab with nothing tabbable
+    // after the element goes to the first item; Shift+Tab with nothing
+    // before it goes to the last.
+    const outsideList = active instanceof HTMLElement && !items.includes(active);
+    const FOLLOWING = Node.DOCUMENT_POSITION_FOLLOWING;
+    if (outsideList && active !== dialog) {
+      const nothingAfter = !items.some((el) => active.compareDocumentPosition(el) & FOLLOWING);
+      const nothingBefore = !items.some((el) => el.compareDocumentPosition(active) & FOLLOWING);
+      if (!e.shiftKey && nothingAfter) {
+        e.preventDefault();
+        first.focus();
+      } else if (e.shiftKey && nothingBefore) {
+        e.preventDefault();
+        last.focus();
+      }
+      return;
+    }
     if (e.shiftKey && (active === first || active === dialog)) {
       e.preventDefault();
       last.focus();
