@@ -776,7 +776,7 @@ if [[ -f "$ENV_FILE" ]]; then
   elif DERIVED_APP_URL="$(normalise_origin "$(app_url)")"; then
     APP_URL="$DERIVED_APP_URL"
     env_file_set APP_URL "$APP_URL"
-    echo "NOTE: APP_URL was not set; saved $APP_URL. If users reach Solvro on another address, re-run with APP_URL=https://... or edit $ENV_FILE."
+    echo "NOTE: APP_URL was not set; saved $APP_URL. Outline links and guest links use it, and a localhost address is ignored for guest links (they fall back to the address the owner has open). If users reach Solvro on another address, re-run with APP_URL=https://... or edit $ENV_FILE."
   else
     APP_URL=""
     echo "NOTE: APP_URL is not set and no address could be derived from this server; the Outline integration stays disabled. Re-run with APP_URL=https://... or edit $ENV_FILE."

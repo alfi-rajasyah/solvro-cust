@@ -22,7 +22,7 @@ async function ensureLabelVisible(user: JwtPayload, labelId: number) {
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 
 const updateLabelSchema = z.object({
-  name: z.string().min(1).max(50).optional(),
+  name: z.string().trim().min(1).max(50).optional(),
   color: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)

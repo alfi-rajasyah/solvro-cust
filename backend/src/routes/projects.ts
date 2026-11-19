@@ -47,7 +47,8 @@ import {
   taskCreatedChanges,
 } from "../lib/activity.js";
 import { epicCreatedChanges } from "../lib/epicActivity.js";
-import { filterActiveUsersWhoCanSeeProject, notifyForEvent } from "../lib/notifications.js";
+import { notifyForEvent } from "../lib/notifications.js";
+import { assertEpicOwnerCanSeeProject } from "../lib/epicOwner.js";
 import {
   customerLinksSchema,
   customerNotFound,
@@ -818,19 +819,7 @@ projectsRouter.post(
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
     const body = req.body as z.infer<typeof createEpicSchema>;
     await ensureProjectVisible(req.user!, id);
-    if (body.ownerId != null) {
-      await assertUserExists(prisma, body.ownerId, "owner_not_found", "Epic owner not found");
-      const visible = await filterActiveUsersWhoCanSeeProject(prisma, id, [body.ownerId], {
-        activeOnly: false,
-      });
-      if (!visible.has(body.ownerId)) {
-        throw new HttpError(
-          400,
-          "owner_no_project_access",
-          "Epic owner must be the project's TAM, a member, or have access to all projects",
-        );
-      }
-    }
+    if (body.ownerId != null) await assertEpicOwnerCanSeeProject(prisma, id, body.ownerId);
 
     // Appends at the end. Nothing re-packs the epic list after a delete, so a
     // plain count would collide with — or land before — an existing epic
@@ -1299,7 +1288,7 @@ projectsRouter.post(
 
 // Project-scoped labels (kept on the projects router for the nested URL)
 const createLabelSchema = z.object({
-  name: z.string().min(1).max(50),
+  name: z.string().trim().min(1).max(50),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
 });
 

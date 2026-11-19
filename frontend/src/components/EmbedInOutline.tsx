@@ -70,7 +70,7 @@ export function EmbedInOutlineDialog({
         label: GUEST_LABEL,
         expiresInDays: DEFAULT_SHARE_EXPIRY_DAYS,
       });
-      setGuestUrl(buildGuestEmbedUrl(absoluteShareUrl(res.url, window.location.origin)));
+      setGuestUrl(buildGuestEmbedUrl(absoluteShareUrl(res.url, res.baseUrl ?? window.location.origin)));
     } catch (err) {
       setError(saveErrorMessage(err, "Could not create the guest link."));
     }

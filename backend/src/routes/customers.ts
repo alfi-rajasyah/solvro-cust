@@ -7,6 +7,7 @@ import { logger } from "../logger.js";
 // services router lives in ./services.ts; this file owns the customer-side mapping.
 import { HttpError } from "../http/errors.js";
 import { assertUserExists } from "../lib/userRefs.js";
+import { customerExistsError, isCustomerNameConflict } from "../lib/customerConflict.js";
 import { validate } from "../http/validate.js";
 import { outlineUrlSchema } from "../lib/outlineUrl.js";
 import {
@@ -520,11 +521,16 @@ customersRouter.post(
     if (tamId != null) {
       data.tam = { connect: { id: tamId } };
     }
-    const customer = await prisma.customer.create({
-      data,
-      include: { tam: { select: { id: true, username: true } } },
-    });
-    res.status(201).json(customer);
+    try {
+      const customer = await prisma.customer.create({
+        data,
+        include: { tam: { select: { id: true, username: true } } },
+      });
+      res.status(201).json(customer);
+    } catch (e) {
+      if (isCustomerNameConflict(e)) throw customerExistsError();
+      throw e;
+    }
   },
 );
 
@@ -600,11 +606,17 @@ customersRouter.patch(
         data.tam = { connect: { id: body.tamId } };
       }
     }
-    const updated = await prisma.customer.update({
-      where: { id },
-      data,
-      include: { tam: { select: { id: true, username: true } } },
-    });
+    let updated;
+    try {
+      updated = await prisma.customer.update({
+        where: { id },
+        data,
+        include: { tam: { select: { id: true, username: true } } },
+      });
+    } catch (e) {
+      if (isCustomerNameConflict(e)) throw customerExistsError();
+      throw e;
+    }
     if (ownerChange) {
       // ActivityEvent has no customer scope (project only), so the owner
       // change is recorded in the structured application log.

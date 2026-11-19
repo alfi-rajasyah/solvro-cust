@@ -227,7 +227,7 @@ function ProjectShareDialog({
 }
 
 function NewLinkPanel({ link }: { link: CreatedShareLink }) {
-  const url = absoluteShareUrl(link.url, window.location.origin);
+  const url = absoluteShareUrl(link.url, link.baseUrl ?? window.location.origin);
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const input = useRef<HTMLInputElement>(null);

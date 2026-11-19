@@ -331,11 +331,16 @@ export interface ShareLink {
   createdBy: { id: number; username: string } | null;
 }
 
-/** POST /projects/:id/share-links — `url` is the `/share/<token>` link, shown once. */
+/**
+ * POST /projects/:id/share-links — `url` is the `/share/<token>` link, shown
+ * once. `baseUrl` is the server's configured public address (APP_URL), or null
+ * when none is set; the link a guest opens is `baseUrl` + `url`.
+ */
 export interface CreatedShareLink {
   id: number;
   label: string | null;
   url: string;
+  baseUrl: string | null;
   expiresAt: string;
   createdAt: string;
 }

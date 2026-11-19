@@ -52,7 +52,7 @@ export function resolveAppUrl(raw: string | undefined, nodeEnv: string): string 
   return parseAppUrl(raw) ?? undefined;
 }
 
-function isLoopbackHost(hostname: string): boolean {
+export function isLoopbackHost(hostname: string): boolean {
   return (
     hostname === "localhost" ||
     hostname.endsWith(".localhost") ||
