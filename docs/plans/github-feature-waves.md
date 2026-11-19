@@ -1,6 +1,6 @@
 # GitHub feature issues #88–#95: wave plan
 
-Status: planned (triage 2026-11-19 @ `7d101ef`)
+Status: in progress (triage 2026-11-19 @ `7d101ef`; wave A started 2026-11-19)
 Archive path: `docs/archive/plans/github-feature-waves.md`
 
 Triage of the eight open GitHub feature issues into waves after the design-cleanup wave. Each wave has 2–3 streams whose files do not overlap. `frontend/src/lib/queries.ts` (spine) has at most one writer per wave; `frontend/src/pages/views/ProjectList.tsx` has one writer per wave.
@@ -45,3 +45,15 @@ Order: A2 before B1 (`ProjectDetail.tsx`); #91 backend before its frontend; B1 b
 6. #92: (a) `report:executive` holders org-wide (like `/reports/executive`) or limited to visible projects? (b) others: only themselves, or also people assigned in projects they own? (c) count subtasks separately? (d) without iTop: Workload tab only?
 7. #93: (a) may team members edit the customer itself (ties to ISS-012) or only its projects? (b) who manages an unowned customer's team? (c) does team membership count as "my projects" in Daily Review? (d) skip adding team members as ProjectMember on assignment? (e) make a project-less customer visible to its team? (f) keep `customer:write` plus the owner rule as the gate?
 8. #95: a ⋯ overlay button on the card link (Lane S), or rebuild the card so link and menu are siblings (Lane P, cleaner for accessibility)?
+
+## Decisions (user, 2026-11-19)
+
+- #88: save on blur, Escape cancels (default). The user reported the description "doesn't appear anywhere" after filling it: until #88 it showed only on Kanban cards (two lines) and in the edit form.
+- #94: `?epicFilter=`; the filter state survives tab switches; Gantt exports stay unfiltered.
+- #91: free whole numbers 0–100; totals count top-level tasks only; changes logged (including the value set at creation); not in the Gantt exports; "duplicating a project" read as task and section duplicate.
+- #90: bulk assign refuses inactive users; cap 200 tasks per bulk edit. (ISS-029 for the single-task path stays open.)
+- #92: `report:executive` holders see workload org-wide.
+- #93: customer-team members may edit the customer itself, not only its projects (ties to ISS-012).
+- #95: rebuild the card so the link and the ⋯ menu are siblings.
+
+Still open: #89 (2b subtask rule), #92 (6b–6d), #93 (7b–7f).

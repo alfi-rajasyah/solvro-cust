@@ -437,6 +437,14 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Cosmetic. Fix: sentence-case chip text and scale classes (icons bound by ISS-056).
 - **Source:** phase review of `docs/archive/plans/design-cleanup.md`
 
+### ISS-198 · P3 · The task panel title editor loses focus and can drop its draft on Escape
+
+- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ feature wave A review
+- **Where:** title editor (editingTitle input) in frontend/src/components/TaskPanel.tsx (~584-610)
+- **Problem:** Escape closes the whole panel; whether the draft saves depends on the browser firing blur as the input unmounts; focus is not returned, and the button has no focus-visible style. The new description editor already handles all three.
+- **Why deferred / fix direction:** Fix: mirror the description editor (Escape cancels and keeps the panel open, settled ref, focus return, DESIGN.md §4 focus style).
+- **Source:** review of GitHub #88 (`docs/plans/github-feature-waves.md`)
+
 ## Open — Accessibility & tokens
 
 ### ISS-081 · P2 · Landmark, heading-order and nested-interactive axe gaps remain
@@ -921,6 +929,14 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** Only vite.config.ts is in the node tsconfig, so vitest.config.ts is covered by neither config.
 - **Why deferred / fix direction:** Vitest fails at load on a broken config anyway. Fix: add vitest.config.ts to the include.
 - **Source:** phase review of `docs/archive/plans/typecheck-and-test-hygiene.md`
+
+### ISS-199 · P3 · e2e login() fails under parallel load on a shared dev server
+
+- **Type:** test-gap · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ feature wave A review
+- **Where:** login() in e2e/fixtures/seed.ts (~67); loginViaUi in e2e/fixtures/test.ts (~69)
+- **Problem:** A login request failed once while several local runs shared the dev server, and loginViaUi waits out the test timeout when the sign-in form shows the Google option (ISS-162).
+- **Why deferred / fix direction:** Local-only. Fix: retry or back off in login(); handle the collapsed admin sign-in in loginViaUi.
+- **Source:** review of GitHub #88 (`docs/plans/github-feature-waves.md`)
 
 ## Open — Dev env & ops
 
