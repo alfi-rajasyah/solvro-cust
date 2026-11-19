@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-19 — Gantt errors, Dates cell and section permissions
+
+- Gantt: a failed date, reorder, move, Critical Path or dependency update always shows its error, even when another update starts right after it.
+- Gantt: the Dates cell no longer shows the date range twice while its editor is open. When the editor closes, focus returns to the cell only if nothing else took it.
+- Gantt: Add section, section reorder and section colour need the project-edit permission, matching the server, and a section row refuses a drop without it, so a role with task edit only no longer sees actions that end in a 403 or a drop that silently reverts.
+
 ### Fixed — 2026-11-19 — Keyboard drag on boards and reorder lists
 
 - Keyboard drag works on the Kanban board and the iTop ticket board: the drag grip is a focusable button (Space to lift, arrow keys to move, Space to drop), and the card wrapper is no longer a stray button.
