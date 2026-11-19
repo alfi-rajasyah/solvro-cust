@@ -20,7 +20,7 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Type:** watch · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
 - **Where:** token ownership check in backend/src/routes/itopUser.ts (line ~222)
 - **Problem:** iTop has no whoami, so a token whose profile reads PersonalToken beyond its own user still passes the check. This is impersonation by a foreign credential, not privilege escalation.
-- **Why deferred / fix direction:** Grant PersonalToken read narrowly or add an iTop-side whoami extension; verify on the real install.
+- **Why deferred / fix direction:** Grant PersonalToken read narrowly or add an iTop-side whoami extension; verify on the real install. User decision 2026-11-18: stays open as `watch`, not accepted.
 - **Source:** snapshot line 2138, section "iTop integration Phase 5 — deferred findings (2026-09-23)"
 
 ### ISS-002 · P2 · DELETE /customers/:id lets the TAM of one project delete an unowned customer
@@ -55,6 +55,14 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Deferred by the user. Require the token when the address changes.
 - **Source:** snapshot line 2430, section "iTop and Outline hardening — deferred findings (2026-10-26)"
 
+### ISS-009 · P2 · Shared pino logger has no redact paths for iTop tokens
+
+- **Type:** debt · **Found:** 2026-09-22 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Where:** pino() call in backend/src/logger.ts (line 4)
+- **Problem:** Nothing logs the iTop token today, but the logger has no redact list as a safety net for token or Auth-Token fields.
+- **Why deferred / fix direction:** Raised to P2 by the user 2026-11-18: it guards the iTop and OAuth tokens. Add a redact array for token, Auth-Token and the per-user token fields.
+- **Source:** snapshot line 2001, section "iTop integration Phase 1 — deferred findings (2026-09-22)"
+
 ### ISS-006 · P3 · Per-email sign-in lockout can be triggered against a colleague
 
 - **Type:** watch · **Found:** 2026-10-22 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -78,14 +86,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** A custom role holding task:write only can duplicate tasks it could not create through the form. This was a deliberate plan decision.
 - **Why deferred / fix direction:** Revisit if custom roles start splitting the two permissions.
 - **Source:** snapshot line 1863, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
-
-### ISS-009 · P3 · Shared pino logger has no redact paths for iTop tokens
-
-- **Type:** debt · **Found:** 2026-09-22 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** pino() call in backend/src/logger.ts (line 4)
-- **Problem:** Nothing logs the iTop token today, but the logger has no redact list as a safety net for token or Auth-Token fields.
-- **Why deferred / fix direction:** Add a redact array for token, Auth-Token and the per-user token fields.
-- **Source:** snapshot line 2001, section "iTop integration Phase 1 — deferred findings (2026-09-22)"
 
 ### ISS-010 · P3 · Guest link pages contact Google for fonts
 
@@ -533,14 +533,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Type the fields and fix the comment, or trim the response with a real select.
 - **Source:** snapshot line 1984, section "iTop integration Phase 1 — deferred findings (2026-09-22)"
 
-### ISS-065 · P3 · useItopTicket weekly hours can be stale after a timezone change
-
-- **Type:** watch · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** useItopTicket in frontend/src/lib/queries.ts (line ~3538)
-- **Problem:** utcOffsetMinutes is sent on the request but is not part of queryKeys.itopTicket, so the 'x h this week' figure stays stale until staleTime elapses after a DST or timezone change. The omission is deliberate because other hooks write to the same key.
-- **Why deferred / fix direction:** Accepted: revisit only if stale weekly hours are reported; folding the offset into the key would also require updating the other hooks' cache writes.
-- **Source:** snapshot line 2274, section "iTop integration Phase 7 — deferred findings (2026-09-23)"
-
 ### ISS-066 · P3 · TaskPanel spins forever when the project-tasks fetch fails
 
 - **Type:** bug · **Found:** 2026-09-29 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -973,22 +965,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Trigger: go-live on the real install; re-test the save and set the env var if refused.
 - **Source:** snapshot line 2314, section "iTop integration — real-install findings (2026-09-24)"
 
-### ISS-119 · P3 · iTop personal-token expiry is only read when iTop allows it
-
-- **Type:** watch · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** PUT /itop/me/token in backend/src/routes/itopUser.ts
-- **Problem:** On installs where PersonalToken is unreadable, expiresAt stays null and Settings cannot warn before the token expires.
-- **Why deferred / fix direction:** Accepted limitation; grant PersonalToken read to the TAM profile if warnings matter.
-- **Source:** snapshot line 2112, section "iTop integration Phase 5 — deferred findings (2026-09-23)"
-
-### ISS-120 · P3 · iTop token write rights are not checked when the token is saved
-
-- **Type:** watch · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** listOperations probe in backend/src/routes/itopUser.ts (line ~202)
-- **Problem:** list_operations shows what the server supports, not what the token's profile may do, so a read-only token saves cleanly and fails on the first write.
-- **Why deferred / fix direction:** Consider a trial dry run if iTop ever offers one.
-- **Source:** snapshot line 2125, section "iTop integration Phase 5 — deferred findings (2026-09-23)"
-
 ### ISS-121 · P3 · iTop board drag transitions assume the default lifecycle
 
 - **Type:** watch · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -1012,14 +988,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** iTop Community does not bundle the Time Tracking extension, so the duration unit and ticket_ref checks cannot run until it is installed from iTop Hub.
 - **Why deferred / fix direction:** Trigger: extension installed on the real install; then run the duration and ticket_ref probes.
 - **Source:** snapshot line 2315, section "iTop integration — real-install findings (2026-09-24)"
-
-### ISS-124 · P3 · pending_reason assumed free text; a list-valued install refuses it
-
-- **Type:** watch · **Found:** 2026-09-24 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** pending_reason in backend/src/routes/itop.ts (line ~853)
-- **Problem:** An install that turns pending_reason into a list of values rejects free text and the user sees iTop's message.
-- **Why deferred / fix direction:** Trigger: an install with a constrained pending_reason; then fetch the allowed values and offer a picker.
-- **Source:** snapshot line 2316, section "iTop integration — real-install findings (2026-09-24)"
 
 ### ISS-125 · P3 · An iTop full sync that always exceeds the run budget never completes
 
@@ -1102,14 +1070,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** The live Gantt hatches the incomplete portion and draws a thin squared rollup, while the PDF still draws a flat overlay and a rounded pill. The in-file comment records this as accepted.
 - **Why deferred / fix direction:** Sync the PDF drawing only if customers notice the mismatch.
 - **Source:** snapshot line 1478, section "Gantt visual refresh — deferred findings (2026-08-03)"
-
-### ISS-135 · P3 · Gantt Excel export omits the pinned iTop ticket
-
-- **Type:** decision · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** buildTasksSheet in frontend/src/lib/gantt/exportExcel.ts
-- **Problem:** No column carries a task's itopTicketRef, which would be safe for customers to see. Adding it also means threading the field through the Gantt row adapter.
-- **Why deferred / fix direction:** Decide whether the export should include it; exportExcel.ts is spine, so changes need an instant review.
-- **Source:** snapshot line 2094, section "iTop integration Phase 4 — deferred findings (2026-09-23)"
 
 ## Open — Tests & CI
 
@@ -1415,4 +1375,10 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 
 ## Closed
 
-No issue has been closed since the 2026-11-18 restructure. Entries closed during the restructure are in the ledger in `docs/archive/plans/issues-restructure.md`, not here.
+Entries closed during the 2026-11-18 restructure are in the ledger in `docs/archive/plans/issues-restructure.md`, not here.
+
+- ISS-065 · 2026-11-18 · accepted by the user: the offset stays out of the query key on purpose (comment in `queries.ts`) · useItopTicket weekly hours can be stale after a timezone change
+- ISS-119 · 2026-11-18 · accepted by the user: iTop limits what Solvro can read; no code change · iTop personal-token expiry is only read when iTop allows it
+- ISS-120 · 2026-11-18 · accepted by the user: iTop cannot report token rights up front · iTop token write rights are not checked when the token is saved
+- ISS-124 · 2026-11-18 · accepted by the user: the user sees iTop's own refusal text · pending_reason assumed free text; a list-valued install refuses it
+- ISS-135 · 2026-11-18 · decided by the user: customer exports do not show iTop ticket refs · Gantt Excel export omits the pinned iTop ticket
