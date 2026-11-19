@@ -15,6 +15,14 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-19 — Task form, task panel and section permissions
+
+- The create-task parent picker offers top-level tasks only; it no longer lists subtasks, which the server rejects as a parent.
+- The subtask "done" checkbox in the task form is disabled for users without task edit permission.
+- Errors in the task side panel (failed delete, duplicate or update) now appear at the top of the panel and scroll into view, instead of below the subtasks list.
+- The task side panel shows "Could not load this task" with a Retry button when the project's tasks fail to load, instead of "Loading task…" forever.
+- The section buttons in the list view (add, reorder, rename, duplicate, delete) now require project:write, matching the server; renaming the "No section" group also requires task:write.
+
 ### Fixed — 2026-11-19 — Task ordering, date and epic-owner checks
 
 - Deleting a task now closes the gap in its sibling list, so positions stay 0..n-1.

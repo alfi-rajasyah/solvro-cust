@@ -126,6 +126,9 @@ export function ProjectList() {
   const { project } = useProjectContext();
   const { user } = useAuth();
   const canEdit = hasPermission(user, "task:write");
+  // Section create/rename/reorder/duplicate/delete routes require project:write,
+  // not task:write (backend/src/routes/sections.ts, routes/projects.ts).
+  const canManageSections = hasPermission(user, "project:write");
   const [, setSearchParams] = useSearchParams();
 
   const { data: tasks, isLoading: tasksLoading, isError, error } = useProjectTasks(project.id);
@@ -521,7 +524,7 @@ export function ProjectList() {
             </>
           )}
         </div>
-        {canEdit && (sections?.length ?? 0) >= 2 && (
+        {canManageSections && (sections?.length ?? 0) >= 2 && (
           <button
             type="button"
             onClick={() => setReorderingSections(true)}
@@ -531,7 +534,7 @@ export function ProjectList() {
             Reorder sections
           </button>
         )}
-        {canEdit && (
+        {canManageSections && (
           <button
             type="button"
             onClick={() => setAddingSection(true)}
@@ -585,6 +588,7 @@ export function ProjectList() {
               nodes={g.tasks}
               collapsed={collapsed.has(groupKeyOf(g.section?.id ?? null))}
               canEdit={canEdit}
+              canManageSections={canManageSections}
               users={users ?? []}
               epicMap={epicMap}
               ticketCtx={ticketCtx}
@@ -690,6 +694,7 @@ interface SectionGroupProps {
   nodes: TaskNode[];
   collapsed: boolean;
   canEdit: boolean;
+  canManageSections: boolean;
   users: { id: number; username: string }[];
   epicMap: Map<number, Epic>;
   ticketCtx: RowTicketContext | null;
@@ -718,6 +723,7 @@ function SectionGroup({
   nodes,
   collapsed,
   canEdit,
+  canManageSections,
   users,
   epicMap,
   ticketCtx,
@@ -799,7 +805,7 @@ function SectionGroup({
         <span className="rounded-full bg-surface-container-high px-1.5 py-0 font-mono text-meta text-on-surface-variant">
           {nodes.length}
         </span>
-        {canEdit && !isRenaming && (
+        {canManageSections && (section !== null || canEdit) && !isRenaming && (
           <div className="ml-auto flex items-center gap-1 [@media(pointer:coarse)]:gap-5">
             <button
               type="button"
