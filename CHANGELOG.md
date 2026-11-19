@@ -15,6 +15,14 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-19 — Keyboard focus and contrast fixes
+
+- Install banner: the dismiss control is a separate, keyboard-reachable button instead of a button nested inside a button; both banner buttons show a visible focus ring, and the banner keeps its 44px height on touch screens.
+- Dialogs: pressing Tab while focus is on a non-tabbable element inside a dialog (such as the Guest links heading) now wraps within the dialog instead of leaving it.
+- Task, epic and ticket panels: closing the panel returns focus to the control that opened it, not to the previous task's opener.
+- Admin > Task statuses: the primary button shows a solid focus ring with an offset.
+- Confirmation dialogs: the warning-tone confirm button uses the theme's amber chip colours in light and dark themes, with a darkening hover; the dialog buttons follow the app's keyboard focus styles.
+
 ### Fixed — 2026-11-19 — Task form, task panel and section permissions
 
 - The create-task parent picker offers top-level tasks only; it no longer lists subtasks, which the server rejects as a parent.

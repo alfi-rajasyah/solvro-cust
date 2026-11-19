@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Modal } from "@/components/Modal";
 import { SkeletonRegion } from "@/components/skeletons/SkeletonRegion";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -86,18 +86,6 @@ function ProjectShareDialog({
   // Revoke button it replaced) is gone by then, and focus on <body> would let
   // the next Tab leave the dialog.
   const listHeading = useRef<HTMLHeadingElement>(null);
-  const listSection = useRef<HTMLElement>(null);
-  const labelInput = useRef<HTMLInputElement>(null);
-
-  // The heading is focusable but not tabbable, so the dialog's Tab trap (which
-  // only wraps from the last tabbable element) would let a forward Tab from it
-  // leave the dialog when no Revoke button follows. Wrap to the first field.
-  function handleHeadingKeyDown(e: KeyboardEvent<HTMLHeadingElement>) {
-    if (e.key !== "Tab" || e.shiftKey) return;
-    if (listSection.current?.querySelector("button:not([disabled])")) return;
-    e.preventDefault();
-    labelInput.current?.focus();
-  }
 
   function close() {
     // The new link is dropped on purpose: it is shown once and never stored.
@@ -161,7 +149,6 @@ function ProjectShareDialog({
                 Label (optional)
               </span>
               <input
-                ref={labelInput}
                 type="text"
                 value={label}
                 maxLength={SHARE_LABEL_MAX}
@@ -196,12 +183,11 @@ function ProjectShareDialog({
 
         {created && <NewLinkPanel link={created} />}
 
-        <section ref={listSection} aria-labelledby="share-links-heading">
+        <section aria-labelledby="share-links-heading">
           <h3
             id="share-links-heading"
             ref={listHeading}
             tabIndex={-1}
-            onKeyDown={handleHeadingKeyDown}
             className="mb-2 text-label-caps uppercase text-on-surface-variant outline-hidden"
           >
             Guest links

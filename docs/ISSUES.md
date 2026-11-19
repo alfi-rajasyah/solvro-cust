@@ -600,14 +600,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Fix the landmark and heading structure, drop those rules from KNOWN_GAP_RULES, and add a task-panel scan.
 - **Source:** snapshot line 2393, section "Accessibility pass — deferred findings (2026-10-23)"
 
-### ISS-082 · P2 · InstallBanner nests a role=button span inside a button
-
-- **Type:** bug · **Found:** 2026-11-12 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** dismiss span in frontend/src/components/InstallBanner.tsx (line ~86)
-- **Problem:** Interactive content inside a button is invalid and the dismiss control is not keyboard reachable.
-- **Why deferred / fix direction:** Use a sibling button, as the iOS-hint branch already does.
-- **Source:** snapshot line 2456, section "Antislop port — deferred findings (2026-11-12)"
-
 ### ISS-083 · P3 · Sidebar nav text uses slate greys instead of the warm design grey
 
 - **Type:** debt · **Found:** 2026-07-20 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -664,14 +656,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Patch it with a marker; reui/ is spine, so it needs an instant review.
 - **Source:** snapshot line 1503, section "Gantt visual refresh — deferred findings (2026-08-03)"
 
-### ISS-090 · P3 · ConfirmModal warning tone uses raw bg-amber-500 instead of the chip-amber pair
-
-- **Type:** debt · **Found:** 2026-08-29 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** confirmClass in frontend/src/components/ConfirmModal.tsx (line ~27)
-- **Problem:** The warning confirm button hard-codes amber-500 with white text instead of the chip-amber token pair. Three delete-confirmation dialogs in Daily Review use it.
-- **Why deferred / fix direction:** Swap the warning branch to the chip-amber background and text tokens.
-- **Source:** snapshot line 1696, section "Daily Review v2 — deferred findings (2026-08-29)"; merged duplicates at snapshot lines 2450
-
 ### ISS-091 · P3 · Older focus:border-primary pattern persists at about 70 sites
 
 - **Type:** debt · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -679,30 +663,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** DESIGN.md names one focus treatment and excludes border-primary, yet the older form still appears at about 70 sites and keeps spreading.
 - **Why deferred / fix direction:** Do one design-system sweep to align every site.
 - **Source:** snapshot line 2081, section "iTop integration Phase 4 — deferred findings (2026-09-23)"
-
-### ISS-092 · P3 · Dialog focus trap lets Tab escape from a tabIndex=-1 element
-
-- **Type:** bug · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** keydown handler in frontend/src/hooks/useDialogFocus.ts (line ~58)
-- **Problem:** Focus on a non-tabbable element such as a programmatically focused heading can Tab out of the dialog when nothing tabbable follows it. ProjectShare works around it locally.
-- **Why deferred / fix direction:** Handle focus outside the item list in the shared hook, then remove the local workaround.
-- **Source:** snapshot line 2354, section "Collaboration & sharing, Phase 6 ("Guest links") — deferred findings (2026-09-30)"
-
-### ISS-093 · P3 · usePanelFocus returns focus to the previous task's opener
-
-- **Type:** bug · **Found:** 2026-10-23 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** usePanelFocus in frontend/src/hooks/usePanelFocus.ts (line ~23)
-- **Problem:** When a click does not focus a button (Safari, Firefox on macOS), switching the panel from task A to B keeps A's opener, so closing B returns focus to A.
-- **Why deferred / fix direction:** Record the last focus outside the panel with a focusin listener.
-- **Source:** snapshot line 2394, section "Accessibility pass — deferred findings (2026-10-23)"
-
-### ISS-094 · P3 · Task statuses primary button has a weak keyboard focus cue
-
-- **Type:** bug · **Found:** 2026-11-13 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** BTN_PRIMARY in frontend/src/components/admin/TaskStatusesTab.tsx (line ~71)
-- **Problem:** The focus border matches the green fill, so only the ring-primary/30 ring shows, below 3:1 contrast.
-- **Why deferred / fix direction:** Use the solid ring with ring-offset-2 on that button.
-- **Source:** snapshot line 2458, section "Antislop port — deferred findings (2026-11-12)"
 
 ## Open — Gantt
 
@@ -1321,6 +1281,11 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-065 · 2026-11-18 · accepted by the user: the offset stays out of the query key on purpose (comment in `queries.ts`) · useItopTicket weekly hours can be stale after a timezone change
 - ISS-066 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · TaskPanel spins forever when the project-tasks fetch fails
 - ISS-075 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · Utilization Refresh failure shows no error
+- ISS-082 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · InstallBanner nests a role=button span inside a button
+- ISS-090 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · ConfirmModal warning tone uses raw bg-amber-500 instead of the chip-amber pair
+- ISS-092 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · Dialog focus trap lets Tab escape from a tabIndex=-1 element
+- ISS-093 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · usePanelFocus returns focus to the previous task's opener
+- ISS-094 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · Task statuses primary button has a weak keyboard focus cue
 - ISS-115 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · GET /itop/services lists every iTop organisation's services to any signed-in user
 - ISS-119 · 2026-11-18 · accepted by the user: iTop limits what Solvro can read; no code change · iTop personal-token expiry is only read when iTop allows it
 - ISS-120 · 2026-11-18 · accepted by the user: iTop cannot report token rights up front · iTop token write rights are not checked when the token is saved

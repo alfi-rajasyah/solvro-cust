@@ -67,43 +67,44 @@ export function InstallBanner() {
     setDeferredPrompt(null);
   }
 
-  function handleDismiss(e: React.MouseEvent) {
-    e.stopPropagation();
+  function handleDismiss() {
     localStorage.setItem(deferredPrompt ? DISMISS_KEY : IOS_HINT_DISMISS_KEY, "1");
     setDismissed(true);
   }
 
   if (deferredPrompt) {
     return (
-      <button
-        type="button"
-        onClick={handleInstallTap}
-        className="[@media(pointer:coarse)]:min-h-11 flex w-full items-center gap-1.5 bg-primary px-3 py-1.5 text-left text-meta font-semibold text-on-primary md:hidden"
-      >
-        <span aria-hidden="true" className="material-symbols-outlined text-[14px]">download</span>
-        <span className="flex-1">Install Solvro: add to home screen</span>
-        <span
-          role="button"
+      <div className="flex w-full items-center gap-1.5 bg-primary px-3 py-1.5 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:py-0 text-meta font-semibold text-on-primary md:hidden">
+        <button
+          type="button"
+          onClick={handleInstallTap}
+          className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch text-left outline-hidden focus-visible:ring-2 focus-visible:ring-on-primary"
+        >
+          <span aria-hidden="true" className="material-symbols-outlined text-[14px]">download</span>
+          <span className="flex-1">Install Solvro: add to home screen</span>
+        </button>
+        <button
+          type="button"
           aria-label="Dismiss install banner"
           onClick={handleDismiss}
-          className="tap-target material-symbols-outlined text-[16px]"
+          className="tap-target material-symbols-outlined text-[16px] outline-hidden focus-visible:ring-2 focus-visible:ring-on-primary"
         >
           close
-        </span>
-      </button>
+        </button>
+      </div>
     );
   }
 
   if (showIosHint) {
     return (
-      <div className="flex w-full items-center gap-1.5 bg-primary px-3 py-1.5 text-meta font-semibold text-on-primary md:hidden">
+      <div className="flex w-full items-center gap-1.5 bg-primary px-3 py-1.5 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:py-0 text-meta font-semibold text-on-primary md:hidden">
         <span aria-hidden="true" className="material-symbols-outlined text-[14px]">ios_share</span>
         <span className="flex-1">Add to Home Screen from the share menu</span>
         <button
           type="button"
           aria-label="Dismiss install hint"
           onClick={handleDismiss}
-          className="tap-target material-symbols-outlined text-[16px]"
+          className="tap-target material-symbols-outlined text-[16px] outline-hidden focus-visible:ring-2 focus-visible:ring-on-primary"
         >
           close
         </button>
