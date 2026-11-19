@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-19 — iTop customer-page e2e tests
+
+- The iTop Tickets board and ticket panel end-to-end tests now give the test customer an iTop organisation, which the customer page has required for its Tickets tab since the change that reads `itopOrgId` directly. Without it the tab never appeared and the tests timed out.
+
 ### Fixed — 2026-11-18 — iTop hardening: log redaction, address token check, Refresh, services scope
 
 - The shared server logger now redacts secret-shaped fields (iTop application and personal tokens, `Authorization` and `Auth-Token` in any letter case listed, OAuth tokens, passwords and secrets) as `[Redacted]`, at the top level and up to two levels deep (`backend/src/logger.ts`).

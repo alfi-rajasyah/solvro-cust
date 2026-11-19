@@ -196,3 +196,18 @@ export async function touchDrag(
   await dispatch("touchEnd", 0, 0);
   await page.waitForTimeout(1500);
 }
+
+/** The customer page shows the Tickets tab only for a customer mapped to an
+ * iTop organisation (`itopOrgId`, CustomerDetail.tsx). The seeded customer is
+ * not mapped, so the customer read is patched with a mapping. */
+export async function mockCustomerOrgMapping(page: Page): Promise<void> {
+  await page.route("**/api/customers/*", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { ...body, itopOrgId: 4242, itopOrgName: "Northwind Freight Sdn Bhd" },
+    });
+  });
+}
