@@ -66,7 +66,7 @@ docker compose logs -f backend          # tail a service
 docker compose down                     # stop; -v also wipes postgres (DESTRUCTIVE)
 # app :5173 · API :3000/health · postgres :5432
 
-docker compose exec backend  npx tsc --noEmit    # typecheck backend
+docker compose exec backend  npm run typecheck   # typecheck backend (src, test, scripts)
 docker compose exec frontend npm run typecheck   # typecheck frontend
 docker compose exec backend  npm test            # backend vitest — use the isolated test DB, see backend/CLAUDE.md
 cd e2e && npm test                               # playwright, desktop + mobile

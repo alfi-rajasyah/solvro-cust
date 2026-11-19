@@ -1,5 +1,5 @@
 import { test, expect, loginViaUi, apiBase, captureTaskRequests } from "../fixtures/test";
-import { getTasks, type SeededTask } from "../fixtures/seed";
+import { createTask, getTasks, type SeededTask } from "../fixtures/seed";
 import type { Locator, Page } from "@playwright/test";
 
 // DateField swap plan, Task 5 — e2e coverage for the ReUI-calendar date
@@ -138,30 +138,6 @@ function ddmmyyyy(day: string): string {
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   return `${dd}/${mm}/${d.getFullYear()}`;
-}
-
-interface CreateTaskInput {
-  title: string;
-  status?: string;
-  startDate?: string | null;
-  dueDate?: string | null;
-  isMilestone?: boolean;
-}
-
-async function createTask(
-  base: string,
-  token: string,
-  projectId: number,
-  input: CreateTaskInput,
-): Promise<SeededTask> {
-  const res = await fetch(`${base}/api/projects/${projectId}/tasks`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  const body = await res.text();
-  expect(res.ok, `createTask(${input.title}) failed: ${res.status} ${body}`).toBe(true);
-  return JSON.parse(body) as SeededTask;
 }
 
 async function openTaskPanel(page: Page, projectId: number, taskId: number): Promise<Locator> {

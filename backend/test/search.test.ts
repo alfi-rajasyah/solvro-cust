@@ -130,6 +130,69 @@ describe("GET /search", () => {
     expect(res.body.customers).toHaveLength(8);
   });
 
+  it("caps projects and tasks at 8 results each", async () => {
+    const { token, userId } = await createAdminAndToken();
+    const n = needle();
+    const projects = [];
+    for (let i = 0; i < 10; i++) {
+      projects.push(await prisma.project.create({ data: { name: `${n} cap ${i}`, tamId: userId } }));
+    }
+    for (let i = 0; i < 10; i++) {
+      await prisma.task.create({
+        data: { statusId: SID.TODO, title: `${n} cap ${i}`, projectId: projects[0].id, position: i },
+      });
+    }
+
+    const res = await request(app)
+      .get("/search")
+      .query({ q: n })
+      .set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.projects).toHaveLength(8);
+    expect(res.body.tasks).toHaveLength(8);
+  });
+
+  it("orders each group by name ascending", async () => {
+    const { token, userId } = await createAdminAndToken();
+    const n = needle();
+    // Created out of order so insertion order can't satisfy the assertion.
+    const names = [`${n} c`, `${n} a`, `${n} b`];
+    let projectId = 0;
+    for (const name of names) {
+      const p = await prisma.project.create({ data: { name, tamId: userId } });
+      projectId = p.id;
+      await prisma.customer.create({ data: { name, description: "d" } });
+      await prisma.task.create({
+        data: { statusId: SID.TODO, title: name, projectId, position: 0 },
+      });
+    }
+
+    const res = await request(app)
+      .get("/search")
+      .query({ q: n })
+      .set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    const sorted = [`${n} a`, `${n} b`, `${n} c`];
+    expect(res.body.projects.map((p: { name: string }) => p.name)).toEqual(sorted);
+    expect(res.body.tasks.map((t: { title: string }) => t.title)).toEqual(sorted);
+    expect(res.body.customers.map((c: { name: string }) => c.name)).toEqual(sorted);
+  });
+
+  it("accepts q of exactly 100 chars and rejects 101 with 400", async () => {
+    const { token } = await createAdminAndToken();
+    const ok = await request(app)
+      .get("/search")
+      .query({ q: "x".repeat(100) })
+      .set("Authorization", `Bearer ${token}`);
+    expect(ok.status).toBe(200);
+
+    const tooLong = await request(app)
+      .get("/search")
+      .query({ q: "x".repeat(101) })
+      .set("Authorization", `Bearer ${token}`);
+    expect(tooLong.status).toBe(400);
+  });
+
   it("scopes projects and tasks by projectVisibilityFilter (TAM sees own only; admin sees all)", async () => {
     const tam = await createUserWithRole("TAM");
     const otherTam = await createUserWithRole("TAM");
@@ -214,6 +277,16 @@ describe("GET /search", () => {
     expect(literalRes.body.projects.map((p: { name: string }) => p.name)).toEqual([
       `${n} 100% done`,
     ]);
+
+    // A literal "_" must match only a literal underscore, not any one char.
+    await prisma.project.create({ data: { name: `${n} a_b`, tamId: userId } });
+    await prisma.project.create({ data: { name: `${n} aXb`, tamId: userId } });
+    const underscoreRes = await request(app)
+      .get("/search")
+      .query({ q: `${n} a_b` })
+      .set("Authorization", `Bearer ${token}`);
+    expect(underscoreRes.status).toBe(200);
+    expect(underscoreRes.body.projects.map((p: { name: string }) => p.name)).toEqual([`${n} a_b`]);
 
     // "%%" passes min(2) but must not become a match-everything wildcard.
     const wildcardRes = await request(app)

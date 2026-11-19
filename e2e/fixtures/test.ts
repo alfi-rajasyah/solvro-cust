@@ -1,10 +1,12 @@
 import { test as base, type Page, type Request, type TestInfo } from "@playwright/test";
 import { seedFixture, type SeededFixture } from "./seed";
 
-// Worker-scoped fixture: one seeded project per worker (effectively per test
-// file, since playwright.config.ts pins workers: 1 and each spec file below
-// only needs a single fresh project). Avoids reseeding per-test while still
-// guaranteeing specs never depend on pre-existing data beyond the admin user.
+// Worker-scoped fixture: one seeded project per worker. playwright.config.ts
+// pins workers: 1, so the whole run (every spec file) shares ONE project and
+// earlier specs leave their tasks behind for later ones. Specs must derive
+// state from the API rather than assume a clean project, and should seed their
+// own rows instead of relying on the project being empty. (CI shards each get
+// a fresh stack, so a spec must not depend on another spec file's data.)
 interface WorkerFixtures {
   seededProject: SeededFixture;
 }

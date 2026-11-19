@@ -160,9 +160,7 @@ export interface CreateTaskInput {
 /**
  * Creates one extra task in an already-seeded project. Specs that need their
  * own throwaway rows (rather than mutating the shared fixture's
- * alpha/beta/gamma/delta) use this instead of hand-rolling the same POST —
- * date-picker.spec.ts and gantt-parity.spec.ts each still carry a private copy
- * that predates this helper and can fold into it independently.
+ * alpha/beta/gamma/delta) use this instead of hand-rolling the same POST.
  */
 export async function createTask(
   base: string,
