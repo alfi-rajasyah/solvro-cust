@@ -72,8 +72,8 @@ export function Drawer({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" && !isDragActive()) onClose();
     }
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
   // Focus: the drawer is non-modal, so nothing moves on open and there is

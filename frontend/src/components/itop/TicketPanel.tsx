@@ -98,8 +98,8 @@ export function TicketPanel({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" && !sheetOpen && !isDragActive()) onClose();
     }
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [onClose, sheetOpen]);
 
   const actionsEnabled = status?.actionsEnabled ?? false;

@@ -8,9 +8,10 @@ import { useDialogFocus } from "@/hooks/useDialogFocus";
  * `aria-pressed="true"` and an `aria-roledescription` (`draggable` from
  * useDraggable, `sortable` from useSortable) for the whole drag, pointer or
  * keyboard. Escape cancels the drag in dnd-kit's own `document` listener, so an
- * overlay's Escape listener (registered in the capture phase, so it runs first
- * whatever the subscription order) must skip its close while this holds, or one
- * keypress cancels the drag and closes the overlay (ISS-188).
+ * overlay's Escape listener must skip its close while this holds, or one
+ * keypress cancels the drag and closes the overlay (ISS-188). The listeners stay
+ * in the bubble phase so an inner widget that consumes Escape (mention picker,
+ * inline rename) can stop it first.
  */
 export function isDragActive(): boolean {
   return (
@@ -50,8 +51,8 @@ export function Modal({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" && !isDragActive()) onClose();
     }
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
   if (!open) return null;

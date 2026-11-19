@@ -38,14 +38,6 @@ describe("Modal Escape and drag guard", () => {
     expect(isDragActive()).toBe(false);
   });
 
-  it("Escape is handled in the capture phase, before a bubble listener on document", () => {
-    const order: string[] = [];
-    render(<Modal open onClose={() => order.push("modal")} title="T">body</Modal>);
-    document.addEventListener("keydown", () => order.push("later"));
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(order).toEqual(["modal", "later"]);
-  });
-
   it("an ordinary pressed toggle button is not a drag", () => {
     const b = document.createElement("button");
     b.setAttribute("aria-pressed", "true");

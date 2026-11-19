@@ -237,8 +237,8 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" && !modalOpen && !isDragActive()) onClose();
     }
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [onClose, modalOpen]);
 
   useEffect(() => {

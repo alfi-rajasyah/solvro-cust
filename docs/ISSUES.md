@@ -716,6 +716,14 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Trigger: PATCH /sections/:id fails mid-session in practice. Then re-seed the modal on settle.
 - **Source:** snapshot line 1119, section "Sortable reorder (sections + subtasks) — deferred findings (2026-07-30)"
 
+### ISS-193 · P3 · The Escape drag guard depends on listener order
+
+- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 4 review
+- **Where:** isDragActive and the Escape listeners in frontend/src/components/Modal.tsx (line ~14), TaskPanel.tsx, itop/TicketPanel.tsx, EpicPanel.tsx, Drawer.tsx
+- **Problem:** The guard works only while the panel's document listener runs before dnd-kit cancels the drag; a panel whose effect re-subscribes mid-drag (TaskPanel's onClose changes on a ProjectDetail re-render) runs after it and still closes on the same Escape. Moving the listeners to the capture phase fixes that but breaks inner widgets that consume Escape (mention picker, inline rename, status picker).
+- **Why deferred / fix direction:** Needs a mid-drag re-render; costs one reopen. Fix: make TaskPanel's onClose stable (useCallback in ProjectDetail), or track drag state from the DndContext monitor instead of the DOM.
+- **Source:** CI failure and review of `docs/archive/plans/panels-forms-board-a11y.md`
+
 ## Open — iTop
 
 ### ISS-114 · P2 · iTop TimeSpent duration unit is assumed to be seconds

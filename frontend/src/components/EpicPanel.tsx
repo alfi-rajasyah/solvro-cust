@@ -108,8 +108,8 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
       if (isDragActive()) return;
       onClose();
     }
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
   // Reset transient UI whenever the panel targets a DIFFERENT epic — mirrors
