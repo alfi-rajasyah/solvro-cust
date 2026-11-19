@@ -113,7 +113,7 @@ export function TaskCard({
               // Focusable: the engine puts dnd-kit's button role, tab stop and
               // key listener here, so Tab, Space, arrows, Space moves a card.
               aria-hidden={dragging || undefined}
-              aria-label="Drag to reorder"
+              aria-label={`Move ${task.title}`}
               className="mt-0.5 rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary inline-flex shrink-0 touch-none items-center text-on-surface-variant/80 transition-opacity md:pointer-fine:opacity-0 md:pointer-fine:group-focus-within/card:opacity-100 md:pointer-fine:group-hover/card:opacity-100"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[16px]">drag_indicator</span>

@@ -137,7 +137,9 @@ export async function gripFor(page: Page, text: string, gripLabel: string) {
   const target = page.getByText(text, { exact: true }).first();
   const tb = await target.boundingBox();
   if (!tb) return null;
-  const grips = page.locator(`[aria-label="${gripLabel}"]`);
+  // Card grips are named "<gripLabel> <text>" ("Move Alpha"); list grips are the bare label.
+  const q = (v: string) => v.replace(/"/g, '\\"');
+  const grips = page.locator(`[aria-label="${q(gripLabel)}"], [aria-label="${q(`${gripLabel} ${text}`)}"]`);
   const n = await grips.count();
   let best: { x: number; y: number; width: number; height: number } | null = null;
   let bestDist = Infinity;

@@ -40,6 +40,7 @@ import {
   statusTone,
 } from "./ticketPresentation";
 import { EMPTY_VALUE } from "@/lib/emptyValue";
+import { isDragActive } from "@/components/Modal";
 
 const CLASS_LABEL: Record<string, string> = {
   UserRequest: "User request",
@@ -95,10 +96,10 @@ export function TicketPanel({
   const sheetOpen = actionSheet !== null;
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !sheetOpen) onClose();
+      if (e.key === "Escape" && !sheetOpen && !isDragActive()) onClose();
     }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
   }, [onClose, sheetOpen]);
 
   const actionsEnabled = status?.actionsEnabled ?? false;
@@ -287,7 +288,10 @@ export function TicketPanel({
                   label="Started"
                   value={ticket.startDate ? `${ageLabel(ticket.startDate)} ago` : EMPTY_VALUE}
                 />
-                <Fact label="Last update" value={`${ageLabel(ticket.lastUpdate)} ago`} />
+                <Fact
+                  label="Last update"
+                  value={ticket.lastUpdate ? `${ageLabel(ticket.lastUpdate)} ago` : EMPTY_VALUE}
+                />
               </div>
 
               <div className="mt-5 border-t border-outline-variant pt-4">

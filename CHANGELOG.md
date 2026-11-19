@@ -15,6 +15,16 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-19 — Panels, forms and board accessibility
+
+- The epic owner picker lists people on the project (its TAM, linked customer owners, members) first and everyone else under "Not on this project", because the server refuses an owner who cannot see the project. The list stays ungrouped until project access has loaded.
+- A task that has subtasks can no longer pick a parent in the task form; the picker is disabled with a short reason.
+- The iTop ticket panel no longer shows "– ago" for "Last update" on a ticket with no update.
+- Pressing Escape while dragging cancels only the drag; it no longer also closes an open task, ticket or epic panel, a dialog or the side drawer.
+- The section reorder dialog checks the project-edit permission itself, and its Close button always works, even if a drag never ended.
+- Keyboard drag on the Kanban board and the iTop ticket board announces card titles or ticket refs and column names instead of raw ids, and names the card you are over when moving within a column. On the iTop board it also says when a target column is not an allowed move, when a drop changes nothing, and when a move waits for confirmation. Each drag handle is named after its card ("Move <title>", "Move <ref>").
+- A failed Gantt section colour change or task duplicate shows an error message instead of failing silently.
+
 ### Fixed — 2026-11-19 — Guest link address, deadlocks and plain conflict messages
 
 - Guest links, including the one used by "Embed in Outline", are built from the server's configured public address (`APP_URL`) instead of the address the owner has open, so a link copied over a tunnel or proxy opens for the guest. When `APP_URL` is unset or names a loopback address such as `http://localhost`, the link still uses the browser address.

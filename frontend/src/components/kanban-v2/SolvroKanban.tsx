@@ -63,6 +63,7 @@ import { STATUS_CATEGORY_ICON } from "@/lib/taskStatuses";
 import { STATUS_TONE_DOT_CLASS } from "@/components/StatusChip";
 import { BoardSkeleton } from "@/components/skeletons";
 import { TOOLBAR_BOX, TOOLBAR_BUTTON_PRIMARY } from "@/lib/utils";
+import { buildBoardAnnouncements } from "@/lib/dragAnnouncements";
 import { columnIdOf, projectToColumns, sortStatusDefsForBoard, sortTasksCanonical } from "./adapter";
 import { TaskCard } from "./cards";
 import { mapCommitToPatch, type KanbanCommitMetaLike } from "./commitMapper";
@@ -518,6 +519,26 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   // `columns` itself hadn't changed.
   const getItemValue = useCallback((task: Task): string => String(task.id), []);
 
+  // Keyboard-drag announcements: card titles and column names, not raw ids.
+  const announcements = useMemo(() => {
+    const titleById = new Map<string, string>();
+    const colOfCard = new Map<string, string>();
+    for (const [colId, list] of Object.entries(columns)) {
+      for (const t of list) {
+        titleById.set(String(t.id), t.title);
+        colOfCard.set(String(t.id), colId);
+      }
+    }
+    const nameOfColumn = new Map(allDefs.map((d) => [columnIdOf(d), d.name]));
+    return buildBoardAnnouncements({
+      cardLabel: (id) => titleById.get(String(id)) ?? null,
+      columnLabelOf: (id) => {
+        const key = String(id);
+        return nameOfColumn.get(key) ?? nameOfColumn.get(colOfCard.get(key) ?? "") ?? null;
+      },
+    });
+  }, [columns, allDefs]);
+
   function openTask(taskId: number) {
     setSearchParams(
       (prev) => {
@@ -748,6 +769,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
         onDragCancel={handleDragCancel}
         restoreOnCancel
         getItemValue={getItemValue}
+        accessibility={{ announcements }}
         className="flex h-full flex-col md:min-h-0 md:flex-1"
       >
         {/* Scroll-snap pager container (<md) / grid container (md:+) — real

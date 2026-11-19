@@ -138,7 +138,7 @@ test.describe("kanban — one column per custom status", () => {
     // The Active band spans past the QA column's left edge to its right edge.
     expect(activeBox!.x + activeBox!.width).toBeGreaterThanOrEqual(qaColBox!.x + qaColBox!.width - 2);
 
-    const grip = await gripFor(page, "Gamma", "Drag to reorder");
+    const grip = await gripFor(page, "Gamma", "Move");
     const header = await page.locator("h3", { hasText: QA_NAME }).boundingBox();
     expect(grip, "grip for Gamma not found").toBeTruthy();
     expect(header, "QA / UAT header not found").toBeTruthy();

@@ -6,6 +6,7 @@ import {
   SortableItemHandle,
   type SortableCommitMeta,
 } from "@/components/reui/sortable";
+import { hasPermission, useAuth } from "@/lib/auth";
 import { type Section, useProjectSections, useUpdateSection } from "@/lib/queries";
 
 interface SectionReorderModalProps {
@@ -22,6 +23,8 @@ export function SectionReorderModal({ projectId, open, onClose }: SectionReorder
   // key, so this hook joins the already-populated cache rather than firing
   // a fresh request. A cold cache would seed `order` empty (below) and pin
   // the "No sections to reorder" state.
+  const { user } = useAuth();
+  const canEdit = hasPermission(user, "project:write");
   const { data: sections } = useProjectSections(projectId);
   const updateSection = useUpdateSection(projectId);
   const [order, setOrder] = useState<Section[]>([]);
@@ -66,14 +69,32 @@ export function SectionReorderModal({ projectId, open, onClose }: SectionReorder
     updateSection.mutate({ id: moved.id, patch: { position: meta.overIndex } });
   }
 
+  // Escape and the backdrop wait for a lifted drag (Escape then cancels the
+  // drag, not the modal). The header X is a deliberate click and always closes,
+  // so a drag-end that never fired cannot strand the modal (ISS-113).
   function handleModalClose() {
     if (isDraggingRef.current) return;
     onClose();
   }
 
+  function handleHeaderClose() {
+    isDraggingRef.current = false;
+    onClose();
+  }
+
   return (
-    <Modal open={open} onClose={handleModalClose} title="Reorder sections" widthClass="max-w-md">
-      {order.length === 0 ? (
+    <Modal
+      open={open}
+      onClose={handleModalClose}
+      onHeaderClose={handleHeaderClose}
+      title="Reorder sections"
+      widthClass="max-w-md"
+    >
+      {!canEdit ? (
+        <p className="text-sm text-on-surface-variant">
+          You need permission to edit this project to reorder its sections.
+        </p>
+      ) : order.length === 0 ? (
         <p className="text-sm text-on-surface-variant">No sections to reorder.</p>
       ) : (
         <Sortable

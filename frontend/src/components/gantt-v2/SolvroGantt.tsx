@@ -748,7 +748,10 @@ export function SolvroGantt(props: SolvroGanttProps) {
 
   const handleSetSectionColor = useCallback(
     (sectionId: number, color: string) => {
-      updateSection.mutate({ id: sectionId, patch: { color } });
+      setActionError(null);
+      updateSection.mutateAsync({ id: sectionId, patch: { color } }).catch((err: unknown) => {
+        setActionError(err instanceof ApiError ? err.message : "Could not change the section color.");
+      });
     },
     [updateSection],
   );
@@ -1580,14 +1583,12 @@ export function SolvroGantt(props: SolvroGanttProps) {
                           disabled={duplicateTask.isPending && duplicateTask.variables === task.id}
                           onClick={() => {
                             setActionError(null);
-                            duplicateTask.mutate(task.id, {
-                              onError: (err) => {
-                                setActionError(
-                                  err instanceof ApiError
-                                    ? err.message
-                                    : "Could not duplicate the task.",
-                                );
-                              },
+                            duplicateTask.mutateAsync(task.id).catch((err: unknown) => {
+                              setActionError(
+                                err instanceof ApiError
+                                  ? err.message
+                                  : "Could not duplicate the task.",
+                              );
                             });
                           }}
                         >
