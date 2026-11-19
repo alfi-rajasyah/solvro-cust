@@ -325,14 +325,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Pass positionerClassName through when a submenu is needed inside a modal.
 - **Source:** snapshot line 815, section "ReUI DateField swap — deferred findings (2026-07-28)"
 
-### ISS-049 · P3 · SectionReorderModal relies on its caller for the permission gate
-
-- **Type:** debt · **Found:** 2026-07-30 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** frontend/src/components/SectionReorderModal.tsx (whole file); mount in frontend/src/pages/views/ProjectList.tsx (line ~668)
-- **Problem:** The modal checks nothing itself and relies on the entry button's gate. A second entry point would inherit no protection.
-- **Why deferred / fix direction:** Add a canEdit check inside the modal.
-- **Source:** snapshot line 1109, section "Sortable reorder (sections + subtasks) — deferred findings (2026-07-30)"
-
 ### ISS-050 · P3 · Filter submenu highlight follows the pointer
 
 - **Type:** watch · **Found:** 2026-07-31 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -494,22 +486,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Move them onto the shared skeleton region.
 - **Source:** snapshot line 2454, section "Antislop port — deferred findings (2026-11-12)"
 
-### ISS-174 · P3 · Epic owner picker lists users the server now refuses
-
-- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 1 review
-- **Where:** EpicPanel owner select in frontend/src/components/EpicPanel.tsx (line ~271)
-- **Problem:** The picker lists every user, but the server refuses an owner who cannot see the project (`owner_no_project_access`), so picking one shows a 400.
-- **Why deferred / fix direction:** The server enforces the rule and the error shows inline. Fix: limit options to users who can see the project, or mark the others disabled with a reason.
-- **Source:** phase review of `docs/archive/plans/task-integrity.md`
-
-### ISS-179 · P3 · Edit-mode parent picker lets a task with subtasks pick a parent
-
-- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 1 review
-- **Where:** possibleParents in frontend/src/components/TaskFormModal.tsx (line ~196)
-- **Problem:** A task that has subtasks can pick a parent, which would make a three-level tree that the server depth guard rejects.
-- **Why deferred / fix direction:** The server refuses it with a 400. Fix: hide the parent picker, or exclude parents, when the edited task has subtasks.
-- **Source:** phase review of `docs/archive/plans/task-ui-fixes.md`
-
 ### ISS-185 · P3 · Service-list saves still invalidate every project and customer query
 
 - **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 3 review
@@ -517,6 +493,14 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** The carried-over ["projects"] and customers prefix invalidations refetch every project subquery after each save, now also on error.
 - **Why deferred / fix direction:** Correct, only wasteful. Fix: narrow to the detail and list keys, as invalidateProjectHealth does.
 - **Source:** phase review of `docs/archive/plans/query-cache-and-timeouts.md`
+
+### ISS-192 · P3 · The epic owner picker lists inactive users
+
+- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 4 review
+- **Where:** owner select in frontend/src/components/EpicPanel.tsx
+- **Problem:** Inactive users appear as owner options, although the UserSummary comment says pickers hide them; ISS-029 decides whether the server should refuse them.
+- **Why deferred / fix direction:** Cosmetic until ISS-029 is decided. Fix: filter inactive users from the picker.
+- **Source:** phase review of `docs/archive/plans/panels-forms-board-a11y.md`
 
 ## Open — Accessibility & tokens
 
@@ -599,14 +583,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** DESIGN.md names one focus treatment and excludes border-primary, yet the older form still appears at about 70 sites and keeps spreading.
 - **Why deferred / fix direction:** Do one design-system sweep to align every site.
 - **Source:** snapshot line 2081, section "iTop integration Phase 4 — deferred findings (2026-09-23)"
-
-### ISS-187 · P3 · Every card grip has the same accessible name
-
-- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 3 review
-- **Where:** grip aria-label in frontend/src/components/kanban-v2/cards.tsx (line ~116) and frontend/src/components/itop/board/TicketCard.tsx (line ~64)
-- **Problem:** Each grip is now a tab stop named "Drag to reorder" or "Drag ticket", so a screen-reader button list cannot tell cards apart.
-- **Why deferred / fix direction:** Each grip sits inside its card. Fix: put the title or ref in the label and loosen the e2e gripFor helper to a prefix match.
-- **Source:** phase review of `docs/archive/plans/keyboard-drag.md`
 
 ## Open — Gantt
 
@@ -706,13 +682,13 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Trigger: confirm in a browser on a partly filled bar. Then pick the label colour per segment.
 - **Source:** snapshot line 2445, section "Design compliance fixes — deferred findings (2026-11-02)"
 
-### ISS-189 · P3 · Gantt section colour and duplicate still swallow errors
+### ISS-191 · P3 · Escape during a Gantt dependency-connect drag also closes the task panel
 
-- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 3 review
-- **Where:** handleSetSectionColor (line ~742) and duplicateTask.mutate (line ~1574) in frontend/src/components/gantt-v2/SolvroGantt.tsx
-- **Problem:** A failed colour change reverts with no message; duplicate still uses a per-call onError, so a second duplicate drops the first error (the ISS-095 race).
-- **Why deferred / fix direction:** Cosmetic field and a rare double action. Fix: mutateAsync(...).catch(setActionError ...) at both sites.
-- **Source:** phase review of `docs/archive/plans/gantt-errors-dates-sections.md`
+- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 4 review
+- **Where:** connect-drag keydown in frontend/src/components/gantt-v2/GanttOverlay.tsx (line ~285)
+- **Problem:** The connect drag listens on window in the bubble phase, after the capture-phase listener of the panel, so one Escape cancels the connect and closes the panel.
+- **Why deferred / fix direction:** Rare; the panel reopens in one click. Fix: register the connect-drag listener in the capture phase on window and stop propagation, as gantt-dnd does.
+- **Source:** phase review of `docs/archive/plans/panels-forms-board-a11y.md`
 
 ## Open — Boards & drag
 
@@ -740,29 +716,13 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Trigger: PATCH /sections/:id fails mid-session in practice. Then re-seed the modal on settle.
 - **Source:** snapshot line 1119, section "Sortable reorder (sections + subtasks) — deferred findings (2026-07-30)"
 
-### ISS-113 · P3 · Section reorder modal can get stuck if a drag never ends
+### ISS-193 · P3 · The Escape drag guard depends on listener order
 
-- **Type:** bug · **Found:** 2026-07-30 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** handleModalClose and the reset effect in frontend/src/components/SectionReorderModal.tsx (lines ~39-72)
-- **Problem:** If a drag-end callback never fires, the guard stays true and blocks every close route; the reset effect only runs when open changes.
-- **Why deferred / fix direction:** Exempt the header X from the guard.
-- **Source:** snapshot line 1145, section "Sortable reorder (sections + subtasks) — deferred findings (2026-07-30)"
-
-### ISS-186 · P3 · Keyboard drag on the boards announces raw ids
-
-- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 3 review
-- **Where:** <Kanban> in frontend/src/components/kanban-v2/SolvroKanban.tsx and frontend/src/components/itop/board/TicketBoard.tsx (line ~229)
-- **Problem:** dnd-kit default announcements say "Picked up draggable item 57"; on the iTop board a forbidden column is shown only by dimming during the drag.
-- **Why deferred / fix direction:** Keyboard drag works and the post-drop alert is announced. Fix: pass accessibility announcements built from titles and column labels; announce forbidden targets.
-- **Source:** phase review of `docs/archive/plans/keyboard-drag.md`
-
-### ISS-188 · P3 · Escape during a keyboard drag also closes an open panel
-
-- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 3 review
-- **Where:** Escape handlers in frontend/src/components/TaskPanel.tsx (line ~237), frontend/src/components/itop/TicketPanel.tsx (line ~98), frontend/src/components/Modal.tsx (line ~31)
-- **Problem:** The document-level Escape listeners run before dnd-kit cancels the drag, so one Escape both cancels the drag and closes the panel.
-- **Why deferred / fix direction:** Edge case; the panel reopens in one click. Fix: skip the close while a drag is active.
-- **Source:** phase review of `docs/archive/plans/keyboard-drag.md`
+- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 4 review
+- **Where:** isDragActive and the Escape listeners in frontend/src/components/Modal.tsx (line ~14), TaskPanel.tsx, itop/TicketPanel.tsx, EpicPanel.tsx, Drawer.tsx
+- **Problem:** The guard works only while the panel's document listener runs before dnd-kit cancels the drag; a panel whose effect re-subscribes mid-drag (TaskPanel's onClose changes on a ProjectDetail re-render) runs after it and still closes on the same Escape. Moving the listeners to the capture phase fixes that but breaks inner widgets that consume Escape (mention picker, inline rename, status picker).
+- **Why deferred / fix direction:** Needs a mid-drag re-render; costs one reopen. Fix: make TaskPanel's onClose stable (useCallback in ProjectDetail), or track drag state from the DndContext monitor instead of the DOM.
+- **Source:** CI failure and review of `docs/archive/plans/panels-forms-board-a11y.md`
 
 ## Open — iTop
 
@@ -845,14 +805,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** The time-entry prune is skipped and waits for the next full run, up to 24 h. Time entries deleted in iTop stay in Solvro until then.
 - **Why deferred / fix direction:** Accepted trade-off. Revisit with the resumable-cursor idea.
 - **Source:** snapshot line 2415, section "Backend concurrency and roles — deferred findings (2026-10-25)"
-
-### ISS-130 · P3 · iTop ticket panel shows '– ago' when lastUpdate is null
-
-- **Type:** bug · **Found:** 2026-11-12 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** Last update Fact in frontend/src/components/itop/TicketPanel.tsx (line ~290)
-- **Problem:** A ticket with no last update shows a dash followed by 'ago'.
-- **Why deferred / fix direction:** Guard on lastUpdate like the Started fact does.
-- **Source:** snapshot line 2457, section "Antislop port — deferred findings (2026-11-12)"
 
 ### ISS-173 · P3 · A repeated Refresh resets the iTop full-sync retry cap
 
@@ -1159,6 +1111,7 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-038 · 2026-11-19 · CHANGELOG "Service lists, Daily Review refresh, request timeouts, section chip" · Service-mapping mutations are not optimistic
 - ISS-041 · 2026-11-19 · CHANGELOG "Label permissions and duplicate label names" · Duplicate label name shows 'Unique constraint violated'
 - ISS-046 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Subtask DONE checkbox in the task modal ignores canEdit
+- ISS-049 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · SectionReorderModal relies on its caller for the permission gate
 - ISS-059 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · TaskPanel header-menu errors appear below the subtasks list
 - ISS-060 · 2026-11-19 · CHANGELOG "Service lists, Daily Review refresh, request timeouts, section chip" · Creating a task leaves Daily Review attention lists stale
 - ISS-061 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Section header actions show for task:write but the routes need project:write
@@ -1177,12 +1130,14 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-095 · 2026-11-19 · CHANGELOG "Gantt errors, Dates cell and section permissions" · Gantt save errors can be swallowed when a later update follows
 - ISS-106 · 2026-11-19 · CHANGELOG "Gantt errors, Dates cell and section permissions" · Gantt Dates cell shows the date range twice while editing
 - ISS-109 · 2026-11-19 · CHANGELOG "Service lists, Daily Review refresh, request timeouts, section chip" · Task panel shows the old section chip during a cross-section drag
+- ISS-113 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Section reorder modal can get stuck if a drag never ends
 - ISS-115 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · GET /itop/services lists every iTop organisation's services to any signed-in user
 - ISS-119 · 2026-11-18 · accepted by the user: iTop limits what Solvro can read; no code change · iTop personal-token expiry is only read when iTop allows it
 - ISS-120 · 2026-11-18 · accepted by the user: iTop cannot report token rights up front · iTop token write rights are not checked when the token is saved
 - ISS-124 · 2026-11-18 · accepted by the user: the user sees iTop's own refusal text · pending_reason assumed free text; a list-valued install refuses it
 - ISS-128 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · An iTop application token saved before an address is not probed
 - ISS-129 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · A Refresh full sync can be dropped silently while a scheduled sync holds the lock
+- ISS-130 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · iTop ticket panel shows '– ago' when lastUpdate is null
 - ISS-132 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Guest links are built from the owner's browser address
 - ISS-135 · 2026-11-18 · decided by the user: customer exports do not show iTop ticket refs · Gantt Excel export omits the pinned iTop ticket
 - ISS-136 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · Typecheck skips vite.config.ts and node tsconfig lists deleted files
@@ -1194,8 +1149,14 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-163 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · setup.sh does not pass ITOP_ALLOW_PRIVATE_HOSTS or ITOP_SYNC_DISABLED
 - ISS-164 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · setup.sh: no registry-login preflight on a fresh install; CORS falls back to `*`
 - ISS-165 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · Icons and favicon have no explicit Cache-Control
+- ISS-174 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Epic owner picker lists users the server now refuses
 - ISS-176 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Epic delete and admin status save can still deadlock with task writes
 - ISS-177 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Epic owner check is copied into two routes
 - ISS-178 · 2026-11-19 · CHANGELOG "Gantt errors, Dates cell and section permissions" · Gantt section actions show for task:write but the routes need project:write
+- ISS-179 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Edit-mode parent picker lets a task with subtasks pick a parent
 - ISS-180 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Label names are not trimmed on the server
 - ISS-181 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Renaming a customer onto an existing name shows "Unique constraint violated"
+- ISS-186 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Keyboard drag on the boards announces raw ids
+- ISS-187 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Every card grip has the same accessible name
+- ISS-188 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Escape during a keyboard drag also closes an open panel
+- ISS-189 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Gantt section colour and duplicate still swallow errors

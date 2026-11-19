@@ -117,4 +117,27 @@ describe("TaskFormModal", () => {
     const subtaskBox = boxes.find((b) => b.closest("li")?.textContent?.includes("Child"));
     expect(subtaskBox!.disabled).toBe(false);
   });
+
+  it("edit mode: the parent picker is disabled with a reason when the task has subtasks", () => {
+    state.tasks = [
+      task({ id: 1, title: "Parent" }),
+      task({ id: 2, title: "Child", parentTaskId: 1 }),
+      task({ id: 3, title: "Other top" }),
+    ];
+    render(
+      <TaskFormModal open onClose={() => {}} mode="edit" projectId={1} task={state.tasks[0] as Task} />,
+    );
+    const picker = screen.getByDisplayValue("Top level") as HTMLSelectElement;
+    expect(picker.disabled).toBe(true);
+    expect(screen.getByText(/stays top level/i)).toBeTruthy();
+  });
+
+  it("edit mode: a task without subtasks keeps an enabled parent picker", () => {
+    state.tasks = [task({ id: 1, title: "Solo" }), task({ id: 3, title: "Other top" })];
+    render(
+      <TaskFormModal open onClose={() => {}} mode="edit" projectId={1} task={state.tasks[0] as Task} />,
+    );
+    expect((screen.getByDisplayValue("Top level") as HTMLSelectElement).disabled).toBe(false);
+    expect(screen.queryByText(/stays top level/i)).toBeNull();
+  });
 });

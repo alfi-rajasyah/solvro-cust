@@ -61,7 +61,7 @@ export function TicketCard({
             // Focusable: the engine puts dnd-kit's button role, tab stop and
             // key listener here, so Space and arrows move a ticket.
             aria-hidden={dragging || undefined}
-            aria-label="Drag ticket"
+            aria-label={`Move ${ticket.ref}`}
             className="rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary inline-flex shrink-0 touch-none items-center text-on-surface-variant/80"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-[16px]">drag_indicator</span>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { usePanelFocus } from "@/hooks/usePanelFocus";
 import { useSearchParams } from "react-router-dom";
 import { InlineDateRangeEditor } from "./InlineDateRangeEditor";
+import { isDragActive } from "./Modal";
 import { TaskStatusChip } from "./StatusChip";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { ApiError } from "@/lib/api";
@@ -13,9 +14,32 @@ import {
   type UpdateEpicInput,
   useCreateTask,
   useEpic,
+  useProject,
+  useProjectMembers,
   useUpdateEpic,
   useUsers,
 } from "@/lib/queries";
+
+/**
+ * Splits the owner choices into users the client knows can see the project
+ * (its TAM, the TAMs of linked customers, its members) and everyone else.
+ * The client cannot know who holds the view-all permission, so those users
+ * stay in the second group and the server's `owner_no_project_access` answer
+ * (shown inline) remains the authority. The current owner is always kept in
+ * the first group so the select never loses its selected option.
+ */
+export function splitEpicOwnerOptions<U extends { id: number }>(
+  users: readonly U[],
+  knownIds: ReadonlySet<number>,
+  currentOwnerId: number | null,
+): { onProject: U[]; others: U[] } {
+  const onProject: U[] = [];
+  const others: U[] = [];
+  for (const u of users) {
+    (knownIds.has(u.id) || u.id === currentOwnerId ? onProject : others).push(u);
+  }
+  return { onProject, others };
+}
 
 const STATUSES: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 
@@ -57,6 +81,9 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
   // shadow it.
   const { data: epic, isLoading, isError, error: epicError } = useEpic(epicId);
   const { data: users } = useUsers();
+  const { data: project } = useProject(projectId);
+  const { data: members } = useProjectMembers(projectId);
+  const accessKnown = project !== undefined && members !== undefined;
   const updateEpic = useUpdateEpic();
   const createTask = useCreateTask(projectId);
 
@@ -78,6 +105,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
       // module doc above) — while that's open, the topmost panel owns the
       // Escape key, so a single press closes only it, not both.
       if (searchParamsRef.current.get("task") !== null) return;
+      if (isDragActive()) return;
       onClose();
     }
     document.addEventListener("keydown", onKey);
@@ -209,6 +237,17 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
     );
   }
 
+  const knownIds = new Set<number>();
+  if (project) {
+    knownIds.add(project.tamId);
+    for (const c of project.customers) if (c.tamId != null) knownIds.add(c.tamId);
+  }
+  for (const m of members ?? []) knownIds.add(m.userId);
+  // Until both lookups have loaded the grouping would be wrong, so render flat.
+  const ownerOptions = accessKnown
+    ? splitEpicOwnerOptions(users ?? [], knownIds, epic.ownerId)
+    : { onProject: users ?? [], others: [] };
+
   return (
     <div
       ref={panelRef}
@@ -268,11 +307,30 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
             className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
           >
             <option value="">Unassigned</option>
-            {(users ?? []).map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.username}
-              </option>
-            ))}
+            {ownerOptions.others.length === 0 ? (
+              ownerOptions.onProject.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.username}
+                </option>
+              ))
+            ) : (
+              <>
+                <optgroup label="On this project">
+                  {ownerOptions.onProject.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.username}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Not on this project">
+                  {ownerOptions.others.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.username}
+                    </option>
+                  ))}
+                </optgroup>
+              </>
+            )}
           </select>
 
           <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">

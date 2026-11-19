@@ -193,6 +193,10 @@ export function TaskFormModal(props: TaskFormModalProps) {
     if (parentTaskId !== "") setEpicId("");
   }, [parentTaskId]);
 
+  // A task that already has subtasks cannot itself become a subtask: the
+  // server's depth guard refuses a three-level tree (ISS-179).
+  const hasSubtasks =
+    !!editingTask && (projectTasks ?? []).some((t) => t.parentTaskId === editingTask.id);
   const possibleParents = (projectTasks ?? []).filter(
     (t) => t.parentTaskId === null && (!editingTask || t.id !== editingTask.id),
   );
@@ -524,7 +528,8 @@ export function TaskFormModal(props: TaskFormModalProps) {
               onChange={(e) =>
                 setParentTaskId(e.target.value === "" ? "" : Number(e.target.value))
               }
-              disabled={!canEdit}
+              disabled={!canEdit || hasSubtasks}
+              aria-describedby={hasSubtasks ? "parent-locked-reason" : undefined}
               className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default"
             >
               <option value="">Top level</option>
@@ -534,6 +539,11 @@ export function TaskFormModal(props: TaskFormModalProps) {
                 </option>
               ))}
             </select>
+            {hasSubtasks && (
+              <span id="parent-locked-reason" className="ml-2 text-meta text-on-surface-variant">
+                Has subtasks, so it stays top level.
+              </span>
+            )}
           </FieldRow>
 
           {/* Section */}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { usePanelFocus } from "@/hooks/usePanelFocus";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { ConfirmModal } from "./ConfirmModal";
+import { isDragActive } from "./Modal";
 import { CopyLinkButton } from "./CopyLinkButton";
 import {
   CRITICAL_PATH_GLYPH,
@@ -234,7 +235,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const modalOpen = conflict !== null || confirmDelete || nestedSheetOpen || rowOverlayCount > 0;
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !modalOpen) onClose();
+      if (e.key === "Escape" && !modalOpen && !isDragActive()) onClose();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
