@@ -15,6 +15,13 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-19 — Task ordering, date and epic-owner checks
+
+- Deleting a task now closes the gap in its sibling list, so positions stay 0..n-1.
+- Updating a task now rejects a due day before the start day, checked against the stored row, with a 400 validation error. This covers edits that send only one date.
+- Deleting a task, section or epic now waits for the project's task-order lock, so it can no longer deadlock with a concurrent task reorder. It returns a retryable 409 if the wait is too long.
+- Creating or updating an epic now requires the owner to be someone who can see the project (its TAM, a linked customer's owner, a member, or a user with access to all projects). Otherwise it returns 400 `owner_no_project_access`.
+
 ### Fixed — 2026-11-19 — iTop customer-page e2e tests
 
 - The iTop Tickets board and ticket panel end-to-end tests now give the test customer an iTop organisation, which the customer page has required for its Tickets tab since the change that reads `itopOrgId` directly. Without it the tab never appeared and the tests timed out.

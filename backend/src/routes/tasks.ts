@@ -17,6 +17,7 @@ import {
   assertLabelsInProject,
   assertSectionInProject,
   assertValidParent,
+  closeGap,
   insertManyAfter,
   moveTaskWithinSiblings,
   siblingKeyEquals,
@@ -370,6 +371,7 @@ tasksRouter.patch(
       status: TaskStatus;
       parentTaskId: number | null;
       isMilestone: boolean;
+      startDate: Date | null;
       dueDate: Date | null;
       assignedToId: number | null;
     }) => {
@@ -480,6 +482,26 @@ tasksRouter.patch(
           formErrors: [],
           fieldErrors: { dueDate: ["A milestone requires a due date"] },
         });
+      }
+
+      // The patch can carry one date only (the panel sends just the changed
+      // field), so check the merged result. A milestone is exempt: its start
+      // is forced to its due date below. Only when this patch touches a date,
+      // so an unrelated edit of a legacy row with due < start still saves.
+      if (body.startDate !== undefined || body.dueDate !== undefined) {
+        const mergedStart = body.startDate !== undefined ? body.startDate : cur.startDate;
+        const mergedDue = body.dueDate !== undefined ? body.dueDate : cur.dueDate;
+        if (
+          !(body.isMilestone ?? cur.isMilestone) &&
+          mergedStart &&
+          mergedDue &&
+          utcMidnightOf(mergedDue).getTime() < utcMidnightOf(mergedStart).getTime()
+        ) {
+          throw new HttpError(400, "validation_error", "Due date must not be before the start date", {
+            formErrors: [],
+            fieldErrors: { dueDate: ["Due date must not be before the start date"] },
+          });
+        }
       }
 
       if (nextParentTaskId !== null) {
@@ -639,10 +661,13 @@ tasksRouter.delete(
     await prisma.$transaction(async (tx) => {
       const task = await tx.task.findUnique({
         where: { id },
-        select: { projectId: true, title: true },
+        select: { projectId: true, title: true, parentTaskId: true },
       });
       if (!task) throw new HttpError(404, "not_found", "Task not found");
+      // The delete re-packs the sibling list: take the order lock first.
+      await lockProjectOrder(tx, "tasks", task.projectId);
       await tx.task.delete({ where: { id } });
+      await closeGap(tx, { projectId: task.projectId, parentTaskId: task.parentTaskId }, id);
       await recordActivity(tx, {
         projectId: task.projectId,
         actorId: req.user!.sub,
@@ -687,10 +712,10 @@ tasksRouter.post(
       // The copy lands at the end of the same sibling list duplicateTaskTree
       // appended it to (source's own list, since no overrides were passed) —
       // move it to right after the source. Placed by the source's identity
-      // (insertManyAfter), not `source.position + 1` as an index: DELETE
-      // /tasks/:id never re-packs its sibling list, so a stale position
-      // value can point at the wrong row once an earlier sibling was
-      // deleted. insertManyAfter re-packs the whole list dense regardless.
+      // (insertManyAfter), not `source.position + 1` as an index: positions
+      // written before DELETE /tasks/:id closed its gap may still be sparse,
+      // so a stored position can point at the wrong row. insertManyAfter
+      // re-packs the whole list dense regardless.
       const key: SiblingKey = { projectId: source.projectId, parentTaskId: source.parentTaskId };
       await insertManyAfter(tx, key, id, [newId]);
 

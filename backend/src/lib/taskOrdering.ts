@@ -39,7 +39,7 @@ export async function countSiblings(tx: Tx, key: SiblingKey): Promise<number> {
  * current position, then id). Does nothing if the task isn't present in
  * that list (e.g. brand new task being created).
  */
-async function closeGap(tx: Tx, key: SiblingKey, taskId: number): Promise<void> {
+export async function closeGap(tx: Tx, key: SiblingKey, taskId: number): Promise<void> {
   const remaining = await tx.task.findMany({
     where: { ...siblingWhere(key), id: { not: taskId } },
     orderBy: [{ position: "asc" }, { id: "asc" }],

@@ -42,17 +42,22 @@ function assigneeFromChanges(event: ActivityEvent): number | null {
  * candidate members) however many ids are passed. It loads the project's facts
  * and applies `canUserSeeProject` (lib/visibility.ts), the pure twin of
  * `projectVisibilityFilter`; test/notifications.test.ts compares the two.
+ * `activeOnly: false` skips the active check (default true) for a caller that
+ * only needs the visibility answer, e.g. an epic owner (ISS-029 is the open
+ * decision on inactive users).
  */
 export async function filterActiveUsersWhoCanSeeProject(
   tx: Tx,
   projectId: number,
   userIds: readonly number[],
+  options: { activeOnly?: boolean } = {},
 ): Promise<Set<number>> {
+  const activeOnly = options.activeOnly ?? true;
   const ids = [...new Set(userIds)];
   if (ids.length === 0) return new Set();
   const [users, project, linkedCustomers] = await Promise.all([
     tx.user.findMany({
-      where: { id: { in: ids }, active: true },
+      where: { id: { in: ids }, ...(activeOnly ? { active: true } : {}) },
       select: { id: true, role: { select: { roleName: true, permissions: true } } },
     }),
     tx.project.findUnique({

@@ -493,3 +493,48 @@ describe("epicId validation on task create/update", () => {
     expect(res.body.epicId).toBeNull();
   });
 });
+
+describe("PATCH /epics/:id ownerId must be able to see the project", () => {
+  it("rejects a user with no access (400 owner_no_project_access) and leaves the owner unchanged", async () => {
+    const epic = await createEpic(projectId);
+    const outsider = await createUserWithRole("TAM");
+    const res = await patchEpic(epic.id, { ownerId: outsider.userId });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("owner_no_project_access");
+    const after = await prisma.epic.findUniqueOrThrow({ where: { id: epic.id } });
+    expect(after.ownerId).toBeNull();
+  });
+
+  it("accepts the project's TAM, a member, and a view-all user", async () => {
+    const epic = await createEpic(projectId);
+    const member = await createUserWithRole("TAM");
+    await prisma.projectMember.create({ data: { projectId, userId: member.userId } });
+    const auditor = await createUserWithRole("AUDITOR");
+    const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
+    for (const ownerId of [project.tamId!, member.userId, auditor.userId]) {
+      const res = await patchEpic(epic.id, { ownerId });
+      expect(res.status).toBe(200);
+      expect(res.body.ownerId).toBe(ownerId);
+    }
+  });
+});
+
+describe("POST /projects/:id/epics ownerId must be able to see the project", () => {
+  it("rejects an outsider with 400 owner_no_project_access and creates nothing", async () => {
+    const outsider = await createUserWithRole("TAM");
+    const res = await request(app)
+      .post(`/projects/${projectId}/epics`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ title: "E", ownerId: outsider.userId });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("owner_no_project_access");
+    expect(await prisma.epic.count({ where: { projectId } })).toBe(0);
+  });
+
+  it("accepts a member", async () => {
+    const member = await createUserWithRole("TAM");
+    await prisma.projectMember.create({ data: { projectId, userId: member.userId } });
+    const epic = await createEpic(projectId, { ownerId: member.userId });
+    expect(epic.ownerId).toBe(member.userId);
+  });
+});

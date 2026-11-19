@@ -46,7 +46,7 @@ import {
   taskCreatedChanges,
 } from "../lib/activity.js";
 import { epicCreatedChanges } from "../lib/epicActivity.js";
-import { notifyForEvent } from "../lib/notifications.js";
+import { filterActiveUsersWhoCanSeeProject, notifyForEvent } from "../lib/notifications.js";
 import {
   customerLinksSchema,
   customerNotFound,
@@ -819,11 +819,19 @@ projectsRouter.post(
     await ensureProjectVisible(req.user!, id);
     if (body.ownerId != null) {
       await assertUserExists(prisma, body.ownerId, "owner_not_found", "Epic owner not found");
+      const visible = await filterActiveUsersWhoCanSeeProject(prisma, id, [body.ownerId], {
+        activeOnly: false,
+      });
+      if (!visible.has(body.ownerId)) {
+        throw new HttpError(
+          400,
+          "owner_no_project_access",
+          "Epic owner must be the project's TAM, a member, or have access to all projects",
+        );
+      }
     }
 
-    // Appends at the end. Epics have no re-pack on delete (unlike tasks'
-    // countSiblings, which is safe because DELETE /tasks/:id never re-packs
-    // either, but nothing here re-packs the epic list after a delete), so a
+    // Appends at the end. Nothing re-packs the epic list after a delete, so a
     // plain count would collide with — or land before — an existing epic
     // once any earlier epic has been deleted (count != max position + 1).
     // max(position) + 1 mirrors the sections POST /:id/sections above.

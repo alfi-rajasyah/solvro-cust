@@ -261,9 +261,14 @@ sectionsRouter.delete(
   validate("params", idParamSchema),
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
-    await ensureSectionVisible(req.user!, id);
+    const { projectId } = await ensureSectionVisible(req.user!, id);
     // Tasks in this section have sectionId set to NULL via onDelete: SetNull.
-    await prisma.section.delete({ where: { id } });
+    // Take the project's task-order lock first, like a reorder does, so the
+    // SetNull update cannot deadlock with a concurrent re-pack.
+    await prisma.$transaction(async (tx) => {
+      await lockProjectOrder(tx, "tasks", projectId);
+      await tx.section.delete({ where: { id } });
+    });
     res.status(204).end();
   },
 );

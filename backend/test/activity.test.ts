@@ -730,6 +730,8 @@ describe("project TAM changes", () => {
 describe("epics", () => {
   it("create, update and delete each record one event; a no-op PATCH records nothing; descriptions never appear as text", async () => {
     const { tam, other, project } = await fixture();
+    // An epic owner must be able to see the project; written directly so no event is recorded.
+    await prisma.projectMember.create({ data: { projectId: project.id, userId: other.userId } });
     const created = await request(app)
       .post(`/projects/${project.id}/epics`)
       .set(auth(tam.token))
