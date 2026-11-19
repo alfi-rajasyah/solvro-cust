@@ -13,6 +13,7 @@ import { prisma } from "../prisma.js";
 import { logger } from "../logger.js";
 import { hasPermission, requireAuth, requirePermission } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
+import { isLabelNameConflict, labelExistsError } from "../lib/labelConflict.js";
 import { dateInput } from "../lib/dateInput.js";
 import { validate } from "../http/validate.js";
 import { outlineUrlSchema } from "../lib/outlineUrl.js";
@@ -1318,20 +1319,25 @@ projectsRouter.get(
 
 projectsRouter.post(
   "/:id/labels",
-  requirePermission("project:write"),
+  requirePermission("task:write"),
   validate("params", idParamSchema),
   validate("body", createLabelSchema),
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
     const body = req.body as z.infer<typeof createLabelSchema>;
     await ensureProjectVisible(req.user!, id);
-    const label = await prisma.label.create({
-      data: {
-        projectId: id,
-        name: body.name,
-        color: body.color ?? "#3aae51",
-      },
-    });
-    res.status(201).json(label);
+    try {
+      const label = await prisma.label.create({
+        data: {
+          projectId: id,
+          name: body.name,
+          color: body.color ?? "#3aae51",
+        },
+      });
+      res.status(201).json(label);
+    } catch (e) {
+      if (isLabelNameConflict(e)) throw labelExistsError();
+      throw e;
+    }
   },
 );
