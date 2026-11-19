@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { requireAuth, requirePermission, type JwtPayload } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
+import { isLabelNameConflict, labelExistsError } from "../lib/labelConflict.js";
 import { validate } from "../http/validate.js";
 import { ensureProjectVisible } from "../lib/visibility.js";
 
@@ -40,11 +41,17 @@ labelsRouter.patch(
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
     await ensureLabelVisible(req.user!, id);
-    const updated = await prisma.label.update({
-      where: { id },
-      data: req.body as z.infer<typeof updateLabelSchema>,
-    });
-    res.json(updated);
+    try {
+      const updated = await prisma.label.update({
+        where: { id },
+        data: req.body as z.infer<typeof updateLabelSchema>,
+      });
+      res.json(updated);
+    } catch (e) {
+      // Renaming onto a name the project already uses (unique per project).
+      if (isLabelNameConflict(e)) throw labelExistsError();
+      throw e;
+    }
   },
 );
 

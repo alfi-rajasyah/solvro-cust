@@ -47,14 +47,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Accepted by user decision 2026-10-22. Revisit if the app is exposed beyond the LAN or the lockout is abused.
 - **Source:** snapshot line 16, section "Known bugs / inconsistencies"
 
-### ISS-007 · P3 · Label creation needs project:write while label edit needs task:write
-
-- **Type:** bug · **Found:** 2026-07-24 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** POST /:id/labels in backend/src/routes/projects.ts (line ~1311); backend/src/routes/labels.ts (lines 37, 53)
-- **Problem:** Creating a label requires project:write; renaming or deleting one requires task:write. TAM and ADMIN hold both, but a custom role with granular permissions sees the mismatch.
-- **Why deferred / fix direction:** Align label creation to task:write and add vitest coverage.
-- **Source:** snapshot line 529, section "Gantt GH #58 deferred findings (2026-07-24)"
-
 ### ISS-008 · P3 · Task duplicate needs task:write while task create needs project:write
 
 - **Type:** watch · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -81,10 +73,10 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 
 ### ISS-012 · P3 · Any project:write user can set the Outline link of an unowned customer
 
-- **Type:** bug · **Found:** 2026-10-09 · **Verified:** 2026-11-18 @ `6dd7592`
+- **Type:** decision · **Found:** 2026-10-09 · **Verified:** 2026-11-18 @ `6dd7592`
 - **Where:** PATCH /customers/:id in backend/src/routes/customers.ts (line ~582)
 - **Problem:** outlineUrl is set under the same gate as name and description (project:write plus visibility), so for a customer with no TAM any such user can point its link at any http/https URL.
-- **Why deferred / fix direction:** Deferred with name and description; gate all three on ownership together.
+- **Why deferred / fix direction:** Decision needed (2026-11-19): gating name, description and Outline link on ownership conflicts with the M1 pentest contract (backend/test/pentestRemediation.test.ts: a TAM with a project under the customer may edit its other fields). Choose: gate only outlineUrl on ownership, gate all three and change M1, or accept.
 - **Source:** snapshot line 2377, section "Outline links, Phase A — deferred findings (2026-10-09)"
 
 ### ISS-013 · P3 · Outline email is not re-checked on token refresh
@@ -283,6 +275,22 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Fix: one shared assertEpicOwnerCanSeeProject helper, and a clearer name for the filter.
 - **Source:** phase review of `docs/archive/plans/task-integrity.md`
 
+### ISS-180 · P3 · Label names are not trimmed on the server
+
+- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 2 review
+- **Where:** label create and rename in backend/src/routes/projects.ts and backend/src/routes/labels.ts
+- **Problem:** Only LabelPicker trims, so "bug" and "bug " can both exist when created through the API.
+- **Why deferred / fix direction:** The UI path trims. Fix: trim in the Zod schemas for create and rename.
+- **Source:** phase review of `docs/archive/plans/label-permissions.md`
+
+### ISS-181 · P3 · Renaming a customer onto an existing name shows "Unique constraint violated"
+
+- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 2 review
+- **Where:** PATCH /customers/:id in backend/src/routes/customers.ts
+- **Problem:** The unique name clash returns the generic 409 with a database term.
+- **Why deferred / fix direction:** Fix: catch the name conflict and return a plain message, as for labels (lib/labelConflict.ts).
+- **Source:** phase review of `docs/archive/plans/label-permissions.md`
+
 ## Open — Frontend UI
 
 ### ISS-038 · P3 · Service-mapping mutations are not optimistic
@@ -308,14 +316,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** Sections with the default color render vivid presets in the Gantt but legacy slate in the List tab, Executive chips and the task panel dot.
 - **Why deferred / fix direction:** Reuse resolveSectionColors from lib/gantt/palette.ts in those three places, or apply the fallback server-side.
 - **Source:** snapshot line 410, section "Tech debt / follow-ups from recent work"
-
-### ISS-041 · P3 · Duplicate label name shows 'Unique constraint violated'
-
-- **Type:** bug · **Found:** 2026-07-24 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** label create in backend/src/routes/projects.ts (line ~1311); error render in frontend/src/components/LabelPicker.tsx (line ~147)
-- **Problem:** Creating a label with an existing name returns a generic 409 and the picker shows its message verbatim. The user sees a database term.
-- **Why deferred / fix direction:** Catch P2002 in the label route with a clear message such as 'A label with that name already exists'.
-- **Source:** snapshot line 531, section "Gantt GH #58 deferred findings (2026-07-24)"
 
 ### ISS-042 · P3 · Comment composer is a single-line input
 
@@ -1269,11 +1269,13 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 
 - ISS-003 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · Epic owner can be a user with no access to the project
 - ISS-005 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · Saving an iTop address does not require the application token
+- ISS-007 · 2026-11-19 · CHANGELOG "Label permissions and duplicate label names" · Label creation needs project:write while label edit needs task:write
 - ISS-009 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · Shared pino logger has no redact paths for iTop tokens
 - ISS-027 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · Deleting a task leaves sparse positions in its sibling list
 - ISS-028 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · PATCH /tasks/:id accepts a due date before the start date
 - ISS-036 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · Section and epic delete can deadlock with a concurrent task reorder
 - ISS-037 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Create-task parent picker lists subtasks the server rejects
+- ISS-041 · 2026-11-19 · CHANGELOG "Label permissions and duplicate label names" · Duplicate label name shows 'Unique constraint violated'
 - ISS-046 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Subtask DONE checkbox in the task modal ignores canEdit
 - ISS-059 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · TaskPanel header-menu errors appear below the subtasks list
 - ISS-061 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Section header actions show for task:write but the routes need project:write

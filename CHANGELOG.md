@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-19 — Label permissions and duplicate label names
+
+- Creating a project label now needs the same permission as renaming or deleting one (`task:write` instead of `project:write`). A duplicate label name, on create or rename, now answers "A label with that name already exists" instead of a database error.
+
 ### Fixed — 2026-11-19 — Keyboard focus and contrast fixes
 
 - Install banner: the dismiss control is a separate, keyboard-reachable button instead of a button nested inside a button; both banner buttons show a visible focus ring, and the banner keeps its 44px height on touch screens.
