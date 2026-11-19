@@ -873,22 +873,9 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                           // vendor's own opacity-50 for the same utility group.
                           // No vendor file touched.
                           className={dragEnabled ? undefined : "opacity-100"}
-                          // Keyboard: the card's title button is the entry point
-                          // (cards.tsx). The engine spreads dnd-kit's attributes
-                          // (role="button", tabIndex 0, "press space to pick
-                          // up") onto this wrapper, but its key listener sits on
-                          // the grip, which cannot take focus — so the wrapper
-                          // announced a keyboard drag that never worked and
-                          // nested the card's buttons inside a button. These
-                          // overrides win in the engine's mergeProps; no vendor
-                          // file touched. Moving a card by keyboard goes
-                          // through the task panel's status field.
-                          role={undefined}
-                          tabIndex={undefined}
-                          aria-roledescription={undefined}
-                          aria-describedby={undefined}
-                          aria-pressed={undefined}
-                          aria-disabled={undefined}
+                          // Keyboard: the card's grip is a focusable button (the
+                          // engine puts dnd-kit's attributes and key listener
+                          // on it); the title button opens the task.
                         >
                           <TaskCard
                             task={task}

@@ -15,6 +15,11 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-19 — Keyboard drag on boards and reorder lists
+
+- Keyboard drag works on the Kanban board and the iTop ticket board: the drag grip is a focusable button (Space to lift, arrow keys to move, Space to drop), and the card wrapper is no longer a stray button.
+- Reorder rows in the task panel, the section reorder dialog and the task status settings are no longer each a tab stop with a joined accessible name; only the reorder handle is focusable.
+
 ### Fixed — 2026-11-19 — Service lists, Daily Review refresh, request timeouts, section chip
 
 - Saving a project's or customer's service list updates instantly and rolls back if the save fails.

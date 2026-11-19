@@ -552,22 +552,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 
 ## Open — Accessibility & tokens
 
-### ISS-078 · P2 · Keyboard drag does not work on the Kanban board
-
-- **Type:** bug · **Found:** 2026-07-27 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** KanbanItem and KanbanItemHandle in frontend/src/components/reui/kanban.tsx (lines ~796, ~838)
-- **Problem:** dnd-kit attributes land on the item wrapper but listeners only on the inner handle, which is not focusable. Mouse and touch drag work; keyboard drag does not.
-- **Why deferred / fix direction:** Needs a sanctioned SOLVRO PATCH (spine file) or an upstream report.
-- **Source:** snapshot line 582, section "Kanban → ReUI swap — deferred findings (2026-07-27)"
-
-### ISS-079 · P2 · Sortable rows are tab stops with role=button and a joined accessible name
-
-- **Type:** bug · **Found:** 2026-07-30 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** SortableItem in frontend/src/components/reui/sortable.tsx (line ~359)
-- **Problem:** dnd-kit attributes give every row role=button and tabIndex 0, even for read-only users with no handle. The row name joins its children's labels and a real button nests inside it.
-- **Why deferred / fix direction:** Move the drag attributes to the handle or add an explicit aria-label. reui/ is spine: needs a SOLVRO PATCH, a gates.sh counter bump and an instant review.
-- **Source:** snapshot line 1131, section "Sortable reorder (sections + subtasks) — deferred findings (2026-07-30)"; merged duplicates at snapshot lines 1520
-
 ### ISS-080 · P2 · Light primary/10 chip tints still fall under 4.5:1
 
 - **Type:** bug · **Found:** 2026-10-23 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -647,6 +631,14 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** DESIGN.md names one focus treatment and excludes border-primary, yet the older form still appears at about 70 sites and keeps spreading.
 - **Why deferred / fix direction:** Do one design-system sweep to align every site.
 - **Source:** snapshot line 2081, section "iTop integration Phase 4 — deferred findings (2026-09-23)"
+
+### ISS-187 · P3 · Every card grip has the same accessible name
+
+- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 3 review
+- **Where:** grip aria-label in frontend/src/components/kanban-v2/cards.tsx (line ~116) and frontend/src/components/itop/board/TicketCard.tsx (line ~64)
+- **Problem:** Each grip is now a tab stop named "Drag to reorder" or "Drag ticket", so a screen-reader button list cannot tell cards apart.
+- **Why deferred / fix direction:** Each grip sits inside its card. Fix: put the title or ref in the label and loosen the e2e gripFor helper to a prefix match.
+- **Source:** phase review of `docs/archive/plans/keyboard-drag.md`
 
 ## Open — Gantt
 
@@ -803,6 +795,22 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** If a drag-end callback never fires, the guard stays true and blocks every close route; the reset effect only runs when open changes.
 - **Why deferred / fix direction:** Exempt the header X from the guard.
 - **Source:** snapshot line 1145, section "Sortable reorder (sections + subtasks) — deferred findings (2026-07-30)"
+
+### ISS-186 · P3 · Keyboard drag on the boards announces raw ids
+
+- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 3 review
+- **Where:** <Kanban> in frontend/src/components/kanban-v2/SolvroKanban.tsx and frontend/src/components/itop/board/TicketBoard.tsx (line ~229)
+- **Problem:** dnd-kit default announcements say "Picked up draggable item 57"; on the iTop board a forbidden column is shown only by dimming during the drag.
+- **Why deferred / fix direction:** Keyboard drag works and the post-drop alert is announced. Fix: pass accessibility announcements built from titles and column labels; announce forbidden targets.
+- **Source:** phase review of `docs/archive/plans/keyboard-drag.md`
+
+### ISS-188 · P3 · Escape during a keyboard drag also closes an open panel
+
+- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 3 review
+- **Where:** Escape handlers in frontend/src/components/TaskPanel.tsx (line ~237), frontend/src/components/itop/TicketPanel.tsx (line ~98), frontend/src/components/Modal.tsx (line ~31)
+- **Problem:** The document-level Escape listeners run before dnd-kit cancels the drag, so one Escape both cancels the drag and closes the panel.
+- **Why deferred / fix direction:** Edge case; the panel reopens in one click. Fix: skip the close while a drag is active.
+- **Source:** phase review of `docs/archive/plans/keyboard-drag.md`
 
 ## Open — iTop
 
@@ -1214,6 +1222,8 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-066 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · TaskPanel spins forever when the project-tasks fetch fails
 - ISS-067 · 2026-11-19 · CHANGELOG "Service lists, Daily Review refresh, request timeouts, section chip" · A hung task PATCH blocks every later save of that task
 - ISS-075 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · Utilization Refresh failure shows no error
+- ISS-078 · 2026-11-19 · CHANGELOG "Keyboard drag on boards and reorder lists" · Keyboard drag does not work on the Kanban board
+- ISS-079 · 2026-11-19 · CHANGELOG "Keyboard drag on boards and reorder lists" · Sortable rows are tab stops with role=button and a joined accessible name
 - ISS-082 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · InstallBanner nests a role=button span inside a button
 - ISS-090 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · ConfirmModal warning tone uses raw bg-amber-500 instead of the chip-amber pair
 - ISS-092 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · Dialog focus trap lets Tab escape from a tabIndex=-1 element
