@@ -15,6 +15,13 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-19 — Service lists, Daily Review refresh, request timeouts, section chip
+
+- Saving a project's or customer's service list updates instantly and rolls back if the save fails.
+- Creating a task refreshes the Daily Review attention lists immediately.
+- Requests to the API time out after 30 seconds (60 seconds for the calls that wait on iTop), so a stuck save can no longer block later edits to the same task. A timed-out save says "The server did not answer in time. Check whether the change was saved before trying again."; a timeout never signs the user out.
+- During a drag between sections, an open task panel shows the new section right away.
+
 ### Changed — 2026-11-19 — setup.sh and nginx
 
 - `setup.sh` passes `ITOP_ALLOW_PRIVATE_HOSTS` and `ITOP_SYNC_DISABLED` from `~/solvro/.env` to the backend, so they can be set without editing the generated compose file. Unset keeps the previous defaults.
