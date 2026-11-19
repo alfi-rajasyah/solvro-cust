@@ -401,10 +401,18 @@ tasksRouter.patch(
       // other lock (see lib/taskStatuses.ts), so an admin category change or
       // delete cannot interleave with it.
       if (body.status !== undefined || body.statusId !== undefined) await lockStatusListShared(tx);
-      // A reorder or re-parent re-packs the project's task order: take that
-      // lock before the row lock below (see lib/orderLock.ts for why the order
-      // matters). The project id is read without a lock; it never changes.
-      if (body.position !== undefined || body.parentTaskId !== undefined) {
+      // A reorder or re-parent re-packs the project's task order, and linking
+      // an epic or section (a non-null id; null takes no key-share lock) locks
+      // that row, which an epic or section delete holds exclusively while it
+      // updates this task. Take the order lock before the row lock below (see
+      // lib/orderLock.ts for why the order matters). The project id is read
+      // without a lock; it never changes.
+      if (
+        body.position !== undefined ||
+        body.parentTaskId !== undefined ||
+        body.epicId != null ||
+        body.sectionId != null
+      ) {
         const [row] = await tx.$queryRaw<{ project_id: number }[]>`SELECT project_id FROM tasks WHERE id = ${id}`;
         if (row) await lockProjectOrder(tx, "tasks", row.project_id);
       }

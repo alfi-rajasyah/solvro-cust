@@ -147,3 +147,17 @@ export async function notifyForEvent(
   const { count } = await tx.notification.createMany({ data: rows });
   return count;
 }
+
+/**
+ * Which of `userIds` can see the project, active or not. For a caller that
+ * only needs the visibility answer, such as an epic owner (ISS-029 is the open
+ * decision on inactive users). Same visibility rules as
+ * `filterActiveUsersWhoCanSeeProject`, without its active-account filter.
+ */
+export function filterUsersWhoCanSeeProject(
+  tx: Tx,
+  projectId: number,
+  userIds: readonly number[],
+): Promise<Set<number>> {
+  return filterActiveUsersWhoCanSeeProject(tx, projectId, userIds, { activeOnly: false });
+}

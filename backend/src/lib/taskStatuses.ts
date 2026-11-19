@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient, type TaskStatus } from "@prisma/client";
 import { HttpError } from "../http/errors.js";
 import { prisma } from "../prisma.js";
+import { lockProjectOrder } from "./orderLock.js";
 
 // Custom task statuses (docs/archive/plans/custom-task-statuses.md §1): a
 // workspace-wide list of admin-defined statuses, each in one of the three
@@ -148,6 +149,14 @@ export interface SaveStatusDefsInput {
   moveTo?: Record<string, number>;
 }
 
+// The save may wait on one order lock per affected project (3 s each). The
+// budget caps the total wait; the transaction timeout sits well above it so
+// the writes after the last lock still fit and Prisma's 5 s default never
+// turns a wait into a P2028 500.
+const ORDER_LOCKS_BUDGET_MS = 15_000;
+const SAVE_TX_TIMEOUT_MS = 30_000;
+const CONCURRENT_MESSAGE = "Another change was saved at the same moment. Try again.";
+
 const conflict = (code: string, message: string, details?: unknown) =>
   new HttpError(409, code, message, details);
 
@@ -199,6 +208,36 @@ export async function saveTaskStatusDefs(input: SaveStatusDefsInput) {
     }
     const keptIds = new Set(statuses.flatMap((s) => (s.id === undefined ? [] : [s.id])));
     const removed = existing.filter((d) => !keptIds.has(d.id));
+
+    // The writes below update tasks across projects (moves off a removed
+    // status, a category change). A task re-pack takes its project's task-order
+    // lock and then updates that project's task rows, so updating task rows
+    // here without that lock can deadlock with it. Lock order: the exclusive
+    // status-list lock above, then each affected project's task-order lock in
+    // ascending project id (so two saves never cross), then the row locks.
+    // Task writers take the shared status-list lock first, then one project's
+    // order lock, so no cycle is possible.
+    const changedIds = [
+      ...removed.map((d) => d.id),
+      ...statuses.flatMap((s) =>
+        s.id !== undefined && existingById.get(s.id)!.category !== s.category ? [s.id] : [],
+      ),
+    ];
+    if (changedIds.length > 0) {
+      const projects = await tx.task.findMany({
+        where: { statusId: { in: changedIds } },
+        distinct: ["projectId"],
+        orderBy: { projectId: "asc" },
+        select: { projectId: true },
+      });
+      // Each wait is bounded (lib/orderLock.ts); bound the total too, so many
+      // projects answer a retryable 409 instead of the transaction expiring.
+      const startedAt = Date.now();
+      for (const { projectId } of projects) {
+        if (Date.now() - startedAt > ORDER_LOCKS_BUDGET_MS) throw new HttpError(409, "concurrent_update", CONCURRENT_MESSAGE);
+        await lockProjectOrder(tx, "tasks", projectId);
+      }
+    }
 
     // Row locks: a task insert pointing at a status being removed waits for
     // this transaction instead of racing the delete.
@@ -272,5 +311,5 @@ export async function saveTaskStatusDefs(input: SaveStatusDefsInput) {
     }
 
     return listTaskStatusDefs(tx);
-  });
+  }, { timeout: SAVE_TX_TIMEOUT_MS });
 }

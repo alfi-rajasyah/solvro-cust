@@ -15,6 +15,15 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-19 — Guest link address, deadlocks and plain conflict messages
+
+- Guest links, including the one used by "Embed in Outline", are built from the server's configured public address (`APP_URL`) instead of the address the owner has open, so a link copied over a tunnel or proxy opens for the guest. When `APP_URL` is unset or names a loopback address such as `http://localhost`, the link still uses the browser address.
+- Deleting an epic or a section no longer deadlocks with a task save that links a task to it, and saving the admin status list no longer deadlocks with a task re-pack: all of them take the project's task-order lock first. A task save that sets no epic or section does not wait on that lock, and a status save that waits too long answers a retryable 409 instead of a server error.
+- A database refusal of text containing a NUL byte is logged (code only, never the row data) and answered with a neutral message.
+- Label names are trimmed on the server, so "bug" and "bug " can no longer both exist.
+- Creating or renaming a customer onto an existing name answers "A customer with that name already exists" instead of a database message.
+- The epic owner check is one shared check for creating and editing an epic.
+
 ### Fixed — 2026-11-19 — Gantt errors, Dates cell and section permissions
 
 - Gantt: a failed date, reorder, move, Critical Path or dependency update always shows its error, even when another update starts right after it.

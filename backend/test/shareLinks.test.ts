@@ -105,7 +105,7 @@ describe("owner API", () => {
       expiresAt: string;
       createdAt: string;
     };
-    expect(Object.keys(body).sort()).toEqual(["createdAt", "expiresAt", "id", "label", "url"]);
+    expect(Object.keys(body).sort()).toEqual(["baseUrl", "createdAt", "expiresAt", "id", "label", "url"]);
     expect(body.label).toBe("For Nusantara IT");
     expect(body.url).toMatch(/^\/share\/[A-Za-z0-9_-]{43}$/);
     const days = (new Date(body.expiresAt).getTime() - before) / 86_400_000;

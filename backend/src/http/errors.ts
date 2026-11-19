@@ -106,10 +106,12 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   }
 
   // 22021: a string with a NUL byte reached a text column. Validated routes
-  // reject it earlier (http/validate.ts); this covers the rest. No details:
-  // the message carries row data.
+  // reject it earlier (http/validate.ts); this covers the rest. No details and
+  // no `err` in the log line: the message carries row data. The NUL can come
+  // from the request or from stored text, so the answer blames neither.
   if (pgCode === "22021") {
-    res.status(400).json({ error: "Text must not contain NUL characters", code: "validation_error" });
+    logger.warn({ pgCode }, "database refused text with a NUL byte");
+    res.status(400).json({ error: "The text contains a character that cannot be saved", code: "validation_error" });
     return;
   }
 

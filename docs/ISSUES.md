@@ -211,14 +211,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Question: reject inactive users (with which error code) or keep accepting them?.
 - **Source:** snapshot line 53, section "Known bugs / inconsistencies"
 
-### ISS-030 · P3 · NUL-byte (22021) errors return 400 without a log line
-
-- **Type:** bug · **Found:** 2026-11-18 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** errorHandler 22021 branch in backend/src/http/errors.ts (line ~111)
-- **Problem:** A Postgres 22021 that skips validate() answers 400 and logs nothing, where the old 500 logged at error. The message also blames the caller when the NUL came from elsewhere.
-- **Why deferred / fix direction:** Log logger.warn({ pgCode }, ...) without err (it carries row data) and use a neutral message.
-- **Source:** snapshot line 60, section "Known bugs / inconsistencies"
-
 ### ISS-031 · P3 · Task attachments are not built; storage and visibility are undecided
 
 - **Type:** decision · **Found:** 2026-07-01 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -259,37 +251,13 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Decide whether an audit trail for links is wanted; if yes, add it to the project diff.
 - **Source:** snapshot line 2376, section "Outline links, Phase A — deferred findings (2026-10-09)"; merged duplicates at snapshot lines 2383
 
-### ISS-176 · P3 · Epic delete and admin status save can still deadlock with task writes
+### ISS-190 · P3 · A slow admin status save can make status-setting task saves fail with a 500
 
-- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 1 review
-- **Where:** epicsRouter.delete in backend/src/routes/epics.ts; status save in backend/src/lib/taskStatuses.ts
-- **Problem:** Epic delete vs a PATCH that sets epicId can deadlock through the epic and task rows; the admin status save takes no task-order lock, so it can deadlock with a re-pack.
-- **Why deferred / fix direction:** Both predate the task-order lock change and are rare. Fix: take the task-order lock in both paths.
-- **Source:** phase review of `docs/archive/plans/task-integrity.md`
-
-### ISS-177 · P3 · Epic owner check is copied into two routes
-
-- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 1 review
-- **Where:** owner check in backend/src/routes/epics.ts (line ~143) and backend/src/routes/projects.ts (line ~822)
-- **Problem:** The same 11-line check sits in both routes, and it calls filterActiveUsersWhoCanSeeProject with activeOnly false, which reads as a contradiction.
-- **Why deferred / fix direction:** Fix: one shared assertEpicOwnerCanSeeProject helper, and a clearer name for the filter.
-- **Source:** phase review of `docs/archive/plans/task-integrity.md`
-
-### ISS-180 · P3 · Label names are not trimmed on the server
-
-- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 2 review
-- **Where:** label create and rename in backend/src/routes/projects.ts and backend/src/routes/labels.ts
-- **Problem:** Only LabelPicker trims, so "bug" and "bug " can both exist when created through the API.
-- **Why deferred / fix direction:** The UI path trims. Fix: trim in the Zod schemas for create and rename.
-- **Source:** phase review of `docs/archive/plans/label-permissions.md`
-
-### ISS-181 · P3 · Renaming a customer onto an existing name shows "Unique constraint violated"
-
-- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 2 review
-- **Where:** PATCH /customers/:id in backend/src/routes/customers.ts
-- **Problem:** The unique name clash returns the generic 409 with a database term.
-- **Why deferred / fix direction:** Fix: catch the name conflict and return a plain message, as for labels (lib/labelConflict.ts).
-- **Source:** phase review of `docs/archive/plans/label-permissions.md`
+- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 4 review
+- **Where:** lockStatusListShared in backend/src/lib/taskStatuses.ts (line ~42); status save order-lock loop (~236)
+- **Problem:** While the status save waits up to about 18 s on project order locks it holds the exclusive status-list lock; task writes that set a status wait on the shared lock with no lock_timeout inside a 5 s transaction, and P2028 is not mapped to 409.
+- **Why deferred / fix direction:** Needs an admin status save during heavy reordering; nothing is saved wrongly. Fix: a lock_timeout under 5 s on the shared wait (55P03 becomes the existing 409), or map P2028 to 409 concurrent_update.
+- **Source:** phase review of `docs/archive/plans/guest-link-address-and-locks.md`
 
 ## Open — Frontend UI
 
@@ -904,14 +872,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Reach the app at http://localhost:PORT, or serve HTTPS (internal-CA cert declined 2026-07-31). Not fixable in the export format.
 - **Source:** snapshot line 125, section "Known bugs / inconsistencies"; merged duplicates at snapshot lines 132, 141, 147
 
-### ISS-132 · P2 · Guest links are built from the owner's browser address
-
-- **Type:** bug · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** NewLinkPanel in frontend/src/components/ProjectShare.tsx (line ~244)
-- **Problem:** The copied link uses window.location.origin, so an owner signed in over an SSH tunnel or localhost gets a link a guest cannot open.
-- **Why deferred / fix direction:** Add a PUBLIC_BASE_URL setting and build the link from it.
-- **Source:** snapshot line 2353, section "Collaboration & sharing, Phase 6 ("Guest links") — deferred findings (2026-09-30)"
-
 ### ISS-133 · P3 · Excel export revokes its blob URL right after the click
 
 - **Type:** debt · **Found:** 2026-07-31 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -1193,6 +1153,7 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-009 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · Shared pino logger has no redact paths for iTop tokens
 - ISS-027 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · Deleting a task leaves sparse positions in its sibling list
 - ISS-028 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · PATCH /tasks/:id accepts a due date before the start date
+- ISS-030 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · NUL-byte (22021) errors return 400 without a log line
 - ISS-036 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · Section and epic delete can deadlock with a concurrent task reorder
 - ISS-037 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Create-task parent picker lists subtasks the server rejects
 - ISS-038 · 2026-11-19 · CHANGELOG "Service lists, Daily Review refresh, request timeouts, section chip" · Service-mapping mutations are not optimistic
@@ -1222,6 +1183,7 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-124 · 2026-11-18 · accepted by the user: the user sees iTop's own refusal text · pending_reason assumed free text; a list-valued install refuses it
 - ISS-128 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · An iTop application token saved before an address is not probed
 - ISS-129 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · A Refresh full sync can be dropped silently while a scheduled sync holds the lock
+- ISS-132 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Guest links are built from the owner's browser address
 - ISS-135 · 2026-11-18 · decided by the user: customer exports do not show iTop ticket refs · Gantt Excel export omits the pinned iTop ticket
 - ISS-136 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · Typecheck skips vite.config.ts and node tsconfig lists deleted files
 - ISS-137 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · search.spec.ts presses Cmd+K without waiting for the listener
@@ -1232,4 +1194,8 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-163 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · setup.sh does not pass ITOP_ALLOW_PRIVATE_HOSTS or ITOP_SYNC_DISABLED
 - ISS-164 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · setup.sh: no registry-login preflight on a fresh install; CORS falls back to `*`
 - ISS-165 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · Icons and favicon have no explicit Cache-Control
+- ISS-176 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Epic delete and admin status save can still deadlock with task writes
+- ISS-177 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Epic owner check is copied into two routes
 - ISS-178 · 2026-11-19 · CHANGELOG "Gantt errors, Dates cell and section permissions" · Gantt section actions show for task:write but the routes need project:write
+- ISS-180 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Label names are not trimmed on the server
+- ISS-181 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Renaming a customer onto an existing name shows "Unique constraint violated"
