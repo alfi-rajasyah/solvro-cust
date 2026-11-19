@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, type FormEvent } from "react";
+import { resolveSectionColors } from "@/lib/gantt/palette";
 import { TOOLBAR_BOX, TOOLBAR_BUTTON_OUTLINE, TOOLBAR_BUTTON_PRIMARY } from "@/lib/utils";
 import { useItopOrgChoice } from "@/components/itop/useItopOrgChoice";
 import {
@@ -222,6 +223,7 @@ export function ProjectList() {
   // rendered `visibleGrouped` projection below — mirrors SolvroKanban.tsx's
   // `topLevelAll` (unfiltered, drop-math source) vs `derivedColumns`
   // (filtered, render-only) split.
+  const sectionColors = useMemo(() => resolveSectionColors(sections ?? []), [sections]);
   const grouped = useMemo(() => groupBySection(tasks ?? [], sections ?? []), [tasks, sections]);
 
   const isTaskVisible = useCallback(
@@ -585,6 +587,7 @@ export function ProjectList() {
             <SectionGroup
               key={g.section?.id ?? "none"}
               section={g.section}
+              sectionColors={sectionColors}
               nodes={g.tasks}
               collapsed={collapsed.has(groupKeyOf(g.section?.id ?? null))}
               canEdit={canEdit}
@@ -691,6 +694,8 @@ export function ProjectList() {
 
 interface SectionGroupProps {
   section: Section | null;
+  /** Gantt-resolved color per section id (resolveSectionColors), computed once by ProjectList. */
+  sectionColors: Map<number, string>;
   nodes: TaskNode[];
   collapsed: boolean;
   canEdit: boolean;
@@ -720,6 +725,7 @@ interface SectionGroupProps {
 
 function SectionGroup({
   section,
+  sectionColors,
   nodes,
   collapsed,
   canEdit,
@@ -770,7 +776,7 @@ function SectionGroup({
             {collapsed ? "chevron_right" : "expand_more"}
           </span>
         </button>
-        {section && <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: section.color }} />}
+        {section && <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: sectionColors.get(section.id) ?? section.color }} />}
         {isRenaming ? (
           <form onSubmit={(e) => onRenameSubmit(key, e)} className="flex items-center gap-2">
             <input

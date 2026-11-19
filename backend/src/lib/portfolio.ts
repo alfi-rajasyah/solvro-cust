@@ -17,7 +17,7 @@ export interface PortfolioProjectRow {
   isOverdue: boolean;
   daysOverdue: number;
   updatedAt: string;
-  sections: { id: number; name: string; color: string }[];
+  sections: { id: number; name: string; color: string; position: number }[];
 }
 
 export async function computePortfolioRows(
@@ -46,8 +46,9 @@ export async function computePortfolioRows(
         select: { customer: { select: { id: true, name: true } } },
       },
       sections: {
-        orderBy: { position: "asc" },
-        select: { id: true, name: true, color: true },
+        // position is not unique (default 0), so id breaks ties the same way the Gantt does
+        orderBy: [{ position: "asc" }, { id: "asc" }],
+        select: { id: true, name: true, color: true, position: true },
       },
     },
   });

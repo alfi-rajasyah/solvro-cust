@@ -5,13 +5,9 @@ import { expect, loginViaUi, test } from "../fixtures/test";
 // Automated accessibility check on the main pages (WCAG 2.1 A/AA plus axe's
 // best practices), in the light and the dark theme, on desktop and mobile. It
 // guards what is fixed today; known gaps are excluded explicitly and are
-// listed in docs/ISSUES.md (ISS-081 and ISS-080):
+// listed in docs/ISSUES.md (ISS-081):
 // - region, landmark-unique, heading-order: the page
 //   landmark and heading structure is not done yet.
-// - contrast of `bg-primary/10` and `bg-primary/15` chips with `text-primary`
-//   text (4.2–4.5:1 over tinted surfaces), waiting on the brand colour
-//   decision. Only the contrast rule skips them; every other rule still
-//   checks them.
 //
 // Table rows after the tenth are skipped: they repeat the same markup, and
 // the pages list whatever the database holds (hundreds of users or projects
@@ -19,8 +15,6 @@ import { expect, loginViaUi, test } from "../fixtures/test";
 // dependent on earlier specs.
 
 const KNOWN_GAP_RULES = ["region", "landmark-unique", "heading-order"];
-const CONTRAST_GAP =
-  ":is(.bg-primary\\/10, .bg-primary\\/15):is(.text-primary, .text-primary-tint-text)";
 const REPEATED_ROWS = "tbody tr:nth-child(n+11)";
 
 async function violations(page: Page) {
@@ -31,10 +25,9 @@ async function violations(page: Page) {
     .disableRules([...KNOWN_GAP_RULES, "color-contrast"])
     .exclude(REPEATED_ROWS)
     .analyze();
-  // Contrast alone, without the known chips.
+  // Contrast alone.
   const contrast = await new AxeBuilder({ page })
     .withRules(["color-contrast"])
-    .exclude(CONTRAST_GAP)
     .exclude(REPEATED_ROWS)
     .analyze();
   return [...all.violations, ...contrast.violations].map((v) => ({

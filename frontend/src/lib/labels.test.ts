@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  roleLabel,
   MILESTONE_UPCOMING_LABEL,
   PHASE_STATUS_LABEL,
   PRIORITY_LABEL,
@@ -155,5 +156,19 @@ describe("guest link labels", () => {
   it("link status and milestone words", () => {
     expect(SHARE_LINK_STATUS_LABEL).toEqual({ active: "Active", expired: "Expired", revoked: "Revoked" });
     expect(MILESTONE_UPCOMING_LABEL).toBe("Upcoming");
+  });
+});
+
+describe("roleLabel", () => {
+  it("relabels the four built-in roles", () => {
+    expect(roleLabel("ADMIN")).toBe("Admin");
+    expect(roleLabel("TAM")).toBe("TAM");
+    expect(roleLabel("STAKEHOLDER")).toBe("Stakeholder");
+    expect(roleLabel("PENDING")).toBe("Pending");
+  });
+
+  it("shows a custom role exactly as stored", () => {
+    expect(roleLabel("PMO")).toBe("PMO");
+    expect(roleLabel("VENDOR_LEAD")).toBe("VENDOR_LEAD");
   });
 });

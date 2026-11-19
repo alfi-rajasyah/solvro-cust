@@ -15,6 +15,29 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-19 — Chip contrast, sidebar text, loading and shortcut hints
+
+- Light-theme green chips (customer primary mark, account overview and service mapping tags, comment mentions, customer avatars, Admin chips) are readable on tinted panels: their text uses the darker `primary-tint-text` token, 4.76:1 or better on every surface in both themes, and the remove icon on service mapping chips uses the same token. The accessibility scan no longer excludes these chips.
+- The sidebar rail uses fixed warm grey text tokens (`rail-text`, `rail-text-hover`, `rail-text-muted`) instead of cool slate greys; inactive nav text is 5.6:1 or better on the rail.
+- The sign-in check shows the delayed loading skeleton instead of plain "Loading…" text.
+- The command palette row drops a dead highlight class and matches the vendored row radius; the top bar search hint reads "Ctrl+K" off macOS.
+- The Admin role select shows Admin, TAM, Stakeholder and Pending in sentence case instead of raw uppercase values; custom roles show their stored names. Admin icon sizes use the type scale.
+
+### Changed — 2026-11-19 — Overview, Portfolio, project tabs and Risks polish
+
+- The Overview and project Overview loading placeholders use the shared delayed skeleton, and the Overview project id uses the data-mono type style.
+- Portfolio timeline bars and legend swatches use the standard square-corner radius, its year switcher uses the data-mono type style, and phones show the Today marker over each project's year track.
+- On narrow phones the active project tab scrolls into view, clear of the edge fade, when a tab is opened directly; the page itself never jumps.
+- The inline Prob and Impact editors on the project Risks table use the app's select component instead of a native dropdown; picking the current value sends no update.
+
+### Changed — 2026-11-19 — Type scale, Critical Path marks, sync form errors and section colours
+
+- Text sizes in the task panel, epic panel, service mapping list, board cards and the Critical Path mark use the named type scale instead of fixed pixel sizes.
+- The /tasks grid and board subtask rows show the Critical Path mark on critical-path tasks.
+- Mid-week and Reflection sync forms name the card missing its title ("Highlight 2 needs a title."), mark that field as invalid and move focus to it.
+- Sections never given a colour show the same colour in the List tab, the Executive page and the task panel as in the Gantt, instead of grey. The portfolio report returns each section's position and orders sections by position, then id.
+- The Gantt drag preview and the unused Gantt go-to-date popover use the standard overlay shadow.
+
 ### Fixed — 2026-11-19 — Panels, forms and board accessibility
 
 - The epic owner picker lists people on the project (its TAM, linked customer owners, members) first and everyone else under "Not on this project", because the server refuses an owner who cannot see the project. The list stays ungrouped until project access has loaded.

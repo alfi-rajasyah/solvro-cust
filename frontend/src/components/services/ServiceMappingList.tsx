@@ -196,7 +196,7 @@ export function ServiceMappingList({
                           </span>
                         )}
                         {subscribed && (
-                          <span className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 font-display text-label-caps uppercase text-primary">
+                          <span className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 font-display text-label-caps uppercase text-primary-tint-text">
                             Subscribed
                           </span>
                         )}
@@ -316,7 +316,7 @@ function ToolsEditor({
         {tools.map((t, i) => (
           <span
             key={`${t}-${i}`}
-            className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-meta text-primary"
+            className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-meta text-primary-tint-text"
           >
             {t}
             {canMutate && (
@@ -325,9 +325,9 @@ function ToolsEditor({
                 onClick={() => remove(i)}
                 disabled={saving}
                 aria-label={`Remove ${t}`}
-                className="tap-target rounded-full text-primary/70 hover:text-primary disabled:opacity-50"
+                className="tap-target rounded-full text-primary-tint-text hover:opacity-70 disabled:opacity-50"
               >
-                <span aria-hidden="true" className="material-symbols-outlined text-[13px]">close</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-xs">close</span>
               </button>
             )}
           </span>

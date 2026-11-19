@@ -181,7 +181,7 @@ export function TaskCard({
       {subtasks.length > 0 && (
         <div className="mb-2">
           <div className="mb-1 flex items-center gap-1 font-display text-label-caps uppercase text-on-surface-variant">
-            <span aria-hidden="true" className="material-symbols-outlined text-[12px]">check_circle</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-meta">check_circle</span>
             Subtasks {subtasksDone}/{subtasks.length}
           </div>
           <ul className="space-y-0.5 border-l border-outline-variant/60 pl-2">
@@ -286,6 +286,14 @@ export function SubtaskRow({
       >
         {task.title}
       </span>
+      {task.isCriticalPath && (
+        <>
+          <span aria-hidden="true" className="inline-flex shrink-0">
+            <CriticalPathMark variant="glyph" />
+          </span>
+          <span className="sr-only">{CRITICAL_PATH_LABEL}</span>
+        </>
+      )}
       {task.assignedTo && (
         <span onPointerDown={(e) => e.stopPropagation()}>
           <AssigneeAvatar user={task.assignedTo} size="xs" />

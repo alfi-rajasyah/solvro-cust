@@ -307,7 +307,8 @@ function beginGesture<TData>(config: BeginGestureConfig<TData>) {
     adoptRootTypography(overlay)
     overlay.style.height = `${barHeight}px`
     const barEl = document.createElement("div")
-    barEl.className = "shrink-0 rounded-sm shadow-lg"
+    // SOLVRO PATCH: shadow-overlay (DESIGN.md elevation whitelist) instead of raw shadow-lg
+    barEl.className = "shrink-0 rounded-sm shadow-overlay"
     barEl.style.width = `${barWidth}px`
     barEl.style.height = "100%"
     barEl.style.background = `color-mix(in oklab, ${color} 22%, var(--color-background))`

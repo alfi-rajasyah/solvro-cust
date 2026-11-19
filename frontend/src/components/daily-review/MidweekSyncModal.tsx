@@ -98,6 +98,8 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
   const [confirmRedraft, setConfirmRedraft] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingFocusKey, setPendingFocusKey] = useState<string | null>(null);
+  // Card whose title blocked the last save; marks the field until it is typed in.
+  const [invalidKey, setInvalidKey] = useState<string | null>(null);
   const titleRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
 
   useEffect(() => {
@@ -162,13 +164,16 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
 
   function submit() {
     setError(null);
+    setInvalidKey(null);
     const kept = state.highlights.filter((h) => {
       const titleEmpty = h.title.trim() === "";
       const restEmpty = h.detail.trim() === "" && h.risk.trim() === "" && h.action.trim() === "";
       return !(titleEmpty && restEmpty);
     });
-    if (kept.some((h) => h.title.trim() === "")) {
-      setError("Every highlight needs a title.");
+    const untitled = kept.find((h) => h.title.trim() === "");
+    if (untitled) {
+      setInvalidKey(untitled.key);
+      setPendingFocusKey(untitled.key);
       return;
     }
     if (kept.length > MAX_HIGHLIGHTS) {
@@ -196,6 +201,10 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
       submit();
     }
   }
+
+  // Computed at render so the number follows the card if others are removed.
+  const blockedIndex = invalidKey ? state.highlights.findIndex((x) => x.key === invalidKey) : -1;
+  const bannerText = blockedIndex >= 0 ? `Highlight ${blockedIndex + 1} needs a title.` : error;
 
   const fieldId = (name: string) => `midweek-${customer.id}-${name}`;
   const linkClass =
@@ -235,9 +244,9 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
     >
       <>
         <div className="space-y-4" onKeyDown={handleKeyDown}>
-          {error && (
+          {bannerText && (
             <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>{bannerText}</AlertDescription>
             </Alert>
           )}
 
@@ -357,7 +366,11 @@ export function MidweekSyncModal({ customer, week, onClose }: MidweekSyncModalPr
                         titleRefs.current.set(h.key, el);
                       }}
                       value={h.title}
-                      onChange={(e) => patchHighlight(h.key, { title: e.target.value })}
+                      onChange={(e) => {
+                        if (invalidKey === h.key) setInvalidKey(null);
+                        patchHighlight(h.key, { title: e.target.value });
+                      }}
+                      aria-invalid={invalidKey === h.key || undefined}
                       maxLength={200}
                       aria-label={`Highlight ${n} title for ${customer.name}`}
                     />

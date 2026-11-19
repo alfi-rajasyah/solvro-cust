@@ -9,6 +9,15 @@ import { useTheme } from "@/lib/theme";
 import { NotificationBell } from "./NotificationBell";
 import { useSidebar } from "./SidebarContext";
 
+/** Mac keyboards show the command glyph; everywhere else the shortcut is Ctrl+K. */
+function isApplePlatform(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+  return /mac|iphone|ipad|ipod/i.test(nav.userAgentData?.platform ?? nav.platform ?? "");
+}
+
+const SEARCH_SHORTCUT = isApplePlatform() ? "⌘K" : "Ctrl+K";
+
 /** Visible menu items only: Help and the theme toggle are `md:hidden`. */
 function menuItems(menu: HTMLElement | null): HTMLElement[] {
   if (!menu) return [];
@@ -186,7 +195,7 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
             Search projects, tasks, customers…
           </span>
           <span className="rounded-sm border border-outline-variant bg-surface-container-low px-1.5 py-0.5 font-mono text-meta text-on-surface-variant">
-            ⌘K
+            {SEARCH_SHORTCUT}
           </span>
         </button>
 

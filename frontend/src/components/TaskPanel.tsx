@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { resolveSectionColors } from "@/lib/gantt/palette";
 import { usePanelFocus } from "@/hooks/usePanelFocus";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { ConfirmModal } from "./ConfirmModal";
@@ -111,6 +112,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
 
   const { data: tasks, isError: tasksError, error: tasksLoadError, refetch: refetchTasks } = useProjectTasks(projectId);
   const { data: sections } = useProjectSections(projectId);
+  const sectionColors = useMemo(() => resolveSectionColors(sections ?? []), [sections]);
   const { data: epics, isLoading: epicsLoading } = useProjectEpics(projectId);
   const { data: users } = useUsers();
   const { data: statusDefs } = useTaskStatuses();
@@ -548,7 +550,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                 onClick={() => onOpenTask(parentTask.id)}
                 className="[@media(pointer:coarse)]:min-h-11 flex min-w-0 items-center gap-0.5 rounded-sm text-meta text-on-surface-variant hover:text-primary outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
               >
-                <span className="material-symbols-outlined text-[13px]" aria-hidden="true">
+                <span className="material-symbols-outlined text-xs" aria-hidden="true">
                   arrow_back
                 </span>
                 <span className="truncate">{parentTask.title}</span>
@@ -761,7 +763,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                   {task.section && (
                     <span
                       className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: task.section.color }}
+                      style={{ backgroundColor: sectionColors.get(task.section.id) ?? task.section.color }}
                     />
                   )}
                   <span className="text-on-surface">{sectionName}</span>
@@ -1026,7 +1028,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               </Sortable>
               {canEdit && (
                 <form onSubmit={handleAddSubtask} className="mt-1.5 flex items-center gap-1.5">
-                  <span aria-hidden="true" className="material-symbols-outlined text-[13px] text-primary">add</span>
+                  <span aria-hidden="true" className="material-symbols-outlined text-xs text-primary">add</span>
                   <input
                     type="text"
                     value={newSubtask}

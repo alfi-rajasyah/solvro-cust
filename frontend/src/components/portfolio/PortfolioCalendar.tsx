@@ -115,7 +115,7 @@ export function PortfolioCalendar({
               chevron_left
             </span>
           </button>
-          <span className="min-w-[4ch] text-center font-mono text-xs font-semibold text-on-surface">
+          <span className="min-w-[4ch] text-center text-data-mono font-mono text-on-surface">
             {year}
           </span>
           <button
@@ -136,10 +136,16 @@ export function PortfolioCalendar({
               key={item.label}
               className="inline-flex items-center gap-1.5 text-meta text-on-surface-variant"
             >
-              <span className={`h-2 w-2 rounded-full ${item.tone}`} />
+              <span className={`h-2 w-2 rounded-sm ${item.tone}`} />
               {item.label}
             </span>
           ))}
+          {showTodayLine && (
+            <span className="inline-flex items-center gap-1.5 text-meta text-on-surface-variant md:hidden">
+              <span aria-hidden="true" className="h-3 border-l border-dashed border-primary" />
+              Today
+            </span>
+          )}
         </div>
       </div>
 
@@ -269,7 +275,7 @@ export function PortfolioCalendar({
                       </div>
                       <div
                         title={`${fmtRange(p.start, p.end)} · ${p.progressPct}%`}
-                        className={`absolute top-1/2 flex h-2.5 -translate-y-1/2 items-center rounded-full ${barTone(p)}`}
+                        className={`absolute top-1/2 flex h-2.5 -translate-y-1/2 items-center rounded-sm ${barTone(p)}`}
                         style={{
                           left: `${leftFrac * 100}%`,
                           width: `${widthPct}%`,
@@ -286,6 +292,13 @@ export function PortfolioCalendar({
                           </span>
                         )}
                       </div>
+                      {showTodayLine && (
+                        <div
+                          aria-hidden="true"
+                          className="pointer-events-none absolute top-0 z-10 h-full border-l border-dashed border-primary md:hidden"
+                          style={{ left: `${todayFrac * 100}%` }}
+                        />
+                      )}
                     </div>
                   </div>
                 );
