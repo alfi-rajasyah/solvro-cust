@@ -194,7 +194,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
   }, [parentTaskId]);
 
   const possibleParents = (projectTasks ?? []).filter(
-    (t) => !editingTask || (t.id !== editingTask.id && t.parentTaskId === null),
+    (t) => t.parentTaskId === null && (!editingTask || t.id !== editingTask.id),
   );
   const subtasks = editingTask
     ? (projectTasks ?? [])
@@ -666,6 +666,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                     <input
                       type="checkbox"
                       checked={s.status === "DONE"}
+                      disabled={!canEdit}
                       onChange={() =>
                         update.mutate({
                           id: s.id,

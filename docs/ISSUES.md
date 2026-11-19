@@ -285,14 +285,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 
 ## Open — Frontend UI
 
-### ISS-037 · P2 · Create-task parent picker lists subtasks the server rejects
-
-- **Type:** bug · **Found:** 2026-08-03 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** possibleParents in frontend/src/components/TaskFormModal.tsx (line ~196)
-- **Problem:** In create mode the filter short-circuits to true, so subtasks appear as parent options. Picking one returns a 400 from the max-depth guard.
-- **Why deferred / fix direction:** Apply the parentTaskId === null filter in both edit and create mode.
-- **Source:** snapshot line 1491, section "Gantt visual refresh — deferred findings (2026-08-03)"
-
 ### ISS-038 · P3 · Service-mapping mutations are not optimistic
 
 - **Type:** debt · **Found:** 2026-07-15 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -356,14 +348,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** Promoting or re-parenting a subtask needs the modal. No Promote shortcut was built after the dogfood window.
 - **Why deferred / fix direction:** Trigger: users report the modal round-trip as friction.
 - **Source:** snapshot line 613, section "Kanban → ReUI swap — deferred findings (2026-07-27)"
-
-### ISS-046 · P3 · Subtask DONE checkbox in the task modal ignores canEdit
-
-- **Type:** bug · **Found:** 2026-07-27 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** subtask checkbox in frontend/src/components/TaskFormModal.tsx (line ~666)
-- **Problem:** A user without task:write can click the checkbox, though the server rejects the PATCH. The up/down arrows are gated.
-- **Why deferred / fix direction:** Add disabled={!canEdit} to the checkbox.
-- **Source:** snapshot line 630, section "Kanban → ReUI swap — deferred findings (2026-07-27)"
 
 ### ISS-047 · P3 · Command palette has dead classes and a hardcoded Mac shortcut glyph
 
@@ -461,14 +445,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Add CriticalPathMark beside the priority indicator if either surface is revisited.
 - **Source:** snapshot line 1798, section "Critical Path mark — deferred findings (2026-09-02)"
 
-### ISS-059 · P3 · TaskPanel header-menu errors appear below the subtasks list
-
-- **Type:** bug · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** error Alert in frontend/src/components/TaskPanel.tsx (line ~1027)
-- **Problem:** A failed Delete or Duplicate task writes its error below the subtasks, off-screen on a task with many subtasks, so the user sees no feedback.
-- **Why deferred / fix direction:** Render the alert at the top of the scroll container or scroll to it.
-- **Source:** snapshot line 1835, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
-
 ### ISS-060 · P3 · Creating a task leaves Daily Review attention lists stale
 
 - **Type:** bug · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -476,14 +452,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** Creating an overdue TODO task does not invalidate the Daily Review query, so its attention lists stay stale until staleTime elapses.
 - **Why deferred / fix direction:** Add the dailyReviewRoot invalidation like the sibling mutations.
 - **Source:** snapshot line 1844, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
-
-### ISS-061 · P3 · Section header actions show for task:write but the routes need project:write
-
-- **Type:** bug · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** canEdit in frontend/src/pages/views/ProjectList.tsx (line 128); routes in backend/src/routes/sections.ts
-- **Problem:** A custom role with task:write only sees the section buttons and gets a 403 in the action error alert. Seeded roles never split the two.
-- **Why deferred / fix direction:** Gate the section actions on project:write.
-- **Source:** snapshot line 1874, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
 
 ### ISS-062 · P3 · Duplicate mutations wait on inactive-query invalidations
 
@@ -501,14 +469,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Mark or focus the offending card when save is blocked.
 - **Source:** snapshot line 1939, section "Weekly Sync achievement rows — deferred findings (2026-09-10)"
 
-
-### ISS-066 · P3 · TaskPanel spins forever when the project-tasks fetch fails
-
-- **Type:** bug · **Found:** 2026-09-29 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** TaskPanel in frontend/src/components/TaskPanel.tsx (lines ~110, ~262)
-- **Problem:** When the fetch errors, tasks stays undefined and the panel keeps showing 'Loading task…' with aria-busy instead of an error state.
-- **Why deferred / fix direction:** Read isError from useProjectTasks and render an error state with a retry.
-- **Source:** snapshot line 2329, section "Collaboration & sharing, Phase 1 ("Quick wins") — deferred findings (2026-09-29)"
 
 ### ISS-067 · P3 · A hung task PATCH blocks every later save of that task
 
@@ -597,6 +557,14 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** The picker lists every user, but the server refuses an owner who cannot see the project (`owner_no_project_access`), so picking one shows a 400.
 - **Why deferred / fix direction:** The server enforces the rule and the error shows inline. Fix: limit options to users who can see the project, or mark the others disabled with a reason.
 - **Source:** phase review of `docs/archive/plans/task-integrity.md`
+
+### ISS-179 · P3 · Edit-mode parent picker lets a task with subtasks pick a parent
+
+- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 1 review
+- **Where:** possibleParents in frontend/src/components/TaskFormModal.tsx (line ~196)
+- **Problem:** A task that has subtasks can pick a parent, which would make a three-level tree that the server depth guard rejects.
+- **Why deferred / fix direction:** The server refuses it with a 400. Fix: hide the parent picker, or exclude parents, when the edited task has subtasks.
+- **Source:** phase review of `docs/archive/plans/task-ui-fixes.md`
 
 ## Open — Accessibility & tokens
 
@@ -849,6 +817,14 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** On a partly filled bar the part of the label over the pale hatch may be hard to read. Seen in light mode, not verified in a browser.
 - **Why deferred / fix direction:** Trigger: confirm in a browser on a partly filled bar. Then pick the label colour per segment.
 - **Source:** snapshot line 2445, section "Design compliance fixes — deferred findings (2026-11-02)"
+
+### ISS-178 · P3 · Gantt section actions show for task:write but the routes need project:write
+
+- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 1 review
+- **Where:** canEdit in frontend/src/components/gantt-v2/SolvroGantt.tsx (line ~354): Add section (~1086), section reorder (~583), section color (~760)
+- **Problem:** The same mismatch ISS-061 fixed in the list view: a custom role with task:write only sees the actions and gets a 403.
+- **Why deferred / fix direction:** Seeded roles never split the two permissions. Fix: gate the three actions on project:write (spine file, instant review).
+- **Source:** phase review of `docs/archive/plans/task-ui-fixes.md`
 
 ## Open — Boards & drag
 
@@ -1337,8 +1313,13 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-027 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · Deleting a task leaves sparse positions in its sibling list
 - ISS-028 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · PATCH /tasks/:id accepts a due date before the start date
 - ISS-036 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · Section and epic delete can deadlock with a concurrent task reorder
+- ISS-037 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Create-task parent picker lists subtasks the server rejects
+- ISS-046 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Subtask DONE checkbox in the task modal ignores canEdit
+- ISS-059 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · TaskPanel header-menu errors appear below the subtasks list
+- ISS-061 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Section header actions show for task:write but the routes need project:write
 - ISS-064 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · CustomerDetail ignores itopOrgId/itopOrgName the API already returns
 - ISS-065 · 2026-11-18 · accepted by the user: the offset stays out of the query key on purpose (comment in `queries.ts`) · useItopTicket weekly hours can be stale after a timezone change
+- ISS-066 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · TaskPanel spins forever when the project-tasks fetch fails
 - ISS-075 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · Utilization Refresh failure shows no error
 - ISS-115 · 2026-11-18 · CHANGELOG "iTop hardening: log redaction, address token check, Refresh, services scope" · GET /itop/services lists every iTop organisation's services to any signed-in user
 - ISS-119 · 2026-11-18 · accepted by the user: iTop limits what Solvro can read; no code change · iTop personal-token expiry is only read when iTop allows it

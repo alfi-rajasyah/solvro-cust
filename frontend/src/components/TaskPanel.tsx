@@ -19,6 +19,7 @@ import { TaskTicketField } from "@/components/itop/TaskTicketField";
 import { useCanCreateItopTicket } from "@/components/itop/useCanCreateItopTicket";
 import { useItopOrgChoice } from "@/components/itop/useItopOrgChoice";
 import { Alert, AlertDescription } from "@/components/reui/alert";
+import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import { Sortable, SortableItem, SortableItemHandle } from "@/components/reui/sortable";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
@@ -107,7 +108,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const { data: itopStatusData } = useItopStatus();
   const subtaskCreateGate = useCanCreateItopTicket(itopOrg.customerId, itopOrg.customerName);
 
-  const { data: tasks } = useProjectTasks(projectId);
+  const { data: tasks, isError: tasksError, error: tasksLoadError, refetch: refetchTasks } = useProjectTasks(projectId);
   const { data: sections } = useProjectSections(projectId);
   const { data: epics, isLoading: epicsLoading } = useProjectEpics(projectId);
   const { data: users } = useUsers();
@@ -191,6 +192,13 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   } | null>(null);
 
   const panelRef = useRef<HTMLDivElement | null>(null);
+  // The error alert sits at the top of the scroll area; bring it into view when
+  // one appears so a failed Delete/Duplicate is seen even if the user has
+  // scrolled down to the subtasks (ISS-059).
+  const errorRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: "nearest" });
+  }, [error]);
   // Focus moves into the panel on open (and when the loading shell is
   // replaced by the loaded panel) and returns to the opener on close.
   usePanelFocus(panelRef, taskId, task ? "ready" : "loading");
@@ -248,18 +256,21 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     // `tasks` undefined = still loading; once it has loaded, a missing task was
     // deleted (or is not visible to this user) — say so instead of spinning.
     const notFound = tasks !== undefined;
+    // A failed fetch leaves `tasks` undefined: show the error with a retry
+    // instead of an endless "Loading task…" (ISS-066).
+    const loadFailed = tasks === undefined && tasksError;
     return (
       <div
         ref={panelRef}
         role="dialog"
         aria-label="Task details"
-        aria-busy={!notFound}
+        aria-busy={!notFound && !loadFailed}
         tabIndex={-1}
         className="fixed right-0 top-14 bottom-0 z-40 flex w-full flex-col border-l border-outline-variant bg-surface-container px-5 py-4 outline-hidden md:w-[380px]"
       >
         <div className="flex items-center justify-between">
           <span className="text-sm text-on-surface-variant">
-            {notFound ? "Task not found" : "Loading task…"}
+            {notFound ? "Task not found" : loadFailed ? "Task details" : "Loading task…"}
           </span>
           <button
             type="button"
@@ -270,6 +281,14 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
             <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
           </button>
         </div>
+        {loadFailed && (
+          <QueryErrorAlert
+            title="Could not load this task"
+            error={tasksLoadError}
+            onRetry={() => refetchTasks()}
+            className="mt-4"
+          />
+        )}
       </div>
     );
   }
@@ -510,6 +529,16 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
+          {/* Top of the scroll area so a failed save, duplicate or delete is seen
+              even on a task with many subtasks (ISS-059). */}
+          {error && (
+            <div ref={errorRef} className="mb-4">
+              <Alert variant="destructive">
+                <AlertDescription className="text-xs">{error}</AlertDescription>
+              </Alert>
+            </div>
+          )}
+
           {/* Parent breadcrumb — the only way back out of a subtask. */}
           {parentTask && (
             <div className="mb-1 flex max-w-full items-center gap-1.5">
@@ -1022,12 +1051,6 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
 
           {/* Outline pages that link to this task (hidden when there is nothing to show). */}
           <OutlineMentions scope={{ kind: "task", id: task.id }} variant="block" />
-
-          {error && (
-            <Alert variant="destructive" className="mt-4">
-              <AlertDescription className="text-xs">{error}</AlertDescription>
-            </Alert>
-          )}
 
           {/* Comments */}
           <div className="mt-5 border-t border-outline-variant pt-4">
