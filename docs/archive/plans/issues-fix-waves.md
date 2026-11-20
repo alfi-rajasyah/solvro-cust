@@ -1,6 +1,6 @@
 # docs/ISSUES.md: fix waves without user decisions
 
-Status: in progress (triage 2026-11-20 @ `5b283ea`; waves E, F, G and H done 2026-11-20)
+Status: shipped 2026-11-20 (triage 2026-11-20 @ `5b283ea`; waves E, F, G and H done; the decision list below stays open in `docs/ISSUES.md`)
 Archive path: `docs/archive/plans/issues-fix-waves.md`
 
 Triage of the open issues in `docs/ISSUES.md` (126 open). 45 can be fixed without a user decision; they are grouped into four waves of up to three streams with disjoint files. Each wave is one or more PRs into `develop`; spine files get the instant review.

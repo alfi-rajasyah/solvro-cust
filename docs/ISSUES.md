@@ -381,7 +381,7 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Where:** `focus-visible:outline-none` with a solid ring on borderless controls across frontend/src (e.g. TaskPanel.tsx ~1155, components/daily-review/, itop/DailyItopStrip.tsx, pages/views/ProjectList.tsx ~944-965)
 - **Problem:** DESIGN.md's borderless form is `outline-hidden focus-visible:ring-2 focus-visible:ring-primary`. `outline-none` removes the outline that forced-colours mode would show, and forced colours drops the ring, so these controls show no keyboard focus there.
 - **Why deferred / fix direction:** Outside the wave scope (the wave fixed bordered controls and the shared constants). Fix: swap to `outline-hidden` in one sweep, then extend `design-focus-border` in `.claude/scripts/gates.sh` to flag `focus-visible:outline-none` next to `focus-visible:ring-` in app code.
-- **Source:** wave G3 review (`docs/plans/issues-fix-waves.md`)
+- **Source:** wave G3 review (`docs/archive/plans/issues-fix-waves.md`)
 
 ### ISS-207 · P3 · Project context toggle and active bordered toggles have a weak keyboard focus cue
 
@@ -389,7 +389,7 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Where:** frontend/src/pages/ProjectDetail.tsx (~330, the "Show project context" toggle); active Filter trigger in frontend/src/components/gantt-v2/SolvroGantt.tsx (~1186)
 - **Problem:** The context toggle has no focus classes and relies on the browser outline. Toggles that already show `border-primary` when active gain nothing from the focus border, so their only focus cue is the `ring-primary/30` ring (about 1.5:1).
 - **Why deferred / fix direction:** Outside the wave scope. Fix: give the toggle the DESIGN.md treatment, and give active bordered toggles a solid ring (or ring offset) on focus.
-- **Source:** wave G3 review (`docs/plans/issues-fix-waves.md`)
+- **Source:** wave G3 review (`docs/archive/plans/issues-fix-waves.md`)
 
 ### ISS-206 · P3 · Project context panel repeats a complementary landmark name
 
@@ -397,7 +397,7 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Where:** frontend/src/pages/ProjectDetail.tsx (the panel opened by "Show project context")
 - **Problem:** With the panel open, axe reports `landmark-unique`: the panel is a complementary landmark without a name distinct from the other one on the page. The axe active-state scan runs contrast-only on this step for that reason.
 - **Why deferred / fix direction:** Found by the new scan, outside the wave scope. Fix: give the panel a distinct aria-label, then make that axe step a full scan.
-- **Source:** wave G3 (`docs/plans/issues-fix-waves.md`)
+- **Source:** wave G3 (`docs/archive/plans/issues-fix-waves.md`)
 
 ### ISS-084 · P3 · Favicon reads weakly on dark browser tab strips
 
