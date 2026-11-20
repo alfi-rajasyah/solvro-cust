@@ -11,9 +11,11 @@
 // DESTRUCTIVE — dev/demo databases only. Keeps roles, the auth_config and
 // itop_config singletons (settings preserved), and the migration history;
 // everything else, users included, is truncated. Refuses to run unless
-// DEMO_SEED_CONFIRM=wipe is set and NODE_ENV is not "production".
+// DEMO_SEED_CONFIRM=wipe is set and NODE_ENV is exactly "development" (only the
+// dev compose service sets it). No production image layer holds scripts/dev/
+// (backend/Dockerfile drops it in the build stage; gates.sh checks that).
 //
-//   docker compose exec -e DEMO_SEED_CONFIRM=wipe backend npx tsx scripts/seed-demo.ts
+//   docker compose exec -e DEMO_SEED_CONFIRM=wipe backend npx tsx scripts/dev/seed-demo.ts
 //
 // Every demo account uses the password "password123". iTop tickets and
 // time entries are not seeded — they only come from a real iTop sync.
@@ -907,8 +909,10 @@ async function main() {
   if (process.env.DEMO_SEED_CONFIRM !== "wipe") {
     throw new Error("Refusing to wipe the database: set DEMO_SEED_CONFIRM=wipe to confirm.");
   }
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("Refusing to run with NODE_ENV=production.");
+  if (process.env.NODE_ENV !== "development") {
+    throw new Error(
+      `Refusing to wipe the database: NODE_ENV is "${process.env.NODE_ENV ?? ""}", not "development". This script is for the dev stack only.`,
+    );
   }
 
   const roles = new Map((await prisma.role.findMany()).map((r) => [r.roleName, r.id]));

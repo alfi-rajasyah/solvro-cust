@@ -18,6 +18,9 @@ CMD ["npm", "run", "dev"]
 FROM deps AS build
 COPY . .
 RUN npm run build
+# Dev-only scripts (e2e data cleanup) never reach the runtime image: drop them
+# here, so the runtime stage copies scripts/ without them (no layer holds them).
+RUN rm -rf scripts/dev
 
 FROM node:22-slim AS runtime
 WORKDIR /app
@@ -27,7 +30,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY package*.json ./
 COPY prisma ./prisma
-COPY scripts ./scripts
+COPY --from=build /app/scripts ./scripts
 RUN npm ci --omit=dev \
     && npx prisma generate \
     && npm cache clean --force
