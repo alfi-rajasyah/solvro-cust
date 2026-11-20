@@ -28,7 +28,8 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Type:** decision · **Found:** 2026-10-09 · **Verified:** 2026-11-18 @ `6dd7592`
 - **Where:** DELETE /customers/:id in backend/src/routes/customers.ts (line ~626); ensureCustomerOwnerAccess in backend/src/lib/visibility.ts (line ~229)
 - **Problem:** On an unowned customer, being TAM of one project passes the delete gate, though deleting affects every project under it. PATCH already uses a stricter rule.
-- **Why deferred / fix direction:** Decide whether delete should use the same rule as the owner change (owner, view-all, or TAM of every project).
+- **Update 2026-11-20 (customer team review):** broader than described. In ownership mode `customerVisibilityFilter` keeps its `{ tamId: null }` arm, so any `customer:write` caller who can see an unowned customer passes `ensureCustomerOwnerAccess` and can delete it, not only the TAM of one project. Customer team membership does not widen this (the team arm is dropped in ownership mode).
+- **Why deferred / fix direction:** Decide whether delete should use the same rule as the owner change (owner, view-all, or TAM of every project): drop the `tamId: null` arm under `ownership` and require TAM-of-all-projects, as `reassignableCustomerIds` does.
 - **Source:** snapshot line 2358, section "Internal sync — deferred findings (2026-10-09)"
 
 ### ISS-004 · P2 · zod 3 has a memory-exhaustion advisory fixed only in zod 4
@@ -202,6 +203,14 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Source:** phase review of `docs/archive/plans/task-integrity.md`
 
 ## Open — Backend/API
+
+### ISS-203 · P3 · Changing a project's TAM may leave tasks assigned to the old TAM
+
+- **Type:** bug (unverified) · **Found:** 2026-11-20 · **Verified:** not yet
+- **Where:** PATCH /projects/:id (tamId change) in backend/src/routes/projects.ts
+- **Problem:** Removing access through the member or customer-team paths unassigns the person's tasks (decision 2026-09-30); a TAM change was not checked. If the old TAM has no other access, their tasks may stay assigned to someone who can no longer open the project.
+- **Why deferred / fix direction:** Out of scope for the customer team change. Fix: after a tamId change, run `unassignWhereAccessLost` (lib/projectMembers.ts) for the old TAM.
+- **Source:** customer team work (`docs/archive/plans/customer-team.md`)
 
 ### ISS-029 · P3 · Inactive users can still be set as TAM, assignee or epic owner
 

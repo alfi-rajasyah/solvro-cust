@@ -253,6 +253,14 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
         ],
       },
       {
+        title: "Customer team",
+        points: [
+          "The Team tab lists the people who work on this customer. Everyone on the team can open and edit every project of the customer, including projects added later, but is not an owner: they cannot delete the customer or its projects or change owners.",
+          "The customer's owner (with \"Manage customers\") can add and remove team members, as can anyone whose role has \"Manage every customer team\", on any customer they can see. Pick a person under \"Person to add\" and click \"Add\". Inactive users cannot be added.",
+          "Click \"Remove\" next to a name and confirm. The person loses the access they had through the team right away, and their tasks in this customer's projects are unassigned, unless they have access another way.",
+        ],
+      },
+      {
         title: "Services and tools",
         points: [
           "Tick a service to include it; type a tool name and press Enter or \",\" to add it. Backspace removes the last tool.",

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AccountHeader, sumProjectHealth } from "@/components/customer/AccountHeader";
 import { AccountOverview } from "@/components/customer/AccountOverview";
+import { CustomerTeam } from "@/components/customer/CustomerTeam";
 import { CustomerDeleteBody, sharedProjectsOf } from "@/components/customer/CustomerDeleteBody";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { CustomerFormModal } from "@/components/CustomerFormModal";
@@ -25,7 +26,7 @@ import {
   useUpdateCustomerServices,
 } from "@/lib/queries";
 
-type Tab = "overview" | "services" | "tickets" | "docs";
+type Tab = "overview" | "services" | "team" | "tickets" | "docs";
 
 
 export function CustomerDetail() {
@@ -61,6 +62,7 @@ export function CustomerDetail() {
   const TAB_ITEMS: ReadonlyArray<{ key: Tab; label: string }> = [
     { key: "overview", label: "Overview" },
     { key: "services", label: "Services" },
+    { key: "team", label: "Team" },
     ...(ticketsAvailable ? [{ key: "tickets" as const, label: "Tickets" }] : []),
     // Outline pages under the customer's link; only offered once an Outline address is set.
     ...(outlineConfig?.baseUrl ? [{ key: "docs" as const, label: "Docs" }] : []),
@@ -227,6 +229,7 @@ export function CustomerDetail() {
           />
         )}
         {tab === "services" && <ServicesTab customer={customer} canMutate={canMutate} />}
+        {tab === "team" && <CustomerTeam customerId={customer.id} />}
         {tab === "docs" && (
           <OutlineDocsTab
             scope="customers"

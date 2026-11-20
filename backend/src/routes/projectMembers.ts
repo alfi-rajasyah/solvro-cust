@@ -6,7 +6,7 @@ import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { ensureProjectVisible } from "../lib/visibility.js";
 import { recordActivity } from "../lib/activity.js";
-import { lockProjectOrder } from "../lib/orderLock.js";
+import { unassignUserTasks } from "../lib/projectMembers.js";
 
 // Project members (docs/archive/plans/collaboration-and-sharing.md, C1): people
 // added to a project besides its TAM, with the same full access as the TAM
@@ -62,6 +62,26 @@ function countAssigned(projectId: number, userId: number): Promise<number> {
 export const projectMembersRouter = Router();
 
 projectMembersRouter.use(requireAuth);
+
+// Users who reach the project through a linked customer's team (no member
+// row). The assignee notice uses it so it does not claim that assigning such a
+// person adds them to the project.
+projectMembersRouter.get(
+  "/:id/team-access",
+  requirePermission("project:read"),
+  validate("params", projectParamsSchema),
+  requireVisibleProject,
+  async (req, res) => {
+    const { id } = req.params as unknown as z.infer<typeof projectParamsSchema>;
+    const rows = await prisma.customerTeamMember.findMany({
+      where: { customer: { projects: { some: { projectId: id } } } },
+      distinct: ["userId"],
+      select: { userId: true },
+      orderBy: { userId: "asc" },
+    });
+    res.json({ teamAccessUserIds: rows.map((r) => r.userId) });
+  },
+);
 
 projectMembersRouter.get(
   "/:id/members",
@@ -178,13 +198,7 @@ projectMembersRouter.delete(
       });
       let unassigned = 0;
       if (count > 0 && userId !== project.tamId) {
-        // Several task rows at once: keep clear of a concurrent reorder's
-        // row-by-row re-pack (lib/orderLock.ts).
-        await lockProjectOrder(tx, "tasks", id);
-        ({ count: unassigned } = await tx.task.updateMany({
-          where: { projectId: id, assignedToId: userId },
-          data: { assignedToId: null },
-        }));
+        unassigned = await unassignUserTasks(tx, id, userId);
       }
       if (count > 0) {
         const removed = await tx.user.findUnique({

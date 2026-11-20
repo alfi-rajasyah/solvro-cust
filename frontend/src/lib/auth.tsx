@@ -51,6 +51,7 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   { value: "customer:view-all", label: "See all customers", hint: "See every customer and its notes and weekly updates. Projects stay limited to the ones you can already see." },
   { value: "customer:read", label: "View customers", hint: "See customers, their notes, weekly updates and services." },
   { value: "customer:write", label: "Manage customers", hint: "Create and edit customers, notes, weekly updates and services." },
+  { value: "customer:team-all", label: "Manage every customer team", hint: "Add and remove team members on any customer you can see, including customers without an owner. A customer's owner with Manage customers can always manage their own customer's team." },
   { value: "project:read", label: "View projects", hint: "See projects, risks, sections, notes." },
   { value: "project:write", label: "Manage projects", hint: "Create/edit projects, risks, sections, baselines." },
   { value: "task:read", label: "View tasks", hint: "See tasks and subtasks." },

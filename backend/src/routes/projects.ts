@@ -37,7 +37,7 @@ import {
 } from "../lib/taskOrdering.js";
 import { assertEpicNotOnSubtask, assertValidEpic } from "../lib/epics.js";
 import { computeProjectHealth, computeSlipDays } from "../lib/projectHealth.js";
-import { ensureAssigneeIsMember } from "../lib/projectMembers.js";
+import { ensureAssigneeIsMember, unassignWhereAccessLost } from "../lib/projectMembers.js";
 import { assertUserExists } from "../lib/userRefs.js";
 import {
   diffProjectChanges,
@@ -496,6 +496,11 @@ projectsRouter.patch(
       // Status-list lock before any row lock (same order as task writes), so a
       // WIP-limit save cannot race an admin delete of a status it names.
       await lockStatusListShared(tx);
+      // Changing customer links can unassign tasks (customer-team access
+      // loss), which takes the task-order lock; take it before the project
+      // row lock below, the order baseline POST/DELETE use, so the two never
+      // invert.
+      if (links !== undefined) await lockProjectOrder(tx, "tasks", id);
       await assertWipLimitKeys(tx, body.wipLimits);
       // Lock first so a concurrent save serialises and the diff is against the
       // row this write actually replaced.
@@ -510,7 +515,29 @@ projectsRouter.patch(
       });
       const namesBefore = await linkedCustomerNames(tx, id);
       const result = await tx.project.update({ where: { id }, data });
-      if (links !== undefined) await syncProjectCustomers(tx, id, links);
+      if (links !== undefined) {
+        const linkedBefore = await tx.projectCustomer.findMany({
+          where: { projectId: id },
+          select: { customerId: true },
+        });
+        await syncProjectCustomers(tx, id, links);
+        // Team members of a customer just unlinked lose the access it gave
+        // them; tasks they hold here are unassigned unless another path keeps it.
+        const kept = new Set(links.map((l) => l.id));
+        const unlinked = linkedBefore.map((l) => l.customerId).filter((c) => !kept.has(c));
+        if (unlinked.length > 0) {
+          const team = await tx.customerTeamMember.findMany({
+            where: { customerId: { in: unlinked } },
+            distinct: ["userId"],
+            select: { userId: true },
+          });
+          await unassignWhereAccessLost(tx, {
+            userIds: team.map((t) => t.userId),
+            projectIds: [id],
+            actorId: req.user!.sub,
+          });
+        }
+      }
       const namesAfter = links === undefined ? namesBefore : await linkedCustomerNames(tx, id);
       // Name, status, customer and the TAM seat are logged (ids and usernames
       // only); a re-save records nothing.

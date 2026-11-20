@@ -411,6 +411,14 @@ function buildBody(event: ActivityEvent): Parts {
         const n = changes?.unassignedTasks;
         const unassigned =
           typeof n === "number" && n > 0 ? [txt(` (unassigned ${n} ${n === 1 ? "task" : "tasks"})`)] : [];
+        if (changes?.viaCustomerTeam === true) {
+          return [
+            ...(label
+              ? [txt("removed "), ent(label), txt("'s access through a customer team")]
+              : [txt("removed a member's access through a customer team")]),
+            ...unassigned,
+          ];
+        }
         return [
           ...(label
             ? [txt("removed "), ent(label), txt(" from the project")]

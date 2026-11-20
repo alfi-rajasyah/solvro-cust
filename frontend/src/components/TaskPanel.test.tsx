@@ -45,6 +45,7 @@ vi.mock("@/lib/queries", async (importOriginal) => {
     useTaskStatuses: empty,
     useProjectLabels: empty,
     useProjectMembers: empty,
+    useProjectTeamAccess: empty,
     useComments: empty,
     useAddComment: mutation,
     useCreateTask: mutation,

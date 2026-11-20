@@ -63,4 +63,10 @@ Decisions (user, 2026-11-20):
 - #92 6c: subtasks count as separate tasks.
 - #92 6d: without iTop configured, the Utilization page shows only the Workload tab.
 
-Still open: #93 (7b–7f).
+- #93 7b: a new permission `customer:team-all` lets its holder manage the team of every customer, including customers with no owner; admins get it through `*`.
+- #93 7c: team membership counts as "my projects" in Daily Review.
+- #93 7d: assigning a task to a team member does not add them as a project member (team access is a separate path).
+- #93 7e: a customer with no projects is visible to its team.
+- #93 7f: managing a customer's own team stays on `customer:write` plus the owner rule.
+
+No questions open.

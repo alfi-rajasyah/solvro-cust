@@ -139,6 +139,8 @@ model User {
   projectMembersAdded    ProjectMember[]         @relation("ProjectMemberAddedBy")
   activityEvents         ActivityEvent[]
   customerActivityEvents CustomerActivityEvent[]
+  customerTeamMemberships CustomerTeamMember[]  @relation("CustomerTeamUser")
+  customerTeamAdded      CustomerTeamMember[]    @relation("CustomerTeamAddedBy")
   shareLinksCreated      ShareLink[]
   notifications          Notification[]
 
@@ -392,13 +394,39 @@ model CustomerActivityEvent {
   customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
   actorId     Int?      @map("actor_id")
   actor       User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  // Contract: "project_deleted" rows carry projectId + projectName and no
+  // member fields; "team_member_added" / "team_member_removed" rows carry
+  // memberId + memberName and no project fields. Read `action` first.
   action      String
-  projectId   Int       @map("project_id")
-  projectName String    @map("project_name")
+  // Project events (deletion) carry the project; team events carry the user.
+  projectId   Int?      @map("project_id")
+  projectName String?   @map("project_name")
+  // Team events (`team_member_added` / `team_member_removed`): plain values,
+  // no FK, so the row survives the user's deletion like projectName does.
+  memberId    Int?      @map("member_id")
+  memberName  String?   @map("member_name")
   createdAt   DateTime  @default(now()) @map("created_at")
 
   @@index([customerId, createdAt(sort: Desc)])
   @@map("customer_activity_events")
+}
+
+// People who work on a customer (GitHub #93): each gets the access a project
+// member has on every project linked to the customer, including ones linked
+// later (lib/visibility.ts, team arm). Never ownership. Managed by
+// routes/customerTeam.ts.
+model CustomerTeamMember {
+  customerId Int      @map("customer_id")
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  userId     Int      @map("user_id")
+  user       User     @relation("CustomerTeamUser", fields: [userId], references: [id], onDelete: Cascade)
+  addedById  Int?     @map("added_by_id")
+  addedBy    User?    @relation("CustomerTeamAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@id([customerId, userId])
+  @@index([userId])
+  @@map("customer_team_members")
 }
 
 // Join between a project and each customer it belongs to. Exactly one primary
@@ -440,6 +468,7 @@ model Customer {
   itopTickets       ItopTicket[]
   itopTimeEntries   ItopTimeEntry[]
   activityEvents    CustomerActivityEvent[]
+  teamMembers       CustomerTeamMember[]
 
   @@index([tamId])
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "customers_name_trgm_idx")
