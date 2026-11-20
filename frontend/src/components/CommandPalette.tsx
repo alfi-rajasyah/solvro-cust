@@ -67,6 +67,11 @@ function apiErrorCode(error: unknown): string | null {
   return typeof code === "string" ? code : null;
 }
 
+// Overrides the vendored input's bordered base styling so the palette field
+// reads as a bare search line; guarded by CommandPalette.test.tsx.
+export const PALETTE_INPUT_CLASS =
+  "flex-1 border-none bg-transparent text-xs text-on-surface outline-hidden placeholder:text-on-surface-variant dark:bg-transparent rounded-none h-auto px-0 focus-visible:ring-0 focus-visible:border-transparent";
+
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -296,7 +301,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             <AutocompleteInput
               autoFocus
               placeholder="Search projects, tasks, customers…"
-              className="flex-1 border-none bg-transparent text-xs text-on-surface outline-hidden placeholder:text-on-surface-variant dark:bg-transparent rounded-none h-auto px-0 focus-visible:ring-0 focus-visible:border-transparent"
+              className={PALETTE_INPUT_CLASS}
             />
             <span className="rounded-sm border border-outline-variant bg-surface-container-low px-1.5 py-0.5 font-mono text-meta text-on-surface-variant">
               esc

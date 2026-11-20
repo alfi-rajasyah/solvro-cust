@@ -226,7 +226,7 @@ describe("task writes — locking and duplicates", () => {
     expect(events[0]!.changes).toEqual({ title: { from: "Before", to: "After" } });
   });
 
-  it("two simultaneous identical assignee PATCHes record exactly one assignee change", async () => {
+  it("simultaneous identical assignee PATCHes record exactly one assignee change", async () => {
     const { tam, other, project } = await fixture();
     const task = await makeTask(project.id, { title: "Race" });
     const send = () =>
@@ -234,9 +234,10 @@ describe("task writes — locking and duplicates", () => {
         .patch(`/tasks/${task.id}`)
         .set(auth(tam.token))
         .send({ assignedToId: other.userId });
-    const [a, b] = await Promise.all([send(), send()]);
-    expect(a.status).toBe(200);
-    expect(b.status).toBe(200);
+    // Eight racers, not two: without the row lock a pair only sometimes both
+    // read the unassigned row before either commits, so two did not reliably fail.
+    const results = await Promise.all(Array.from({ length: 8 }, send));
+    expect(results.map((r) => r.status)).toEqual(Array(8).fill(200));
     const events = await eventsOf(project.id);
     const assigneeEvents = events.filter(
       (e) => e.entityType === "task" && e.changes && "assignee" in (e.changes as object),

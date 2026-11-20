@@ -81,4 +81,32 @@ test.describe("gantt color-by legend — desktop", () => {
     await expect(legend).toHaveCount(0);
     await expect(colorBy).toHaveText(/section/i);
   });
+  test("the picked color mode survives a reload", async ({ page, seededProject }) => {
+    await loginViaUi(page);
+    await openGantt(page, seededProject.projectId);
+
+    const colorBy = page.getByRole("button", { name: /color by/i });
+    const legend = page.getByTestId("gantt-legend");
+    await colorBy.click();
+    await page.getByRole("menuitemradio", { name: "Priority" }).click();
+    await expect(legend.getByText("Urgent", { exact: true })).toBeVisible();
+    await expect(colorBy).toHaveText(/priority/i);
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem("solvro.gantt.colorBy")))
+      .toBe("priority");
+
+    await page.reload({ waitUntil: "networkidle" });
+
+    const restored = page.getByRole("button", { name: /color by/i });
+    await expect(restored).toHaveText(/priority/i);
+    await restored.click();
+    await expect(page.getByRole("menuitemradio", { name: "Priority" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await expect(page.getByTestId("gantt-legend").getByText("Urgent", { exact: true })).toBeVisible();
+
+    // Put the default back so later specs see the documented first-run mode.
+    await page.getByRole("menuitemradio", { name: "Section" }).click();
+  });
 });

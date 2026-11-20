@@ -29,6 +29,20 @@ export function apiBase(testInfo: TestInfo): string {
   return new URL(testInfo.project.use.baseURL ?? "http://localhost:8080").origin;
 }
 
+/**
+ * Whether the stack under test offers Google sign-in (the same public
+ * endpoint the Login page reads). The seeded QA stack does not; a dev stack
+ * with a client ID and allowed domains does, and then the login page shows
+ * the Google button and collapses the password form behind an accordion.
+ */
+export async function googleSignInEnabled(testInfo: TestInfo): Promise<boolean> {
+  const res = await fetch(`${apiBase(testInfo)}/api/auth/google/config`);
+  if (!res.ok) throw new Error(`GET /api/auth/google/config failed: ${res.status}`);
+  const body = (await res.json()) as { enabled?: boolean; clientId?: string | null };
+  // Same condition as Login.tsx's googleAvailable.
+  return Boolean(body.enabled && body.clientId);
+}
+
 export const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "qa@solvro.test";
 export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "QaTest1234!";
 
@@ -61,8 +75,12 @@ export async function submitLoginForm(
   email = ADMIN_EMAIL,
   password = ADMIN_PASSWORD,
 ): Promise<void> {
-  const accordion = page.getByText(/Admin sign-in/i).first();
-  if (await accordion.isVisible().catch(() => false)) {
+  // The form is not there yet while the sign-in config loads, so wait for
+  // whichever of the two layouts shows up instead of probing once.
+  const emailField = page.locator('input[type="email"]');
+  const accordion = page.locator("summary").filter({ hasText: /Admin sign-in/i });
+  await emailField.or(accordion).first().waitFor({ state: "visible", timeout: 15_000 });
+  if (await accordion.isVisible()) {
     await accordion.click();
   }
   const emailInput = page.locator('input[type="email"]');

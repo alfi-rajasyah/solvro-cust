@@ -617,14 +617,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 
 ## Open — Tests & CI
 
-### ISS-205 · P3 · No e2e check that Gantt connector paths stay finite
-
-- **Type:** test-gap · **Found:** 2026-11-20 · **Verified:** 2026-11-20 @ wave F
-- **Where:** e2e/tests/gantt-parity.spec.ts; connector building in frontend/src/components/gantt-v2/GanttOverlay.tsx
-- **Problem:** A milestone connector briefly drew `NaN` paths (a spread `DOMRect` lost its getter fields); only the Delivery Gate caught it. Unit tests now cover the rect helpers, but no e2e asserts that a seeded project with milestones and dependencies renders every connector with finite coordinates and no console error.
-- **Why deferred / fix direction:** Fixed in code; the guard is missing. Fix: in a gantt e2e on the seeded fixture (milestone with incoming and outgoing dependencies), assert no `path[d*="NaN"]` and no console error.
-- **Source:** wave F Delivery Gate (`docs/plans/issues-fix-waves.md`)
-
 ### ISS-204 · P2 · Mobile e2e first runs after a release is merged into main
 
 - **Type:** decision · **Found:** 2026-11-20 · **Verified:** 2026-11-20 @ release PR #114
@@ -640,14 +632,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** The same four to five drag cases fail their first attempt and pass on retry. The retry budget has one spare attempt.
 - **Why deferred / fix direction:** Trigger: a fifth case flakes or any case fails through its retry. Then run a flake-hunt pass.
 - **Source:** snapshot line 896, section "ReUI DateField swap — deferred findings (2026-07-28)"; merged duplicates at snapshot lines 2320
-
-### ISS-140 · P2 · gates.sh runs only the smoke e2e spec
-
-- **Type:** debt · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** smoke_gate in .claude/scripts/gates.sh (line 98)
-- **Problem:** New e2e specs never run in the mechanical gate and depend on someone running them by hand.
-- **Why deferred / fix direction:** Add a step that runs the specs changed in the diff.
-- **Source:** snapshot line 1887, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
 
 ### ISS-141 · P3 · pwa.spec.ts fails against the Vite dev server
 
@@ -665,14 +649,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Add ESLint with react-hooks/exhaustive-deps and an npm run lint step in CI.
 - **Source:** snapshot line 476, section "Tech debt / follow-ups from recent work"; merged duplicates at snapshot lines 2330
 
-### ISS-144 · P3 · No e2e test that the Gantt colorBy choice survives a reload
-
-- **Type:** test-gap · **Found:** 2026-07-23 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** e2e/tests/gantt-legend.spec.ts; COLOR_BY_STORAGE_KEY in frontend/src/components/gantt-v2/SolvroGantt.tsx (line 160)
-- **Problem:** The legend spec only switches Status, Section and Priority within a session. It never checks the stored choice after a reload.
-- **Why deferred / fix direction:** Add a case that selects a mode, reloads, and asserts the select and legend are restored.
-- **Source:** snapshot line 494, section "Tech debt / follow-ups from recent work"
-
 ### ISS-145 · P3 · Connector hover-delete e2e test flakes rarely
 
 - **Type:** watch · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -688,22 +664,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** Many specs sleep for a fixed time instead of waiting on a condition or response, which adds slowness and flake risk.
 - **Why deferred / fix direction:** Convert to waitForResponse or selector waits in one hardening pass.
 - **Source:** snapshot line 550, section "Plan B Task 9 deferred findings — ReUI Gantt swap (2026-07-25)"; merged duplicates at snapshot lines 547
-
-### ISS-147 · P3 · No test guards the Login and sidebar always-dark pin
-
-- **Type:** test-gap · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** Login.tsx root wrapper and sidebar rail (frontend/src/pages/Login.tsx, layout sidebar); no spec in e2e/tests
-- **Problem:** Nothing checks that Login and the sidebar stay dark when the theme is light. A Tailwind theme change could reintroduce the bug.
-- **Why deferred / fix direction:** Add an assertion with the theme forced to light via localStorage.
-- **Source:** snapshot line 565, section "Login/Sidebar always-dark-pin fix — deferred findings (2026-07-25)"
-
-### ISS-149 · P3 · No e2e drag test for section reorder or subtask drag
-
-- **Type:** test-gap · **Found:** 2026-07-30 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** SectionReorderModal and TaskPanel subtask Sortable; e2e/tests has no covering spec
-- **Problem:** Neither reorder surface has a spec exercising the drag gesture; the smoke gate only checks rendering.
-- **Why deferred / fix direction:** Add drag specs next to the existing Gantt and Kanban drag specs.
-- **Source:** snapshot line 1158, section "Sortable reorder (sections + subtasks) — deferred findings (2026-07-30)"
 
 ### ISS-150 · P3 · Duplicate-chip e2e spec cannot reproduce the upstream race
 
@@ -721,14 +681,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Keep the patch-count gate; revisit if the vendor is re-pulled.
 - **Source:** snapshot line 1451, section "Issues Sweep #1 — residuals (2026-08-02)"
 
-### ISS-153 · P3 · daily-review e2e spec leaves junk rows in the shared dev DB each run
-
-- **Type:** test-gap · **Found:** 2026-08-29 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** header comment and missing cleanup in e2e/tests/daily-review.spec.ts (lines 29-36)
-- **Problem:** Each run flips a project ACTIVE and a customer's TAM permanently. DELETE routes now exist but the spec never calls them, and its header comment still claims they are missing.
-- **Why deferred / fix direction:** Delete the seeded project and customer in a teardown and correct the comment.
-- **Source:** snapshot line 1712, section "Daily Review v2 — deferred findings (2026-08-29)"
-
 ### ISS-154 · P3 · Three e2e specs flaked once and passed on retry
 
 - **Type:** watch · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -744,23 +696,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** The test failed about 1 run in 2 on the mobile project: after sign-in, goto('/admin') landed on the sign-in page. A later sign-in race fix (frontend/src/lib/auth.tsx) matches the symptom but is not confirmed as the cause.
 - **Why deferred / fix direction:** Trigger: strike it if the flake stays gone across several CI runs; otherwise investigate.
 - **Source:** snapshot line 2328, section "Collaboration & sharing, Phase 1 ("Quick wins") — deferred findings (2026-09-29)"
-
-### ISS-156 · P3 · taskOrdering cross-project test flakes in the parallel run
-
-- **Type:** test-gap · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** 'orders GET /tasks (cross-project)…' in backend/test/taskOrdering.test.ts (line ~103)
-- **Problem:** The test reads the take: 200 window of GET /tasks, which other test files fill when run in parallel, so the two tasks can fall outside it.
-- **Why deferred / fix direction:** Filter the request to the test's own project or fetch by id instead of the global list.
-- **Also seen 2026-11-19:** `epics.test.ts` "returns epicId on GET /projects/:id/tasks and GET /tasks" failed once in the full run and passed in the next two; same cross-project GET /tasks pattern.
-- **Source:** snapshot line 2336, section "Collaboration & sharing, Phase 3 ("Conflict warning") — deferred findings (2026-09-30)"
-
-### ISS-157 · P3 · Concurrency tests for activity and notification recipients are unproven
-
-- **Type:** test-gap · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** backend/test/activity.test.ts (line ~229); backend/test/notifications.test.ts (line ~129)
-- **Problem:** The simultaneous-assign tests cannot fail spuriously, but nobody has confirmed they fail when the row lock is removed, so they may not guard it.
-- **Why deferred / fix direction:** Temporarily remove the lock and confirm both tests fail; if not, strengthen them.
-- **Source:** snapshot line 2344, section "Collaboration & sharing, Phase 4 ("Activity and notifications") — deferred findings (2026-09-30)"
 
 ### ISS-158 · P3 · Weekly Sync e2e test times out on a database with hundreds of customers
 
@@ -794,38 +729,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Re-test with realistic row counts when tables grow.
 - **Source:** snapshot line 2441, section "Data integrity, session and query performance — deferred findings (2026-10-26)"
 
-### ISS-162 · P3 · e2e fails on a dev stack with Google sign-in configured
-
-- **Type:** watch · **Found:** 2026-11-02 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** Google-not-configured cases in e2e/tests/auth.spec.ts (line ~10); console-error check in e2e/tests/smoke.spec.ts (line ~45)
-- **Problem:** The tests assume the seeded QA stack with no Google sign-in. They fail on a stack with a client ID or an origin Google rejects.
-- **Why deferred / fix direction:** Trigger: running e2e outside the seeded QA stack. Run against the QA stack.
-- **Source:** snapshot line 2447, section "Design compliance fixes — deferred findings (2026-11-02)"
-
-### ISS-182 · P3 · prisma/seed.ts is outside the backend typecheck
-
-- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 2 review
-- **Where:** include in backend/tsconfig.check.json; import in backend/prisma/seed.ts (line 2)
-- **Problem:** The seed entry is not typechecked, and its extensionless import of ./builtInRoles would fail under NodeNext.
-- **Why deferred / fix direction:** The seed is small and fails loudly at db:seed. Fix: add prisma/**/*.ts to the include and use ./builtInRoles.js.
-- **Source:** phase review of `docs/archive/plans/typecheck-and-test-hygiene.md`
-
-### ISS-183 · P3 · frontend/vitest.config.ts is not typechecked
-
-- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 2 review
-- **Where:** include in frontend/tsconfig.node.json
-- **Problem:** Only vite.config.ts is in the node tsconfig, so vitest.config.ts is covered by neither config.
-- **Why deferred / fix direction:** Vitest fails at load on a broken config anyway. Fix: add vitest.config.ts to the include.
-- **Source:** phase review of `docs/archive/plans/typecheck-and-test-hygiene.md`
-
-### ISS-199 · P3 · e2e login() fails under parallel load on a shared dev server
-
-- **Type:** test-gap · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ feature wave A review
-- **Where:** login() in e2e/fixtures/seed.ts (~67); loginViaUi in e2e/fixtures/test.ts (~69)
-- **Problem:** A login request failed once while several local runs shared the dev server, and loginViaUi waits out the test timeout when the sign-in form shows the Google option (ISS-162).
-- **Why deferred / fix direction:** Local-only. Fix: retry or back off in login(); handle the collapsed admin sign-in in loginViaUi.
-- **Source:** review of GitHub #88 (`docs/plans/github-feature-waves.md`)
-
 ## Open — Dev env & ops
 
 ### ISS-166 · P3 · Dev backend tsx watch sometimes misses file edits
@@ -844,14 +747,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Trigger: npm upgrade. Use targeted npm update inside the container meanwhile.
 - **Source:** snapshot line 2425, section "Dependency advisories — remaining (2026-10-25)"
 
-### ISS-168 · P3 · version.test.ts fails in the dev container because VERSION is not mounted
-
-- **Type:** watch · **Found:** 2026-11-02 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** readFileSync of VERSION in frontend/src/lib/version.test.ts (line ~11)
-- **Problem:** The dev compose mounts only frontend/, so the repo VERSION file is missing and the test fails with ENOENT. It passes in CI.
-- **Why deferred / fix direction:** Trigger: dev container mounts change. Or skip the check when the file is absent.
-- **Source:** snapshot line 2446, section "Design compliance fixes — deferred findings (2026-11-02)"
-
 ## Open — Docs & process
 
 ### ISS-169 · P3 · Re-pulling vendored ReUI files overwrites SOLVRO PATCH edits
@@ -869,22 +764,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** The design doc frontmatter names dark as the default theme; the app uses the system preference. The user chose to keep system.
 - **Why deferred / fix direction:** Correct the frontmatter to system in a docs-only change.
 - **Source:** snapshot line 563, section "Login/Sidebar always-dark-pin fix — deferred findings (2026-07-25)"
-
-### ISS-171 · P3 · Vendored autocomplete header, hash and override gaps
-
-- **Type:** debt · **Found:** 2026-07-27 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** frontend/src/components/reui/autocomplete.tsx (header lines 1-8); AutocompleteInput className in frontend/src/components/CommandPalette.tsx (line ~299)
-- **Problem:** The header does not state a marker count, no registry hash is stored for any vendored engine, and the palette input overrides base styling with nothing guarding it.
-- **Why deferred / fix direction:** Record exact counts and hashes in vendor headers; add a computed-style or class snapshot test.
-- **Source:** snapshot line 685, section "Global search & ⌘K command palette — deferred findings (2026-07-27)"
-
-### ISS-172 · P3 · index.css comment about chip-violet is out of date
-
-- **Type:** debt · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** comment above the Alert tone tokens in frontend/src/index.css (line ~157)
-- **Problem:** The comment says chip-violet has no meaning assigned elsewhere, but Alert info and Critical Path both use it.
-- **Why deferred / fix direction:** Reword the comment in the next index.css edit.
-- **Source:** snapshot line 1807, section "Critical Path mark — deferred findings (2026-09-02)"
 
 ## Closed
 
@@ -962,12 +841,23 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-136 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · Typecheck skips vite.config.ts and node tsconfig lists deleted files
 - ISS-137 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · search.spec.ts presses Cmd+K without waiting for the listener
 - ISS-139 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · Backend typecheck gate skips scripts and tests
+- ISS-140 · 2026-11-20 · CHANGELOG "Test and tooling fixes" · gates.sh runs only the smoke e2e spec
 - ISS-142 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · Stale comment says the seeded project is per test file
+- ISS-144 · 2026-11-20 · CHANGELOG "Test and tooling fixes" · No e2e test that the Gantt colorBy choice survives a reload
+- ISS-147 · 2026-11-20 · CHANGELOG "Test and tooling fixes" · No test guards the Login and sidebar always-dark pin
 - ISS-148 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · Search contract tests miss the length cap, ordering and the underscore case
+- ISS-149 · 2026-11-20 · CHANGELOG "Test and tooling fixes" · No e2e drag test for section reorder or subtask drag
 - ISS-152 · 2026-11-19 · CHANGELOG "Wider typechecks and test hygiene" · Two e2e specs keep private copies of createTask
+- ISS-153 · 2026-11-20 · CHANGELOG "Test and tooling fixes" · daily-review e2e spec leaves junk rows in the shared dev DB each run
+- ISS-156 · 2026-11-20 · CHANGELOG "Test and tooling fixes" · taskOrdering cross-project test flakes in the parallel run
+- ISS-157 · 2026-11-20 · CHANGELOG "Test and tooling fixes" · Concurrency tests for activity and notification recipients are unproven
+- ISS-162 · 2026-11-20 · CHANGELOG "Test and tooling fixes" · e2e fails on a dev stack with Google sign-in configured
 - ISS-163 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · setup.sh does not pass ITOP_ALLOW_PRIVATE_HOSTS or ITOP_SYNC_DISABLED
 - ISS-164 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · setup.sh: no registry-login preflight on a fresh install; CORS falls back to `*`
 - ISS-165 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · Icons and favicon have no explicit Cache-Control
+- ISS-168 · 2026-11-20 · CHANGELOG "Test and tooling fixes" · version.test.ts fails in the dev container because VERSION is not mounted
+- ISS-171 · 2026-11-20 · CHANGELOG "Test and tooling fixes" · Vendored autocomplete header, hash and override gaps
+- ISS-172 · 2026-11-20 · CHANGELOG "Test and tooling fixes" · index.css comment about chip-violet is out of date
 - ISS-173 · 2026-11-20 · CHANGELOG "Backend hardening: CORS header, secret tags, iTop webhook and sync retries, `solvro config`" · A repeated Refresh resets the iTop full-sync retry cap
 - ISS-174 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Epic owner picker lists users the server now refuses
 - ISS-176 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Epic delete and admin status save can still deadlock with task writes
@@ -976,6 +866,8 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-179 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Edit-mode parent picker lets a task with subtasks pick a parent
 - ISS-180 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Label names are not trimmed on the server
 - ISS-181 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Renaming a customer onto an existing name shows "Unique constraint violated"
+- ISS-182 · 2026-11-20 · CHANGELOG "Test and tooling fixes" · prisma/seed.ts is outside the backend typecheck
+- ISS-183 · 2026-11-20 · CHANGELOG "Test and tooling fixes" · frontend/vitest.config.ts is not typechecked
 - ISS-184 · 2026-11-20 · CHANGELOG "Backend hardening: CORS header, secret tags, iTop webhook and sync retries, `solvro config`" · solvro config cannot set the new iTop variables
 - ISS-185 · 2026-11-20 · CHANGELOG "Inactive users in pickers, service-save refetches, project tab preload" · Service-list saves still invalidate every project and customer query
 - ISS-186 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Keyboard drag on the boards announces raw ids
@@ -989,6 +881,8 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-195 · 2026-11-20 · CHANGELOG "Polish fixes: Portfolio Today marker, loaders, comment box, maskable icon" · The Portfolio Today line disappears over an active bar
 - ISS-196 · 2026-11-20 · CHANGELOG "Polish fixes: Portfolio Today marker, loaders, comment box, maskable icon" · Two bare pulse blocks remain in Project Overview, and the Risks Status cell is still native
 - ISS-198 · 2026-11-20 · CHANGELOG "Task panel title editor and filter popover" · The task panel title editor loses focus and can drop its draft on Escape
+- ISS-199 · 2026-11-20 · CHANGELOG "Test and tooling fixes" · e2e login() fails under parallel load on a shared dev server
 - ISS-200 · 2026-11-20 · CHANGELOG "Task panel title editor and filter popover" · A deleted epic or label left in the filter URL keeps the views empty
 - ISS-201 · 2026-11-20 · CHANGELOG "Task panel title editor and filter popover" · The task filter popover has no focus trap or focus return
 - ISS-203 · 2026-11-20 · CHANGELOG "Tasks of a replaced project TAM are unassigned" · Changing a project's TAM may leave tasks assigned to the old TAM
+- ISS-205 · 2026-11-20 · CHANGELOG "Test and tooling fixes" · No e2e check that Gantt connector paths stay finite
