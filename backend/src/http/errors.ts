@@ -90,7 +90,8 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
 
   // Postgres aborted the statement because another transaction held or
   // changed the same rows: a deadlock (40P01), a serialisation failure
-  // (40001, Prisma P2034) or a lock wait past `lock_timeout` (55P03, e.g.
+  // (40001, Prisma P2034), an interactive transaction that timed out (Prisma
+  // P2028) or a lock wait past `lock_timeout` (55P03, e.g.
   // lib/orderLock.ts). Nothing was saved, and the same request succeeds when
   // sent again, so it is a 409 the client can retry, not a 500. Routes that
   // re-pack shared rows serialise themselves (lib/orderLock.ts); a deadlock
@@ -119,7 +120,7 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   res.status(500).json({ error: "Internal server error", code: "internal_error" });
 };
 
-const CONCURRENCY_ABORT_CODES = new Set(["40P01", "40001", "55P03"]);
+const CONCURRENCY_ABORT_CODES = new Set(["40P01", "40001", "55P03", "P2028"]);
 
 /**
  * The Postgres SQLSTATE behind a Prisma error, when Prisma reports one: the
@@ -131,6 +132,15 @@ const CONCURRENCY_ABORT_CODES = new Set(["40P01", "40001", "55P03"]);
 function postgresCode(err: unknown): string | undefined {
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === "P2034") return "40001";
+    // An interactive transaction that expired (its 5 s, 30 s or 60 s budget
+    // ran out, e.g. in a lock wait) or never started in time: nothing was
+    // saved, so a retry is safe. Any other P2028 ("already closed", "committed
+    // transaction", "not found") may follow a commit or is a code bug: a 500.
+    if (err.code === "P2028") {
+      return /expired transaction|Unable to start a transaction in the given time/.test(err.message)
+        ? "P2028"
+        : undefined;
+    }
     if (err.code !== "P2010") return undefined;
     const code = (err.meta as { code?: unknown } | undefined)?.code;
     return typeof code === "string" ? code : undefined;

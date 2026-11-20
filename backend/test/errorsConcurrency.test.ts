@@ -34,6 +34,35 @@ describe("errorHandler: concurrent transaction aborts", () => {
     expect(run(unknown).status).toBe(409);
   });
 
+  it("answers 409 for an interactive transaction that expired or timed out (P2028)", () => {
+    const err = new Prisma.PrismaClientKnownRequestError("Transaction API error: A query cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 5100 ms passed since the start of the transaction.", {
+      code: "P2028",
+      clientVersion: "5.22.0",
+    });
+    expect(run(err)).toEqual({
+      status: 409,
+      body: { error: "Another change was saved at the same moment. Try again.", code: "concurrent_update" },
+    });
+  });
+
+  it("answers 409 for a transaction that could not start in time (P2028)", () => {
+    const err = new Prisma.PrismaClientKnownRequestError("Unable to start a transaction in the given time.", {
+      code: "P2028",
+      clientVersion: "5.22.0",
+    });
+    expect(run(err).status).toBe(409);
+  });
+
+  it("keeps a P2028 on a committed or unknown transaction a 500", () => {
+    for (const message of [
+      "Transaction API error: A query cannot be executed on a committed transaction.",
+      "Transaction API error: Transaction not found.",
+    ]) {
+      const err = new Prisma.PrismaClientKnownRequestError(message, { code: "P2028", clientVersion: "5.22.0" });
+      expect(run(err).status).toBe(500);
+    }
+  });
+
   it("answers 409 for a deadlock or a lock wait on a raw statement (P2010)", () => {
     for (const code of ["40P01", "55P03"]) {
       const err = new Prisma.PrismaClientKnownRequestError(`Raw query failed. Code: \`${code}\``, {

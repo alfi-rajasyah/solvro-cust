@@ -64,12 +64,12 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Self-host the fonts; deferred because it changes the whole app shell.
 - **Source:** snapshot line 2350, section "Collaboration & sharing, Phase 6 ("Guest links") — deferred findings (2026-09-30)"
 
-### ISS-011 · P3 · Remaining port-review hardening: GCM tag length, iTop webhook limit, key rotation
+### ISS-011 · P3 · SECRETS_KEY rotation invalidates every stored token
 
-- **Type:** debt · **Found:** 2026-10-09 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** open() in backend/src/lib/secretBox.ts (line ~53); allCallsAt in backend/src/routes/webhook.ts (line ~46)
-- **Problem:** Three bullets remain: decipher.setAuthTag is used without authTagLength, so a truncated tag is accepted; the iTop webhook rate limit is one global window, so a flood can starve genuine calls; SECRETS_KEY rotation invalidates all stored tokens.
-- **Why deferred / fix direction:** Pass authTagLength and check tag length; key the iTop limiter per IP as the Outline one is; add a key id to the sealed format if rotation is needed.
+- **Type:** debt · **Found:** 2026-10-09 · **Verified:** 2026-11-20 @ wave E
+- **Where:** seal()/open() in backend/src/lib/secretBox.ts
+- **Problem:** The sealed format has no key id, so rotating SECRETS_KEY makes every stored iTop and Outline token unreadable. The tag-length and iTop webhook limiter parts of this entry were fixed 2026-11-20 (CHANGELOG "Backend hardening: CORS header, secret tags, iTop webhook and sync retries, `solvro config`").
+- **Why deferred / fix direction:** Only matters if a key rotation is ever needed. Fix: add a key id to the sealed format and accept the old key during a transition.
 - **Source:** snapshot line 2361, section "Internal sync — deferred findings (2026-10-09)"
 
 ### ISS-012 · P3 · Any project:write user can set the Outline link of an unowned customer
@@ -204,14 +204,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 
 ## Open — Backend/API
 
-### ISS-203 · P3 · Changing a project's TAM may leave tasks assigned to the old TAM
-
-- **Type:** bug (unverified) · **Found:** 2026-11-20 · **Verified:** not yet
-- **Where:** PATCH /projects/:id (tamId change) in backend/src/routes/projects.ts
-- **Problem:** Removing access through the member or customer-team paths unassigns the person's tasks (decision 2026-09-30); a TAM change was not checked. If the old TAM has no other access, their tasks may stay assigned to someone who can no longer open the project.
-- **Why deferred / fix direction:** Out of scope for the customer team change. Fix: after a tamId change, run `unassignWhereAccessLost` (lib/projectMembers.ts) for the old TAM.
-- **Source:** customer team work (`docs/archive/plans/customer-team.md`)
-
 ### ISS-029 · P3 · Inactive users can still be set as TAM, assignee or epic owner
 
 - **Type:** decision · **Found:** 2026-10-23 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -236,14 +228,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Widen the selects if the mark is ever surfaced there.
 - **Source:** snapshot line 1791, section "Critical Path mark — deferred findings (2026-09-02)"
 
-### ISS-033 · P3 · CORS does not expose X-Total-Count
-
-- **Type:** debt · **Found:** 2026-09-29 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** cors({...}) in backend/src/app.ts (line ~57)
-- **Problem:** Cross-origin callers cannot read the X-Total-Count header that GET /tasks sets. The app is unaffected through the same-origin /api proxy.
-- **Why deferred / fix direction:** Add exposedHeaders: ['X-Total-Count'] if the API is ever called cross-origin.
-- **Source:** snapshot line 2323, section "Professional UI pass — deferred findings (2026-09-29)"
-
 ### ISS-034 · P3 · Rate limiter counters are per backend instance
 
 - **Type:** watch · **Found:** 2026-09-30 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -259,14 +243,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** outlineUrl edits on a project or customer are not recorded, consistent with description edits.
 - **Why deferred / fix direction:** Decide whether an audit trail for links is wanted; if yes, add it to the project diff.
 - **Source:** snapshot line 2376, section "Outline links, Phase A — deferred findings (2026-10-09)"; merged duplicates at snapshot lines 2383
-
-### ISS-190 · P3 · A slow admin status save can make status-setting task saves fail with a 500
-
-- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 4 review
-- **Where:** lockStatusListShared in backend/src/lib/taskStatuses.ts (line ~42); status save order-lock loop (~236)
-- **Problem:** While the status save waits up to about 18 s on project order locks it holds the exclusive status-list lock; task writes that set a status wait on the shared lock with no lock_timeout inside a 5 s transaction, and P2028 is not mapped to 409.
-- **Why deferred / fix direction:** Needs an admin status save during heavy reordering; nothing is saved wrongly. Fix: a lock_timeout under 5 s on the shared wait (55P03 becomes the existing 409), or map P2028 to 409 concurrent_update.
-- **Source:** phase review of `docs/archive/plans/guest-link-address-and-locks.md`
 
 ## Open — Frontend UI
 
@@ -742,14 +718,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Accepted trade-off. Revisit with the resumable-cursor idea.
 - **Source:** snapshot line 2415, section "Backend concurrency and roles — deferred findings (2026-10-25)"
 
-### ISS-173 · P3 · A repeated Refresh resets the iTop full-sync retry cap
-
-- **Type:** debt · **Found:** 2026-11-18 · **Verified:** 2026-11-18 @ `fix/itop-findings-redo`
-- **Where:** requestSync / runRequested in backend/src/lib/itop/scheduler.ts (line ~58)
-- **Problem:** Each new Refresh starts the retry loop at attempt 0, so a Refresh about once a minute keeps the 30-minute retry window alive while the lock is held.
-- **Why deferred / fix direction:** The lock holder is time-boxed by RUN_BUDGET_MS and Refresh by its 60 s window. Fix: keep one deadline in module state instead of a per-call attempt counter.
-- **Source:** phase review of `docs/archive/plans/itop-findings-redo.md`
-
 ## Open — Exports & sharing
 
 ### ISS-131 · P2 · Gantt Excel/PDF downloads blocked on the plain-HTTP production host
@@ -1005,14 +973,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Trigger: dev container mounts change. Or skip the check when the file is absent.
 - **Source:** snapshot line 2446, section "Design compliance fixes — deferred findings (2026-11-02)"
 
-### ISS-184 · P3 · solvro config cannot set the new iTop variables
-
-- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 2 review
-- **Where:** CONFIG_KEYS / config_effective in setup.sh (line ~513)
-- **Problem:** ITOP_ALLOW_PRIVATE_HOSTS and ITOP_SYNC_DISABLED can be set only by editing ~/solvro/.env by hand.
-- **Why deferred / fix direction:** Hand-editing .env works and is documented. Fix: add both to CONFIG_KEYS with a true/false validator.
-- **Source:** phase review of `docs/archive/plans/setup-and-nginx.md`
-
 ## Open — Docs & process
 
 ### ISS-169 · P3 · Re-pulling vendored ReUI files overwrites SOLVRO PATCH edits
@@ -1058,6 +1018,7 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-027 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · Deleting a task leaves sparse positions in its sibling list
 - ISS-028 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · PATCH /tasks/:id accepts a due date before the start date
 - ISS-030 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · NUL-byte (22021) errors return 400 without a log line
+- ISS-033 · 2026-11-20 · CHANGELOG "Backend hardening: CORS header, secret tags, iTop webhook and sync retries, `solvro config`" · CORS does not expose X-Total-Count
 - ISS-036 · 2026-11-19 · CHANGELOG "Task ordering, date and epic-owner checks" · Section and epic delete can deadlock with a concurrent task reorder
 - ISS-037 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Create-task parent picker lists subtasks the server rejects
 - ISS-038 · 2026-11-19 · CHANGELOG "Service lists, Daily Review refresh, request timeouts, section chip" · Service-mapping mutations are not optimistic
@@ -1118,6 +1079,7 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-163 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · setup.sh does not pass ITOP_ALLOW_PRIVATE_HOSTS or ITOP_SYNC_DISABLED
 - ISS-164 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · setup.sh: no registry-login preflight on a fresh install; CORS falls back to `*`
 - ISS-165 · 2026-11-19 · CHANGELOG "setup.sh and nginx" · Icons and favicon have no explicit Cache-Control
+- ISS-173 · 2026-11-20 · CHANGELOG "Backend hardening: CORS header, secret tags, iTop webhook and sync retries, `solvro config`" · A repeated Refresh resets the iTop full-sync retry cap
 - ISS-174 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Epic owner picker lists users the server now refuses
 - ISS-176 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Epic delete and admin status save can still deadlock with task writes
 - ISS-177 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Epic owner check is copied into two routes
@@ -1125,7 +1087,10 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-179 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Edit-mode parent picker lets a task with subtasks pick a parent
 - ISS-180 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Label names are not trimmed on the server
 - ISS-181 · 2026-11-19 · CHANGELOG "Guest link address, deadlocks and plain conflict messages" · Renaming a customer onto an existing name shows "Unique constraint violated"
+- ISS-184 · 2026-11-20 · CHANGELOG "Backend hardening: CORS header, secret tags, iTop webhook and sync retries, `solvro config`" · solvro config cannot set the new iTop variables
 - ISS-186 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Keyboard drag on the boards announces raw ids
 - ISS-187 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Every card grip has the same accessible name
 - ISS-188 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Escape during a keyboard drag also closes an open panel
 - ISS-189 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · Gantt section colour and duplicate still swallow errors
+- ISS-190 · 2026-11-20 · CHANGELOG "A slow admin status save no longer fails task saves with a 500" · A slow admin status save can make status-setting task saves fail with a 500
+- ISS-203 · 2026-11-20 · CHANGELOG "Tasks of a replaced project TAM are unassigned" · Changing a project's TAM may leave tasks assigned to the old TAM

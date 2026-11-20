@@ -1,19 +1,22 @@
 # docs/ISSUES.md: fix waves without user decisions
 
-Status: planned (triage 2026-11-20 @ `5b283ea`)
+Status: in progress (triage 2026-11-20 @ `5b283ea`; wave E done 2026-11-20)
 Archive path: `docs/archive/plans/issues-fix-waves.md`
 
 Triage of the open issues in `docs/ISSUES.md` (126 open). 45 can be fixed without a user decision; they are grouped into four waves of up to three streams with disjoint files. Each wave is one or more PRs into `develop`; spine files get the instant review.
 
 ## Waves
 
-### Wave E: backend correctness
+### Wave E: backend correctness (done 2026-11-20)
+
+Review: no blockers; fixed in one round (TAM-change activity wording, P2028 mapped to 409 only for expired or could-not-start transactions, INSTALL.md keys) plus a pre-existing iTop bug found in review (an incremental nudge cancelled a pending full-sync retry). Delivery Gate PASS 2026-11-20: the TAM-change activity line in light 1440 px and dark 375 px. Gates green; no frontend smoke ran on the first pass (backend-only), and the second run failed only on ISS-162.
+
 
 | Stream | Issues | Main files |
 |---|---|---|
-| E1 | ISS-203 (old TAM keeps tasks after a TAM change), ISS-017 (409 reveals a hidden customer's name) | `backend/src/routes/projects.ts` (spine), `backend/src/routes/customers.ts` |
-| E2 | ISS-190 (slow status save gives a 500), ISS-032 (selects omit `isCriticalPath`) | `backend/src/lib/taskStatuses.ts`, search and portfolio task selects |
-| E3 | ISS-033 (CORS `X-Total-Count`), ISS-011 (secretBox and webhook hardening), ISS-173 (iTop retry cap), ISS-184 (`solvro config` iTop keys) | `backend/src/app.ts`, `backend/src/lib/secretBox.ts`, `backend/src/lib/itop/scheduler.ts`, `setup.sh` (spine) |
+| E1 | ISS-203 (old TAM keeps tasks after a TAM change) | `backend/src/routes/projects.ts` (spine) |
+| E2 | ISS-190 (slow status save gives a 500) | `backend/src/lib/taskStatuses.ts`, `backend/src/http/errors.ts` |
+| E3 | ISS-033 (CORS `X-Total-Count`), ISS-011 (GCM tag length and per-IP iTop webhook limit; key rotation stays open as ISS-011), ISS-173 (iTop retry cap), ISS-184 (`solvro config` iTop keys) | `backend/src/app.ts`, `backend/src/lib/secretBox.ts`, `backend/src/lib/itop/scheduler.ts`, `setup.sh` (spine) |
 
 ### Wave F: frontend task views
 
@@ -44,6 +47,7 @@ Order: E, F, G, H. G3 never runs alongside another stream (it touches many files
 ## Needs a user decision (not in the waves)
 
 - Decision-type issues: ISS-002, ISS-012, ISS-029, ISS-031, ISS-035, ISS-039, ISS-051, ISS-056, ISS-099, ISS-107, ISS-204.
+- Moved out of wave E (2026-11-20): ISS-017 is a product choice (accept the 409, or scope customer-name uniqueness by visibility); ISS-032 is a watch item (no surface shows the mark there).
 - Choices: ISS-202 (filter subtasks on Kanban cards?), ISS-170 (theme default dark or system?), ISS-025 (show or clean up deleted-project activity records?), ISS-010 (self-host fonts? recommended).
 
 ## Large items to schedule separately

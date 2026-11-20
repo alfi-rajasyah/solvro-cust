@@ -107,6 +107,7 @@ cfg() {
   HOME="$home" PATH="$WORK/bin:$PATH" SHIM_LOG="$log" SHIM_UP_FAIL="${UP_FAIL:-0}" \
     setsid bash "$home/solvro/bin/solvro" config "$@" </dev/null >"$WORK/out-$label.log" 2>&1
   local code=$? app pg=0 up=0
+  printf '%s' "$home" > "$WORK/home-$label"
   app="$(grep -E '^APP_URL=' "$home/solvro/.env" | tail -n 1 | cut -d= -f2- | tr -d '"')"
   grep -q '127.0.0.1:5433:5432' "$home/solvro/docker-compose.yml" 2>/dev/null && pg=1
   grep -qx 'docker compose up -d' "$log" && up=1
@@ -123,6 +124,10 @@ check "config restart fails: previous restored"  "1 http://localhost 0 1"       
 check "config value with a line break: refused"  "1 http://localhost 0 0"        "$(cfg ctrl set "TRUST_PROXY=loopback,
 uniquelocal")" ctrl
 check "config show: no secrets printed"          "0 http://localhost 0 0"        "$(cfg show show)" show
+check "config set ITOP_SYNC_DISABLED=maybe: refused" "1 http://localhost 0 0"    "$(cfg itopbad set ITOP_SYNC_DISABLED=maybe)" itopbad
+if grep -q '^ITOP_SYNC_DISABLED=' "$(cat "$WORK/home-itopbad")/solvro/.env"; then fail "ITOP_SYNC_DISABLED=maybe was written"; fi
+check "config set ITOP_SYNC_DISABLED=true: saved"    "0 http://localhost 1 1"    "$(cfg itopok set ITOP_SYNC_DISABLED=true)" itopok
+if grep -qx 'ITOP_SYNC_DISABLED="true"' "$(cat "$WORK/home-itopok")/solvro/.env"; then pass "ITOP_SYNC_DISABLED saved as a quoted value"; else fail "ITOP_SYNC_DISABLED not saved as ITOP_SYNC_DISABLED=\"true\""; fi
 if grep -q 'POSTGRES_PASSWORD\|JWT_SECRET\|SECRETS_KEY' "$WORK/out-show.log"; then fail "config show printed a secret"; fi
 
 if [[ $FAILED -ne 0 ]]; then

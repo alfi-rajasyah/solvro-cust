@@ -80,8 +80,10 @@ export async function unassignUserTasks(
 }
 
 /**
- * Customer-team access ended for `userIds` on `projectIds` (team member
- * removed, project unlinked from the customer, customer deleted). Call it
+ * Access ended for `userIds` on `projectIds`: a customer-team member removed,
+ * a project unlinked from the customer, a customer deleted
+ * (`via: "customerTeam"`, the default), or a project's TAM replaced
+ * (`via: "tamChange"`; the old TAM is the user). Call it
  * inside the transaction AFTER the change: for each user and project that the
  * user can no longer see (projectVisibilityFilter built from their role, so
  * any other path to the project — TAM, member, other customer, view-all —
@@ -90,7 +92,12 @@ export async function unassignUserTasks(
  */
 export async function unassignWhereAccessLost(
   tx: Prisma.TransactionClient,
-  opts: { userIds: readonly number[]; projectIds: readonly number[]; actorId: number },
+  opts: {
+    userIds: readonly number[];
+    projectIds: readonly number[];
+    actorId: number;
+    via?: "customerTeam" | "tamChange";
+  },
 ): Promise<void> {
   if (opts.userIds.length === 0 || opts.projectIds.length === 0) return;
   const users = await tx.user.findMany({
@@ -123,7 +130,10 @@ export async function unassignWhereAccessLost(
           entityId: u.id,
           action: "removed",
           entityLabel: u.username,
-          changes: { unassignedTasks: unassigned, viaCustomerTeam: true },
+          changes:
+            opts.via === "tamChange"
+              ? { unassignedTasks: unassigned, viaTamChange: true }
+              : { unassignedTasks: unassigned, viaCustomerTeam: true },
         });
       }
     }

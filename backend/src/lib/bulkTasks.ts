@@ -88,7 +88,7 @@ export async function bulkUpdateTasks(user: JwtPayload, body: BulkTasksBody): Pr
       // order, then the rows. The order lock is unconditional: this write
       // row-locks many members of the task list, so it must queue behind any
       // reorder, delete or status-delete move that re-packs the list.
-      if (body.statusId !== undefined) await lockStatusListShared(tx);
+      if (body.statusId !== undefined) await lockStatusListShared(tx, 10_000);
       await lockProjectOrder(tx, "tasks", projectId);
       // Ascending id order so two overlapping bulk writes cannot deadlock.
       await tx.$queryRaw`SELECT id FROM tasks WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR NO KEY UPDATE`;

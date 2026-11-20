@@ -61,6 +61,7 @@ export function createApp(opts: { logger?: Logger } = {}): Express {
           ? true
           : env.CORS_ORIGIN.split(",").map((s) => s.trim()),
       credentials: false,
+      exposedHeaders: ["X-Total-Count"],
     }),
   );
   app.use(createRequestLogger(opts.logger ?? defaultLogger));

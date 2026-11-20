@@ -393,13 +393,15 @@ Usage: solvro <command>
   config set KEY=VALUE ...      Change settings and restart what they affect,
                                 e.g. solvro config set APP_URL=https://solvro.acme.com
   config unset KEY              Remove an optional setting (POSTGRES_PORT,
-                                TRUST_PROXY, EMBED_FRAME_ANCESTORS).
+                                TRUST_PROXY, EMBED_FRAME_ANCESTORS,
+                                ITOP_ALLOW_PRIVATE_HOSTS, ITOP_SYNC_DISABLED).
   version                       Show the installed release.
   backup                        Write a database dump to ~/solvro/backups/.
   help                          Show this help.
 
 Settings: APP_URL BIND_ADDR FRONTEND_PORT BACKEND_PORT POSTGRES_PORT
-          TRUST_PROXY EMBED_FRAME_ANCESTORS
+          TRUST_PROXY EMBED_FRAME_ANCESTORS ITOP_ALLOW_PRIVATE_HOSTS
+          ITOP_SYNC_DISABLED
 USAGE
 }
 
@@ -516,8 +518,8 @@ cmd_update() {
 
 # Settings `solvro config` may change. Secrets (POSTGRES_PASSWORD, JWT_SECRET,
 # SECRETS_KEY) and IMAGE_TAG are never shown or set here.
-CONFIG_KEYS=(APP_URL BIND_ADDR FRONTEND_PORT BACKEND_PORT POSTGRES_PORT TRUST_PROXY EMBED_FRAME_ANCESTORS)
-CONFIG_OPTIONAL=(POSTGRES_PORT TRUST_PROXY EMBED_FRAME_ANCESTORS)
+CONFIG_KEYS=(APP_URL BIND_ADDR FRONTEND_PORT BACKEND_PORT POSTGRES_PORT TRUST_PROXY EMBED_FRAME_ANCESTORS ITOP_ALLOW_PRIVATE_HOSTS ITOP_SYNC_DISABLED)
+CONFIG_OPTIONAL=(POSTGRES_PORT TRUST_PROXY EMBED_FRAME_ANCESTORS ITOP_ALLOW_PRIVATE_HOSTS ITOP_SYNC_DISABLED)
 
 config_default() {
   case "$1" in
@@ -525,6 +527,8 @@ config_default() {
     FRONTEND_PORT) echo "80" ;;
     BACKEND_PORT) echo "3000" ;;
     TRUST_PROXY) echo "loopback, uniquelocal" ;;
+    ITOP_ALLOW_PRIVATE_HOSTS) echo "true" ;;
+    ITOP_SYNC_DISABLED) echo "false" ;;
     *) echo "" ;;
   esac
 }
@@ -554,6 +558,9 @@ config_value() {
       out="$((10#$value))" ;;
     TRUST_PROXY)
       is_trust_proxy "$value" || die "TRUST_PROXY must be a hop count 0-10 or a comma list of loopback, linklocal, uniquelocal, IPs or CIDRs."
+      out="$value" ;;
+    ITOP_ALLOW_PRIVATE_HOSTS|ITOP_SYNC_DISABLED)
+      [[ "$value" == true || "$value" == false ]] || die "$key must be true or false."
       out="$value" ;;
     EMBED_FRAME_ANCESTORS)
       out="$(normalise_frame_origins "$value")" && [[ -n "$out" ]] \
@@ -616,11 +623,11 @@ cmd_config() {
       for key in "${CONFIG_KEYS[@]}"; do
         value="$(env_file_get "$key")"
         if [[ -n "$value" ]]; then
-          printf '  %-22s %s\n' "$key" "$value"
+          printf '  %-25s %s\n' "$key" "$value"
         elif [[ -n "$(config_default "$key")" ]]; then
-          printf '  %-22s %s (default)\n' "$key" "$(config_default "$key")"
+          printf '  %-25s %s (default)\n' "$key" "$(config_default "$key")"
         else
-          printf '  %-22s (not set)\n' "$key"
+          printf '  %-25s (not set)\n' "$key"
         fi
       done
       echo "Change one with: solvro config set KEY=VALUE"

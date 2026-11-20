@@ -9,6 +9,7 @@ import { env } from "../env.js";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
+const TAG_LENGTH = 16;
 const FORMAT_VERSION = "v1";
 
 /** Thrown by `open()` on malformed input, a tampered tag/ciphertext, or the wrong key. Never carries plaintext. */
@@ -48,8 +49,12 @@ export function open(sealed: string): string {
     throw new SecretBoxError("Invalid secret format: unexpected IV length");
   }
 
+  if (tag.length !== TAG_LENGTH) {
+    throw new SecretBoxError("Invalid secret format: unexpected auth tag length");
+  }
+
   try {
-    const decipher = crypto.createDecipheriv(ALGORITHM, getKey(), iv);
+    const decipher = crypto.createDecipheriv(ALGORITHM, getKey(), iv, { authTagLength: TAG_LENGTH });
     decipher.setAuthTag(tag);
     const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
     return plaintext.toString("utf8");
