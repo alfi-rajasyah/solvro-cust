@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-20 — Workload tab on the Utilization page
+
+- Utilization has a new Workload tab that counts Solvro tasks per assignee for a chosen week: open tasks, due in the selected week, overdue, active in the selected week (start to due date overlaps the week), and open story points, plus one Unassigned row. Click a person to list their open tasks with project, status and due date; each links to the task panel. It works without iTop; when iTop is not connected, Workload is the only tab. Done-category tasks are not counted, subtasks count as separate tasks, and inactive users show only while they hold open tasks.
+- Two new role permissions control whose workload a user sees. With neither, a user sees only their own row. `workload:team` adds everyone assigned in projects the user owns, plus those projects' unassigned tasks. `workload:all` shows every assignee across all projects, including all unassigned tasks. With org-wide workload access, counts cover every project, but task names are shown only for projects you can open, with a plain count for the rest. `report:executive` does not grant either. Help and the role editor describe the new tab and permissions.
+- New endpoints `GET /utilization/workload` and `GET /utilization/workload/tasks`; who is visible is decided on the server from the caller's permissions. Task dates are calendar days, so the week runs Monday to Sunday by date, and the viewer's UTC offset decides which day counts as today for the overdue column. (#92)
+
 ### Added — 2026-11-20 — Story points in the task form, task panel, Kanban cards and Epics tab
 
 - Tasks can carry an optional "Story points" estimate (whole numbers 0 to 100, empty means not estimated). Set it in the create and edit form or inline in the task panel; invalid values are refused before they are sent, and an edit that clashes with someone else's change names the field as "Story points" in the conflict dialog.
