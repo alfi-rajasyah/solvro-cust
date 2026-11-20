@@ -17,7 +17,7 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ### Added — 2026-11-20 — Cleanup of e2e fixture rows in the dev database
 
-- `backend/scripts/cleanup-e2e-data.ts` removes the rows local Playwright runs leave in a dev database: customers whose description starts with `e2e`, projects linked to them or named with a fixture stamp, and `@solvro.test` users other than the e2e sign-in account. It is a dry run unless `E2E_CLEANUP_CONFIRM=delete` is set, and refuses `NODE_ENV=production`. `.claude/scripts/gates.sh` runs it after its Playwright step against the default dev stack, so the demo data stays usable for manual QA.
+- `backend/scripts/dev/cleanup-e2e-data.ts` removes the rows local Playwright runs leave in a dev database: customers whose description starts with `e2e` and whose name carries a fixture stamp, projects linked to them or named with a fixture stamp, and `@solvro.test` users other than the e2e sign-in account (`ADMIN_EMAIL`). It is a dry run unless `E2E_CLEANUP_CONFIRM=delete` is set. It is a dev-stack tool only: it refuses to run unless `NODE_ENV` is `development`, and no production image layer contains `scripts/dev/`: `backend/Dockerfile` drops it in the build stage and copies `scripts/` into the runtime image from there, checked by a new `guardrail-dev-scripts-excluded` gate. `.claude/scripts/gates.sh` runs it after its Playwright step against the default dev stack, so the demo data stays usable for manual QA.
 
 ### Fixed — 2026-11-20 — Keyboard focus ring on tab links
 

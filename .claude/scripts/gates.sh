@@ -110,10 +110,10 @@ smoke_gate() {
   local rc=0
   (cd e2e && BASE_URL="${BASE_URL:-http://localhost:5173}" npx playwright test "${specs[@]}") || rc=$?
   # The specs write fixture rows into the dev database behind :5173; remove
-  # them so the demo data stays usable for manual QA (backend/scripts/cleanup-e2e-data.ts).
+  # them so the demo data stays usable for manual QA (backend/scripts/dev/cleanup-e2e-data.ts).
   # Only for the default dev stack: another BASE_URL means another database.
   if [ -z "${BASE_URL:-}" ] || [ "${BASE_URL}" = "http://localhost:5173" ]; then
-    docker compose exec -T -e E2E_CLEANUP_CONFIRM=delete backend npx tsx scripts/cleanup-e2e-data.ts \
+    docker compose exec -T -e E2E_CLEANUP_CONFIRM=delete -e E2E_ADMIN_EMAIL="${ADMIN_EMAIL:-qa@solvro.test}" backend npx tsx scripts/dev/cleanup-e2e-data.ts \
       || echo "e2e data cleanup failed (the gate result is unchanged)"
   fi
   return "$rc"
@@ -253,6 +253,18 @@ if [ -d frontend/src/components/reui/data-grid ]; then
   if [ "$N" -eq "$EXPECTED_DATAGRID_PATCHES" ]; then pass guardrail-datagrid-vendor
   else fail guardrail-datagrid-vendor "SOLVRO PATCH count $N != recorded $EXPECTED_DATAGRID_PATCHES"; fi
 else fail guardrail-datagrid-vendor "frontend/src/components/reui/data-grid/ missing"; fi
+
+# backend/scripts/dev/ holds dev-stack-only tools (e2e data cleanup). The build
+# stage deletes it and the runtime stage copies scripts/ from the build stage
+# only, so no runtime layer ever holds it.
+DEV_SCRIPTS_CHECK="$(awk '
+  /^FROM /{stage=$NF}
+  stage=="build" && $0=="RUN rm -rf scripts/dev"{rm=1}
+  stage=="runtime" && $0=="COPY --from=build /app/scripts ./scripts"{fromb=1}
+  stage=="runtime" && /^COPY[[:space:]]+scripts/{direct=1}
+  END{print (rm && fromb && !direct) ? "ok" : "bad"}' backend/Dockerfile)"
+if [ "$DEV_SCRIPTS_CHECK" = ok ]; then pass guardrail-dev-scripts-excluded
+else fail guardrail-dev-scripts-excluded "backend/Dockerfile must delete scripts/dev in the build stage and copy scripts/ into runtime only from build"; fi
 
 EXPECTED_BADGE_PATCHES=6
 if [ -f frontend/src/components/reui/badge.tsx ]; then
