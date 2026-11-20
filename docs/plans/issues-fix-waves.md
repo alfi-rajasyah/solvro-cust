@@ -1,6 +1,6 @@
 # docs/ISSUES.md: fix waves without user decisions
 
-Status: in progress (triage 2026-11-20 @ `5b283ea`; wave E done 2026-11-20)
+Status: in progress (triage 2026-11-20 @ `5b283ea`; wave E and F done 2026-11-20)
 Archive path: `docs/archive/plans/issues-fix-waves.md`
 
 Triage of the open issues in `docs/ISSUES.md` (126 open). 45 can be fixed without a user decision; they are grouped into four waves of up to three streams with disjoint files. Each wave is one or more PRs into `develop`; spine files get the instant review.
@@ -18,13 +18,16 @@ Review: no blockers; fixed in one round (TAM-change activity wording, P2028 mapp
 | E2 | ISS-190 (slow status save gives a 500) | `backend/src/lib/taskStatuses.ts`, `backend/src/http/errors.ts` |
 | E3 | ISS-033 (CORS `X-Total-Count`), ISS-011 (GCM tag length and per-IP iTop webhook limit; key rotation stays open as ISS-011), ISS-173 (iTop retry cap), ISS-184 (`solvro config` iTop keys) | `backend/src/app.ts`, `backend/src/lib/secretBox.ts`, `backend/src/lib/itop/scheduler.ts`, `setup.sh` (spine) |
 
-### Wave F: frontend task views
+### Wave F: frontend task views (done 2026-11-20)
+
+Review: one blocker (Done button focus ring) and should-fixes (milestone connector geometry, List assignee picker) fixed over two rounds; inactive-user filtering unified in `lib/assignableUsers.ts`; tab loaders single-sourced. Delivery Gate FAIL then PASS 2026-11-20: the first run caught `NaN` connector paths from the new milestone entry point (a spread `DOMRect`); fixed with a finite-rect fallback (ISS-205 tracks the missing e2e guard). Gates green except ISS-162.
+
 
 | Stream | Issues | Main files |
 |---|---|---|
 | F1 | ISS-198 (title editor Escape and focus), ISS-200 (stale filter ids in the URL), ISS-201 (filter popover focus trap) | `TaskPanel.tsx`, `TaskFilterPopover.tsx`, `hooks/useTaskFilters.ts` |
-| F2 | Gantt ISS-191, ISS-096, ISS-098, ISS-101, ISS-100, ISS-103, ISS-104; Excel blob URL ISS-133 | `gantt-v2/`, `reui/gantt/`, `lib/gantt/exportExcel.ts` (spine) |
-| F3 | ISS-192 (inactive users in the epic owner picker), ISS-185 and ISS-062 (cache refreshes), ISS-020 (section color duplicated), ISS-024 (tab chunk preload) | `EpicPanel.tsx`, `lib/queries.ts` (spine), `lib/gantt/palette.ts`, `pages/ProjectDetail.tsx` |
+| F2 | Gantt ISS-191, ISS-096, ISS-098, ISS-101, ISS-100; Excel blob URL ISS-133 | `gantt-v2/`, `reui/gantt/`, `lib/gantt/exportExcel.ts` (spine) |
+| F3 | ISS-192 (inactive users in the epic owner picker), ISS-185 (service-list cache refresh), ISS-024 (tab chunk preload) | `EpicPanel.tsx`, `lib/queries.ts` (spine), `lib/gantt/palette.ts`, `pages/ProjectDetail.tsx` |
 
 ### Wave G: polish and accessibility
 
@@ -47,6 +50,7 @@ Order: E, F, G, H. G3 never runs alongside another stream (it touches many files
 ## Needs a user decision (not in the waves)
 
 - Decision-type issues: ISS-002, ISS-012, ISS-029, ISS-031, ISS-035, ISS-039, ISS-051, ISS-056, ISS-099, ISS-107, ISS-204.
+- Moved out of wave F (2026-11-20): ISS-104 (readability-only refactor of spine code), ISS-103 (waits on the adapter signature lock), ISS-062 (act only if latency shows), ISS-020 (needs a shared package or a schema change).
 - Moved out of wave E (2026-11-20): ISS-017 is a product choice (accept the 409, or scope customer-name uniqueness by visibility); ISS-032 is a watch item (no surface shows the mark there).
 - Choices: ISS-202 (filter subtasks on Kanban cards?), ISS-170 (theme default dark or system?), ISS-025 (show or clean up deleted-project activity records?), ISS-010 (self-host fonts? recommended).
 

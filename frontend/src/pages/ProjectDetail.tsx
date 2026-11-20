@@ -35,6 +35,7 @@ import { hasPermission, useAuth } from "@/lib/auth";
 import { GanttExportProvider } from "@/lib/gantt/exportContext";
 import { canOwnProject, saveErrorMessage } from "@/lib/ownerAccess";
 import { safeOutlineHref } from "@/lib/outlineUrl";
+import { preloadProjectTab, projectTabFromPath } from "@/lib/projectTabPreload";
 import { carryFilterSearch } from "@/lib/taskFilters";
 import {
   type ProjectDetail as ProjectDetailType,
@@ -89,6 +90,13 @@ export function ProjectDetail() {
   const { feedback: copyFeedback, copy: copyLink } = useCopyLinkFeedback();
 
   const { data: project, isLoading, isError, error, refetch } = useProject(projectId);
+
+  // The tab's chunk is requested here, beside the project fetch, rather than
+  // when the Outlet mounts after it (hooks stay above the early returns).
+  const activeTab = projectTabFromPath(location.pathname);
+  useEffect(() => {
+    preloadProjectTab(activeTab);
+  }, [activeTab]);
 
   // On a narrow phone the tab strip scrolls sideways; bring the active tab into
   // view after navigation. Sets scrollLeft only (scrollIntoView would also scroll
@@ -347,6 +355,8 @@ export function ProjectDetail() {
             <NavLink
               key={tab.to}
               to={{ pathname: tab.to, search: filterSearch }}
+              onPointerEnter={() => preloadProjectTab(tab.to)}
+              onFocus={() => preloadProjectTab(tab.to)}
               className={({ isActive }) =>
                 [
                   "-mb-px border-b-2 px-1 pb-3 font-display text-sm transition-colors [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:text-center [@media(pointer:coarse)]:pt-2.5",

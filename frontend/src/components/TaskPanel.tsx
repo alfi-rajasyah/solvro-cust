@@ -29,6 +29,7 @@ import { CommentBody, CommentComposer } from "@/components/CommentMentions";
 import { fmtAgo, fmtRange } from "@/lib/formatDate";
 import { parseStoryPoints } from "@/lib/storyPoints";
 import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
+import { assignableUsers, assigneeOptionLabel } from "@/lib/assignableUsers";
 import { isApplePlatform } from "@/lib/platform";
 import { PRIORITY_LABEL } from "@/lib/labels";
 import {
@@ -219,6 +220,8 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const renameSettledRef = useRef(false);
   // Same guard for the panel's own title editor; reset when it opens.
   const titleSettledRef = useRef(false);
+  const titleButtonRef = useRef<HTMLButtonElement | null>(null);
+  const focusTitleRef = useRef(false);
   // And for the description editor: blur and Escape can both end one edit.
   const descriptionSettledRef = useRef(false);
   const descriptionId = useId();
@@ -265,6 +268,14 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     setError(null);
     setConflict(null);
   }, [taskId]);
+
+  // After Enter or Escape in the title editor, focus returns to its button.
+  useEffect(() => {
+    if (!editingTitle && focusTitleRef.current) {
+      focusTitleRef.current = false;
+      titleButtonRef.current?.focus();
+    }
+  }, [editingTitle]);
 
   // After Escape, hand focus back to the button that opened the editor.
   useEffect(() => {
@@ -365,10 +376,18 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     // built on the old title and conflict with the first. Settle once per edit.
     if (titleSettledRef.current) return;
     titleSettledRef.current = true;
+    // Enter returns focus to the title button; a blur-save must not steal it.
+    if (e.type === "submit") focusTitleRef.current = true;
     const trimmed = titleDraft.trim();
     setEditingTitle(false);
     const base = editBase ?? task!;
     if (trimmed && trimmed !== base.title) patch({ title: trimmed }, base);
+  }
+
+  function cancelTitle() {
+    titleSettledRef.current = true;
+    focusTitleRef.current = true;
+    setEditingTitle(false);
   }
 
   // Blur saves, Escape cancels (handled in the textarea's onKeyDown). Clearing
@@ -610,12 +629,19 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                 value={titleDraft}
                 onChange={(e) => setTitleDraft(e.target.value)}
                 onBlur={handleTitleSubmit}
+                onKeyDown={(e) => {
+                  if (e.key !== "Escape" || e.nativeEvent.isComposing) return;
+                  // Cancel this edit only; the panel-level Escape listener must not close the panel.
+                  e.stopPropagation();
+                  cancelTitle();
+                }}
                 maxLength={200}
                 className="[@media(pointer:coarse)]:min-h-11 w-full border-none bg-transparent text-lg font-bold text-on-surface rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
               />
             </form>
           ) : (
             <button
+              ref={titleButtonRef}
               type="button"
               disabled={!canEdit}
               onClick={() => {
@@ -624,7 +650,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                 setTitleDraft(task.title);
                 setEditingTitle(true);
               }}
-              className="[@media(pointer:coarse)]:min-h-11 block w-full rounded-sm text-left text-lg font-bold text-on-surface hover:bg-surface-container-high disabled:cursor-default"
+              className="[@media(pointer:coarse)]:min-h-11 block w-full rounded-sm text-left text-lg font-bold text-on-surface outline-hidden hover:bg-surface-container-high focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default"
             >
               {task.title}
             </button>
@@ -735,9 +761,9 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                   className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <option value="">Unassigned</option>
-                  {(users ?? []).map((u) => (
+                  {assignableUsers(users ?? [], task.assignedToId).map((u) => (
                     <option key={u.id} value={u.id}>
-                      {`${u.username}${assigneeAddsMember(u.id) ? " (not on project)" : ""}`}
+                      {`${assigneeOptionLabel(u)}${assigneeAddsMember(u.id) ? " (not on project)" : ""}`}
                     </option>
                   ))}
                 </select>
@@ -745,7 +771,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     warning goes on the options themselves plus this line —
                     a plain paragraph, not a live region (specs query the
                     panel by role). */}
-                {(users ?? []).some((u) => assigneeAddsMember(u.id)) && (
+                {assignableUsers(users ?? [], task.assignedToId).some((u) => assigneeAddsMember(u.id)) && (
                   <p className="mt-1 text-meta text-on-surface-variant">
                     People marked “not on project” are added to it when assigned.
                   </p>
@@ -1436,7 +1462,7 @@ function SubtaskAssigneePicker({
   onChange,
 }: {
   canEdit: boolean;
-  users: { id: number; username: string }[];
+  users: { id: number; username: string; active?: boolean }[];
   assignee: { id: number; username: string } | null | undefined;
   value: number | null;
   addsMember: (id: number | null | undefined) => boolean;
@@ -1459,9 +1485,9 @@ function SubtaskAssigneePicker({
         className="[@media(pointer:coarse)]:min-h-11 w-28 shrink-0 rounded-sm border border-outline-variant bg-surface-container-lowest px-1 py-0.5 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
       >
         <option value="">Unassigned</option>
-        {users.map((u) => (
+        {assignableUsers(users, value).map((u) => (
           <option key={u.id} value={u.id}>
-            {`${u.username}${addsMember(u.id) ? " (not on project)" : ""}`}
+            {`${assigneeOptionLabel(u)}${addsMember(u.id) ? " (not on project)" : ""}`}
           </option>
         ))}
       </select>

@@ -251,8 +251,9 @@ export function legendEntries(
   }
   // Section mode: one entry per section in board order, resolved through the
   // same fallback cycling the bars use.
+  // resolveSectionColors builds its Map in board order (position, then id),
+  // so iterating it is the legend order; no second sort.
   const colors = resolveSectionColors(sections);
-  return [...sections]
-    .sort((a, b) => a.position - b.position || a.id - b.id)
-    .map((s): [string, string] => [s.name, colors.get(s.id) ?? DEFAULT_SECTION_COLOR]);
+  const nameById = new Map(sections.map((s) => [s.id, s.name]));
+  return [...colors].map(([id, color]): [string, string] => [nameById.get(id) ?? "", color]);
 }

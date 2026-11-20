@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 import { addDays, differenceInCalendarDays, parseISO } from "date-fns";
 import type { GanttEvent } from "@/components/reui/gantt/gantt-types";
 import type { CreateDependencyInput, Task, TaskDependency } from "@/lib/queries";
-import { buildConnectorRoute, type ConnectorRoute } from "./connector-paths";
+import { tryBuildConnectorRoute, successorAttachRect, type ConnectorRoute } from "./connector-paths";
 
 // Plan B Task 6 — chart-space SVG overlay: dependency connectors (with
 // drag-create + delete) and baseline ghosts, all driven by real DOM
@@ -58,6 +58,8 @@ export interface GanttOverlayProps {
 
 interface Measurement {
   bars: Map<number, DOMRect>;
+  /** Rendered milestone diamonds, by task id (connectors attach to these). */
+  diamonds: Map<number, DOMRect>;
   contentWidth: number;
   contentHeight: number;
   scrollLeft: number;
@@ -88,9 +90,20 @@ function resolveViewport(pane: HTMLElement | null): HTMLElement | null {
  * (`[data-slot="scroll-area-viewport"]`), not the outer relatively-
  * positioned pane.
  */
-function measureBars(scrollEl: HTMLElement): Map<number, DOMRect> {
+function measureBars(scrollEl: HTMLElement): {
+  bars: Map<number, DOMRect>;
+  diamonds: Map<number, DOMRect>;
+} {
   const originRect = scrollEl.getBoundingClientRect();
   const out = new Map<number, DOMRect>();
+  const diamonds = new Map<number, DOMRect>();
+  const toContent = (r: DOMRect) =>
+    new DOMRect(
+      r.left - originRect.left + scrollEl.scrollLeft,
+      r.top - originRect.top + scrollEl.scrollTop,
+      r.width,
+      r.height,
+    );
   scrollEl.querySelectorAll<HTMLElement>("[data-task-id]").forEach((el) => {
     const bar = el.closest<HTMLElement>(BAR_SELECTOR);
     if (!bar) return;
@@ -104,8 +117,10 @@ function measureBars(scrollEl: HTMLElement): Map<number, DOMRect> {
         r.height,
       ),
     );
+    const diamond = bar.querySelector<HTMLElement>("[data-milestone-diamond]");
+    if (diamond) diamonds.set(Number(el.dataset.taskId), toContent(diamond.getBoundingClientRect()));
   });
-  return out;
+  return { bars: out, diamonds };
 }
 
 /** date-only ISO parse, matching adapter.ts's `taskToEvent` convention. */
@@ -168,7 +183,7 @@ export function GanttOverlay({
     const measure = () => {
       raf = 0;
       setMeasurement({
-        bars: measureBars(viewport),
+        ...measureBars(viewport),
         contentWidth: viewport.scrollWidth,
         contentHeight: viewport.scrollHeight,
         scrollLeft: viewport.scrollLeft,
@@ -281,8 +296,13 @@ export function GanttOverlay({
           targetHandle: "left-target",
         });
       };
+      // Capture phase + stopPropagation (as gantt-dnd does): one Escape
+      // cancels the connect drag and never reaches the task panel's own
+      // Escape listener. Registered only while this drag is active, so it
+      // cannot swallow Escape for inner widgets otherwise (ISS-193).
       const onKey = (ev: KeyboardEvent) => {
         if (ev.key === "Escape") {
+          ev.stopPropagation();
           endDrag();
           setConnectDrag(null);
         }
@@ -290,13 +310,13 @@ export function GanttOverlay({
       function endDrag() {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
-        window.removeEventListener("keydown", onKey);
+        window.removeEventListener("keydown", onKey, true);
         teardownActiveDrag = null;
       }
       teardownActiveDrag = endDrag;
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
-      window.addEventListener("keydown", onKey);
+      window.addEventListener("keydown", onKey, true);
     };
 
     document.addEventListener("pointerdown", onPointerDownCapture, true);
@@ -306,6 +326,14 @@ export function GanttOverlay({
       setConnectDrag(null);
     };
   }, [canEdit, viewportEl]);
+
+  const eventByTaskId = useMemo(() => {
+    const map = new Map<number, GanttEvent<Task>>();
+    for (const e of events) {
+      if (e.data) map.set(e.data.id, e);
+    }
+    return map;
+  }, [events]);
 
   // ---- Connectors: route predecessor-right → successor-left for every
   // dependency with BOTH endpoints currently measured. A collapsed-away
@@ -319,18 +347,17 @@ export function GanttOverlay({
       const predRect = measurement.bars.get(dep.predecessorTaskId);
       const succRect = measurement.bars.get(dep.successorTaskId);
       if (!predRect || !succRect) continue;
-      out.push({ id: dep.id, type: dep.type, ...buildConnectorRoute(predRect, succRect) });
+      // ISS-101: a milestone successor is entered at its diamond's left
+      // vertex; a predecessor leaves from the bar's right edge (past the title).
+      const route = tryBuildConnectorRoute(
+        predRect,
+        successorAttachRect(succRect, measurement.diamonds.get(dep.successorTaskId)),
+      );
+      if (route) out.push({ id: dep.id, type: dep.type, ...route });
     }
     return out;
   }, [measurement, dependencies]);
 
-  const eventByTaskId = useMemo(() => {
-    const map = new Map<number, GanttEvent<Task>>();
-    for (const e of events) {
-      if (e.data) map.set(e.data.id, e);
-    }
-    return map;
-  }, [events]);
 
   // ---- Baselines: derive one px-per-day scale from any single measured
   // bar + its live event dates, then place a ghost rect per task that has

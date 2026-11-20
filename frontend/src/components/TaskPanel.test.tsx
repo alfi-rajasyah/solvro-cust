@@ -10,6 +10,7 @@ const duplicateMutateAsync = vi.fn();
 const updateMutateAsync = vi.fn();
 const authPerms = { current: ["task:write"] as string[] };
 const tasksQuery = { current: {} as Record<string, unknown> };
+const usersQuery = { current: undefined as unknown };
 
 vi.mock("@/lib/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth")>();
@@ -41,7 +42,7 @@ vi.mock("@/lib/queries", async (importOriginal) => {
     useItopTicketsByRefs: empty,
     useProjectSections: empty,
     useProjectEpics: empty,
-    useUsers: empty,
+    useUsers: () => ({ data: usersQuery.current, isLoading: false }),
     useTaskStatuses: empty,
     useProjectLabels: empty,
     useProjectMembers: empty,
@@ -82,6 +83,7 @@ afterEach(() => {
   duplicateMutateAsync.mockReset();
   updateMutateAsync.mockReset();
   authPerms.current = ["task:write"];
+  usersQuery.current = undefined;
 });
 
 describe("TaskPanel load states", () => {
@@ -251,6 +253,47 @@ describe("TaskPanel description", () => {
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit description" }));
   });
 
+  it("title: Escape cancels, keeps the panel open and returns focus to the title button", () => {
+    const onClose = vi.fn();
+    tasksQuery.current = { data: [base], isError: false, error: null, refetch };
+    render(<TaskPanel {...props} onClose={onClose} />);
+    fireEvent.click(screen.getByRole("button", { name: "Parent" }));
+    const input = screen.getByDisplayValue("Parent");
+    fireEvent.change(input, { target: { value: "Renamed" } });
+    act(() => {
+      fireEvent.keyDown(input, { key: "Escape" });
+      fireEvent.blur(input);
+    });
+    expect(screen.queryByDisplayValue("Renamed")).toBeNull();
+    expect(updateMutateAsync).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Parent" }));
+  });
+
+  it("title: Enter then blur saves once and returns focus to the title button", () => {
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Parent" }));
+    const input = screen.getByDisplayValue("Parent");
+    fireEvent.change(input, { target: { value: "Renamed" } });
+    act(() => {
+      fireEvent.submit(input.closest("form")!);
+      fireEvent.blur(input);
+    });
+    expect(updateMutateAsync).toHaveBeenCalledTimes(1);
+    expect(updateMutateAsync.mock.calls[0][0]).toMatchObject({ id: 5, patch: { title: "Renamed" } });
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Parent" }));
+  });
+
+  it("title: a blur save does not take focus", () => {
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Parent" }));
+    const input = screen.getByDisplayValue("Parent");
+    fireEvent.change(input, { target: { value: "Renamed" } });
+    fireEvent.blur(input);
+    expect(updateMutateAsync).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).not.toBe(screen.getByRole("button", { name: "Parent" }));
+  });
+
   it("Ctrl+Enter saves", () => {
     open();
     fireEvent.click(screen.getByRole("button", { name: "Edit description" }));
@@ -373,5 +416,78 @@ describe("TaskPanel story points", () => {
     open({ storyPoints: null });
     const b = screen.getByRole("button", { name: "Story points Not estimated" }) as HTMLButtonElement;
     expect(b.disabled).toBe(true);
+  });
+});
+
+describe("TaskPanel assignee pickers hide inactive users", () => {
+  const user = (id: number, username: string, active: boolean) => ({
+    id,
+    username,
+    email: `${username}@solvro.pl`,
+    role: "TAM",
+    active,
+  });
+  const task = (over: Record<string, unknown>) => ({
+    id: 5,
+    title: "Parent",
+    description: null,
+    status: "TODO",
+    priority: "MEDIUM",
+    position: 0,
+    parentTaskId: null,
+    assignedToId: null,
+    assignedTo: null,
+    labels: [],
+    section: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...over,
+  });
+  const options = (select: HTMLElement) =>
+    Array.from(select.querySelectorAll("option")).map((o) => o.textContent);
+
+  it("hides an inactive user in the task assignee select", () => {
+    usersQuery.current = [user(1, "ann", true), user(2, "old", false)];
+    tasksQuery.current = { data: [task({})], isError: false, error: null, refetch };
+    render(<TaskPanel {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: /Unassigned/ }));
+    const select = document.querySelector("select") as HTMLElement;
+    const labels = options(select);
+    expect(labels.some((l) => l?.startsWith("ann"))).toBe(true);
+    expect(labels.some((l) => l?.includes("old"))).toBe(false);
+  });
+
+  it("keeps the current inactive assignee, labelled (inactive)", () => {
+    usersQuery.current = [user(1, "ann", true), user(2, "old", false), user(3, "gone", false)];
+    tasksQuery.current = {
+      data: [task({ assignedToId: 2, assignedTo: { id: 2, username: "old" } })],
+      isError: false,
+      error: null,
+      refetch,
+    };
+    render(<TaskPanel {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: /old/ }));
+    const labels = options(document.querySelector("select") as HTMLElement);
+    expect(labels.some((l) => l?.startsWith("old (inactive)"))).toBe(true);
+    expect(labels.some((l) => l?.includes("gone"))).toBe(false);
+  });
+
+  it("applies the same rule to the subtask assignee picker", () => {
+    usersQuery.current = [user(1, "ann", true), user(2, "old", false), user(3, "gone", false)];
+    tasksQuery.current = {
+      data: [
+        task({}),
+        task({ id: 6, title: "Child", parentTaskId: 5, assignedToId: 2, assignedTo: { id: 2, username: "old" } }),
+      ],
+      isError: false,
+      error: null,
+      refetch,
+    };
+    render(<TaskPanel {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Assignee for Child" }));
+    const labels = options(screen.getByRole("combobox", { name: "Assignee for Child" }));
+    expect(labels.some((l) => l?.startsWith("old (inactive)"))).toBe(true);
+    expect(labels.some((l) => l?.startsWith("ann"))).toBe(true);
+    expect(labels.some((l) => l?.includes("gone"))).toBe(false);
   });
 });

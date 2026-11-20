@@ -75,6 +75,8 @@ async function apiPatchTask(
  * fixed-overlay + absolute-panel shape (ProjectList.tsx). */
 async function closeFilterPopover(page: Page): Promise<void> {
   await page.mouse.click(500, 500);
+  // The popover animates out; wait until it is gone so the next "Filter" lookup is unambiguous.
+  await expect(page.locator("[data-slot=popover-content]")).toHaveCount(0);
 }
 
 test.describe("list & gantt drag & drop — desktop (mouse)", () => {
