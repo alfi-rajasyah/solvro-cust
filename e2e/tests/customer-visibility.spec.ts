@@ -132,13 +132,13 @@ test.describe("Customer visibility", () => {
     await loginViaUi(page, tamAEmail, password);
 
     // ------------------------------------------------------------------
-    // /customers: customer A's row (h3 name in the Customer cell of the
+    // /customers: customer A's row (h2 name in the Customer cell of the
     // Customers.tsx data-grid) is visible; customer B's is absent.
     // ------------------------------------------------------------------
     await page.goto("/customers", { waitUntil: "networkidle" });
     await page.waitForTimeout(500);
-    await expect(page.getByRole("heading", { level: 3, name: customerAName, exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { level: 3, name: customerBName, exact: true })).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 2, name: customerAName, exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: customerBName, exact: true })).toHaveCount(0);
 
     // ------------------------------------------------------------------
     // /daily-review: customer A's group header (h2, CustomerGroup.tsx) is

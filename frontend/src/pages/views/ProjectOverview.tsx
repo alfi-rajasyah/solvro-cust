@@ -111,9 +111,9 @@ export function ProjectOverview() {
       <section className="rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
         <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="font-display text-base font-semibold text-on-surface">
+            <h2 className="font-display text-base font-semibold text-on-surface">
               Progress S-Curve
-            </h3>
+            </h2>
             <p className="mt-0.5 text-xs text-on-surface-variant">
               Cumulative tasks scheduled to complete over time. Compares the locked
               baseline against the current (re-planned) schedule.
@@ -191,7 +191,7 @@ function NeedsAttention({ tasks, projectId }: { tasks: Task[]; projectId: number
   return (
     <section className={PANEL_CLASS}>
       <header className="mb-3 flex items-center justify-between">
-        <h3 className={PANEL_HEADING}>Needs attention</h3>
+        <h2 className={PANEL_HEADING}>Needs attention</h2>
         <span className="text-xs text-on-surface-variant">overdue + next 7 days</span>
       </header>
       {shown.length === 0 ? (
@@ -242,7 +242,7 @@ function StatusBreakdown({ tasks }: { tasks: Task[] }) {
 
   return (
     <section className={PANEL_CLASS}>
-      <h3 className={`${PANEL_HEADING} mb-3`}>Status breakdown</h3>
+      <h2 className={`${PANEL_HEADING} mb-3`}>Status breakdown</h2>
       {tasks.length === 0 ? (
         <PanelEmpty icon="list_alt" text="No tasks yet." />
       ) : (
@@ -294,7 +294,7 @@ function TopRisks({ projectId }: { projectId: number }) {
   return (
     <section className={PANEL_CLASS}>
       <header className="mb-3 flex items-center justify-between">
-        <h3 className={PANEL_HEADING}>Top open risks</h3>
+        <h2 className={PANEL_HEADING}>Top open risks</h2>
         <Link
           to={`/projects/${projectId}/risks`}
           className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-xs font-semibold text-primary hover:underline"
@@ -303,7 +303,9 @@ function TopRisks({ projectId }: { projectId: number }) {
         </Link>
       </header>
       {isLoading ? (
-        <div className="h-16 animate-pulse rounded-sm bg-surface-container-low" />
+        <SkeletonRegion>
+          <Skeleton className="h-16 rounded-sm bg-surface-container-low" />
+        </SkeletonRegion>
       ) : isError ? (
         <p className="text-xs text-on-surface-variant">Could not load risks.</p>
       ) : top.length === 0 ? (
@@ -339,7 +341,7 @@ function ProjectNotesPanel({ projectId }: { projectId: number }) {
   return (
     <section className={PANEL_CLASS}>
       <header className="mb-3 flex items-center justify-between">
-        <h3 className={PANEL_HEADING}>Notes</h3>
+        <h2 className={PANEL_HEADING}>Notes</h2>
         <Link
           to="/daily-review"
           className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-xs font-semibold text-primary hover:underline"
@@ -348,7 +350,9 @@ function ProjectNotesPanel({ projectId }: { projectId: number }) {
         </Link>
       </header>
       {isLoading ? (
-        <div className="h-16 animate-pulse rounded-sm bg-surface-container-low" />
+        <SkeletonRegion>
+          <Skeleton className="h-16 rounded-sm bg-surface-container-low" />
+        </SkeletonRegion>
       ) : isError ? (
         <p className="text-xs text-on-surface-variant">Could not load notes.</p>
       ) : !notes || notes.length === 0 ? (

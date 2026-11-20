@@ -916,14 +916,14 @@ function SectionGroup({
             </button>
           </form>
         ) : (
-          <h3
+          <h2
             className={[
               "font-display text-sm font-semibold",
               section ? "text-on-surface" : "italic text-on-surface-variant",
             ].join(" ")}
           >
             {section?.name ?? "No section"}
-          </h3>
+          </h2>
         )}
         <span className="rounded-full bg-surface-container-high px-1.5 py-0 font-mono text-meta text-on-surface-variant">
           {nodes.length}

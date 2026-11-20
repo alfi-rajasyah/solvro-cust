@@ -184,14 +184,14 @@ function ProjectShareDialog({
         {created && <NewLinkPanel link={created} />}
 
         <section aria-labelledby="share-links-heading">
-          <h3
+          <h2
             id="share-links-heading"
             ref={listHeading}
             tabIndex={-1}
             className="mb-2 text-label-caps uppercase text-on-surface-variant outline-hidden"
           >
             Guest links
-          </h3>
+          </h2>
           {links.isLoading ? (
             <SkeletonRegion className="space-y-2" data-testid="share-links-loading">
               {[0, 1].map((i) => (

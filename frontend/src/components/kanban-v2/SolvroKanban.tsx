@@ -799,7 +799,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                         aria-hidden="true"
                         className={`h-2 w-2 shrink-0 rounded-full ${STATUS_TONE_DOT_CLASS[def.color]}`}
                       />
-                      <h3 className="min-w-0 truncate text-sm font-bold text-on-surface">{def.name}</h3>
+                      <h2 className="min-w-0 truncate text-sm font-bold text-on-surface">{def.name}</h2>
                       <span
                         className={[
                           "rounded-full px-2 py-0.5 text-meta font-medium",

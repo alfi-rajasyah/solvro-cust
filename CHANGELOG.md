@@ -15,6 +15,21 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-20 — Polish fixes: Portfolio Today marker, loaders, comment box, maskable icon
+
+- The Portfolio Today marker is a two-tone line (inverse-surface core, surface edge), shared by the desktop, phone and legend views, so it clears 3:1 over active and overdue project bars.
+- Project Overview's Top open risks and Notes panels load through the shared skeleton, and the Risks table's Status cell uses the same select as its sibling cells.
+- Admin's "Needs role" chip is sentence case instead of uppercase.
+- The task comment box is an auto-growing textarea. On desktop Enter sends and Shift+Enter adds a new line; on a phone Enter adds a line and only the Send button sends. The Enter that confirms an IME conversion no longer sends. @mentions work as before, and the mention picker is announced to screen readers with the number of people found and the arrow-key hint.
+- The PWA manifest now lists a 192px maskable icon next to the 512px one, so low-density Android launchers no longer downscale the large one.
+
+### Fixed — 2026-11-20 — Page landmarks and heading order pass the accessibility scan
+
+- The sidebar navigation and tab strips now have distinct accessible names ("Main", "Sections"), and the mobile install banner is a named region, so every page's content sits in a landmark and no landmark name repeats.
+- Page headings no longer skip a level: card, row, column and panel titles under a page's h1 are now h2 (same look). Affects Projects, Overview, Customers, Project Overview and its Recent activity, the Kanban columns, the List sections, the task panel's Comments heading, the customer Tickets board columns and the Outline API and webhook cards.
+- Dialog, drawer and notifications-popover headers and footers no longer register as extra page banner or footer landmarks (`Modal.tsx`, `Drawer.tsx`, `NotificationBell.tsx`; same look).
+- The accessibility test now enforces the region, landmark-unique and heading-order rules, and also scans an open task panel (from the Kanban and the Gantt tab), the share dialog and the customer Tickets board.
+
 ### Fixed — 2026-11-20 — Task panel title editor and filter popover
 
 - The task panel's title editor now behaves like the description editor: Escape cancels the edit and keeps the panel open, the draft saves once on Enter or blur, focus returns to the title after Enter or Escape, and the title button shows a focus ring (`TaskPanel.tsx`).

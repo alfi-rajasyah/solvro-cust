@@ -27,6 +27,14 @@ export function sortPortfolioRows(
 // Portfolio Timelines — Calendar view (horizontal year-roadmap)
 // ─────────────────────────────────────────────────────────────────────────
 
+// One Today marker for the desktop overlay, the phone per-row overlay and the
+// phone legend swatch: an inverse-surface core with a surface-coloured edge.
+// Neither colour alone clears 3:1 against every bar (inverse-surface is about
+// 2.5:1 on bg-primary and bg-error), but the edge measures 5.75:1 or more on
+// both, so one of the two tones always does.
+const TODAY_LINE_CLASS =
+  "w-1 -translate-x-1/2 border-x border-surface-container-lowest bg-inverse-surface";
+
 const MIN_BAR_WIDTH_PCT = 1;
 
 // Width of the label column (project name · customer, status chip). Shared
@@ -142,7 +150,7 @@ export function PortfolioCalendar({
           ))}
           {showTodayLine && (
             <span className="inline-flex items-center gap-1.5 text-meta text-on-surface-variant md:hidden">
-              <span aria-hidden="true" className="h-3 border-l border-dashed border-primary" />
+              <span aria-hidden="true" className={`${TODAY_LINE_CLASS} ml-0.5 h-3`} />
               Today
             </span>
           )}
@@ -184,10 +192,10 @@ export function PortfolioCalendar({
                   <div className={`${LABEL_COL_CLASS} shrink-0 max-md:hidden`} />
                   <div className="relative flex-1">
                     <div
-                      className="absolute top-0 h-full border-l border-dashed border-primary"
+                      className={`${TODAY_LINE_CLASS} absolute top-0 h-full`}
                       style={{ left: `${todayFrac * 100}%` }}
                     >
-                      <span className="absolute -top-0.5 left-1 whitespace-nowrap rounded-sm bg-primary px-1 py-0.5 font-display text-label-caps uppercase leading-none text-on-primary">
+                      <span className="absolute -top-0.5 left-1 whitespace-nowrap rounded-sm bg-inverse-surface px-1 py-0.5 font-display text-label-caps uppercase leading-none text-inverse-on-surface">
                         Today
                       </span>
                     </div>
@@ -295,7 +303,7 @@ export function PortfolioCalendar({
                       {showTodayLine && (
                         <div
                           aria-hidden="true"
-                          className="pointer-events-none absolute top-0 z-10 h-full border-l border-dashed border-primary md:hidden"
+                          className={`${TODAY_LINE_CLASS} pointer-events-none absolute top-0 z-10 h-full md:hidden`}
                           style={{ left: `${todayFrac * 100}%` }}
                         />
                       )}

@@ -50,9 +50,9 @@ export function OutlineWebhookCard({ settings }: { settings: OutlineAdminSetting
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-display text-sm font-semibold text-on-surface">
+          <h2 className="font-display text-sm font-semibold text-on-surface">
             Webhook (for “Mentioned in Outline”)
-          </h3>
+          </h2>
           <Chip tone={receiving ? "emerald" : settings.webhookSecretSet ? "amber" : "gray"}>
             {receiving ? "Receiving" : settings.webhookSecretSet ? "Waiting" : "Not set up"}
           </Chip>

@@ -246,14 +246,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Question: should active: false block new assignments?.
 - **Source:** snapshot line 342, section "Tech debt / follow-ups from recent work"
 
-### ISS-042 · P3 · Comment composer is a single-line input
-
-- **Type:** debt · **Found:** 2026-07-24 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** CommentComposer in frontend/src/components/CommentMentions.tsx (line ~143)
-- **Problem:** The task panel comment box is a one-line input that scrolls sideways for long comments.
-- **Why deferred / fix direction:** Replace with an auto-growing textarea.
-- **Source:** snapshot line 533, section "Gantt GH #58 deferred findings (2026-07-24)"
-
 ### ISS-043 · P3 · Popovers near scroll-area bottoms can clip
 
 - **Type:** watch · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -261,14 +253,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** Absolute-positioned popovers inside the internally scrolling containers can clip at the bottom edge instead of flipping.
 - **Why deferred / fix direction:** Trigger: a user reports clipping. Then move the popovers to a portal with flip logic.
 - **Source:** snapshot line 544, section "Plan B Task 9 deferred findings — ReUI Gantt swap (2026-07-25)"
-
-### ISS-044 · P3 · PWA manifest declares only a 512px maskable icon
-
-- **Type:** debt · **Found:** 2026-07-26 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** icons array in frontend/vite.config.ts (line ~47)
-- **Problem:** Low-DPI Android launchers downscale the 512 maskable icon instead of getting a 192 one.
-- **Why deferred / fix direction:** Generate icon-maskable-192.png and add a manifest entry.
-- **Source:** snapshot line 573, section "PWA icon regeneration — deferred findings (2026-07-25/26)"
 
 ### ISS-045 · P3 · Subtask promote and re-parent only exist in the task modal
 
@@ -374,30 +358,13 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Accepted: UI-only lag. Revisit only if the throttle becomes a complaint.
 - **Source:** snapshot line 2372, section "Internal sync — deferred findings (2026-10-09)"
 
-### ISS-195 · P3 · The Portfolio Today line disappears over an active bar
+### ISS-197 · P3 · Admin still has fixed 14px icons
 
-- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 5 review
-- **Where:** Today overlays in frontend/src/components/portfolio/PortfolioCalendar.tsx (~187 desktop, ~298 phone)
-- **Problem:** The line is border-primary and active bars are bg-primary, so only short stubs show where today falls inside an active project.
-- **Why deferred / fix direction:** The legend and month grid still orient the user. Fix: a marker that stays visible over a bg-primary bar, shared by both overlays.
+- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-20 @ wave G
+- **Where:** text-[14px] icons (~1285, ~1515) in frontend/src/pages/Admin.tsx
+- **Problem:** Two icons keep arbitrary sizes. (The uppercase "Needs role" chip was fixed 2026-11-20, CHANGELOG "Polish fixes: Portfolio Today marker, loaders, comment box, maskable icon".)
+- **Why deferred / fix direction:** Bound by ISS-056 (how Material Symbols sizes are set app-wide). Fix with the scale classes once ISS-056 is decided.
 - **Source:** phase review of `docs/archive/plans/design-cleanup.md`
-
-### ISS-196 · P3 · Two bare pulse blocks remain in Project Overview, and the Risks Status cell is still native
-
-- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 5 review
-- **Where:** animate-pulse blocks in frontend/src/pages/views/ProjectOverview.tsx (~304, ~349); Status select in frontend/src/pages/views/ProjectRisks.tsx (~443)
-- **Problem:** The sub-section loaders skip the shared skeleton, and one Risks row mixes a native select (focus: style) with the new ui/select cells.
-- **Why deferred / fix direction:** Cosmetic. Fix: move both loaders to SkeletonRegion and the Status cell to ui/select.
-- **Source:** phase review of `docs/archive/plans/design-cleanup.md`
-
-### ISS-197 · P3 · Admin still has an uppercase Needs-role chip and fixed 14px icons
-
-- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 5 review
-- **Where:** "Needs role" chip (~275) and text-[14px] icons (~1285, ~1515) in frontend/src/pages/Admin.tsx
-- **Problem:** The chip uses uppercase text-label-caps and two icons keep arbitrary sizes.
-- **Why deferred / fix direction:** Cosmetic. Fix: sentence-case chip text and scale classes (icons bound by ISS-056).
-- **Source:** phase review of `docs/archive/plans/design-cleanup.md`
-
 ### ISS-202 · P3 · Kanban cards list every subtask while a label filter is active
 
 - **Type:** UX · **Found:** 2026-11-20 · **Verified:** 2026-11-20 @ feature wave B
@@ -407,14 +374,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Source:** GitHub #89 (`docs/archive/plans/feature-wave-b.md`)
 
 ## Open — Accessibility & tokens
-
-### ISS-081 · P2 · Landmark, heading-order and nested-interactive axe gaps remain
-
-- **Type:** debt · **Found:** 2026-10-23 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** KNOWN_GAP_RULES in e2e/tests/axe.spec.ts (line ~21); SortableItem rows in frontend/src/components/TaskPanel.tsx
-- **Problem:** region, landmark-unique and heading-order are disabled in the axe scan. The TaskPanel subtask rows (handle and controls inside the row) are never scanned for nested-interactive.
-- **Why deferred / fix direction:** Fix the landmark and heading structure, drop those rules from KNOWN_GAP_RULES, and add a task-panel scan.
-- **Source:** snapshot line 2393, section "Accessibility pass — deferred findings (2026-10-23)"
 
 ### ISS-084 · P3 · Favicon reads weakly on dark browser tab strips
 
@@ -937,6 +896,8 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-038 · 2026-11-19 · CHANGELOG "Service lists, Daily Review refresh, request timeouts, section chip" · Service-mapping mutations are not optimistic
 - ISS-040 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · Uncustomized sections show slate outside the Gantt
 - ISS-041 · 2026-11-19 · CHANGELOG "Label permissions and duplicate label names" · Duplicate label name shows 'Unique constraint violated'
+- ISS-042 · 2026-11-20 · CHANGELOG "Polish fixes: Portfolio Today marker, loaders, comment box, maskable icon" · Comment composer is a single-line input
+- ISS-044 · 2026-11-20 · CHANGELOG "Polish fixes: Portfolio Today marker, loaders, comment box, maskable icon" · PWA manifest declares only a 512px maskable icon
 - ISS-046 · 2026-11-19 · CHANGELOG "Task form, task panel and section permissions" · Subtask DONE checkbox in the task modal ignores canEdit
 - ISS-047 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · Command palette has dead classes and a hardcoded Mac shortcut glyph
 - ISS-049 · 2026-11-19 · CHANGELOG "Panels, forms and board accessibility" · SectionReorderModal relies on its caller for the permission gate
@@ -960,6 +921,7 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-078 · 2026-11-19 · CHANGELOG "Keyboard drag on boards and reorder lists" · Keyboard drag does not work on the Kanban board
 - ISS-079 · 2026-11-19 · CHANGELOG "Keyboard drag on boards and reorder lists" · Sortable rows are tab stops with role=button and a joined accessible name
 - ISS-080 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) (remaining pairs outside the touched chips: ISS-194) · Light primary/10 chip tints still fall under 4.5:1
+- ISS-081 · 2026-11-20 · CHANGELOG "Page landmarks and heading order pass the accessibility scan" · Landmark, heading-order and nested-interactive axe gaps remain
 - ISS-082 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · InstallBanner nests a role=button span inside a button
 - ISS-083 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · Sidebar nav text uses slate greys instead of the warm design grey
 - ISS-085 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · Overview project id uses raw font-mono instead of a type token
@@ -1014,6 +976,8 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-190 · 2026-11-20 · CHANGELOG "A slow admin status save no longer fails task saves with a 500" · A slow admin status save can make status-setting task saves fail with a 500
 - ISS-191 · 2026-11-20 · CHANGELOG "Gantt connect-drag Escape, narrow tree pane, milestone arrows" · Escape during a Gantt dependency-connect drag also closes the task panel
 - ISS-192 · 2026-11-20 · CHANGELOG "Inactive users in pickers, service-save refetches, project tab preload" · The epic owner picker lists inactive users
+- ISS-195 · 2026-11-20 · CHANGELOG "Polish fixes: Portfolio Today marker, loaders, comment box, maskable icon" · The Portfolio Today line disappears over an active bar
+- ISS-196 · 2026-11-20 · CHANGELOG "Polish fixes: Portfolio Today marker, loaders, comment box, maskable icon" · Two bare pulse blocks remain in Project Overview, and the Risks Status cell is still native
 - ISS-198 · 2026-11-20 · CHANGELOG "Task panel title editor and filter popover" · The task panel title editor loses focus and can drop its draft on Escape
 - ISS-200 · 2026-11-20 · CHANGELOG "Task panel title editor and filter popover" · A deleted epic or label left in the filter URL keeps the views empty
 - ISS-201 · 2026-11-20 · CHANGELOG "Task panel title editor and filter popover" · The task filter popover has no focus trap or focus return

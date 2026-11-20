@@ -127,7 +127,7 @@ test.describe("kanban — one column per custom status", () => {
     await openKanban(page, seededProject.projectId);
 
     await expect(page.locator('[data-slot="kanban-column"]')).toHaveCount(4);
-    await expect(page.locator("h3", { hasText: QA_NAME })).toBeVisible();
+    await expect(page.locator("h2", { hasText: QA_NAME })).toBeVisible();
     // Band: Not started (1 col) / Active (2 cols: In progress + QA) / Done (1 col).
     const bands = page.getByTestId("kanban-category-band");
     await expect(bands).toHaveCount(3);
@@ -139,7 +139,7 @@ test.describe("kanban — one column per custom status", () => {
     expect(activeBox!.x + activeBox!.width).toBeGreaterThanOrEqual(qaColBox!.x + qaColBox!.width - 2);
 
     const grip = await gripFor(page, "Gamma", "Move");
-    const header = await page.locator("h3", { hasText: QA_NAME }).boundingBox();
+    const header = await page.locator("h2", { hasText: QA_NAME }).boundingBox();
     expect(grip, "grip for Gamma not found").toBeTruthy();
     expect(header, "QA / UAT header not found").toBeTruthy();
 

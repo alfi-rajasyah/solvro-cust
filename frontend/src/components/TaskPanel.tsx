@@ -1304,9 +1304,9 @@ function PanelComments({ taskId, projectId }: { taskId: number; projectId: numbe
 
   return (
     <div className="space-y-3">
-      <h3 className="font-display text-label-caps uppercase text-on-surface-variant">
+      <h2 className="font-display text-label-caps uppercase text-on-surface-variant">
         Comments {comments && comments.length > 0 && `· ${comments.length}`}
-      </h3>
+      </h2>
 
       {isLoading && (
         <div className="h-12 animate-pulse rounded-sm border border-outline-variant bg-surface-container-low" />

@@ -114,13 +114,13 @@ test.describe("Duplicate — Task panel, subtask row, section header (desktop + 
     // never offer a Duplicate button (ProjectList.tsx gates the button on
     // `section` being non-null).
     const noneRow = page
-      .getByRole("heading", { level: 3, name: "No section", exact: true })
+      .getByRole("heading", { level: 2, name: "No section", exact: true })
       .locator("xpath=..");
     await expect(noneRow.getByRole("button", { name: "Duplicate section", exact: true })).toHaveCount(
       0,
     );
 
-    const headings = page.getByRole("heading", { level: 3, name: sectionName, exact: true });
+    const headings = page.getByRole("heading", { level: 2, name: sectionName, exact: true });
     await expect(headings).toHaveCount(1);
 
     // Scope the click to THIS section's own header row — every section
@@ -132,9 +132,9 @@ test.describe("Duplicate — Task panel, subtask row, section header (desktop + 
     await expect(headings).toHaveCount(2);
 
     // "Directly below the source" (§3 Decision 10: position = source + 1) —
-    // the very next h3 in document order is the copy, with nothing else
+    // the very next h2 in document order is the copy, with nothing else
     // (e.g. another section, or the "No section" pseudo-group) between them.
-    const allHeadingTexts = await page.getByRole("heading", { level: 3 }).allTextContents();
+    const allHeadingTexts = await page.getByRole("heading", { level: 2 }).allTextContents();
     const idx = allHeadingTexts.indexOf(sectionName);
     expect(idx).toBeGreaterThanOrEqual(0);
     expect(allHeadingTexts[idx + 1]).toBe(sectionName);

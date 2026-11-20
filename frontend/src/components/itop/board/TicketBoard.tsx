@@ -326,7 +326,7 @@ export function TicketBoard({
                   ].join(" ")}
                 >
                   <div className="flex items-center gap-2 px-1 pb-1">
-                    <h3 className="text-sm font-bold text-on-surface">{COLUMN_LABELS[column]}</h3>
+                    <h2 className="text-sm font-bold text-on-surface">{COLUMN_LABELS[column]}</h2>
                     <span className="rounded-full bg-surface-container-high px-2 py-0.5 text-meta font-medium text-on-surface-variant">
                       {columnTickets.length}
                     </span>
