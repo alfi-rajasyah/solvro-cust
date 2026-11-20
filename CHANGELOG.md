@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-20 — Cleanup of e2e fixture rows in the dev database
+
+- `backend/scripts/cleanup-e2e-data.ts` removes the rows local Playwright runs leave in a dev database: customers whose description starts with `e2e`, projects linked to them or named with a fixture stamp, and `@solvro.test` users other than the e2e sign-in account. It is a dry run unless `E2E_CLEANUP_CONFIRM=delete` is set, and refuses `NODE_ENV=production`. `.claude/scripts/gates.sh` runs it after its Playwright step against the default dev stack, so the demo data stays usable for manual QA.
+
 ### Fixed — 2026-11-20 — Keyboard focus ring on tab links
 
 - The project tabs (Overview, List, Kanban and the rest) and the shared tab bar (`components/Tabs.tsx`) show a primary focus ring from the keyboard instead of the browser outline. The ring is drawn inside the tab because the scrolling tab bar would clip it outside, and `e2e/tests/axe.spec.ts` checks it.

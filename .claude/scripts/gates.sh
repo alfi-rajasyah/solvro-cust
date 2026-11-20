@@ -107,7 +107,16 @@ smoke_gate() {
   # Smoke plus any e2e spec added or modified in the diff (CHANGED_SPECS, derived at the top).
   local specs=("tests/smoke.spec.ts" "${CHANGED_SPECS[@]}")
   echo "playwright specs: ${specs[*]}"
-  (cd e2e && BASE_URL="${BASE_URL:-http://localhost:5173}" npx playwright test "${specs[@]}")
+  local rc=0
+  (cd e2e && BASE_URL="${BASE_URL:-http://localhost:5173}" npx playwright test "${specs[@]}") || rc=$?
+  # The specs write fixture rows into the dev database behind :5173; remove
+  # them so the demo data stays usable for manual QA (backend/scripts/cleanup-e2e-data.ts).
+  # Only for the default dev stack: another BASE_URL means another database.
+  if [ -z "${BASE_URL:-}" ] || [ "${BASE_URL}" = "http://localhost:5173" ]; then
+    docker compose exec -T -e E2E_CLEANUP_CONFIRM=delete backend npx tsx scripts/cleanup-e2e-data.ts \
+      || echo "e2e data cleanup failed (the gate result is unchanged)"
+  fi
+  return "$rc"
 }
 
 if [ "$F_BACK" -eq 1 ]; then
