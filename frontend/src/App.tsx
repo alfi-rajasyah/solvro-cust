@@ -9,6 +9,7 @@ import { EmbedInvalidLink } from "@/components/embed/EmbedInvalidLink";
 import { PageLoading } from "@/components/skeletons";
 import { Login } from "@/pages/Login";
 import { Overview } from "@/pages/Overview";
+import { PROJECT_TAB_LOADERS } from "@/lib/projectTabPreload";
 
 /**
  * A page loaded on first visit, in its own chunk, so the first download holds
@@ -37,15 +38,15 @@ const Settings = lazyPage(() => import("@/pages/Settings"), "Settings");
 const Tasks = lazyPage(() => import("@/pages/Tasks"), "Tasks");
 const Utilization = lazyPage(() => import("@/pages/Utilization"), "Utilization");
 const WeeklySync = lazyPage(() => import("@/pages/WeeklySync"), "WeeklySync");
-const ProjectEpics = lazyPage(() => import("@/pages/views/ProjectEpics"), "ProjectEpics");
-const ProjectGantt = lazyPage(() => import("@/pages/views/ProjectGantt"), "ProjectGantt");
-const ProjectKanban = lazyPage(() => import("@/pages/views/ProjectKanban"), "ProjectKanban");
-const ProjectList = lazyPage(() => import("@/pages/views/ProjectList"), "ProjectList");
-const ProjectOverview = lazyPage(() => import("@/pages/views/ProjectOverview"), "ProjectOverview");
-const ProjectRisks = lazyPage(() => import("@/pages/views/ProjectRisks"), "ProjectRisks");
-const ProjectServices = lazyPage(() => import("@/pages/views/ProjectServices"), "ProjectServices");
-const ProjectDocs = lazyPage(() => import("@/pages/views/ProjectDocs"), "ProjectDocs");
-const ProjectTimeline = lazyPage(() => import("@/pages/views/ProjectTimeline"), "ProjectTimeline");
+const ProjectEpics = lazyPage(PROJECT_TAB_LOADERS.epics, "ProjectEpics");
+const ProjectGantt = lazyPage(PROJECT_TAB_LOADERS.gantt, "ProjectGantt");
+const ProjectKanban = lazyPage(PROJECT_TAB_LOADERS.kanban, "ProjectKanban");
+const ProjectList = lazyPage(PROJECT_TAB_LOADERS.list, "ProjectList");
+const ProjectOverview = lazyPage(PROJECT_TAB_LOADERS.overview, "ProjectOverview");
+const ProjectRisks = lazyPage(PROJECT_TAB_LOADERS.risks, "ProjectRisks");
+const ProjectServices = lazyPage(PROJECT_TAB_LOADERS.services, "ProjectServices");
+const ProjectDocs = lazyPage(PROJECT_TAB_LOADERS.docs, "ProjectDocs");
+const ProjectTimeline = lazyPage(PROJECT_TAB_LOADERS.timeline, "ProjectTimeline");
 
 /**
  * `/projects/:id` → its Overview tab. Carries `?task=` (and any other query or

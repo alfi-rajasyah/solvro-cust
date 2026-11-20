@@ -6,6 +6,7 @@ import { isDragActive } from "./Modal";
 import { TaskStatusChip } from "./StatusChip";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { ApiError } from "@/lib/api";
+import { assignableUsers, assigneeOptionLabel } from "@/lib/assignableUsers";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { fmtRange } from "@/lib/formatDate";
 import { TASK_STATUS_LABEL } from "@/lib/labels";
@@ -26,16 +27,18 @@ import {
  * The client cannot know who holds the view-all permission, so those users
  * stay in the second group and the server's `owner_no_project_access` answer
  * (shown inline) remains the authority. The current owner is always kept in
- * the first group so the select never loses its selected option.
+ * the first group so the select never loses its selected option. Inactive
+ * users are left out, except the current owner, who stays (marked in the
+ * select) so the field does not go blank.
  */
-export function splitEpicOwnerOptions<U extends { id: number }>(
+export function splitEpicOwnerOptions<U extends { id: number; active?: boolean }>(
   users: readonly U[],
   knownIds: ReadonlySet<number>,
   currentOwnerId: number | null,
 ): { onProject: U[]; others: U[] } {
   const onProject: U[] = [];
   const others: U[] = [];
-  for (const u of users) {
+  for (const u of assignableUsers(users, currentOwnerId)) {
     (knownIds.has(u.id) || u.id === currentOwnerId ? onProject : others).push(u);
   }
   return { onProject, others };
@@ -246,7 +249,10 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
   // Until both lookups have loaded the grouping would be wrong, so render flat.
   const ownerOptions = accessKnown
     ? splitEpicOwnerOptions(users ?? [], knownIds, epic.ownerId)
-    : { onProject: users ?? [], others: [] };
+    : {
+        onProject: assignableUsers(users ?? [], epic.ownerId),
+        others: [],
+      };
 
   return (
     <div
@@ -310,7 +316,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
             {ownerOptions.others.length === 0 ? (
               ownerOptions.onProject.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.username}
+                  {assigneeOptionLabel(u)}
                 </option>
               ))
             ) : (
@@ -318,14 +324,14 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
                 <optgroup label="On this project">
                   {ownerOptions.onProject.map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.username}
+                      {assigneeOptionLabel(u)}
                     </option>
                   ))}
                 </optgroup>
                 <optgroup label="Not on this project">
                   {ownerOptions.others.map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.username}
+                      {assigneeOptionLabel(u)}
                     </option>
                   ))}
                 </optgroup>

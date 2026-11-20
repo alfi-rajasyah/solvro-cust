@@ -84,6 +84,27 @@ export function writeTaskFilters(params: URLSearchParams, filters: TaskFilters):
   return next;
 }
 
+/**
+ * The patch that drops epic and label ids no longer in the project (a deleted
+ * epic or label, an old shared link), or null when nothing needs dropping.
+ * Pass `undefined` for a list that has not loaded: its filter is left alone.
+ * `none` / "No label" is always valid.
+ */
+export function stalePrunePatch(
+  filters: TaskFilters,
+  known: { epicIds?: number[]; labelIds?: number[] },
+): Partial<TaskFilters> | null {
+  const patch: Partial<TaskFilters> = {};
+  if (typeof filters.epic === "number" && known.epicIds && !known.epicIds.includes(filters.epic)) {
+    patch.epic = "all";
+  }
+  if (known.labelIds) {
+    const kept = filters.labelIds.filter((id) => known.labelIds!.includes(id));
+    if (kept.length !== filters.labelIds.length) patch.labelIds = kept;
+  }
+  return Object.keys(patch).length > 0 ? patch : null;
+}
+
 /** Query string (with leading `?`, or empty) holding only the filter params. */
 export function carryFilterSearch(params: URLSearchParams): string {
   const kept = new URLSearchParams();

@@ -16,6 +16,7 @@ import {
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ApiError } from "@/lib/api";
+import { assignableUsers, assigneeOptionLabel } from "@/lib/assignableUsers";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { commitDraft, dayFromIso, isoFromDay } from "@/lib/dateField";
 import { parseStoryPoints } from "@/lib/storyPoints";
@@ -507,9 +508,9 @@ export function TaskFormModal(props: TaskFormModalProps) {
               className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default"
             >
               <option value="">Unassigned</option>
-              {(users ?? []).map((u) => (
+              {assignableUsers(users ?? [], assignedToId === "" ? null : assignedToId).map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.username} · {u.role}
+                  {assigneeOptionLabel(u)} · {u.role}
                 </option>
               ))}
             </select>

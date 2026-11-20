@@ -140,4 +140,42 @@ test.describe("task filters", () => {
     await expect(page).not.toHaveURL(/labels=/);
     await expect(shown("Red task")).toBeVisible();
   });
+
+  test("a deleted epic or label in the URL is dropped", async ({ page, seededProject }) => {
+    const { projectId } = seededProject;
+    await page.goto(`/projects/${projectId}/list?epicFilter=999999&labels=999998,none`, {
+      waitUntil: "networkidle",
+    });
+    await expect(page).not.toHaveURL(/epicFilter=/);
+    await expect(page).toHaveURL(/labels=none/);
+    await expect(page).not.toHaveURL(/999998/);
+  });
+
+  test("the filter popover traps focus and returns it to the Filter button", async ({ page, seededProject }) => {
+    await page.goto(`/projects/${seededProject.projectId}/list`, { waitUntil: "networkidle" });
+    const trigger = page.getByRole("button", { name: "Filter" });
+    await trigger.click();
+    const epic = page.getByLabel("Epic", { exact: true });
+    await expect(epic).toBeVisible();
+    const panel = page.locator("[data-slot=popover-content]");
+    // Tab never leaves the open popover.
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press("Tab");
+      await expect
+        .poll(() => panel.evaluate((el) => el.contains(document.activeElement)), { timeout: 2000 })
+        .toBe(true);
+    }
+    await page.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+
+    // Mobile: the open panel stays inside the 375px viewport.
+    if (test.info().project.name === "mobile") {
+      await trigger.click();
+      const box = await panel.boundingBox();
+      const vw = page.viewportSize()!.width;
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(vw);
+    }
+  });
 });

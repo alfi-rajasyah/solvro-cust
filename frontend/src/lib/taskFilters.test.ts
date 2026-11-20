@@ -10,6 +10,7 @@ import {
   reorderAmongVisible,
   visibleOrderUnchanged,
   scopeFilters,
+  stalePrunePatch,
   taskMatchesEpic,
   taskMatchesLabels,
   taskVisible,
@@ -180,5 +181,27 @@ describe("reorder with hidden rows", () => {
   it("matches a plain reorder when nothing is hidden", () => {
     expect(reorderAmongVisible(["a", "b", "c"], ["a", "b", "c"], "c", 0)).toEqual(["c", "a", "b"]);
     expect(reorderAmongVisible(["a", "b", "c"], ["a", "b", "c"], "a", 2)).toEqual(["b", "c", "a"]);
+  });
+});
+
+describe("stalePrunePatch", () => {
+  const f = (over: Partial<TaskFilters>): TaskFilters => ({ ...EMPTY_FILTERS, ...over });
+
+  it("drops an epic and label ids that no longer exist", () => {
+    expect(
+      stalePrunePatch(f({ epic: 9, labelIds: [1, 2, 3] }), { epicIds: [1, 2], labelIds: [1, 3] }),
+    ).toEqual({ epic: "all", labelIds: [1, 3] });
+  });
+
+  it("keeps valid ids, none and No label", () => {
+    expect(
+      stalePrunePatch(f({ epic: "none", labelIds: [1], noLabel: true }), { epicIds: [], labelIds: [1] }),
+    ).toBeNull();
+    expect(stalePrunePatch(f({ epic: 2 }), { epicIds: [2] })).toBeNull();
+  });
+
+  it("leaves a list that has not loaded alone", () => {
+    expect(stalePrunePatch(f({ epic: 9, labelIds: [7] }), {})).toBeNull();
+    expect(stalePrunePatch(f({ epic: 9, labelIds: [7] }), { labelIds: [] })).toEqual({ labelIds: [] });
   });
 });

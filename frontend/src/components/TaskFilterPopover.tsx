@@ -1,5 +1,5 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { useId, type ReactNode } from "react";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Epic, Label } from "@/lib/queries";
 import type { EpicFilter, TaskFilters } from "@/lib/taskFilters";
 
@@ -28,14 +28,15 @@ interface TaskFilterPopoverProps {
   children?: ReactNode;
   /** Classes for the trigger button; receives whether any filter is active. */
   triggerClassName: (active: boolean) => string;
-  /** Stacking of the backdrop and panel; the Gantt sits under a sticky z-30 header. */
-  layerClassName?: { backdrop: string; panel: string };
 }
 
 /**
  * The Filter button and popover shared by List, Kanban, Gantt and Timeline:
  * same trigger, same Epic select, same Clear link, so the four views read as
  * one control. The state itself lives in the URL (`hooks/useTaskFilters.ts`).
+ *
+ * Built on the Base-UI popover: focus moves in on open, Tab stays inside, and
+ * Escape or an outside press closes it and returns focus to the Filter button.
  */
 export function TaskFilterPopover({
   filters,
@@ -46,21 +47,10 @@ export function TaskFilterPopover({
   labels,
   children,
   triggerClassName,
-  layerClassName = { backdrop: "z-10", panel: "z-20" },
 }: TaskFilterPopoverProps) {
-  const [open, setOpen] = useState(false);
   const labelGroupId = useId();
   const epicSelectId = useId();
   const active = activeCount > 0;
-
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
 
   function toggleLabel(id: number) {
     onChange({
@@ -71,13 +61,8 @@ export function TaskFilterPopover({
   }
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className={triggerClassName(active)}
-      >
+    <Popover modal="trap-focus">
+      <PopoverTrigger className={triggerClassName(active)}>
         <span aria-hidden="true" className="material-symbols-outlined text-base">filter_alt</span>
         Filter
         {active && (
@@ -85,92 +70,97 @@ export function TaskFilterPopover({
             {activeCount}
           </span>
         )}
-      </button>
-      {open && (
-        <>
-          <div className={cn("fixed inset-0", layerClassName.backdrop)} onClick={() => setOpen(false)} />
-          <div
-            className={cn(
-              "mt-2 rounded-sm max-md:fixed max-md:inset-x-4 max-md:top-20 max-md:mt-0 max-md:max-h-[calc(100dvh-6rem)] max-md:overflow-y-auto md:absolute md:right-0 md:w-64 border border-outline-variant bg-surface-container-lowest p-3 shadow-overlay",
-              layerClassName.panel,
-            )}
+      </PopoverTrigger>
+      {/* The positioner keeps the panel inside the viewport (collisionPadding), so
+          at 375px it widens to the screen minus the 16px gutters like the old sheet. */}
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        collisionPadding={16}
+        positionerClassName="z-50"
+        className="max-h-(--available-height) w-64 overflow-y-auto rounded-sm border-outline-variant bg-surface-container-lowest p-3 text-on-surface shadow-overlay max-md:w-[calc(100vw-2rem)]"
+      >
+        {children}
+        <div className="mb-3">
+          <label htmlFor={epicSelectId} className={FIELD_LABEL}>
+            Epic
+          </label>
+          <select
+            id={epicSelectId}
+            value={epicToValue(filters.epic)}
+            onChange={(e) => onChange({ epic: valueToEpic(e.target.value) })}
+            className={SELECT_CLASS}
           >
-            {children}
-            <div className="mb-3">
-              <label htmlFor={epicSelectId} className={FIELD_LABEL}>
-                Epic
+            <option value="">All</option>
+            <option value="none">No epic</option>
+            {epics.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.title}
+              </option>
+            ))}
+          </select>
+        </div>
+        {labels && (
+          <div className="mb-3">
+            <span id={labelGroupId} className={FIELD_LABEL}>
+              Label
+            </span>
+            <div
+              role="group"
+              aria-labelledby={labelGroupId}
+              className="max-h-40 overflow-y-auto rounded-sm border border-outline-variant bg-surface-container py-1"
+            >
+              <label className="[@media(pointer:coarse)]:min-h-11 flex cursor-pointer items-center gap-2 px-2 py-1 text-sm text-on-surface hover:bg-surface-container-high">
+                <input
+                  type="checkbox"
+                  checked={filters.noLabel}
+                  onChange={(e) => onChange({ noLabel: e.target.checked })}
+                  className="accent-primary"
+                />
+                <span className="italic text-on-surface-variant">No label</span>
               </label>
-              <select
-                id={epicSelectId}
-                value={epicToValue(filters.epic)}
-                onChange={(e) => onChange({ epic: valueToEpic(e.target.value) })}
-                className={SELECT_CLASS}
-              >
-                <option value="">All</option>
-                <option value="none">No epic</option>
-                {epics.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {labels && (
-              <div className="mb-3">
-                <span id={labelGroupId} className={FIELD_LABEL}>
-                  Label
-                </span>
-                <div
-                  role="group"
-                  aria-labelledby={labelGroupId}
-                  className="max-h-40 overflow-y-auto rounded-sm border border-outline-variant bg-surface-container py-1"
+              {labels.map((l) => (
+                <label
+                  key={l.id}
+                  className="[@media(pointer:coarse)]:min-h-11 flex cursor-pointer items-center gap-2 px-2 py-1 text-sm text-on-surface hover:bg-surface-container-high"
                 >
-                  <label className="[@media(pointer:coarse)]:min-h-11 flex cursor-pointer items-center gap-2 px-2 py-1 text-sm text-on-surface hover:bg-surface-container-high">
-                    <input
-                      type="checkbox"
-                      checked={filters.noLabel}
-                      onChange={(e) => onChange({ noLabel: e.target.checked })}
-                      className="accent-primary"
-                    />
-                    <span className="italic text-on-surface-variant">No label</span>
-                  </label>
-                  {labels.map((l) => (
-                    <label
-                      key={l.id}
-                      className="[@media(pointer:coarse)]:min-h-11 flex cursor-pointer items-center gap-2 px-2 py-1 text-sm text-on-surface hover:bg-surface-container-high"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={filters.labelIds.includes(l.id)}
-                        onChange={() => toggleLabel(l.id)}
-                        className="accent-primary"
-                      />
-                      <span
-                        aria-hidden="true"
-                        className="h-2 w-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: l.color }}
-                      />
-                      <span className="min-w-0 truncate">{l.name}</span>
-                    </label>
-                  ))}
-                  {labels.length === 0 && (
-                    <p className="px-2 py-1 text-meta text-on-surface-variant">No labels in this project yet.</p>
-                  )}
-                </div>
-              </div>
-            )}
-            {active && (
-              <button
-                type="button"
-                onClick={onClear}
-                className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-xs font-semibold text-primary hover:underline"
-              >
-                Clear filters
-              </button>
-            )}
+                  <input
+                    type="checkbox"
+                    checked={filters.labelIds.includes(l.id)}
+                    onChange={() => toggleLabel(l.id)}
+                    className="accent-primary"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: l.color }}
+                  />
+                  <span className="min-w-0 truncate">{l.name}</span>
+                </label>
+              ))}
+              {labels.length === 0 && (
+                <p className="px-2 py-1 text-meta text-on-surface-variant">No labels in this project yet.</p>
+              )}
+            </div>
           </div>
-        </>
-      )}
-    </div>
+        )}
+        <div className="flex items-center justify-between gap-3">
+          {active ? (
+            <button
+              type="button"
+              onClick={onClear}
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm text-xs font-semibold text-primary outline-hidden hover:underline focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              Clear filters
+            </button>
+          ) : (
+            <span />
+          )}
+          <PopoverClose className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm text-xs font-semibold text-on-surface-variant outline-hidden hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary">
+            Done
+          </PopoverClose>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

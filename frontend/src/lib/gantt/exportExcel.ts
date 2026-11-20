@@ -379,5 +379,6 @@ export async function exportGanttToExcel(opts: ExportExcelOpts): Promise<void> {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // Revoke on a later task so the browser can start the download first.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }

@@ -45,6 +45,7 @@ import { TaskFormModal } from "@/components/TaskFormModal";
 import { RowTicketCell, type RowTicketContext } from "@/components/itop/RowTicketCell";
 import { useCanCreateItopTicket } from "@/components/itop/useCanCreateItopTicket";
 import { ApiError } from "@/lib/api";
+import { assignableUsers, assigneeOptionLabel } from "@/lib/assignableUsers";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { commitDraft, dayFromIso } from "@/lib/dateField";
 import { useDragActivityGuard } from "@/lib/dragActivity";
@@ -1454,7 +1455,7 @@ function AssigneeOptions({
   value,
   onPick,
 }: {
-  users: { id: number; username: string }[];
+  users: { id: number; username: string; active?: boolean }[];
   projectId: number;
   value: number | null;
   onPick: (id: number | null) => void;
@@ -1469,7 +1470,7 @@ function AssigneeOptions({
       >
         Unassigned
       </button>
-      {users.map((u) => (
+      {assignableUsers(users, value).map((u) => (
         <button
           key={u.id}
           type="button"
@@ -1479,7 +1480,7 @@ function AssigneeOptions({
             u.id === value ? "font-bold text-primary" : "text-on-surface",
           ].join(" ")}
         >
-          {u.username}
+          {assigneeOptionLabel(u)}
           {addsMember(u.id) && (
             <span className="text-meta font-normal text-on-surface-variant">
               {ASSIGN_ADDS_MEMBER_NOTICE}

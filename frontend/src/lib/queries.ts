@@ -1922,8 +1922,9 @@ export function useUpdateCustomerServices(customerId: number) {
       for (const [key, data] of ctx?.prev ?? []) qc.setQueryData(key, data);
     },
     onSettled: () => {
+      // Assignments appear only on the customer detail (lists and the
+      // project subqueries carry none), so nothing broader is refetched.
       qc.invalidateQueries({ predicate: (q) => isCustomerDetailKey(q.queryKey, customerId) });
-      qc.invalidateQueries({ queryKey: queryKeys.customers });
     },
   });
 }
@@ -1967,8 +1968,9 @@ export function useUpdateProjectServices(projectId: number) {
       for (const [key, data] of ctx?.prev ?? []) qc.setQueryData(key, data);
     },
     onSettled: () => {
+      // Assignments appear only on the project detail (lists and subqueries
+      // carry none), so nothing broader is refetched.
       qc.invalidateQueries({ predicate: (q) => isProjectDetailKey(q.queryKey, projectId) });
-      qc.invalidateQueries({ queryKey: ["projects"] });
     },
   });
 }

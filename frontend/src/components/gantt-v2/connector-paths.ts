@@ -45,6 +45,45 @@ export const ARROW_INSET = 2; // pull the tip back so the arrowhead doesn't over
 // intercept resize/connect pointer-downs.
 export const HIT_TRIM = 14;
 
+/**
+ * Milestone successor entry, from the rect of the rendered diamond itself
+ * (`[data-milestone-diamond]`; its bounding box spans the rotated square, so
+ * its left edge is the diamond's left vertex). The entry rect is inset by
+ * ARROW_INSET because buildConnectorRoute pulls the tip back by that much.
+ * A milestone predecessor still exits from its bar's right edge: the bar is
+ * overflow-hidden, so that edge is past every visible title glyph, whereas
+ * the diamond's right vertex would run the first segment through the title.
+ */
+export function milestoneEntryRect(diamond: Rect): Rect {
+  // Explicit fields, not a spread: a DOMRect keeps x/y/width/height as
+  // prototype getters, so `{ ...domRect }` is an empty object.
+  return {
+    x: diamond.x + ARROW_INSET,
+    y: diamond.y,
+    width: 0,
+    height: diamond.height,
+  };
+}
+
+/** True when every field of the rect is a finite number. */
+export function isFiniteRect(rect: Rect | undefined | null): rect is Rect {
+  return (
+    !!rect &&
+    Number.isFinite(rect.x) &&
+    Number.isFinite(rect.y) &&
+    Number.isFinite(rect.width) &&
+    Number.isFinite(rect.height)
+  );
+}
+
+/**
+ * Successor attach rect: the milestone diamond's entry when it was measured
+ * and is usable, otherwise the bar rect.
+ */
+export function successorAttachRect(bar: Rect, diamond: Rect | undefined | null): Rect {
+  return isFiniteRect(diamond) ? milestoneEntryRect(diamond) : bar;
+}
+
 // Ported verbatim from GanttConnectors.tsx:52-56.
 export function polylineToPath(pts: Pt[]): string {
   if (pts.length === 0) return "";
@@ -157,4 +196,13 @@ export function buildConnectorRoute(
     ax,
     ay,
   };
+}
+
+/**
+ * Measured-DOM entry point: a non-finite endpoint skips the connector
+ * (returns null) instead of emitting NaN into an SVG path.
+ */
+export function tryBuildConnectorRoute(predRect: Rect, succRect: Rect): ConnectorRoute | null {
+  if (!isFiniteRect(predRect) || !isFiniteRect(succRect)) return null;
+  return buildConnectorRoute(predRect, succRect);
 }

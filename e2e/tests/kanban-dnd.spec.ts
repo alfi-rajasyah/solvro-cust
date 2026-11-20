@@ -139,6 +139,8 @@ async function clickTaskRow(page: Page, projectId: number, title: string): Promi
  * intercept anyway. */
 async function closeFilterPopover(page: Page): Promise<void> {
   await page.mouse.click(500, 500);
+  // The popover animates out; wait until it is gone so the next "Filter" lookup is unambiguous.
+  await expect(page.locator("[data-slot=popover-content]")).toHaveCount(0);
 }
 
 /** Full CARD bounding box for a title, not just the title text's own bbox

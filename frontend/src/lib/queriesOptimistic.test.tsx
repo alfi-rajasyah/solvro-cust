@@ -7,6 +7,7 @@ import {
   queryKeys,
   reorderTasksLocally,
   useBulkUpdateTasks,
+  useUpdateCustomerServices,
   useUpdateProjectServices,
   type ProjectDetail,
   type Section,
@@ -78,6 +79,53 @@ describe("useUpdateProjectServices (optimistic)", () => {
     // value was written first.
     expect(qc.getQueryData<ProjectDetail>(DETAIL_KEY)?.services).toEqual(base.services);
     expect(qc.getQueryData([...queryKeys.project(5), "tasks"])).toEqual(["untouched"]);
+  });
+});
+
+describe("service saves invalidate only their own detail query (ISS-185)", () => {
+  const stale = (qc: QueryClient, key: readonly unknown[]) =>
+    qc.getQueryState(key)?.isInvalidated;
+
+  it("project services: detail only, not lists, siblings or customers", async () => {
+    const { qc, wrapper } = setup();
+    const keys = {
+      detail: DETAIL_KEY,
+      otherDetail: [...queryKeys.project(6), "2026-11-19"],
+      list: ["projects", {}, "2026-11-19"],
+      sub: [...queryKeys.project(5), "tasks"],
+      customers: ["customers", "2026-11-19"],
+    };
+    for (const k of Object.values(keys)) qc.setQueryData(k, { services: [] });
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ id: 5, services: [] }), { status: 200 }));
+    const { result } = renderHook(() => useUpdateProjectServices(5), { wrapper });
+    await act(async () => {
+      await result.current.mutateAsync([]);
+    });
+    expect(stale(qc, keys.detail)).toBe(true);
+    expect(stale(qc, keys.otherDetail)).toBe(false);
+    expect(stale(qc, keys.list)).toBe(false);
+    expect(stale(qc, keys.sub)).toBe(false);
+    expect(stale(qc, keys.customers)).toBe(false);
+  });
+
+  it("customer services: that customer's detail only", async () => {
+    const { qc, wrapper } = setup();
+    const keys = {
+      detail: ["customers", 3, "2026-11-19"],
+      otherDetail: ["customers", 4, "2026-11-19"],
+      list: ["customers", "2026-11-19"],
+      project: DETAIL_KEY,
+    };
+    for (const k of Object.values(keys)) qc.setQueryData(k, { services: [] });
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ id: 3, services: [] }), { status: 200 }));
+    const { result } = renderHook(() => useUpdateCustomerServices(3), { wrapper });
+    await act(async () => {
+      await result.current.mutateAsync([]);
+    });
+    expect(stale(qc, keys.detail)).toBe(true);
+    expect(stale(qc, keys.otherDetail)).toBe(false);
+    expect(stale(qc, keys.list)).toBe(false);
+    expect(stale(qc, keys.project)).toBe(false);
   });
 });
 

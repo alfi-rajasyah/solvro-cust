@@ -15,6 +15,25 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-20 — Task panel title editor and filter popover
+
+- The task panel's title editor now behaves like the description editor: Escape cancels the edit and keeps the panel open, the draft saves once on Enter or blur, focus returns to the title after Enter or Escape, and the title button shows a focus ring (`TaskPanel.tsx`).
+- An epic or label that no longer exists is dropped from the task filter in the URL once the project's epics and labels have loaded, instead of leaving List, Kanban, Gantt and Timeline empty behind a hidden filter (`useTaskFilters.ts`).
+- The task filter popover now uses the Base-UI popover. Focus is trapped inside it while open, Escape or an outside click closes it and returns focus to the Filter button, a Done button closes it, the Done and Clear filters buttons show a full-contrast focus ring, and at 375px it stays inside the viewport (`TaskFilterPopover.tsx`, `ui/popover.tsx`).
+
+### Fixed — 2026-11-20 — Gantt connect-drag Escape, narrow tree pane, milestone arrows
+
+- Pressing Escape during a Gantt dependency-connect drag now cancels only the drag and no longer also closes the task panel.
+- The Gantt name column now follows the tree pane's real width, both on containers narrower than about 699px and live while dragging the splitter, so the Dates, Status and color columns no longer clip or snap back on release.
+- Dependency arrows into a milestone now end at the diamond's left point instead of the edge of its day box, and arrows out of a milestone leave from the end of its bar, so no line crosses the diamond or its title.
+- The Gantt legend no longer sorts sections twice, and the Excel export revokes its download URL on a later task so the browser can start the download first.
+
+### Fixed — 2026-11-20 — Inactive users in pickers, service-save refetches, project tab preload
+
+- Assignee and epic-owner pickers (task panel, subtasks, new-task form, List row, epic panel) share one rule: inactive users are hidden, and the current inactive assignee or owner stays selectable, labelled "(inactive)" so the field does not go blank (`lib/assignableUsers.ts`).
+- Saving a project's or a customer's services now refetches only that project's or customer's detail, instead of every project and customer query.
+- The active project tab's code now starts loading while the project data is still being fetched, and when a tab link is hovered or focused, so tabs no longer wait for the project fetch before loading.
+
 ### Fixed — 2026-11-20 — Tasks of a replaced project TAM are unassigned
 
 - Changing a project's TAM (`PATCH /projects/:id`) now unassigns the previous TAM's tasks in that project when the change leaves them without access. They keep their tasks if they still have access another way: as a project member, as owner of a linked customer, as a customer team member, or with view-all access. The unassignment is recorded in the project's activity feed, worded as a TAM change (for example "unassigned 2 of X's tasks after the TAM change").

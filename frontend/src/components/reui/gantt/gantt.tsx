@@ -1226,6 +1226,9 @@ interface GanttTreePanelConfig {
   resizable?: boolean
   /** Width of the sticky name column in px. Default 208. */
   nameColumnWidth?: number
+  /** SOLVRO PATCH (ISS-096/098): floor in px the name column shrinks to when the
+      rendered pane is narrower than `width` (container clamp, live drag). Default 0. */
+  minNameColumnWidth?: number
   /** Fires after any user resize (drag release, keyboard, double-click reset). */
   onWidthChange?: (width: number) => void
 }
