@@ -778,6 +778,14 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 
 ## Open — Tests & CI
 
+### ISS-204 · P2 · Mobile e2e first runs after a release is merged into main
+
+- **Type:** decision · **Found:** 2026-11-20 · **Verified:** 2026-11-20 @ release PR #114
+- **Where:** .github/workflows/ci.yml (e2e job `if:` and matrix, ~line 231-238)
+- **Problem:** PRs into develop run desktop e2e only, and PRs into main skip e2e (by design, to save Actions minutes, `f469b5a`). Mobile e2e therefore first runs on the push to main after the release merge. A mobile regression then blocks the image publish, but the code is already on main. The 2026-11-20 release (#114) shipped 24 PRs whose mobile e2e had never run.
+- **Why deferred / fix direction:** Decision for the user. Options: (a) before merging a release PR, run the full suite on develop by hand (`gh workflow run ci.yml --ref develop`, about 20 minutes) and merge only if green; (b) run desktop and mobile e2e on PRs into main (more minutes per release, none per feature PR); (c) accept the current order.
+- **Source:** release PR #114 review, 2026-11-20
+
 ### ISS-138 · P2 · Drag e2e specs flake on first attempt and pass on retry
 
 - **Type:** watch · **Found:** 2026-07-28 · **Verified:** 2026-11-18 @ `6dd7592`
