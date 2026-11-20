@@ -296,3 +296,81 @@ describe("TaskPanel description", () => {
     expect(screen.queryByText("Description")).toBeNull();
   });
 });
+
+describe("TaskPanel story points", () => {
+  const base = {
+    id: 5,
+    title: "Parent",
+    description: null,
+    status: "TODO",
+    priority: "MEDIUM",
+    position: 0,
+    parentTaskId: null,
+    labels: [],
+    section: null,
+    storyPoints: 3,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  function open(over: Record<string, unknown> = {}) {
+    tasksQuery.current = { data: [{ ...base, ...over }], isError: false, error: null, refetch };
+    updateMutateAsync.mockResolvedValue({});
+    render(<TaskPanel {...props} />);
+  }
+  function edit(value: string) {
+    fireEvent.click(screen.getByRole("button", { name: "Story points 3" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Story points" }), { target: { value } });
+    return screen.getByRole("textbox", { name: "Story points" });
+  }
+
+  it("saves a new value on Enter with the stale-write expectation", () => {
+    open();
+    fireEvent.keyDown(edit("8"), { key: "Enter" });
+    expect(updateMutateAsync.mock.calls[0][0]).toMatchObject({
+      id: 5,
+      patch: { storyPoints: 8 },
+      expected: { storyPoints: 3 },
+    });
+  });
+
+  it("clears the estimate with an empty field", () => {
+    open();
+    fireEvent.keyDown(edit(""), { key: "Enter" });
+    expect(updateMutateAsync.mock.calls[0][0].patch).toEqual({ storyPoints: null });
+  });
+
+  it("refuses an out-of-range value and keeps the field open", () => {
+    open();
+    fireEvent.keyDown(edit("101"), { key: "Enter" });
+    expect(updateMutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("0 to 100");
+  });
+
+  it("blur with an invalid draft keeps the field open and shows the problem", () => {
+    open();
+    fireEvent.blur(edit("abc"));
+    expect(updateMutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Story points" })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("0 to 100");
+  });
+
+  it("does not save an unchanged value", () => {
+    open();
+    fireEvent.blur(edit("3"));
+    expect(updateMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("Escape cancels without saving", () => {
+    open();
+    fireEvent.keyDown(edit("9"), { key: "Escape" });
+    expect(updateMutateAsync).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox", { name: "Story points" })).toBeNull();
+  });
+
+  it("shows Not estimated, read-only without task:write", () => {
+    authPerms.current = [];
+    open({ storyPoints: null });
+    const b = screen.getByRole("button", { name: "Story points Not estimated" }) as HTMLButtonElement;
+    expect(b.disabled).toBe(true);
+  });
+});

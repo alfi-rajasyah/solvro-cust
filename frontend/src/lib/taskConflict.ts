@@ -28,6 +28,7 @@ export const TRACKED_FIELDS = [
   "isMilestone",
   "isCriticalPath",
   "labelIds",
+  "storyPoints",
 ] as const;
 
 export type TrackedField = (typeof TRACKED_FIELDS)[number];
@@ -48,6 +49,7 @@ export interface TaskExpected {
   isMilestone?: boolean;
   isCriticalPath?: boolean;
   labelIds?: number[];
+  storyPoints?: number | null;
 }
 
 export interface StaleWriteConflict {
@@ -202,6 +204,7 @@ export interface TaskFormValues {
   epicId: number | null;
   labelIds: number[];
   isCriticalPath: boolean;
+  storyPoints: number | null;
 }
 
 function sameSet(a: number[], b: number[]): boolean {
@@ -242,6 +245,7 @@ export function diffTaskForm(
   if (form.isCriticalPath !== (base.isCriticalPath ?? false)) {
     patch.isCriticalPath = form.isCriticalPath;
   }
+  if (form.storyPoints !== (base.storyPoints ?? null)) patch.storyPoints = form.storyPoints;
   return { patch, expected: buildExpected(base, patch) };
 }
 
@@ -261,6 +265,7 @@ export const CONFLICT_FIELD_LABEL: Record<TrackedField, string> = {
   isMilestone: "Milestone",
   isCriticalPath: "Critical path",
   labelIds: "Labels",
+  storyPoints: "Story points",
 };
 
 /** Name lookups for id-valued fields; a missing id falls back to `#id`. */
@@ -341,6 +346,8 @@ export function formatConflictValue(
       return value ? "Yes" : "No";
     case "isCriticalPath":
       return value ? "Yes" : "No";
+    case "storyPoints":
+      return typeof value === "number" ? String(value) : "Not estimated";
     case "labelIds": {
       const ids = Array.isArray(value) ? (value as number[]) : [];
       if (ids.length === 0) return "No labels";

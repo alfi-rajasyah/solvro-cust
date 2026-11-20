@@ -27,6 +27,7 @@ import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { CommentBody, CommentComposer } from "@/components/CommentMentions";
 import { fmtAgo, fmtRange } from "@/lib/formatDate";
+import { parseStoryPoints } from "@/lib/storyPoints";
 import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
 import { isApplePlatform } from "@/lib/platform";
 import { PRIORITY_LABEL } from "@/lib/labels";
@@ -816,6 +817,19 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               <span className="text-on-surface">{PRIORITY_LABEL[task.priority]}</span>
             </button>
 
+            <span
+              id={STORY_POINTS_LABEL_ID}
+              className="self-center font-display text-label-caps uppercase text-on-surface-variant"
+            >
+              Story points
+            </span>
+            <StoryPointsEditor
+              key={task.id}
+              value={task.storyPoints ?? null}
+              canEdit={canEdit}
+              onCommit={(storyPoints) => patch({ storyPoints })}
+            />
+
             <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
               Type
             </span>
@@ -1310,6 +1324,100 @@ function PanelComments({ taskId, projectId }: { taskId: number; projectId: numbe
         />
       )}
     </div>
+  );
+}
+
+const STORY_POINTS_LABEL_ID = "task-panel-story-points-label";
+const STORY_POINTS_VALUE_ID = "task-panel-story-points-value";
+
+/**
+ * Story points row: reads as text, becomes a number field on click. Enter or
+ * leaving the field saves, Escape cancels; empty clears the estimate, anything
+ * outside whole numbers 0-100 is refused here before it reaches the API.
+ */
+function StoryPointsEditor({
+  value,
+  canEdit,
+  onCommit,
+}: {
+  value: number | null;
+  canEdit: boolean;
+  onCommit: (value: number | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [problem, setProblem] = useState<string | null>(null);
+  const errorId = useId();
+
+  function commit() {
+    const parsed = parseStoryPoints(draft);
+    if (!parsed.ok) {
+      setProblem(parsed.error);
+      return;
+    }
+    setProblem(null);
+    setEditing(false);
+    if (parsed.value !== value) onCommit(parsed.value);
+  }
+
+  if (editing && canEdit) {
+    return (
+      <div>
+        <input
+          autoFocus
+          type="text"
+          inputMode="numeric"
+          maxLength={3}
+          aria-labelledby={STORY_POINTS_LABEL_ID}
+          aria-invalid={problem ? true : undefined}
+          aria-describedby={problem ? errorId : undefined}
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setProblem(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit();
+            } else if (e.key === "Escape") {
+              e.stopPropagation();
+              setProblem(null);
+              setEditing(false);
+            }
+          }}
+          onBlur={commit}
+          className="[@media(pointer:coarse)]:min-h-11 w-24 rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+        />
+        {problem && (
+          <p id={errorId} role="alert" className="mt-1 text-meta text-error">
+            {problem}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={!canEdit}
+      onClick={() => {
+        setDraft(value === null ? "" : String(value));
+        setProblem(null);
+        setEditing(true);
+      }}
+      className="[@media(pointer:coarse)]:min-h-11 flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
+      title={canEdit ? "Click to set story points" : undefined}
+      aria-labelledby={`${STORY_POINTS_LABEL_ID} ${STORY_POINTS_VALUE_ID}`}
+    >
+      <span
+        id={STORY_POINTS_VALUE_ID}
+        className={value === null ? "text-on-surface-variant" : "text-on-surface"}
+      >
+        {value === null ? "Not estimated" : value}
+      </span>
+    </button>
   );
 }
 

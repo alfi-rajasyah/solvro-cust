@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-20 — Story points in the task form, task panel, Kanban cards and Epics tab
+
+- Tasks can carry an optional "Story points" estimate (whole numbers 0 to 100, empty means not estimated). Set it in the create and edit form or inline in the task panel; invalid values are refused before they are sent, and an edit that clashes with someone else's change names the field as "Story points" in the conflict dialog.
+- Kanban cards show the number when it is set.
+- The Epics tab has a "Story points" column giving the points done out of the total for each epic. Only top-level tasks count (subtasks do not), and the totals update as soon as a task is edited. (#91)
+
 ### Added — 2026-11-20 — Epic and label filters across the task views
 
 - The List, Kanban, Gantt and Timeline tabs now share an epic filter ("All", "No epic" or one epic), and List and Kanban gain a label filter: pick one or more labels (a task needs at least one of them) or "No label". The filters combine with each other and with Kanban's assignee and priority filters, and the Filter badge counts each active control.
