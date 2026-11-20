@@ -1180,10 +1180,11 @@ export function SolvroGantt(props: SolvroGanttProps) {
             onClear={() => setFilters(clearPatch("epic"))}
             activeCount={filterCount}
             epics={epics}
+            focusOffsetClass="focus-visible:ring-offset-surface-container-lowest"
             triggerClassName={(active) =>
               cn(
                 TOOLBAR_ITEM_HEIGHT,
-                "inline-flex items-center gap-1 rounded-md border px-2.5 font-display text-meta font-semibold transition-colors focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+                "inline-flex items-center gap-1 rounded-md border px-2.5 font-display text-meta font-semibold transition-colors",
                 active
                   ? "border-primary bg-primary/10 text-primary-tint-text"
                   : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:text-on-surface",

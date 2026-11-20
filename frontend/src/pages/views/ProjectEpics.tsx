@@ -510,7 +510,7 @@ function TitleCell({
             onStartRename();
           }}
           aria-label={`Rename ${epic.title}`}
-          className="tap-target material-symbols-outlined shrink-0 rounded-sm p-1 text-[15px] text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="tap-target material-symbols-outlined shrink-0 rounded-sm p-1 text-[15px] text-on-surface-variant/80 hover:text-primary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
         >
           edit
         </button>

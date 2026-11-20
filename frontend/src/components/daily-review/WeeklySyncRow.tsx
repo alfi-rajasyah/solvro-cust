@@ -65,7 +65,7 @@ export function WeeklySyncRow({ customer, week }: WeeklySyncRowProps) {
           <button
             type="button"
             onClick={() => setActiveModal("reflection")}
-            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-3 py-1.5 font-display text-meta font-semibold text-on-primary hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-3 py-1.5 font-display text-meta font-semibold text-on-primary hover:bg-primary/90 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             Reflection sync
           </button>

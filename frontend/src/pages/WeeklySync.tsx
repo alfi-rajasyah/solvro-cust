@@ -363,7 +363,7 @@ export function WeeklySync() {
                 type="button"
                 onClick={() => setShowAll((v) => !v)}
                 data-testid="weekly-sync-hidden-toggle"
-                className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center text-meta font-semibold text-primary hover:underline [@media(pointer:coarse)]:min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center text-meta font-semibold text-primary hover:underline [@media(pointer:coarse)]:min-h-11 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
               >
                 {showAll ? "Hide them" : "Show them"}
               </button>
@@ -540,7 +540,7 @@ function blockWrapperProps(
     onClick: clickable ? handleClick : undefined,
     onKeyDown: clickable ? handleKeyDown : undefined,
     className: clickable
-      ? "cursor-pointer hover:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      ? "cursor-pointer hover:bg-surface-container-low focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
       : undefined,
     "data-testid": `weekly-sync-row-${customer.id}`,
   };

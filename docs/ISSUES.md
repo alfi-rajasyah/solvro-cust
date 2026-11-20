@@ -375,29 +375,13 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 
 ## Open — Accessibility & tokens
 
-### ISS-208 · P3 · About 35 borderless controls drop their focus indicator in forced-colours mode
+### ISS-209 · P3 · Project tab links have no explicit keyboard focus treatment
 
-- **Type:** a11y · **Found:** 2026-11-20 · **Verified:** 2026-11-20 @ wave G3 review
-- **Where:** `focus-visible:outline-none` with a solid ring on borderless controls across frontend/src (e.g. TaskPanel.tsx ~1155, components/daily-review/, itop/DailyItopStrip.tsx, pages/views/ProjectList.tsx ~944-965)
-- **Problem:** DESIGN.md's borderless form is `outline-hidden focus-visible:ring-2 focus-visible:ring-primary`. `outline-none` removes the outline that forced-colours mode would show, and forced colours drops the ring, so these controls show no keyboard focus there.
-- **Why deferred / fix direction:** Outside the wave scope (the wave fixed bordered controls and the shared constants). Fix: swap to `outline-hidden` in one sweep, then extend `design-focus-border` in `.claude/scripts/gates.sh` to flag `focus-visible:outline-none` next to `focus-visible:ring-` in app code.
-- **Source:** wave G3 review (`docs/archive/plans/issues-fix-waves.md`)
-
-### ISS-207 · P3 · Project context toggle and active bordered toggles have a weak keyboard focus cue
-
-- **Type:** a11y · **Found:** 2026-11-20 · **Verified:** 2026-11-20 @ wave G3 review
-- **Where:** frontend/src/pages/ProjectDetail.tsx (~330, the "Show project context" toggle); active Filter trigger in frontend/src/components/gantt-v2/SolvroGantt.tsx (~1186)
-- **Problem:** The context toggle has no focus classes and relies on the browser outline. Toggles that already show `border-primary` when active gain nothing from the focus border, so their only focus cue is the `ring-primary/30` ring (about 1.5:1).
-- **Why deferred / fix direction:** Outside the wave scope. Fix: give the toggle the DESIGN.md treatment, and give active bordered toggles a solid ring (or ring offset) on focus.
-- **Source:** wave G3 review (`docs/archive/plans/issues-fix-waves.md`)
-
-### ISS-206 · P3 · Project context panel repeats a complementary landmark name
-
-- **Type:** a11y · **Found:** 2026-11-20 · **Verified:** 2026-11-20 @ wave G3
-- **Where:** frontend/src/pages/ProjectDetail.tsx (the panel opened by "Show project context")
-- **Problem:** With the panel open, axe reports `landmark-unique`: the panel is a complementary landmark without a name distinct from the other one on the page. The axe active-state scan runs contrast-only on this step for that reason.
-- **Why deferred / fix direction:** Found by the new scan, outside the wave scope. Fix: give the panel a distinct aria-label, then make that axe step a full scan.
-- **Source:** wave G3 (`docs/archive/plans/issues-fix-waves.md`)
+- **Type:** a11y · **Found:** 2026-11-20 · **Verified:** 2026-11-20 @ `b95ad98`
+- **Where:** tab links in frontend/src/pages/ProjectDetail.tsx (~364) and frontend/src/components/Tabs.tsx
+- **Problem:** The tabs mark the active one with `border-b-2 border-primary` and carry no focus classes, so keyboard focus falls back to the browser outline, which does not follow DESIGN.md's one focus treatment.
+- **Why deferred / fix direction:** Found while fixing ISS-207, outside its scope. Fix: give the tab links the borderless form (`outline-hidden focus-visible:ring-2 focus-visible:ring-primary`), and add a keyboard check to the axe spec.
+- **Source:** `docs/archive/plans/a11y-focus-followups.md`
 
 ### ISS-084 · P3 · Favicon reads weakly on dark browser tab strips
 
@@ -886,3 +870,6 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-201 · 2026-11-20 · CHANGELOG "Task panel title editor and filter popover" · The task filter popover has no focus trap or focus return
 - ISS-203 · 2026-11-20 · CHANGELOG "Tasks of a replaced project TAM are unassigned" · Changing a project's TAM may leave tasks assigned to the old TAM
 - ISS-205 · 2026-11-20 · CHANGELOG "Test and tooling fixes" · No e2e check that Gantt connector paths stay finite
+- ISS-206 · 2026-11-20 · CHANGELOG "Focus rings on toggles and forced-colours focus for borderless controls" · Project context panel repeats a complementary landmark name
+- ISS-207 · 2026-11-20 · CHANGELOG "Focus rings on toggles and forced-colours focus for borderless controls" (also the Kanban, List and Timeline Filter triggers, through the shared component) · Project context toggle and active bordered toggles have a weak keyboard focus cue
+- ISS-208 · 2026-11-20 · CHANGELOG "Focus rings on toggles and forced-colours focus for borderless controls" · About 35 borderless controls drop their focus indicator in forced-colours mode

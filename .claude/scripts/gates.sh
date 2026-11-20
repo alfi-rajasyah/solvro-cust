@@ -287,6 +287,10 @@ design_check design-on-primary "text-white on bg-primary (use text-on-primary)" 
 #     treatment is in docs/DESIGN.md. Vendored ui/ and reui/ are excluded.
 design_check design-focus-border "focus:border-primary (use focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30)" \
   "$(design_grep "focus:border-primary")"
+# 1c. A visible focus ring goes with outline-hidden, not outline-none: outline-none
+#     removes the outline that forced-colours mode would show in place of the ring.
+design_check design-outline-none "focus-visible:outline-none (use focus-visible:outline-hidden)" \
+  "$(design_grep "focus-visible:outline-none|(^|[\"' \`])outline-none[^\"'\`]*focus-visible:ring-")"
 # 2 and 3 read whole files (a tag or a comment can span lines), so they use
 # perl rather than the line grep above.
 design_perl() { # design_perl <perl -ne body run once per file, file in $_>

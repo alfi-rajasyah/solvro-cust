@@ -1152,7 +1152,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         type="button"
                         onClick={() => startSubtaskRename(s)}
                         aria-label={`Rename ${s.title}`}
-                        className="material-symbols-outlined -m-2 [@media(pointer:coarse)]:m-0 shrink-0 rounded-sm p-2 [@media(pointer:coarse)]:p-3.5 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100"
+                        className="material-symbols-outlined -m-2 [@media(pointer:coarse)]:m-0 shrink-0 rounded-sm p-2 [@media(pointer:coarse)]:p-3.5 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100"
                       >
                         edit
                       </button>
@@ -1163,7 +1163,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         disabled={duplicateTask.isPending && duplicateTask.variables === s.id}
                         onClick={() => void handleSubtaskDuplicate(s)}
                         aria-label={`Duplicate ${s.title}`}
-                        className="material-symbols-outlined -m-2 [@media(pointer:coarse)]:m-0 shrink-0 rounded-sm p-2 [@media(pointer:coarse)]:p-3.5 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100 disabled:cursor-default disabled:opacity-50"
+                        className="material-symbols-outlined -m-2 [@media(pointer:coarse)]:m-0 shrink-0 rounded-sm p-2 [@media(pointer:coarse)]:p-3.5 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100 disabled:cursor-default disabled:opacity-50"
                       >
                         content_copy
                       </button>

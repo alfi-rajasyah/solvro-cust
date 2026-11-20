@@ -941,7 +941,7 @@ function SectionGroup({
             <button
               type="button"
               onClick={() => onRename(section)}
-              className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
               title={section ? "Rename section" : "Promote into a real section"}
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[17px]">edit</span>
@@ -951,7 +951,7 @@ function SectionGroup({
                 type="button"
                 onClick={() => onDuplicate(section)}
                 disabled={duplicatingSectionId === section.id}
-                className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default disabled:opacity-50"
+                className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default disabled:opacity-50"
                 title="Duplicate section"
                 aria-label="Duplicate section"
               >
@@ -962,7 +962,7 @@ function SectionGroup({
               <button
                 type="button"
                 onClick={() => onDelete(section)}
-                className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-error-container hover:text-on-error-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-error-container hover:text-on-error-container focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                 title="Delete section"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[17px]">delete</span>

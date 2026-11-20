@@ -251,7 +251,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
 
   const fieldId = (name: string) => `reflection-${customer.id}-${name}`;
   const linkClass =
-    "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+    "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-meta font-semibold text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary";
 
   // Modal.tsx registers one document-level Escape listener per open
   // instance with no stopPropagation, so a single Escape press would
@@ -380,7 +380,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
                       type="button"
                       onClick={() => removeAchievement(a.key)}
                       aria-label={`Remove achievement ${n}`}
-                      className="tap-target text-meta font-semibold text-on-surface-variant hover:text-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className="tap-target text-meta font-semibold text-on-surface-variant hover:text-error focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       Remove
                     </button>

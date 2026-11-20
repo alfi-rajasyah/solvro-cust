@@ -130,6 +130,17 @@ for (const colorScheme of ["light", "dark"] as const) {
         await toggle.click();
         // The glyph is aria-hidden, so axe skips it: assert the class directly.
         await expect(page.getByRole("button", { name: "Hide project context" })).toHaveClass(/text-primary-tint-text/);
+        // The panel slides in over 200ms; scan once it sits inside the viewport.
+        const panel = page.getByRole("complementary", { name: "Project context" });
+        await expect(panel).toBeVisible();
+        await expect
+          .poll(async () => {
+            const box = await panel.boundingBox();
+            return box ? box.x + box.width <= (page.viewportSize()?.width ?? 0) + 1 : false;
+          })
+          .toBe(true);
+        await settle(page);
+        expect(await violations(page), "project context panel open").toEqual([]);
       }
     });
 
