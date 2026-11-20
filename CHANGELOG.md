@@ -15,6 +15,22 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-20 — Tasks of a replaced project TAM are unassigned
+
+- Changing a project's TAM (`PATCH /projects/:id`) now unassigns the previous TAM's tasks in that project when the change leaves them without access. They keep their tasks if they still have access another way: as a project member, as owner of a linked customer, as a customer team member, or with view-all access. The unassignment is recorded in the project's activity feed, worded as a TAM change (for example "unassigned 2 of X's tasks after the TAM change").
+
+### Fixed — 2026-11-20 — A slow admin status save no longer fails task saves with a 500
+
+- A task save that sets a status now waits at most 2.5 s for the status-list lock (`backend/src/lib/taskStatuses.ts`) while an admin status save holds it. After that it answers the retryable 409 `concurrent_update` instead of a 500. Bulk edit and section duplicate, which run longer, wait up to 10 s. Prisma's "transaction expired" and "could not start in time" errors (P2028) are also mapped to 409 `concurrent_update` in `backend/src/http/errors.ts`; other P2028 errors stay a 500, because the write may already have been saved.
+
+### Fixed — 2026-11-20 — Backend hardening: CORS header, secret tags, iTop webhook and sync retries, `solvro config`
+
+- API responses now expose the `X-Total-Count` header to cross-origin callers (`backend/src/app.ts`).
+- Stored integration secrets are refused when their authentication tag is not exactly 16 bytes; secrets saved earlier still open (`backend/src/lib/secretBox.ts`).
+- The iTop webhook's pre-authentication rate limit is now counted per client address, so one noisy caller can no longer block genuine iTop notifications (`backend/src/routes/webhook.ts`).
+- Pressing Refresh repeatedly while an iTop sync is running no longer restarts the 30-minute retry window; a queued full sync now gives up at one fixed deadline, and an incremental iTop webhook nudge no longer cancels a pending full-sync retry (`backend/src/lib/itop/scheduler.ts`).
+- `solvro config` can now set and unset `ITOP_ALLOW_PRIVATE_HOSTS` and `ITOP_SYNC_DISABLED` (accepting `true` or `false`) without editing `.env` by hand (`setup.sh`, `INSTALL.md`).
+
 ### Changed — 2026-11-20 — Demo seed covers story points, customer teams and workload
 
 - `backend/scripts/seed-demo.ts` now gives most top-level demo tasks a story points estimate (every fourth is left unestimated), adds two customer teams (rizky.pratama on Kopi Senja, budi.santoso on Klinik Sehat Bersama), and creates a `TEAM_LEAD` role (the TAM permissions plus `workload:team` and `customer:team-all`) held by maya.putri, so the demo workspace shows the Workload tab's team view and customer team access.

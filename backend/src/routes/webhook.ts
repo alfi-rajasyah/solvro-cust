@@ -34,14 +34,19 @@ const REJECTION_WARN_INTERVAL_MS = 60_000;
 // against this budget, only a call that would otherwise trigger a sync.
 let acceptedAt: number[] = [];
 
-// A second, much wider sliding window over EVERY call to this route
-// (accepted or not) — checked first, before the config read and the AES
+// A second, much wider fixed window over EVERY call to this route (accepted
+// or not), kept per client address (rateLimitKey) — checked first, before the config read and the AES
 // decrypt below, so a flood of bad-secret calls can't spend a DB read + a
 // decrypt on each one indefinitely. 10x the accepted budget: generous
 // enough that a legitimate burst of correct calls never trips it (that's
 // RATE_LIMIT_MAX_ACCEPTED's job), tight enough to cap the unauthenticated
-// cost of a flood.
-let allCallsAt: number[] = [];
+// cost of a flood. Being per address (as the Outline webhook's limiter is), one
+// noisy or hostile caller cannot starve the genuine iTop trigger; the accepted
+// window above stays global.
+const allCallsLimiter = createRateLimiter({
+  limit: RATE_LIMIT_MAX_ALL_CALLS,
+  windowMs: RATE_LIMIT_WINDOW_MS,
+});
 
 // Rejected (bad/missing-secret) calls are warn-logged, but a flood must not
 // flood the logs either — at most one warn line per REJECTION_WARN_INTERVAL_MS,
@@ -59,7 +64,7 @@ let rejectionWarnCallsForTests = 0;
 /** Test-only: clears every sliding window/counter between test cases sharing this module. */
 export function resetItopWebhookRateLimitForTests(): void {
   acceptedAt = [];
-  allCallsAt = [];
+  allCallsLimiter.reset();
   lastRejectionWarnAt = 0;
   rejectionsSinceLastWarn = 0;
   rejectionWarnCallsForTests = 0;
@@ -87,16 +92,9 @@ function warnRejectedSecret(): void {
   }
 }
 
-webhookRouter.post("/itop", async (req, res) => {
-  // Cheapest check first, before any config read or decrypt: a flood (bad
-  // secret or otherwise) is capped well ahead of the accepted-call budget.
-  const now = Date.now();
-  allCallsAt = allCallsAt.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  if (allCallsAt.length >= RATE_LIMIT_MAX_ALL_CALLS) {
-    throw new HttpError(429, "rate_limited", "Too many webhook calls");
-  }
-  allCallsAt.push(now);
-
+// The per-address limiter runs first, before any config read or decrypt: a
+// flood (bad secret or otherwise) is capped well ahead of the accepted-call budget.
+webhookRouter.post("/itop", allCallsLimiter.middleware, async (req, res) => {
   const config = await getItopConfig();
 
   // No secret configured yet — 404, not 401: an unauthenticated scanner

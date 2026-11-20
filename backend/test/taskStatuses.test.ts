@@ -515,3 +515,40 @@ describe("migration: WIP limits re-keyed by status id", () => {
     expect(await get(noLimits.id)).toBeNull();
   });
 });
+
+describe("task write while the admin status save holds the status-list lock", () => {
+  it("answers 409 concurrent_update within the bounded wait, then succeeds once the lock is released", async () => {
+    const { tam, project } = await setup();
+    const task = await makeTask(project.id, 1, "TODO");
+
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let locked!: () => void;
+    const holding = new Promise<void>((resolve) => (locked = resolve));
+    // The admin save's exclusive status-list lock (namespace 7301), held open.
+    const holder = prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(7301::int, 0)`;
+        locked();
+        await released;
+      },
+      { timeout: 30_000 },
+    );
+    await holding;
+
+    try {
+      const started = Date.now();
+      const blocked = await request(app).patch(`/tasks/${task.id}`).set(auth(tam.token)).send({ status: "DONE" });
+      expect(blocked.status).toBe(409);
+      expect(blocked.body.code).toBe("concurrent_update");
+      expect(Date.now() - started).toBeLessThan(4_500);
+    } finally {
+      release();
+      await holder;
+    }
+
+    const ok = await request(app).patch(`/tasks/${task.id}`).set(auth(tam.token)).send({ status: "DONE" });
+    expect(ok.status).toBe(200);
+    expect(ok.body.status).toBe("DONE");
+  }, 20_000);
+});

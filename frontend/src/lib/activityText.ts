@@ -411,6 +411,12 @@ function buildBody(event: ActivityEvent): Parts {
         const n = changes?.unassignedTasks;
         const unassigned =
           typeof n === "number" && n > 0 ? [txt(` (unassigned ${n} ${n === 1 ? "task" : "tasks"})`)] : [];
+        if (changes?.viaTamChange === true) {
+          const count = typeof n === "number" && n > 1 ? `${n} of ` : "";
+          return label
+            ? [txt(`unassigned ${count}`), ent(label), txt(`'s ${n === 1 ? "task" : "tasks"} after the TAM change`)]
+            : [txt(`unassigned ${count}the previous TAM's ${n === 1 ? "task" : "tasks"} after the TAM change`)];
+        }
         if (changes?.viaCustomerTeam === true) {
           return [
             ...(label

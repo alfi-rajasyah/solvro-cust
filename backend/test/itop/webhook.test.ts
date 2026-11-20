@@ -12,6 +12,7 @@
 // docs/archive/plans/itop-integration.md Task 4.1.
 import "../env.js";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import express from "express";
 import request from "supertest";
 
 // vi.mock factories are hoisted above top-level const declarations, so the
@@ -24,12 +25,14 @@ vi.mock("../../src/lib/itop/scheduler.js", async (importOriginal) => {
 });
 
 import { createApp } from "../../src/app.js";
+import { errorHandler } from "../../src/http/errors.js";
 import { prisma } from "../../src/prisma.js";
 import { seal } from "../../src/lib/secretBox.js";
 import { bustItopConfigCache } from "../../src/lib/itop/config.js";
 import {
   resetItopWebhookRateLimitForTests,
   getItopWebhookRejectionWarnCallsForTests,
+  webhookRouter,
 } from "../../src/routes/webhook.js";
 import { seedRoles } from "../testAuth.js";
 
@@ -158,6 +161,23 @@ describe("POST /webhook/itop — no auth required, but secret-gated", () => {
     const res61 = await post("whatever");
     expect(res61.status).toBe(429);
     expect(res61.body.code).toBe("rate_limited");
+  });
+
+  it("keys the all-calls window per client address: one flooding client cannot starve another", async () => {
+    await setWebhookSecret("correct-secret-value");
+    const proxied = express();
+    proxied.set("trust proxy", 1);
+    proxied.use("/webhook", webhookRouter);
+    proxied.use(errorHandler);
+    const from = (ip: string, secret: string) =>
+      request(proxied).post("/webhook/itop").set("X-Forwarded-For", ip).set(HEADER, secret);
+    for (let i = 0; i < 60; i++) await from("198.51.100.7", "nope");
+    const flooded = await from("198.51.100.7", "nope");
+    expect(flooded.status).toBe(429);
+    expect(flooded.body.code).toBe("rate_limited");
+    // The genuine trigger, arriving from another address, still gets through.
+    const genuine = await from("203.0.113.9", "correct-secret-value");
+    expect(genuine.status).toBe(202);
   });
 
   it("logs at most one rejection warning per window for a burst of bad-secret calls", async () => {
