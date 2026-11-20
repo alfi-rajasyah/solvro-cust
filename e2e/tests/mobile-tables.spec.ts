@@ -80,6 +80,12 @@ test.describe("Wide tables on a phone", () => {
     // iTop is not connected on the QA stack, so the matrix is fed a canned
     // /utilization response (the API contract is unit-tested elsewhere).
     const days = ["2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01"];
+    // The page opens on Workload without iTop, so report it as connected.
+    await page.route("**/api/itop/status", (route) =>
+      route.fulfill({
+        json: { configured: true, baseUrl: "https://itop.example.test", lastSyncAt: null, lastSyncOk: true, refreshMinutes: 5 },
+      }),
+    );
     await page.route("**/api/utilization*", (route) =>
       route.fulfill({
         json: {
@@ -134,6 +140,33 @@ test.describe("Wide tables on a phone", () => {
       const headerBox = await header.boundingBox();
       expect(Math.abs(headerBox!.x - cells[8].x)).toBeLessThanOrEqual(12);
     }
+  });
+
+  test("Workload table does not scroll sideways", async ({ page }) => {
+    // The QA stack has no iTop, so the page opens on Workload; the table is fed a canned response.
+    await page.route("**/api/utilization/workload?*", (route) =>
+      route.fulfill({
+        json: {
+          week: { key: "2026-W44", start: "2026-10-26", days: [] },
+          utcOffsetMinutes: 0,
+          today: "2026-10-28",
+          scope: "team",
+          rows: [
+            { key: "user:1", userId: 1, name: "Mobile Layout Assignee With A Long Name", active: true, open: 12, dueThisWeek: 3, overdue: 2, activeInWeek: 7, storyPoints: 34 },
+            { key: "unassigned", userId: null, name: "Unassigned", active: true, open: 4, dueThisWeek: 0, overdue: 0, activeInWeek: 1, storyPoints: 0 },
+          ],
+          totals: { open: 16, dueThisWeek: 3, overdue: 2, activeInWeek: 8, storyPoints: 34 },
+        },
+      }),
+    );
+    await loginViaUi(page);
+    await page.goto("/utilization", { waitUntil: "networkidle" });
+    await expect(page.getByRole("heading", { name: "Utilization" })).toBeVisible();
+
+    const row = page.getByTestId("workload-row").first();
+    await expect(row).toBeVisible();
+    await expect(row.getByText("Mobile Layout Assignee With A Long Name")).toBeVisible();
+    await expectNoHorizontalScroll(page, "workload-row");
   });
 
   test("Portfolio timeline fits the viewport and lists the project", async ({ page, seededProject }, testInfo) => {

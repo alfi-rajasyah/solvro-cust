@@ -56,4 +56,11 @@ Order: A2 before B1 (`ProjectDetail.tsx`); #91 backend before its frontend; B1 b
 - #93: customer-team members may edit the customer itself, not only its projects (ties to ISS-012).
 - #95: rebuild the card so the link and the ⋯ menu are siblings.
 
-Still open: #89 (2b subtask rule), #92 (6b–6d), #93 (7b–7f).
+Decisions (user, 2026-11-20):
+
+- #89 2b: a subtask matches a label filter on its own labels (shipped that way in wave B).
+- #92 6b: a new two-level permission set replaces the `report:executive` grant for workload: `workload:team` sees everyone assigned in projects the caller owns, `workload:all` sees everyone org-wide; without either, a user sees only their own workload. (Supersedes 6a for the Workload tab; the iTop hours scopes keep `report:executive`.)
+- #92 6c: subtasks count as separate tasks.
+- #92 6d: without iTop configured, the Utilization page shows only the Workload tab.
+
+Still open: #93 (7b–7f).
