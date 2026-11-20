@@ -361,7 +361,7 @@ export function ProjectDetail() {
               onFocus={() => preloadProjectTab(tab.to)}
               className={({ isActive }) =>
                 [
-                  "-mb-px border-b-2 px-1 pb-3 font-display text-sm transition-colors [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:text-center [@media(pointer:coarse)]:pt-2.5",
+                  "-mb-px rounded-t-sm border-b-2 px-1 pb-3 font-display text-sm transition-colors outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:text-center [@media(pointer:coarse)]:pt-2.5",
                   isActive
                     ? "border-primary text-primary"
                     : "border-transparent text-on-surface-variant hover:text-on-surface",
