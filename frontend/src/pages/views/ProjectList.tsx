@@ -1,5 +1,14 @@
-import { useCallback, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { resolveSectionColors } from "@/lib/gantt/palette";
+import { TaskFilterPopover } from "@/components/TaskFilterPopover";
+import { useTaskFilters } from "@/hooks/useTaskFilters";
+import {
+  buildFilterContext,
+  clearPatch,
+  countActiveFilters,
+  scopeFilters,
+  taskVisible,
+} from "@/lib/taskFilters";
 import { TOOLBAR_BOX, TOOLBAR_BUTTON_OUTLINE, TOOLBAR_BUTTON_PRIMARY } from "@/lib/utils";
 import { useItopOrgChoice } from "@/components/itop/useItopOrgChoice";
 import {
@@ -52,6 +61,7 @@ import {
   useItopStatus,
   useItopTicketsByRefs,
   useProjectEpics,
+  useProjectLabels,
   useProjectSections,
   useProjectTasks,
   useUpdateSection,
@@ -136,6 +146,7 @@ export function ProjectList() {
   const { data: sections, isLoading: sectionsLoading } = useProjectSections(project.id);
   const { data: users } = useUsers();
   const { data: epics } = useProjectEpics(project.id);
+  const { data: labels } = useProjectLabels(project.id);
   const updateTask = useUpdateTask(project.id);
 
   // Ticket column: one batched by-refs request per render covers every pinned
@@ -194,11 +205,10 @@ export function ProjectList() {
   const [renameValue, setRenameValue] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [deletingSection, setDeletingSection] = useState<Section | null>(null);
-  const [filterOpen, setFilterOpen] = useState(false);
-  // Epic filter (docs/archive/plans/epics-spec.md §6/§7 T6): "" = All (inactive),
-  // `null` = "No epic" (task.epicId === null), a number = one project epic —
-  // same three-state shape as SolvroKanban.tsx's filterEpicId.
-  const [filterEpicId, setFilterEpicId] = useState<number | null | "">("");
+  // Epic and label filters live in the URL (hooks/useTaskFilters.ts) so they
+  // survive a tab switch; this view applies the "list" scope (epic + labels).
+  const { filters: urlFilters, setFilters } = useTaskFilters();
+  const filters = useMemo(() => scopeFilters(urlFilters, "list"), [urlFilters]);
 
   // Pauses the project queries' 30 s refresh while a row/section drag is live
   // (docs/archive/plans/collaboration-and-sharing.md).
@@ -226,25 +236,23 @@ export function ProjectList() {
   const sectionColors = useMemo(() => resolveSectionColors(sections ?? []), [sections]);
   const grouped = useMemo(() => groupBySection(tasks ?? [], sections ?? []), [tasks, sections]);
 
-  const isTaskVisible = useCallback(
-    (task: Task) => {
-      if (filterEpicId !== "") {
-        if (filterEpicId === null) {
-          if (task.epicId !== null) return false;
-        } else if (task.epicId !== filterEpicId) {
-          return false;
-        }
-      }
-      return true;
-    },
-    [filterEpicId],
-  );
-  const filterActive = filterEpicId !== "";
+  const filterCtx = useMemo(() => buildFilterContext(tasks ?? []), [tasks]);
+  const filterCount = countActiveFilters(filters);
+  const filterActive = filterCount > 0;
 
-  const visibleGrouped = useMemo(
-    () => grouped.map((g) => ({ ...g, tasks: g.tasks.filter((n) => isTaskVisible(n.task)) })),
-    [grouped, isTaskVisible],
-  );
+  // Render-only projection: hides rows (and, while a filter is active, the
+  // sections left with no visible row). Drag math below never reads it.
+  const visibleGrouped = useMemo(() => {
+    if (!filterActive) return grouped;
+    return grouped
+      .map((g) => ({
+        ...g,
+        tasks: g.tasks
+          .filter((n) => taskVisible(n.task, filters, filterCtx))
+          .map((n) => ({ ...n, subtasks: n.subtasks.filter((s) => taskVisible(s, filters, filterCtx)) })),
+      }))
+      .filter((g) => g.tasks.length > 0);
+  }, [grouped, filterActive, filters, filterCtx]);
 
   function openTask(id: number) {
     setSearchParams(
@@ -468,64 +476,23 @@ export function ProjectList() {
 
   return (
     <>
-      <div className="mb-3 flex items-center justify-end gap-2">
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setFilterOpen((v) => !v)}
-            className={[
+      <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+        <TaskFilterPopover
+          filters={filters}
+          onChange={setFilters}
+          onClear={() => setFilters(clearPatch("list"))}
+          activeCount={filterCount}
+          epics={epics ?? []}
+          labels={labels ?? []}
+          triggerClassName={(active) =>
+            [
               `${TOOLBAR_BOX} tap-target border font-semibold transition-colors`,
-              filterActive
+              active
                 ? "border-primary bg-primary/10 text-primary"
                 : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container",
-            ].join(" ")}
-          >
-            <span aria-hidden="true" className="material-symbols-outlined text-base">filter_alt</span>
-            Filter
-            {filterActive && (
-              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-meta leading-none font-bold text-on-primary">
-                1
-              </span>
-            )}
-          </button>
-          {filterOpen && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setFilterOpen(false)} />
-              <div className="absolute right-0 z-20 mt-2 w-64 rounded-sm border border-outline-variant bg-surface-container-lowest p-3 shadow-overlay">
-                <div className="mb-3">
-                  <label className="mb-1 block text-label-caps uppercase text-on-surface-variant">
-                    Epic
-                  </label>
-                  <select
-                    value={filterEpicId === "" ? "" : filterEpicId === null ? "none" : String(filterEpicId)}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setFilterEpicId(v === "" ? "" : v === "none" ? null : Number(v));
-                    }}
-                    className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
-                  >
-                    <option value="">All</option>
-                    <option value="none">No epic</option>
-                    {(epics ?? []).map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {filterActive && (
-                  <button
-                    type="button"
-                    onClick={() => setFilterEpicId("")}
-                    className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-xs font-semibold text-primary hover:underline"
-                  >
-                    Clear filters
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+            ].join(" ")
+          }
+        />
         {canManageSections && (sections?.length ?? 0) >= 2 && (
           <button
             type="button"
@@ -575,6 +542,12 @@ export function ProjectList() {
           <span>Prio</span>
           <span>Status</span>
         </div>
+
+        {filterActive && visibleGrouped.length === 0 && (
+          <p className="px-3 py-6 text-center text-sm text-on-surface-variant">
+            No tasks match the current filters.
+          </p>
+        )}
 
         <DndContext
           sensors={sensors}

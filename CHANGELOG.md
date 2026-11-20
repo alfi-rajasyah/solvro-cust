@@ -15,6 +15,13 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-20 — Epic and label filters across the task views
+
+- The List, Kanban, Gantt and Timeline tabs now share an epic filter ("All", "No epic" or one epic), and List and Kanban gain a label filter: pick one or more labels (a task needs at least one of them) or "No label". The filters combine with each other and with Kanban's assignee and priority filters, and the Filter badge counts each active control.
+- With an epic selected, subtasks follow their parent's epic, List and Gantt hide sections that have no matching task, and the Gantt draws no dependency arrows to hidden tasks. For labels, a subtask matches on its own labels and a parent stays visible while one of its subtasks matches.
+- The filters are kept in the page address (`epicFilter`, `labels`, `assignee`, `priority`) and carried by the project tab links, so they survive switching between List, Kanban, Gantt and Timeline and can be shared as a link. Dragging to reorder still works while a filter is active, and the Gantt Excel and PDF exports still contain the full project.
+- On phones the Filter popover opens as a scrollable panel inside the screen. (#94, #89)
+
 ### Added — 2026-11-19 — Story points on tasks (API)
 
 - Tasks have an optional story points estimate, a whole number from 0 to 100. The API accepts `storyPoints` when creating a task and in `PATCH /tasks/:id`; a concurrent edit of the value is detected like other fields, duplicating a task or section copies it, and setting or changing it, including at creation, appears in the project activity log. New nullable `tasks.story_points` column (migration `20261119120000_task_story_points`). The screens that show and edit it follow separately. (#91)
