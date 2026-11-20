@@ -75,7 +75,7 @@ export function Modal({
         {customHeader !== undefined ? (
           customHeader
         ) : (
-          <header className="flex items-center justify-between border-b border-outline-variant px-5 py-3.5">
+          <div className="flex items-center justify-between border-b border-outline-variant px-5 py-3.5">
             <span className="font-display text-[14px] font-semibold text-on-surface">
               {title}
             </span>
@@ -87,13 +87,13 @@ export function Modal({
             >
               <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
             </button>
-          </header>
+          </div>
         )}
         <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {footer && (
-          <footer className="flex justify-end gap-2 border-t border-outline-variant px-5 py-3">
+          <div className="flex justify-end gap-2 border-t border-outline-variant px-5 py-3">
             {footer}
-          </footer>
+          </div>
         )}
       </div>
     </div>,

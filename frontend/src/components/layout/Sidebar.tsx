@@ -246,6 +246,7 @@ export function Sidebar() {
 
         <TooltipProvider delay={0} closeDelay={0}>
           <nav
+            aria-label="Main"
             className={["mt-2 flex-1 overflow-y-auto pb-4", expanded ? "px-3" : "px-2"].join(" ")}
           >
             {groups.map(({ group, items }, gi) => (

@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
   activeMentionQuery,
   deriveMentionedIds,
@@ -43,10 +43,23 @@ export function CommentBody({
   );
 }
 
+// On touch the on-screen Enter key is a newline and only Send sends; a
+// hardware-keyboard desktop keeps Enter to send.
+function isCoarsePointer(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse)").matches
+  );
+}
+
 /**
- * The comment box: a single-line input whose `@` opens a picker of the
- * project's people. It is an ARIA combobox — the input owns focus and points
- * at the listbox with `aria-controls` / `aria-activedescendant`.
+ * The comment box: an auto-growing textarea whose `@` opens a picker of the
+ * project's people. Enter sends and Shift+Enter adds a line on desktop; on touch Enter adds
+ * a line and only Send sends. The textarea keeps
+ * focus and points at the picker's listbox with `aria-controls` /
+ * `aria-activedescendant` (a textarea cannot take the combobox role, so it
+ * stays a textbox with `aria-autocomplete="list"`).
  */
 export function CommentComposer({
   candidates,
@@ -60,7 +73,7 @@ export function CommentComposer({
   onSend: (body: string, mentionedUserIds: number[]) => Promise<void>;
 }) {
   const listId = useId();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [body, setBody] = useState("");
   const [caret, setCaret] = useState(0);
   const [highlight, setHighlight] = useState(0);
@@ -79,6 +92,14 @@ export function CommentComposer({
   );
   const open = query !== null && query.start !== dismissedAt && matches.length > 0;
   const active = Math.min(highlight, Math.max(0, matches.length - 1));
+
+  // Grow with the content up to a cap, then scroll; reset on send (body "").
+  useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [body]);
 
   // Put the caret after an inserted mention once React has written the value.
   useEffect(() => {
@@ -100,16 +121,24 @@ export function CommentComposer({
     setHighlight(0);
   }
 
-  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     // Enter/Tab/arrows during IME composition belong to the IME, not the picker.
-    if (!open || e.nativeEvent.isComposing) return;
+    // Safari fires the confirming keydown after compositionend, with keyCode 229.
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+    if (!open) {
+      if (e.key === "Enter" && !e.shiftKey && !isCoarsePointer()) {
+        e.preventDefault();
+        e.currentTarget.form?.requestSubmit();
+      }
+      return;
+    }
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setHighlight((active + 1) % matches.length);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setHighlight((active - 1 + matches.length) % matches.length);
-    } else if (e.key === "Enter" || e.key === "Tab") {
+    } else if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
       e.preventDefault();
       pick(matches[active]);
     } else if (e.key === "Escape") {
@@ -138,15 +167,15 @@ export function CommentComposer({
     <>
       <form
         onSubmit={handleSubmit}
-        className="relative flex [@media(pointer:coarse)]:min-h-11 items-center gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30"
+        className="relative flex [@media(pointer:coarse)]:min-h-11 items-end gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30"
       >
-        <input
+        <textarea
           ref={inputRef}
-          type="text"
-          role="combobox"
+          rows={1}
           aria-label="Write a comment"
           aria-autocomplete="list"
-          aria-expanded={open}
+          aria-haspopup="listbox"
+          enterKeyHint={isCoarsePointer() ? "enter" : "send"}
           aria-controls={open ? listId : undefined}
           aria-activedescendant={open ? `${listId}-${active}` : undefined}
           value={body}
@@ -163,16 +192,22 @@ export function CommentComposer({
           onKeyDown={handleKeyDown}
           maxLength={5000}
           placeholder="Write a comment…"
-          className="min-w-0 flex-1 border-none bg-transparent text-xs text-on-surface outline-hidden placeholder:text-on-surface-variant/80"
+          className="max-h-40 min-w-0 flex-1 resize-none border-none bg-transparent text-xs [@media(pointer:coarse)]:py-1.5 text-on-surface outline-hidden placeholder:text-on-surface-variant/80"
         />
         <button
           type="submit"
           disabled={isPending || !body.trim()}
           aria-label="Send comment"
-          className="tap-target flex shrink-0 items-center text-primary disabled:opacity-40"
+          className="tap-target flex shrink-0 items-center self-end text-primary disabled:opacity-40"
         >
           <span aria-hidden="true" className="material-symbols-outlined text-[17px]">send</span>
         </button>
+
+        <span role="status" className="sr-only">
+          {open
+            ? `${matches.length} ${matches.length === 1 ? "person" : "people"} found. Use up and down arrows to choose.`
+            : ""}
+        </span>
 
         {open && (
           <ul

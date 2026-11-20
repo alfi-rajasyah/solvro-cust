@@ -75,7 +75,7 @@ export function OutlineApiCard({ settings }: { settings: OutlineAdminSettings })
       className="space-y-4 rounded-sm border border-outline-variant bg-surface-container-lowest p-4"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="font-display text-sm font-semibold text-on-surface">API access (OAuth app)</h3>
+        <h2 className="font-display text-sm font-semibold text-on-surface">API access (OAuth app)</h2>
         <Chip tone={ready ? "emerald" : "amber"}>{ready ? "Ready" : "Setup incomplete"}</Chip>
       </div>
 

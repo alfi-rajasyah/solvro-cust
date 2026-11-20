@@ -39,4 +39,22 @@ test.describe("task panel comments — desktop", () => {
       }),
     ).toBeLessThanOrEqual(1);
   });
+
+  test("composer grows with Shift+Enter lines and Enter sends them as one comment", async ({ page, seededProject }) => {
+    const { projectId, alpha } = seededProject;
+    await loginViaUi(page);
+    await page.goto(`/projects/${projectId}/list?task=${alpha.id}`, { waitUntil: "networkidle" });
+
+    const composer = page.getByRole("textbox", { name: "Write a comment" });
+    const oneLine = (await composer.boundingBox())!.height;
+    await composer.fill("first line");
+    await composer.press("Shift+Enter");
+    await composer.pressSequentially("second line");
+    expect((await composer.boundingBox())!.height).toBeGreaterThan(oneLine);
+
+    await composer.press("Enter");
+    await expect(composer).toHaveValue("");
+    await expect(page.getByText("first line").first()).toBeVisible();
+    await expect(page.getByText("second line").first()).toBeVisible();
+  });
 });

@@ -241,9 +241,9 @@ function ProjectCard({
         </div>
 
         {/* Title */}
-        <h3 className="mb-1 truncate font-display text-sm font-bold leading-tight text-on-surface group-hover:text-primary">
+        <h2 className="mb-1 truncate font-display text-sm font-bold leading-tight text-on-surface group-hover:text-primary">
           {project.name}
-        </h3>
+        </h2>
 
         {/* Description */}
         <p className="mb-3 line-clamp-2 min-h-[2.4rem] text-meta leading-snug text-on-surface-variant">

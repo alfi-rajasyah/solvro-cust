@@ -270,10 +270,7 @@ function UsersTab() {
             {u.role === "PENDING" && (
               <span
                 title="Auto-provisioned via Google. Pick a role above to grant access."
-                // No token matches 10px (the smallest named size is
-                // text-label-caps at 12px) — left as an arbitrary value per
-                // N5 (do not invent a size to fill the gap).
-                className="rounded-full bg-chip-amber-bg px-2 py-0.5 font-display text-label-caps leading-4 uppercase text-chip-amber-text"
+                className="rounded-full bg-chip-amber-bg px-2 py-0.5 font-display text-meta font-semibold leading-4 text-chip-amber-text"
               >
                 Needs role
               </span>

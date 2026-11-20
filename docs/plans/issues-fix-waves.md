@@ -1,6 +1,6 @@
 # docs/ISSUES.md: fix waves without user decisions
 
-Status: in progress (triage 2026-11-20 @ `5b283ea`; wave E and F done 2026-11-20)
+Status: in progress (triage 2026-11-20 @ `5b283ea`; waves E and F done, wave G1/G2 done 2026-11-20)
 Archive path: `docs/archive/plans/issues-fix-waves.md`
 
 Triage of the open issues in `docs/ISSUES.md` (126 open). 45 can be fixed without a user decision; they are grouped into four waves of up to three streams with disjoint files. Each wave is one or more PRs into `develop`; spine files get the instant review.
@@ -29,11 +29,14 @@ Review: one blocker (Done button focus ring) and should-fixes (milestone connect
 | F2 | Gantt ISS-191, ISS-096, ISS-098, ISS-101, ISS-100; Excel blob URL ISS-133 | `gantt-v2/`, `reui/gantt/`, `lib/gantt/exportExcel.ts` (spine) |
 | F3 | ISS-192 (inactive users in the epic owner picker), ISS-185 (service-list cache refresh), ISS-024 (tab chunk preload) | `EpicPanel.tsx`, `lib/queries.ts` (spine), `lib/gantt/palette.ts`, `pages/ProjectDetail.tsx` |
 
-### Wave G: polish and accessibility
+### Wave G: polish and accessibility (G1 and G2 done 2026-11-20; G3 next, alone)
+
+G1/G2 review: no blockers; seven should-fix items fixed in one round (Today marker two-tone contrast, legend swatch, Safari IME Enter, mention picker announcement, remaining heading-level gaps incl. task panel, Tickets board and share dialog, DESIGN.md whitelist), plus Modal/Drawer/notifications headers no longer counted as page landmarks. Delivery Gate PASS 2026-11-20: Portfolio Today marker, Project Overview, Risks status select, multi-line comment box (desktop Shift+Enter, phone Enter) in light and dark at 1440 and 375 px. A first phone run sent comments on Enter: a Playwright artefact (full-page screenshots reset touch emulation, so the page saw a fine pointer), not an app bug. Gates green except ISS-162.
+
 
 | Stream | Issues | Main files |
 |---|---|---|
-| G1 | ISS-195, ISS-196, ISS-197 (Portfolio today line, pulse blocks, Admin chip and icons), ISS-042 (multi-line comment box), ISS-044 (PWA icons) | `PortfolioCalendar.tsx`, `ProjectOverview.tsx`, `Admin.tsx`, `CommentMentions.tsx`, `vite.config.ts` |
+| G1 | ISS-195, ISS-196, ISS-197 (Portfolio today line, pulse blocks, Admin chip; the icon sizes wait on ISS-056), ISS-042 (multi-line comment box), ISS-044 (PWA icons) | `PortfolioCalendar.tsx`, `ProjectOverview.tsx`, `Admin.tsx`, `CommentMentions.tsx`, `vite.config.ts` |
 | G2 | ISS-081 (axe landmark, heading-order and nested-interactive gaps) | `e2e/tests/axe.spec.ts`, layout files |
 | G3 | ISS-194 (P2 contrast in active states), ISS-091 (about 70 old `focus:border-primary` sites) | many files: runs last and alone |
 
