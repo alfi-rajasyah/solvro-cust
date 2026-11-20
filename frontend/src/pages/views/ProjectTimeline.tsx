@@ -13,7 +13,18 @@ import { TaskFormModal } from "@/components/TaskFormModal";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { dateToDay, dayFromIso } from "@/lib/dateField";
 import { fmtRange } from "@/lib/formatDate";
-import { type Priority, type Task, type TaskStatus, useProjectTasks, useUpdateTask } from "@/lib/queries";
+import {
+  type Priority,
+  type Task,
+  type TaskStatus,
+  useProjectEpics,
+  useProjectTasks,
+  useUpdateTask,
+} from "@/lib/queries";
+import { buildFilterContext, clearPatch, countActiveFilters, scopeFilters, taskVisible } from "@/lib/taskFilters";
+import { TaskFilterPopover } from "@/components/TaskFilterPopover";
+import { useTaskFilters } from "@/hooks/useTaskFilters";
+import { TOOLBAR_BOX } from "@/lib/utils";
 
 const PRIORITY_ORDER: Record<Priority, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
@@ -36,7 +47,13 @@ export function ProjectTimeline() {
   const { project } = useProjectContext();
   const { user } = useAuth();
   const { data: tasks, isLoading, isError, error } = useProjectTasks(project.id);
+  const { data: epics } = useProjectEpics(project.id);
   const updateTask = useUpdateTask(project.id);
+  // The epic filter lives in the URL (hooks/useTaskFilters.ts) and is shared
+  // with List, Kanban and Gantt; the Timeline applies only its epic part.
+  const { filters: urlFilters, setFilters } = useTaskFilters();
+  const filters = useMemo(() => scopeFilters(urlFilters, "epic"), [urlFilters]);
+  const filterCount = countActiveFilters(filters);
   const [editTask, setEditTask] = useState<Task | null>(null);
 
   const canEdit = hasPermission(user, "task:write");
@@ -47,7 +64,8 @@ export function ProjectTimeline() {
 
   const ordered = useMemo(() => {
     if (!tasks) return [];
-    const topLevel = tasks.filter((t) => t.parentTaskId === null);
+    const ctx = buildFilterContext(tasks);
+    const topLevel = tasks.filter((t) => t.parentTaskId === null && taskVisible(t, filters, ctx));
     return [...topLevel].sort((a, b) => {
       const aStart = a.startDate ? new Date(a.startDate).getTime() : Number.POSITIVE_INFINITY;
       const bStart = b.startDate ? new Date(b.startDate).getTime() : Number.POSITIVE_INFINITY;
@@ -60,7 +78,7 @@ export function ProjectTimeline() {
       if (ap !== bp) return ap - bp;
       return a.id - b.id;
     });
-  }, [tasks]);
+  }, [tasks, filters]);
 
   const subtasksOf = useMemo(() => {
     const map = new Map<number, Task[]>();
@@ -88,12 +106,32 @@ export function ProjectTimeline() {
     );
   }
 
-  if (ordered.length === 0) {
+  if (ordered.length === 0 && filterCount === 0) {
     return <EmptyState icon="checklist" message="No tasks yet. Add tasks from the Kanban board." />;
   }
 
   return (
     <>
+      <div className="mb-3 flex items-center justify-end">
+        <TaskFilterPopover
+          filters={filters}
+          onChange={setFilters}
+          onClear={() => setFilters(clearPatch("epic"))}
+          activeCount={filterCount}
+          epics={epics ?? []}
+          triggerClassName={(active) =>
+            [
+              `${TOOLBAR_BOX} tap-target border font-semibold transition-colors`,
+              active
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container",
+            ].join(" ")
+          }
+        />
+      </div>
+      {ordered.length === 0 && (
+        <p className="py-6 text-center text-sm text-on-surface-variant">No tasks match the current filters.</p>
+      )}
       <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
         {/* SOLVRO PATCH: `value={-1}` neutralizes ReUI Timeline's step/active-state
             concept. This view has no "current step" — every TaskTimelineItem's

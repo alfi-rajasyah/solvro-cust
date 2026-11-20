@@ -35,6 +35,7 @@ import { hasPermission, useAuth } from "@/lib/auth";
 import { GanttExportProvider } from "@/lib/gantt/exportContext";
 import { canOwnProject, saveErrorMessage } from "@/lib/ownerAccess";
 import { safeOutlineHref } from "@/lib/outlineUrl";
+import { carryFilterSearch } from "@/lib/taskFilters";
 import {
   type ProjectDetail as ProjectDetailType,
   useDeleteProject,
@@ -145,6 +146,10 @@ export function ProjectDetail() {
       { replace: true },
     );
   }
+
+  // The task views (List, Kanban, Gantt, Timeline) share one filter set in the
+  // URL; every tab link carries just those params, never `task` or `epic`.
+  const filterSearch = carryFilterSearch(searchParams);
 
   const canEdit = hasPermission(user, "project:write");
   // Members (access via membership alone) can edit but not hand the project
@@ -341,7 +346,7 @@ export function ProjectDetail() {
           {TABS.filter((tab) => tab.to !== "docs" || embedAvailable).map((tab) => (
             <NavLink
               key={tab.to}
-              to={tab.to}
+              to={{ pathname: tab.to, search: filterSearch }}
               className={({ isActive }) =>
                 [
                   "-mb-px border-b-2 px-1 pb-3 font-display text-sm transition-colors [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:text-center [@media(pointer:coarse)]:pt-2.5",

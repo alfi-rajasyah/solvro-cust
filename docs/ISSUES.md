@@ -445,6 +445,30 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Fix: mirror the description editor (Escape cancels and keeps the panel open, settled ref, focus return, DESIGN.md §4 focus style).
 - **Source:** review of GitHub #88 (`docs/plans/github-feature-waves.md`)
 
+### ISS-200 · P3 · A deleted epic or label left in the filter URL keeps the views empty
+
+- **Type:** bug · **Found:** 2026-11-20 · **Verified:** 2026-11-20 @ feature wave B
+- **Where:** frontend/src/hooks/useTaskFilters.ts, frontend/src/components/TaskFilterPopover.tsx
+- **Problem:** `?epicFilter=` or `?labels=` with an id that no longer exists (deleted epic or label, or an old shared link) keeps the filter active and shows "No tasks match the current filters." until the user clicks Clear.
+- **Why deferred / fix direction:** Rare and recoverable with Clear. Fix: drop ids not in `useProjectEpics` / `useProjectLabels` once those queries have loaded.
+- **Source:** GitHub #94 / #89 (`docs/archive/plans/feature-wave-b.md`)
+
+### ISS-201 · P3 · The task filter popover has no focus trap or focus return
+
+- **Type:** a11y · **Found:** 2026-11-20 · **Verified:** 2026-11-20 @ feature wave B
+- **Where:** frontend/src/components/TaskFilterPopover.tsx (List, Kanban, Gantt, Timeline)
+- **Problem:** Tab leaves the open popover, and closing it (Escape or outside click) does not return focus to the Filter button. Inherited from the old hand-rolled List and Kanban popovers.
+- **Why deferred / fix direction:** Fix: move the popover onto the Base-UI `Popover` primitive (`ui/popover.tsx`).
+- **Source:** GitHub #94 / #89 (`docs/archive/plans/feature-wave-b.md`)
+
+### ISS-202 · P3 · Kanban cards list every subtask while a label filter is active
+
+- **Type:** UX · **Found:** 2026-11-20 · **Verified:** 2026-11-20 @ feature wave B
+- **Where:** frontend/src/components/kanban-v2/cards.tsx (subtask checklist)
+- **Problem:** A card stays visible when one of its subtasks matches the label filter (the agreed rule), but its subtask checklist still shows the subtasks that do not match.
+- **Why deferred / fix direction:** Product question. Fix if wanted: pass the filtered subtasks to the card.
+- **Source:** GitHub #89 (`docs/archive/plans/feature-wave-b.md`)
+
 ## Open — Accessibility & tokens
 
 ### ISS-081 · P2 · Landmark, heading-order and nested-interactive axe gaps remain

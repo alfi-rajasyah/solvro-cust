@@ -11,6 +11,17 @@ import { hasPermission, useAuth } from "@/lib/auth";
 import { dateToDay } from "@/lib/dateField";
 import { usePointerPressActivity } from "@/lib/dragActivity";
 import { fmtDateTime } from "@/lib/formatDate";
+import { TaskFilterPopover } from "@/components/TaskFilterPopover";
+import { useTaskFilters } from "@/hooks/useTaskFilters";
+import {
+  buildFilterContext,
+  clearPatch,
+  countActiveFilters,
+  reorderAmongVisible,
+  scopeFilters,
+  taskVisible,
+  visibleOrderUnchanged,
+} from "@/lib/taskFilters";
 import { useGanttExport } from "@/lib/gantt/exportContext";
 import { addDays, buildRows, rowsDateRange, startOfDay, type Row } from "@/lib/gantt/geometry";
 import {
@@ -507,10 +518,45 @@ export function SolvroGantt(props: SolvroGanttProps) {
   // toggles the ghosts and reports the lock state in the toggle's tooltip.
   const baselineLockedAtPretty = baselineLockedAt ? fmtDateTime(baselineLockedAt) : null;
 
-  const resources = useMemo(() => buildResources(tasks, sections), [tasks, sections]);
+  // Epic filter (shared with List, Kanban and Timeline through the URL). It only
+  // shapes what the chart shows: bars, rows, rollups and connectors. Reorder
+  // math (`allResources`, `tasks`) and the Excel/PDF export (`allRows`) keep
+  // reading the full project.
+  const { filters: urlFilters, setFilters } = useTaskFilters();
+  const filters = useMemo(() => scopeFilters(urlFilters, "epic"), [urlFilters]);
+  const filterCount = countActiveFilters(filters);
+  const filterActive = filterCount > 0;
+  const filterCtx = useMemo(() => buildFilterContext(tasks), [tasks]);
+  const visibleTasks = useMemo(
+    () => (filterActive ? tasks.filter((t) => taskVisible(t, filters, filterCtx)) : tasks),
+    [tasks, filterActive, filters, filterCtx],
+  );
+  // While the filter is active a section with no visible top-level task is hidden.
+  const visibleSections = useMemo(() => {
+    if (!filterActive) return sections;
+    const used = new Set(visibleTasks.filter((t) => t.parentTaskId === null).map((t) => t.sectionId));
+    // Colours are assigned by section index; resolve them on the full list and
+    // pin them, so hiding a section never repaints the others.
+    const colors = resolveSectionColors(sections);
+    return sections.filter((s) => used.has(s.id)).map((s) => ({ ...s, color: colors.get(s.id) ?? s.color }));
+  }, [sections, visibleTasks, filterActive]);
+  const visibleDependencies = useMemo(() => {
+    if (!filterActive) return dependencies;
+    const ids = new Set(visibleTasks.map((t) => t.id));
+    return dependencies.filter((d) => ids.has(d.predecessorTaskId) && ids.has(d.successorTaskId));
+  }, [dependencies, visibleTasks, filterActive]);
+
+  const allResources = useMemo(() => buildResources(tasks, sections), [tasks, sections]);
+  const resources = useMemo(
+    () => (filterActive ? buildResources(visibleTasks, visibleSections) : allResources),
+    [filterActive, visibleTasks, visibleSections, allResources],
+  );
   const events = useMemo<GanttEvent<Task>[]>(
-    () => [...buildEvents(tasks, sections, colorBy, canEdit), ...buildRollupEvents(tasks, sections)],
-    [tasks, sections, colorBy, canEdit],
+    () => [
+      ...buildEvents(visibleTasks, visibleSections, colorBy, canEdit),
+      ...buildRollupEvents(visibleTasks, visibleSections),
+    ],
+    [visibleTasks, visibleSections, colorBy, canEdit],
   );
   const years = useMemo(() => yearsCoveredBy(events), [events]);
   const { data: holidays = [] } = useHolidays(years);
@@ -612,11 +658,18 @@ export function SolvroGantt(props: SolvroGanttProps) {
         // then patch every REAL section whose position actually changed.
         // Mirrors GanttFrame.tsx:544-559's ordered/filtered/splice + diffed
         // Promise.all of useUpdateSection calls.
-        const currentRootIds = resources.map((r) => r.id);
-        const others = currentRootIds.filter((id) => id !== resourceId);
-        const clamped = Math.max(0, Math.min(index, others.length));
-        const nextRootOrder = [...others];
-        nextRootOrder.splice(clamped, 0, resourceId);
+        // `index` counts the rows the user sees (`resources`); the new order is
+        // computed on the full list (`allResources`), anchored on the visible
+        // neighbour the section was dropped next to, so sections hidden by the
+        // epic filter keep their place.
+        const nextRootOrder = reorderAmongVisible(
+          allResources.map((r) => r.id),
+          resources.map((r) => r.id),
+          resourceId,
+          index,
+        );
+        // Nothing moved on screen (or no other visible section): save nothing.
+        if (!nextRootOrder) return false;
 
         const patches = nextRootOrder
           .filter((id) => id !== sectionNodeId(null))
@@ -676,7 +729,9 @@ export function SolvroGantt(props: SolvroGanttProps) {
         .filter((t) => t.parentTaskId === null)
         .sort((a, b) => a.position - b.position || a.id - b.id);
       const others = topLevelOrdered.filter((t) => t.id !== taskId);
-      const targetSiblings = others.filter((t) => t.sectionId === targetSectionId);
+      // `index` counts the siblings the user sees; `others` stays the full order.
+      const visibleIds = new Set(visibleTasks.map((t) => t.id));
+      const targetSiblings = others.filter((t) => t.sectionId === targetSectionId && visibleIds.has(t.id));
       const crossSection = targetSectionId !== moved.sectionId;
 
       let position: number | undefined;
@@ -693,6 +748,13 @@ export function SolvroGantt(props: SolvroGanttProps) {
         position = others.findIndex((t) => t.id === before.id);
       }
 
+      if (!crossSection) {
+        // Dropped back where it was on screen: hidden siblings must not shift.
+        const visibleInSection = topLevelOrdered
+          .filter((t) => t.sectionId === targetSectionId && visibleIds.has(t.id))
+          .map((t) => t.id);
+        if (visibleOrderUnchanged(visibleInSection, taskId, index)) return false;
+      }
       if (!crossSection && (position === undefined || position === moved.position)) {
         return false; // no-op — same section, same slot (or nothing to reorder against)
       }
@@ -706,7 +768,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
       });
       return;
     },
-    [canEdit, canManageSections, resources, sections, tasks, taskById, updateTask, updateSection],
+    [canEdit, canManageSections, allResources, resources, sections, tasks, visibleTasks, taskById, updateTask, updateSection],
   );
 
   // Plan B Task 6 — connector create/delete, wired into GanttOverlay as
@@ -1110,8 +1172,28 @@ export function SolvroGantt(props: SolvroGanttProps) {
           </>
         )}
 
+        <div className="ml-2">
+          <TaskFilterPopover
+            filters={filters}
+            onChange={setFilters}
+            onClear={() => setFilters(clearPatch("epic"))}
+            activeCount={filterCount}
+            epics={epics}
+            layerClassName={{ backdrop: "z-40", panel: "z-50" }}
+            triggerClassName={(active) =>
+              cn(
+                TOOLBAR_ITEM_HEIGHT,
+                "inline-flex items-center gap-1 rounded-md border px-2.5 font-display text-meta font-semibold transition-colors focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+                active
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:text-on-surface",
+              )
+            }
+          />
+        </div>
+
         <span className="ml-2 hidden font-mono text-meta text-on-surface-variant lg:inline">
-          {tasks.filter((t) => t.startDate || t.dueDate).length} dated · {sections.length} sections
+          {visibleTasks.filter((t) => t.startDate || t.dueDate).length} dated · {visibleSections.length} sections
         </span>
 
         {/* `flex-1 min-w-0` + `flex-wrap` (2026-08-31): the cluster takes
@@ -1423,7 +1505,9 @@ export function SolvroGantt(props: SolvroGanttProps) {
       {!isLoading && !isError && resources.length === 0 && (
         <div className="m-3 rounded-sm border border-dashed border-outline-variant p-12 text-center text-on-surface-variant">
           <p className="text-sm">
-            No tasks or sections yet. Use + Task or + Section above to start building the plan.
+            {filterActive
+              ? "No tasks match the current filters."
+              : "No tasks or sections yet. Use + Task or + Section above to start building the plan."}
           </p>
         </div>
       )}
@@ -1724,7 +1808,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
               tree already committed, reached via containerRef + a portal. */}
           <GanttOverlay
             containerRef={ganttContainerRef}
-            dependencies={dependencies}
+            dependencies={visibleDependencies}
             events={events}
             showBaseline={showBaseline}
             canEdit={canEdit}
