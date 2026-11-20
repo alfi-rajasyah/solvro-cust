@@ -278,6 +278,22 @@ export interface ProjectMember {
   assignedTaskCount: number;
 }
 
+/** One member of a customer's team (GET /customers/:id/team). */
+export interface CustomerTeamMember {
+  userId: number;
+  username: string;
+  email: string;
+  active: boolean;
+  addedAt: string;
+  addedBy: { id: number; username: string } | null;
+}
+
+export interface CustomerTeam {
+  members: CustomerTeamMember[];
+  /** The caller may add and remove members: the customer's owner, or `customer:team-all`. */
+  canManage: boolean;
+}
+
 export type ActivityEntityType =
   | "project"
   | "task"
@@ -809,6 +825,8 @@ export const queryKeys = {
   projectTasks: (id: number) => ["projects", id, "tasks"] as const,
   projectLabels: (id: number) => ["projects", id, "labels"] as const,
   projectSections: (id: number) => ["projects", id, "sections"] as const,
+  // Users with project access through a customer team (not project members).
+  projectTeamAccess: (id: number) => ["projects", id, "team-access"] as const,
   projectMembers: (id: number) => ["projects", id, "members"] as const,
   // Guest links (docs/archive/plans/collaboration-and-sharing.md, L4).
   projectShareLinks: (id: number) => ["projects", id, "share-links"] as const,
@@ -849,6 +867,7 @@ export const queryKeys = {
   // the bare `["customers", id, "weekly-updates"]` PREFIX (see
   // useSaveWeeklyUpdate below), not this full key, for the same reason
   // `projectNotes` above documents.
+  customerTeam: (id: number) => ["customers", id, "team"] as const,
   customerWeeklyUpdates: (id: number, limit?: number) =>
     ["customers", id, "weekly-updates", limit ?? null] as const,
   // Newest-first customer (operations) notes for the account Overview.
@@ -1142,6 +1161,66 @@ export function useCustomer(id: number | null) {
   });
 }
 
+export function useCustomerTeam(customerId: number | null) {
+  const live = useLiveRefresh();
+  return useQuery({
+    ...live,
+    queryKey: customerId ? queryKeys.customerTeam(customerId) : ["customers", "noop", "team"],
+    queryFn: ({ signal }) =>
+      apiRequest<CustomerTeam>(`/customers/${customerId}/team`, { signal }),
+    enabled: customerId !== null,
+  });
+}
+
+// A team change alters which projects and customers the affected user can
+// see. That only matters to this session when the user changed their own
+// membership (`selfId`), so only then are the customer and project lists
+// refreshed; otherwise the team list is enough.
+function invalidateCustomerTeamWrite(
+  qc: QueryClient,
+  customerId: number,
+  userId: number,
+  selfId: number | undefined,
+) {
+  qc.invalidateQueries({ queryKey: queryKeys.customerTeam(customerId) });
+  // Any project of this customer may now grant or drop access to this user.
+  qc.invalidateQueries({
+    predicate: ({ queryKey: k }) => k[0] === "projects" && k[2] === "team-access",
+  });
+  if (selfId !== undefined && userId === selfId) {
+    qc.invalidateQueries({ queryKey: queryKeys.customers });
+    qc.invalidateQueries({ queryKey: ["projects"] });
+    qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+    qc.invalidateQueries({ queryKey: queryKeys.navBadgesRoot });
+    qc.invalidateQueries({ queryKey: queryKeys.overview });
+    qc.invalidateQueries({ queryKey: ["tasks"] });
+    qc.invalidateQueries({ queryKey: ["search"] });
+  }
+}
+
+export function useAddCustomerTeamMember(customerId: number, selfId?: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: number) =>
+      apiRequest<CustomerTeamMember>(`/customers/${customerId}/team`, {
+        method: "POST",
+        body: { userId },
+      }),
+    onSettled: (_data, _err, userId) =>
+      invalidateCustomerTeamWrite(qc, customerId, userId, selfId),
+  });
+}
+
+export function useRemoveCustomerTeamMember(customerId: number, selfId?: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: number) =>
+      apiRequest<void>(`/customers/${customerId}/team/${userId}`, { method: "DELETE" }),
+    onSettled: (_data, _err, userId) =>
+      invalidateCustomerTeamWrite(qc, customerId, userId, selfId),
+  });
+}
+
 export function useProject(id: number | null) {
   // `health.overdueCount` depends on the caller's local day — see useProjects.
   const today = dateToDay(new Date())!;
@@ -1173,6 +1252,17 @@ export function useProjectMembers(projectId: number | null) {
     queryKey: projectId ? queryKeys.projectMembers(projectId) : ["projects", "noop", "members"],
     queryFn: ({ signal }) =>
       apiRequest<ProjectMember[]>(`/projects/${projectId}/members`, { signal }),
+    enabled: projectId !== null,
+  });
+}
+
+export function useProjectTeamAccess(projectId: number | null) {
+  const live = useLiveRefresh();
+  return useQuery({
+    ...live,
+    queryKey: projectId ? queryKeys.projectTeamAccess(projectId) : ["projects", "noop", "team-access"],
+    queryFn: ({ signal }) =>
+      apiRequest<{ teamAccessUserIds: number[] }>(`/projects/${projectId}/team-access`, { signal }),
     enabled: projectId !== null,
   });
 }

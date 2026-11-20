@@ -469,15 +469,29 @@ describe("visibility arms for recipients", () => {
       ],
     });
     await prisma.user.update({ where: { id: inactiveMember.userId }, data: { active: false } });
-    const everyone = [tam, other, third, stakeholder, admin, stranger, inactiveMember, owner, secondOwner].map(
-      (u) => u.userId,
-    );
+    // Customer team (GitHub #93): a team member of the SECOND linked customer
+    // sees the project; a team member of an unlinked customer does not.
+    const teamMember = await createUserWithRole("TAM");
+    const unlinkedTeamMember = await createUserWithRole("TAM");
+    const unlinkedCustomer = await prisma.customer.create({
+      data: { name: uniq("C3"), description: "d", tamId: owner.userId },
+    });
+    await prisma.customerTeamMember.createMany({
+      data: [
+        { customerId: secondCustomer.id, userId: teamMember.userId },
+        { customerId: unlinkedCustomer.id, userId: unlinkedTeamMember.userId },
+      ],
+    });
+    const everyone = [
+      tam, other, third, stakeholder, admin, stranger, inactiveMember, owner, secondOwner,
+      teamMember, unlinkedTeamMember,
+    ].map((u) => u.userId);
     const batch = await filterActiveUsersWhoCanSeeProject(prisma, p.id, [...everyone, 999_999_999]);
     for (const uid of everyone) {
       expect(batch.has(uid), `user ${uid}`).toBe(await isActiveUserWhoCanSeeProject(uid, p.id));
     }
     expect([...batch].sort()).toEqual(
-      [tam, other, stakeholder, admin, owner, secondOwner].map((u) => u.userId).sort(),
+      [tam, other, stakeholder, admin, owner, secondOwner, teamMember].map((u) => u.userId).sort(),
     );
     expect(batch.has(999_999_999)).toBe(false);
     expect(project.id).toBeGreaterThan(0);
@@ -643,8 +657,9 @@ describe("@mentions", () => {
       expect(twenty.statements).toHaveLength(one.statements.length);
       // ...and stays a handful: Prisma splits the nested user->role and
       // project->customer/members reads into separate statements (5 reads),
-      // plus createMany's implicit BEGIN / INSERT / COMMIT.
-      expect(twenty.statements.length).toBeLessThanOrEqual(8);
+      // plus the customer-team read (1) and createMany's implicit
+      // BEGIN / INSERT / COMMIT.
+      expect(twenty.statements.length).toBeLessThanOrEqual(9);
     } finally {
       await logged.$disconnect();
     }

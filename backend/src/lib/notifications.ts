@@ -39,7 +39,7 @@ function assigneeFromChanges(event: ActivityEvent): number | null {
 /**
  * Which of `userIds` are active users who can see `projectId`, in a fixed
  * number of queries (users + roles, then the project's TAM / customer owner /
- * candidate members) however many ids are passed. It loads the project's facts
+ * candidate members and customer team members) however many ids are passed. It loads the project's facts
  * and applies `canUserSeeProject` (lib/visibility.ts), the pure twin of
  * `projectVisibilityFilter`; test/notifications.test.ts compares the two.
  * `activeOnly: false` skips the active check (default true) for a caller that
@@ -55,7 +55,7 @@ export async function filterActiveUsersWhoCanSeeProject(
   const activeOnly = options.activeOnly ?? true;
   const ids = [...new Set(userIds)];
   if (ids.length === 0) return new Set();
-  const [users, project, linkedCustomers] = await Promise.all([
+  const [users, project, linkedCustomers, teamRows] = await Promise.all([
     tx.user.findMany({
       where: { id: { in: ids }, ...(activeOnly ? { active: true } : {}) },
       select: { id: true, role: { select: { roleName: true, permissions: true } } },
@@ -72,6 +72,11 @@ export async function filterActiveUsersWhoCanSeeProject(
       where: { projects: { some: { projectId } }, tamId: { not: null } },
       select: { tamId: true },
     }),
+    // Team members of ANY linked customer among the candidates.
+    tx.customerTeamMember.findMany({
+      where: { userId: { in: ids }, customer: { projects: { some: { projectId } } } },
+      select: { userId: true },
+    }),
   ]);
   const visible = new Set<number>();
   if (!project) return visible;
@@ -81,6 +86,7 @@ export async function filterActiveUsersWhoCanSeeProject(
       linkedCustomers.map((c) => c.tamId).filter((id): id is number => id !== null),
     ),
     memberIds: new Set(project.members.map((m) => m.userId)),
+    teamMemberIds: new Set(teamRows.map((r) => r.userId)),
   };
   for (const u of users) {
     const permissions = Array.isArray(u.role.permissions)

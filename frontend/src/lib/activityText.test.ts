@@ -283,6 +283,16 @@ describe("describeActivity - members", () => {
     expect(
       text(ev({ entityType: "member", entityLabel: "ben", action: "removed", changes: { unassignedTasks: 2 } })),
     ).toBe("maya.putri removed ben from the project (unassigned 2 tasks)");
+    expect(
+      text(
+        ev({
+          entityType: "member",
+          entityLabel: "ben",
+          action: "removed",
+          changes: { unassignedTasks: 2, viaCustomerTeam: true },
+        }),
+      ),
+    ).toBe("maya.putri removed ben's access through a customer team (unassigned 2 tasks)");
     expect(text(ev({ entityType: "member", entityLabel: null, action: "added" }))).toBe(
       "maya.putri added a member to the project",
     );

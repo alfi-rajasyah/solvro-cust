@@ -7,6 +7,7 @@ import { logger } from "../logger.js";
 // services router lives in ./services.ts; this file owns the customer-side mapping.
 import { HttpError } from "../http/errors.js";
 import { assertUserExists } from "../lib/userRefs.js";
+import { unassignWhereAccessLost } from "../lib/projectMembers.js";
 import { customerExistsError, isCustomerNameConflict } from "../lib/customerConflict.js";
 import { validate } from "../http/validate.js";
 import { outlineUrlSchema } from "../lib/outlineUrl.js";
@@ -656,7 +657,20 @@ customersRouter.delete(
       const heirByProject = new Map<number, number>();
       for (const r of remaining) if (!heirByProject.has(r.projectId)) heirByProject.set(r.projectId, r.customerId);
       const heirs = [...heirByProject].map(([projectId, customerId]) => ({ projectId, customerId }));
+      // Team members lose the access the customer gave them (the rows cascade
+      // with the customer): unassign their tasks in projects they can no
+      // longer see once it is gone.
+      const team = await tx.customerTeamMember.findMany({ where: { customerId: id }, select: { userId: true } });
+      const linkedProjects = await tx.projectCustomer.findMany({
+        where: { customerId: id },
+        select: { projectId: true },
+      });
       await tx.customer.delete({ where: { id } });
+      await unassignWhereAccessLost(tx, {
+        userIds: team.map((t) => t.userId),
+        projectIds: linkedProjects.map((l) => l.projectId),
+        actorId: req.user!.sub,
+      });
       for (const h of heirs) {
         await tx.projectCustomer.update({
           where: { projectId_customerId: h },

@@ -75,7 +75,12 @@ export async function resolveDailyReviewScope(user: JwtPayload) {
   // member (user decision 2026-09-30, docs/archive/plans/collaboration-and-sharing.md).
   // AND-composed with the customer condition so the two ORs can't collide.
   const mine: Prisma.ProjectWhereInput = {
-    OR: [{ tamId: user.sub }, { members: { some: { userId: user.sub } } }],
+    OR: [
+      { tamId: user.sub },
+      { members: { some: { userId: user.sub } } },
+      // Customer team (GitHub #93) counts like membership.
+      { customers: { some: { customer: { teamMembers: { some: { userId: user.sub } } } } } },
+    ],
   };
   const projectWhere: Prisma.ProjectWhereInput = viewAll
     ? { status: "ACTIVE" }
@@ -103,7 +108,13 @@ export async function resolveDailyReviewScope(user: JwtPayload) {
       status: true,
       tamId: true,
       members: { where: { userId: user.sub }, select: { userId: true } },
-      customers: { select: { customerId: true, isPrimary: true } },
+      customers: {
+        select: {
+          customerId: true,
+          isPrimary: true,
+          customer: { select: { teamMembers: { where: { userId: user.sub }, select: { userId: true } } } },
+        },
+      },
       baselineLockedAt: true,
     },
   });
@@ -119,9 +130,13 @@ export async function resolveDailyReviewScope(user: JwtPayload) {
   // operations notes and the weekly update (Decision 8).
   // A shared project in scope only through an OWNED customer does not pull its
   // other (attached) customers in: they need a project of the caller's own.
+  const isMine = (p: (typeof projects)[number]) =>
+    p.tamId === user.sub ||
+    p.members.length > 0 ||
+    p.customers.some((l) => l.customer.teamMembers.length > 0);
   const projectCustomerIds = new Set(
     projects
-      .filter((p) => viewAll || p.tamId === user.sub || p.members.length > 0)
+      .filter((p) => viewAll || isMine(p))
       .flatMap((p) => p.customers.map((l) => l.customerId)),
   );
   const customers = candidateCustomers.filter(
@@ -131,10 +146,14 @@ export async function resolveDailyReviewScope(user: JwtPayload) {
   // `mine`: the caller's own project (view-all, TAM, or member). An ATTACHED
   // customer's group takes a project only when it is `mine`; an OWNED
   // customer's group takes every project linked to it.
-  const scoped = projects.map(({ tamId, members, ...p }) => ({
-    ...p,
-    mine: viewAll || tamId === user.sub || members.length > 0,
-  }));
+  const scoped = projects.map((project) => {
+    const { tamId: _tamId, members: _members, customers, ...p } = project;
+    return {
+      ...p,
+      customers: customers.map(({ customerId, isPrimary }) => ({ customerId, isPrimary })),
+      mine: viewAll || isMine(project),
+    };
+  });
   return { customers, projects: scoped, ownedCustomerIds: ownedIdSet };
 }
 
