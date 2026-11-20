@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-20 — Demo seed covers story points, customer teams and workload
+
+- `backend/scripts/seed-demo.ts` now gives most top-level demo tasks a story points estimate (every fourth is left unestimated), adds two customer teams (rizky.pratama on Kopi Senja, budi.santoso on Klinik Sehat Bersama), and creates a `TEAM_LEAD` role (the TAM permissions plus `workload:team` and `customer:team-all`) held by maya.putri, so the demo workspace shows the Workload tab's team view and customer team access.
+
 ### Added — 2026-11-20 — Customer team
 
 - Each customer now has a team. A team member can open every project linked to the customer, including projects linked later, with the same access as a project member, and can edit the customer itself. They are not an owner: they cannot delete the customer or its projects, or change a customer's owner, a project's TAM or a project's customers. Assigning a task to a team member does not add them as a project member, and removing someone from the team ends their access on their next request. Team members are included in Daily Review and in notifications. A customer with no projects is visible to its team. Removing someone from a customer's team, unlinking a project from the customer, or deleting the customer also unassigns that person's tasks in projects they can no longer open (any other access they still have keeps them).
