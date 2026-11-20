@@ -2263,6 +2263,53 @@ export function useUpdateTask(projectId: number) {
   });
 }
 
+/** Body of `POST /tasks/bulk`: the ids plus at least one action. */
+export interface BulkUpdateTasksInput {
+  taskIds: number[];
+  addLabelIds?: number[];
+  removeLabelIds?: number[];
+  statusId?: number;
+  assignedToId?: number | null;
+  priority?: Priority;
+  epicId?: number | null;
+}
+
+/**
+ * Applies one change to many tasks in a single request (all or nothing on the
+ * server). No optimistic write: the server decides the outcome, and a refused
+ * request must leave the list as it was. Invalidates what a single task update
+ * invalidates, since a bulk edit can touch any of the same derived views.
+ */
+export function useBulkUpdateTasks(projectId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: BulkUpdateTasksInput) =>
+      apiRequest<{ updated: number }>("/tasks/bulk", { method: "POST", body: input }),
+    onSettled: (_data, _err, input) => {
+      // Same guard as useUpdateTask: while a single-task save is in flight, a
+      // refetch would return its in-between state; that save refetches itself.
+      if (qc.isMutating({ mutationKey: ["updateTask", projectId] }) === 0) {
+        qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
+      }
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: queryKeys.overview });
+      invalidateProjectHealth(qc, projectId);
+      invalidateProjectActivity(qc, projectId);
+      qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
+      // Epic progress derives from task status and epicId, and the bulk call
+      // does not say which epics the tasks left, so every cached epic detail
+      // is refreshed along with the list.
+      qc.invalidateQueries({ queryKey: queryKeys.projectEpics(projectId) });
+      qc.invalidateQueries({ predicate: ({ queryKey: k }) => k[0] === "epics" });
+      // Assigning a non-member adds them to the project server-side.
+      if (input.assignedToId != null) {
+        qc.invalidateQueries({ queryKey: queryKeys.projectMembers(projectId) });
+      }
+    },
+  });
+}
+
 export function useDeleteTask(projectId: number) {
   const qc = useQueryClient();
   return useMutation({

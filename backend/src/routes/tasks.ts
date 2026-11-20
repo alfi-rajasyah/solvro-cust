@@ -32,6 +32,7 @@ import { assertUserExists } from "../lib/userRefs.js";
 import { diffTaskChanges, recordActivity } from "../lib/activity.js";
 import { filterActiveUsersWhoCanSeeProject, notifyForEvent } from "../lib/notifications.js";
 import { storyPointsField } from "../lib/storyPoints.js";
+import { bulkTasksSchema, bulkUpdateTasks, type BulkTasksBody } from "../lib/bulkTasks.js";
 
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 
@@ -347,6 +348,17 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
     }),
   );
 });
+
+// Registered before the "/:id" routes so a literal "bulk" is never read as an id.
+tasksRouter.post(
+  "/bulk",
+  requirePermission("task:write"),
+  validate("body", bulkTasksSchema),
+  async (req, res) => {
+    const updated = await bulkUpdateTasks(req.user!, req.body as BulkTasksBody);
+    res.json({ updated });
+  },
+);
 
 tasksRouter.patch(
   "/:id",
