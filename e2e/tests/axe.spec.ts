@@ -144,6 +144,22 @@ for (const colorScheme of ["light", "dark"] as const) {
       }
     });
 
+    test("project tabs show an inset focus ring from the keyboard", async ({ page, seededProject }) => {
+      // The tab bar clips overflow, so the ring is drawn inset (docs/DESIGN.md).
+      await loginViaUi(page);
+      await page.goto(`/projects/${seededProject.projectId}/overview`, { waitUntil: "networkidle" });
+      await settle(page);
+      const main = page.getByRole("main");
+      const tab = main.getByRole("link", { name: "List", exact: true });
+      // Focus the tab before it, then Tab onto it, so :focus-visible applies.
+      await main.getByRole("link", { name: "Overview", exact: true }).focus();
+      await page.keyboard.press("Tab");
+      await expect(tab).toBeFocused();
+      const shadow = await tab.evaluate((el) => getComputedStyle(el).boxShadow);
+      expect(shadow, "inset ring on the focused tab").toMatch(/inset/);
+      expect(shadow).toMatch(/rgb\(/);
+    });
+
     test("share dialog has no axe violations", async ({ page, seededProject }) => {
       await loginViaUi(page);
       await page.goto(`/projects/${seededProject.projectId}/overview`, { waitUntil: "networkidle" });

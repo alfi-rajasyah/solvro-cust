@@ -375,14 +375,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 
 ## Open — Accessibility & tokens
 
-### ISS-209 · P3 · Project tab links have no explicit keyboard focus treatment
-
-- **Type:** a11y · **Found:** 2026-11-20 · **Verified:** 2026-11-20 @ `b95ad98`
-- **Where:** tab links in frontend/src/pages/ProjectDetail.tsx (~364) and frontend/src/components/Tabs.tsx
-- **Problem:** The tabs mark the active one with `border-b-2 border-primary` and carry no focus classes, so keyboard focus falls back to the browser outline, which does not follow DESIGN.md's one focus treatment.
-- **Why deferred / fix direction:** Found while fixing ISS-207, outside its scope. Fix: give the tab links the borderless form (`outline-hidden focus-visible:ring-2 focus-visible:ring-primary`), and add a keyboard check to the axe spec.
-- **Source:** `docs/archive/plans/a11y-focus-followups.md`
-
 ### ISS-084 · P3 · Favicon reads weakly on dark browser tab strips
 
 - **Type:** debt · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -873,3 +865,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-206 · 2026-11-20 · CHANGELOG "Focus rings on toggles and forced-colours focus for borderless controls" · Project context panel repeats a complementary landmark name
 - ISS-207 · 2026-11-20 · CHANGELOG "Focus rings on toggles and forced-colours focus for borderless controls" (also the Kanban, List and Timeline Filter triggers, through the shared component) · Project context toggle and active bordered toggles have a weak keyboard focus cue
 - ISS-208 · 2026-11-20 · CHANGELOG "Focus rings on toggles and forced-colours focus for borderless controls" · About 35 borderless controls drop their focus indicator in forced-colours mode
+- ISS-209 · 2026-11-20 · CHANGELOG "Keyboard focus ring on tab links" · Project tab links have no explicit keyboard focus treatment

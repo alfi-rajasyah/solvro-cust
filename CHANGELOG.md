@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-20 — Keyboard focus ring on tab links
+
+- The project tabs (Overview, List, Kanban and the rest) and the shared tab bar (`components/Tabs.tsx`) show a primary focus ring from the keyboard instead of the browser outline. The ring is drawn inside the tab because the scrolling tab bar would clip it outside, and `e2e/tests/axe.spec.ts` checks it.
+
 ### Fixed — 2026-11-20 — Focus rings on toggles and forced-colours focus for borderless controls
 
 - The project context panel has its own accessible name ("Project context"), so screen readers no longer announce it as a second unnamed side region. The accessibility scan now checks the page with the panel open.
