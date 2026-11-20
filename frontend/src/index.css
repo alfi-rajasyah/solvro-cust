@@ -160,8 +160,8 @@
      warning reuse the chip-emerald and chip-amber text values (Alert draws
      a single solid tone with its own opacity modifiers, the same shape as
      --error, not a separate background/text pair). info uses the
-     chip-violet family: the only chip hue with no status meaning assigned
-     elsewhere. invert reuses inverse-surface and inverse-on-surface: a
+     chip-violet family, which also marks Critical Path and the violet
+     task-status colour. invert reuses inverse-surface and inverse-on-surface: a
      flipped-polarity filled alert is exactly what that pair already means.
      invert-foreground pairs with invert; the other three tones have no
      foreground companion because alert.tsx never references one (it pairs

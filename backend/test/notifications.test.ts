@@ -126,12 +126,13 @@ describe("assigned", () => {
     expect(await notesFor(other.userId)).toHaveLength(0);
   });
 
-  it("two simultaneous identical assign PATCHes create exactly one notification", async () => {
+  it("simultaneous identical assign PATCHes create exactly one notification", async () => {
     const { tam, other, project } = await fixture();
     const task = await makeTask(project.id);
     const send = () => patchTask(tam.token, task.id, { assignedToId: other.userId });
-    const [a, b] = await Promise.all([send(), send()]);
-    expect([a.status, b.status]).toEqual([200, 200]);
+    // Eight racers: without the row lock a pair does not reliably both read the unassigned row.
+    const results = await Promise.all(Array.from({ length: 8 }, send));
+    expect(results.map((r) => r.status)).toEqual(Array(8).fill(200));
     expect(await notesFor(other.userId)).toHaveLength(1);
   });
 

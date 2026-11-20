@@ -46,7 +46,17 @@ test.describe("smoke", () => {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("console", (m) => {
-      if (m.type() === "error") errors.push(m.text());
+      if (m.type() !== "error") return;
+      // On a stack with Google sign-in configured, the Login page loads Google
+      // Identity Services, which logs "[GSI_LOGGER] ... origin is not allowed"
+      // and a bare "Failed to load resource ... 403" for the iframe fetch when
+      // the dev origin is not registered for the client ID. Ignore only those
+      // two shapes: the GSI logger prefix, and a failed load whose own URL is
+      // on accounts.google.com. Anything else, including a failed load from
+      // the app's origin, still counts.
+      if (m.text().startsWith("[GSI_LOGGER]")) return;
+      if (new URL(m.location().url || "about:blank").hostname === "accounts.google.com") return;
+      errors.push(m.text());
     });
 
     await loginViaUi(page);

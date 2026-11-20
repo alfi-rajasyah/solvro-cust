@@ -15,6 +15,17 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-20 — Test and tooling fixes
+
+- The Playwright auth and smoke specs pass on a stack with Google sign-in configured as well as without it: they read the sign-in config and skip the case that does not apply, and the smoke console-error check ignores only Google Identity Services origin messages. The e2e login helper retries brief network and 5xx failures (never a 4xx), and the UI login opens the collapsed admin sign-in form.
+- The Daily Review spec creates and deletes its own customer and project instead of leaving changed rows behind. Two backend tests (cross-project task ordering, and `epicId` on the global task list) filter by their own TAM instead of depending on the global 200-row task window.
+- New end-to-end checks: the Gantt color-by choice survives a reload, Login and the sidebar stay dark under the light theme, sections and subtasks reorder by drag, and both connectors of a milestone with an incoming and an outgoing dependency draw finite paths with no console error.
+- The simultaneous-assignment tests for task activity and notifications send 8 concurrent requests, so they fail reliably if the task row lock is removed.
+- The backend typecheck covers `prisma/` (the seed script, whose role import now uses its `.js` extension), and the frontend typecheck covers `vitest.config.ts`.
+- `.claude/scripts/gates.sh` also runs every e2e spec added or changed in a diff, including diffs that touch no frontend code, and lists the specs it ran on a pass as well as a failure. It also guards the vendored autocomplete patch count and no longer drops untracked paths that contain spaces.
+- The frontend version test skips its VERSION-file comparison when that file is not mounted (the dev container) and still runs it in CI.
+- The command palette's search-input styling override is now a named constant with a test guarding it, and the vendored `reui/autocomplete.tsx` header records its patch-marker count. A stale `index.css` comment about the violet chip colour is corrected.
+
 ### Fixed — 2026-11-20 — Keyboard focus treatment and primary-tint contrast
 
 - Bordered form controls across the app (project, task, risk and customer forms, the task and epic panels, date fields, the iTop and services screens, Admin) now share one focus treatment: a primary border and ring, plus a transparent outline so a focus indicator still shows in forced-colours (high-contrast) mode. It replaces an older variant that stacked two rings and showed no indicator in forced colours. A new design check in `.claude/scripts/gates.sh` (`design-focus-border`) stops the old form coming back.

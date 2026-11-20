@@ -108,7 +108,12 @@ describe("task creation appends to sibling list", () => {
     const patchRes = await patchTask(t1.id, { position: 0 });
     expect(patchRes.status).toBe(200);
 
-    const res = await request(app).get("/tasks").set("Authorization", `Bearer ${token}`);
+    // GET /tasks is capped at 200 rows, and rows left behind by earlier test
+    // files (globalSetup truncates once per run) can fill that window.
+    // Scoping to this project's TAM (unique per beforeEach) keeps the request
+    // on the global list while the window holds only this test's rows.
+    const { tamId } = await prisma.project.findUniqueOrThrow({ where: { id: projectId }, select: { tamId: true } });
+    const res = await request(app).get("/tasks").query({ tamId }).set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(200);
     const ids = (res.body as TaskRow[]).map((t) => t.id).filter((id) => id === t0.id || id === t1.id);
     expect(ids).toEqual([t1.id, t0.id]);

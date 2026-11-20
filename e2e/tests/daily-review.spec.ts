@@ -21,18 +21,18 @@ import { createTask, isoDateOffset } from "../fixtures/seed";
 // dev stack that already has other ACTIVE projects/reviews/notes from
 // manual QA, other test runs, or a concurrently-running agent. Every tile
 // assertion below instead reads a BASELINE before this spec's customer/
-// project enter scope (the seeded project starts PLANNING/uncustomered, so
+// project enter scope (this spec's project does not exist yet, so
 // it contributes nothing to any tile yet) and asserts the exact DELTA this
 // spec's own actions produce — a fresh API read rather than a hardcoded
 // total, so shared-DB pollution can't break the assertions.
 //
-// Note for whoever re-runs this spec repeatedly against the same dev DB:
-// unlike other fixtures (which leave their seeded project PLANNING and so
-// invisible to Daily Review), this spec flips its project ACTIVE and its
-// customer's `tamId` to the admin permanently — there is no DELETE
-// endpoint for either, so each run leaves one more ACTIVE project/customer
-// in scope forever. The baseline-delta approach above is exactly what
-// keeps the assertions correct regardless of how much of that accumulates.
+// This spec flips a project ACTIVE and gives a customer the admin as TAM,
+// which would put them in Daily Review scope for good. It therefore creates
+// its own customer and project (never the shared worker project, which later
+// specs still use) and deletes both in afterAll, so repeated runs against the
+// same database accumulate nothing in scope. (One project_deleted
+// CustomerActivityEvent row stays, with its customerId set to null.) The baseline-delta approach above keeps
+// the assertions correct whatever else is already in scope.
 //
 // e2e/ is its own standalone TS project with no dependency on frontend/src
 // — the ISO week arithmetic for the Prev/Next assertion below is a small local
@@ -40,6 +40,28 @@ import { createTask, isoDateOffset } from "../fixtures/seed";
 // lib/isoWeek.ts.
 
 test.describe.configure({ mode: "serial" });
+
+// Rows this spec creates, removed in afterAll even when the test fails midway.
+const created: { base: string; token: string; projectId?: number; customerId?: number } = {
+  base: "",
+  token: "",
+};
+
+test.afterAll(async () => {
+  if (!created.base) return;
+  const headers = { Authorization: `Bearer ${created.token}` };
+  // Project first: the customer delete would otherwise only unlink it.
+  const failures: string[] = [];
+  if (created.projectId !== undefined) {
+    const res = await fetch(`${created.base}/api/projects/${created.projectId}`, { method: "DELETE", headers });
+    if (!res.ok) failures.push(`project ${created.projectId}: ${res.status}`);
+  }
+  if (created.customerId !== undefined) {
+    const res = await fetch(`${created.base}/api/customers/${created.customerId}`, { method: "DELETE", headers });
+    if (!res.ok) failures.push(`customer ${created.customerId}: ${res.status}`);
+  }
+  if (failures.length) throw new Error(`daily-review cleanup failed: ${failures.join(", ")}`);
+});
 
 async function readCount(page: Page, testId: string): Promise<number> {
   const el = page.getByTestId(`${testId}-value`);
@@ -116,14 +138,16 @@ test.describe("Daily Review v2", () => {
     { page, seededProject },
     testInfo,
   ) => {
-    const { token, userId, projectId } = seededProject;
+    const { token, userId } = seededProject;
     const base = apiBase(testInfo);
+    created.base = base;
+    created.token = token;
     const H = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
     const stamp = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
     await loginViaUi(page);
 
-    // --- Baseline: our project is still PLANNING/uncustomered at this
+    // --- Baseline: our customer and project do not exist yet at this
     // point, so it contributes nothing to any stats-bar tile yet — see
     // header comment.
     await page.goto("/daily-review", { waitUntil: "networkidle" });
@@ -133,8 +157,8 @@ test.describe("Daily Review v2", () => {
     const baseOverdue = await readCount(page, "stat-overdue-tasks");
     const baseNotes = await readCount(page, "stat-notes-this-week");
 
-    // --- Fixture: a fresh customer (tamId = the admin fixture user), the
-    // seeded project reassigned to it and flipped ACTIVE, one overdue task.
+    // --- Fixture: a fresh customer (tamId = the admin fixture user) with its
+    // own project, flipped ACTIVE, and one overdue task.
     const customerName = `Daily Review Co ${stamp}`;
     const customerRes = await fetch(`${base}/api/customers`, {
       method: "POST",
@@ -147,11 +171,25 @@ test.describe("Daily Review v2", () => {
     });
     expect(customerRes.ok, `create customer: ${customerRes.status}`).toBeTruthy();
     const customer = (await customerRes.json()) as { id: number };
+    created.customerId = customer.id;
+
+    const createRes = await fetch(`${base}/api/projects`, {
+      method: "POST",
+      headers: H,
+      body: JSON.stringify({
+        name: `Daily Review Project ${stamp}`,
+        description: "e2e daily review fixture project",
+        customerId: customer.id,
+      }),
+    });
+    expect(createRes.ok, `create project: ${createRes.status}`).toBeTruthy();
+    const projectId = ((await createRes.json()) as { id: number }).id;
+    created.projectId = projectId;
 
     const projectRes = await fetch(`${base}/api/projects/${projectId}`, {
       method: "PATCH",
       headers: H,
-      body: JSON.stringify({ status: "ACTIVE", customers: [{ id: customer.id, isPrimary: true }] }),
+      body: JSON.stringify({ status: "ACTIVE" }),
     });
     expect(projectRes.ok, `patch project: ${projectRes.status}`).toBeTruthy();
     const project = (await projectRes.json()) as { name: string };

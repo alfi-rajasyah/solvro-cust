@@ -1,6 +1,6 @@
 # docs/ISSUES.md: fix waves without user decisions
 
-Status: in progress (triage 2026-11-20 @ `5b283ea`; waves E, F and G done 2026-11-20)
+Status: in progress (triage 2026-11-20 @ `5b283ea`; waves E, F, G and H done 2026-11-20)
 Archive path: `docs/archive/plans/issues-fix-waves.md`
 
 Triage of the open issues in `docs/ISSUES.md` (126 open). 45 can be fixed without a user decision; they are grouped into four waves of up to three streams with disjoint files. Each wave is one or more PRs into `develop`; spine files get the instant review.
@@ -42,7 +42,9 @@ G3 (run alone): all 69 old `focus:border-primary` sites aligned to the DESIGN.md
 | G2 | ISS-081 (axe landmark, heading-order and nested-interactive gaps) | `e2e/tests/axe.spec.ts`, layout files |
 | G3 | ISS-194 (P2 contrast in active states), ISS-091 (about 70 old `focus:border-primary` sites) | many files: runs last and alone |
 
-### Wave H: tests and tooling
+### Wave H: tests and tooling (done 2026-11-20)
+
+Three parallel streams. ISS-161 stayed out (its fix waits for realistic table sizes); ISS-205 joined H2. ISS-157: removing the task row lock made the original activity test fail only 2 of 3 runs, so both concurrency tests now use 8 racers and failed 5/5 without the lock. Review: no blockers; 4 should-fix items and 3 nits fixed in one round (changed specs now run for e2e-only diffs too; the connector, always-dark and reorder specs assert what they claim and clean up). Delivery Gate: not applicable, no visible change. Gates fully green, including the smoke spec with Google sign-in configured.
 
 | Stream | Issues | Main files |
 |---|---|---|

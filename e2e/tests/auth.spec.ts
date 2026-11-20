@@ -1,27 +1,40 @@
-import { test, expect, loginViaUi, ADMIN_EMAIL, ADMIN_PASSWORD } from "../fixtures/test";
+import {
+  test,
+  expect,
+  googleSignInEnabled,
+  loginViaUi,
+  submitLoginForm,
+  ADMIN_EMAIL,
+} from "../fixtures/test";
 
-// The seeded QA stack has Google sign-in NOT configured (no clientId, no
-// allowed domains — see backend/prisma/seed.ts). Login renders no Google
-// section at all in that case: just the password form, expanded by default
-// with no "Admin sign-in" accordion to click through (see frontend's
-// pages/Login.tsx). These specs assert that reality.
+// Two stack shapes are supported. The seeded QA stack has Google sign-in NOT
+// configured (no clientId, no allowed domains — see backend/prisma/seed.ts):
+// Login shows only the password form, no "Admin sign-in" accordion. A dev
+// stack with Google configured shows the Google button and collapses the
+// password form behind that accordion. The shape is read from
+// /auth/google/config, and each shape-specific case skips on the other one;
+// every sign-in below goes through submitLoginForm, which handles both.
 
 test.describe("auth", () => {
-  test("Google not configured: password form renders directly, no accordion", async ({ page }) => {
+  test("Google not configured: password form renders directly, no accordion", async ({ page }, testInfo) => {
+    test.skip(await googleSignInEnabled(testInfo), "this stack has Google sign-in configured");
     await page.goto("/", { waitUntil: "networkidle" });
     await expect(page.getByText(/Admin sign-in/i)).toHaveCount(0);
     await expect(page.locator('input[type="email"]')).toBeVisible();
   });
 
+  test("Google configured: password form sits behind the Admin sign-in accordion", async ({ page }, testInfo) => {
+    test.skip(!(await googleSignInEnabled(testInfo)), "this stack has no Google sign-in");
+    await page.goto("/", { waitUntil: "networkidle" });
+    await expect(page.getByText(/Admin sign-in/i)).toBeVisible();
+    await expect(page.locator('input[type="email"]')).toBeHidden();
+    await page.getByText(/Admin sign-in/i).click();
+    await expect(page.locator('input[type="email"]')).toBeVisible();
+  });
+
   test("password sign-in logs in", async ({ page }) => {
     await page.goto("/", { waitUntil: "networkidle" });
-
-    const emailInput = page.locator('input[type="email"]');
-    await expect(emailInput).toBeVisible();
-
-    await emailInput.fill(ADMIN_EMAIL);
-    await page.fill('input[type="password"]', ADMIN_PASSWORD);
-    await page.click('button[type="submit"]');
+    await submitLoginForm(page);
 
     await page.waitForURL(/overview|projects|\/$/i, { timeout: 10_000 });
     // Login page should no longer be showing the sign-in form.
@@ -31,9 +44,7 @@ test.describe("auth", () => {
   test("invalid credentials show an error and keep the user on the login form", async ({ page }) => {
     await page.goto("/", { waitUntil: "networkidle" });
 
-    await page.fill('input[type="email"]', ADMIN_EMAIL);
-    await page.fill('input[type="password"]', "definitely-wrong-password");
-    await page.click('button[type="submit"]');
+    await submitLoginForm(page, ADMIN_EMAIL, "definitely-wrong-password");
 
     await expect(page.getByRole("alert")).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('input[type="password"]')).toBeVisible();
@@ -69,9 +80,7 @@ test.describe("auth: admin guard on a fresh page load", () => {
 
   test("an admin page opened right after sign-in stays on the admin page", async ({ page }) => {
     await page.goto("/", { waitUntil: "networkidle" });
-    await page.fill('input[type="email"]', ADMIN_EMAIL);
-    await page.fill('input[type="password"]', ADMIN_PASSWORD);
-    await page.click('button[type="submit"]');
+    await submitLoginForm(page);
     await page.waitForURL((url) => !url.pathname.includes("login"), { timeout: 10_000 });
     // Sign-in stores the user next to the session token, so a full page load
     // from here already has both.

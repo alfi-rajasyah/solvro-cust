@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { ensureBuiltInRoles } from "./builtInRoles";
+import { ensureBuiltInRoles } from "./builtInRoles.js";
 
 const prisma = new PrismaClient();
 
