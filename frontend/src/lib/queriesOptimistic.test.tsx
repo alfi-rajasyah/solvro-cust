@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import {
   queryKeys,
   reorderTasksLocally,
+  useBulkUpdateTasks,
   useUpdateProjectServices,
   type ProjectDetail,
   type Section,
@@ -110,5 +111,32 @@ describe("reorderTasksLocally section (ISS-109)", () => {
   it("clears it when moved out of every section", () => {
     const out = reorderTasksLocally([task], 10, { sectionId: null, position: 0 }, sections);
     expect(out[0].section).toBeNull();
+  });
+});
+
+describe("useBulkUpdateTasks", () => {
+  it("posts the body to /tasks/bulk and refreshes the project's task list", async () => {
+    const { qc, wrapper } = setup();
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ updated: 2 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const spy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useBulkUpdateTasks(5), { wrapper });
+    let out: { updated: number } | undefined;
+    await act(async () => {
+      out = await result.current.mutateAsync({ taskIds: [1, 2], addLabelIds: [3] });
+    });
+    expect(out).toEqual({ updated: 2 });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/tasks/bulk");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({ taskIds: [1, 2], addLabelIds: [3] });
+    const keys = spy.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey ?? null));
+    expect(keys).toContain(JSON.stringify(queryKeys.projectTasks(5)));
+    expect(keys).toContain(JSON.stringify(queryKeys.workloadRoot));
+    expect(keys).toContain(JSON.stringify(queryKeys.dailyReviewRoot));
   });
 });

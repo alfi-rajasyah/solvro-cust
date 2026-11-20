@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-20 — Bulk edit in the List view, and story points in the List
+
+- The List view has a checkbox on every task and subtask, plus a "select all visible" box in the header that follows the active filters. With tasks selected, a bulk action bar shows the count and lets you add or remove labels and set status, assignee, priority or epic for all of them in one request. The epic action is unavailable while a subtask is selected, inactive users are not offered as assignees, and a failed request keeps the selection and shows the server's message. Selecting more than 200 tasks disables the bulk actions, and select all only covers rows that are on screen (not collapsed sections or collapsed subtask lists). The edit controls appear only for users with task write access.
+- New endpoint `POST /tasks/bulk` applies one change set to up to 200 selected tasks of one project in a single transaction: add or remove labels, set the status, assignee (null clears it), priority, or epic (top-level tasks only). Every task must be visible to the caller and in the same project (404 otherwise); labels must belong to that project (400 `invalid_label`); an epic on a subtask is refused (400 `epic_on_subtask`); a deactivated assignee is refused (400 `assignee_inactive`), and a non-member assignee is added as a project member. Task order is never changed, and an activity event is recorded for each changed task.
+- The List shows a "Points" column on desktop and the value on phone rows when set, and each section header shows the story point total and the done total over top-level tasks. (#90, #91)
+
 ### Added — 2026-11-20 — Workload tab on the Utilization page
 
 - Utilization has a new Workload tab that counts Solvro tasks per assignee for a chosen week: open tasks, due in the selected week, overdue, active in the selected week (start to due date overlaps the week), and open story points, plus one Unassigned row. Click a person to list their open tasks with project, status and due date; each links to the task panel. It works without iTop; when iTop is not connected, Workload is the only tab. Done-category tasks are not counted, subtasks count as separate tasks, and inactive users show only while they hold open tasks.
