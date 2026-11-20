@@ -46,6 +46,7 @@ import {
   shortLabel,
   taskCreatedChanges,
 } from "../lib/activity.js";
+import { storyPointsField } from "../lib/storyPoints.js";
 import { epicCreatedChanges } from "../lib/epicActivity.js";
 import { notifyForEvent } from "../lib/notifications.js";
 import { assertEpicOwnerCanSeeProject } from "../lib/epicOwner.js";
@@ -156,6 +157,7 @@ const createTaskSchema = z
     dueDate: dateInput.nullable().optional(),
     isMilestone: z.boolean().optional(),
     isCriticalPath: z.boolean().optional(),
+    storyPoints: storyPointsField.optional(),
     assignedToId: z.number().int().positive().nullable().optional(),
     parentTaskId: z.number().int().positive().nullable().optional(),
     sectionId: z.number().int().positive().nullable().optional(),
@@ -695,6 +697,7 @@ projectsRouter.post(
           dueDate: body.dueDate ?? null,
           isMilestone: body.isMilestone ?? false,
           isCriticalPath: body.isCriticalPath ?? false,
+          storyPoints: body.storyPoints ?? null,
           assignedToId: body.assignedToId ?? null,
           parentTaskId: body.parentTaskId ?? null,
           sectionId: body.sectionId ?? null,

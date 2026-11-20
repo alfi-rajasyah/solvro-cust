@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-19 — Story points on tasks (API)
+
+- Tasks have an optional story points estimate, a whole number from 0 to 100. The API accepts `storyPoints` when creating a task and in `PATCH /tasks/:id`; a concurrent edit of the value is detected like other fields, duplicating a task or section copies it, and setting or changing it, including at creation, appears in the project activity log. New nullable `tasks.story_points` column (migration `20261119120000_task_story_points`). The screens that show and edit it follow separately. (#91)
+
 ### Added — 2026-11-19 — Delete a project from the Projects list
 
 - Each project card on the Projects list has a ⋯ menu with "Delete project", shown to the people who can delete a project from its page (the project's TAM, the owner of a linked customer, or anyone with view-all access, with project write access). It opens the same confirmation dialog as the project page, and the list updates in place. (#95)

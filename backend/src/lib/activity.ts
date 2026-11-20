@@ -89,6 +89,7 @@ export interface TaskSnapshot {
   dueDate: Date | null;
   isMilestone: boolean;
   isCriticalPath: boolean;
+  storyPoints: number | null;
   sectionId: number | null;
   epicId: number | null;
   parentTaskId: number | null;
@@ -112,6 +113,7 @@ export function diffTaskChanges(before: TaskSnapshot, after: TaskSnapshot): Acti
     "priority",
     "isMilestone",
     "isCriticalPath",
+    "storyPoints",
     "sectionId",
     "epicId",
     "parentTaskId",
@@ -144,9 +146,9 @@ export function diffTaskChanges(before: TaskSnapshot, after: TaskSnapshot): Acti
   return changes;
 }
 
-/** Changes recorded for a freshly created task: only who it was assigned to. */
+/** Changes recorded for a freshly created task: its assignee, iTop ticket and story points. */
 export function taskCreatedChanges(
-  after: Pick<TaskSnapshot, "assignedTo"> & Partial<Pick<TaskSnapshot, "itopTicketRef">>,
+  after: Pick<TaskSnapshot, "assignedTo"> & Partial<Pick<TaskSnapshot, "itopTicketRef" | "storyPoints">>,
 ): ActivityChanges {
   const changes: ActivityChanges = {};
   if (after.assignedTo) {
@@ -154,6 +156,7 @@ export function taskCreatedChanges(
   }
   // A task created with an iTop ticket pinned logs it, like a later pin does.
   if (after.itopTicketRef) changes.itopTicketRef = fromTo(null, after.itopTicketRef);
+  if (after.storyPoints != null) changes.storyPoints = fromTo(null, after.storyPoints);
   return changes;
 }
 

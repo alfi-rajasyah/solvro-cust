@@ -31,6 +31,7 @@ import { ensureAssigneeIsMember } from "../lib/projectMembers.js";
 import { assertUserExists } from "../lib/userRefs.js";
 import { diffTaskChanges, recordActivity } from "../lib/activity.js";
 import { filterActiveUsersWhoCanSeeProject, notifyForEvent } from "../lib/notifications.js";
+import { storyPointsField } from "../lib/storyPoints.js";
 
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 
@@ -53,6 +54,7 @@ const expectedTaskSchema = z.object({
   parentTaskId: z.number().int().positive().nullable().optional(),
   isMilestone: z.boolean().optional(),
   isCriticalPath: z.boolean().optional(),
+  storyPoints: storyPointsField.optional(),
   labelIds: z.array(z.number().int().positive()).optional(),
 });
 type ExpectedTask = z.infer<typeof expectedTaskSchema>;
@@ -81,6 +83,7 @@ const updateTaskSchema = z
     dueDate: dateInput.nullable().optional(),
     isMilestone: z.boolean().optional(),
     isCriticalPath: z.boolean().optional(),
+    storyPoints: storyPointsField.optional(),
     // baselineStartDate / baselineDueDate are intentionally NOT accepted here —
     // they are server-set only, snapshotted by POST /projects/:id/baseline.
     // Accepting them from clients would let any task:write user overwrite the
@@ -199,6 +202,7 @@ function findStaleFields(
     "parentTaskId",
     "isMilestone",
     "isCriticalPath",
+    "storyPoints",
   ] as const;
   for (const field of scalarFields) {
     const want = expected[field];
@@ -580,6 +584,7 @@ tasksRouter.patch(
       if (body.dueDate !== undefined) data.dueDate = body.dueDate;
       if (body.isMilestone !== undefined) data.isMilestone = body.isMilestone;
       if (body.isCriticalPath !== undefined) data.isCriticalPath = body.isCriticalPath;
+      if (body.storyPoints !== undefined) data.storyPoints = body.storyPoints;
       if (body.itopTicketRef !== undefined) data.itopTicketRef = body.itopTicketRef;
       // Milestone due-date lockstep: whatever this patch results in, a
       // milestone with a due date must have startDate === dueDate.
