@@ -258,7 +258,7 @@ function UsersTab() {
               onChange={(e) => handleRoleChange(u, e.target.value as Role)}
               // Sentence-case role words (roleLabel), not the raw uppercase enum
               // value; text-xs keeps the control at the table's body size.
-              className="rounded-sm border border-outline-variant bg-surface px-2 py-1 font-display text-xs font-medium text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60 [@media(pointer:coarse)]:min-h-11"
+              className="rounded-sm border border-outline-variant bg-surface px-2 py-1 font-display text-xs font-medium text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60 [@media(pointer:coarse)]:min-h-11"
               title={isSelf ? "You cannot change your own role" : undefined}
             >
               {roleOptionsFor(u.role).map((r) => (
@@ -532,7 +532,7 @@ function UsersTab() {
             value={newEmail}
             onChange={(e) => setNewEmail(e.target.value)}
             placeholder="user@example.com"
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
         </label>
         <label className="w-full md:flex-1 md:min-w-[120px]">
@@ -545,7 +545,7 @@ function UsersTab() {
             onChange={(e) => setNewUsername(e.target.value)}
             maxLength={50}
             placeholder="alice"
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
         </label>
         <label className="w-full md:flex-1 md:min-w-[140px]">
@@ -557,7 +557,7 @@ function UsersTab() {
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             autoComplete="new-password"
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
         </label>
         <label className="w-full md:w-auto md:min-w-[120px]">
@@ -567,7 +567,7 @@ function UsersTab() {
           <select
             value={newRole}
             onChange={(e) => setNewRole(e.target.value as Role)}
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-display text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-display text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           >
             {assignableRoles.map((r) => (
               <option key={r} value={r}>
@@ -782,7 +782,7 @@ function RolesTab() {
                 onChange={(e) => setEditName(e.target.value)}
                 disabled={r.builtIn}
                 maxLength={50}
-                className="w-32 rounded-sm border border-outline-variant bg-surface px-2 py-1 font-mono text-sm uppercase focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
+                className="w-32 rounded-sm border border-outline-variant bg-surface px-2 py-1 font-mono text-sm uppercase focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-60"
                 title={
                   r.builtIn
                     ? "This role is reserved and cannot be renamed"
@@ -1046,7 +1046,7 @@ function RolesTab() {
             onChange={(e) => setNewName(e.target.value)}
             maxLength={50}
             placeholder="e.g. MANAGER"
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm uppercase focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm uppercase focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
         </label>
         <div>
@@ -1473,7 +1473,7 @@ function SignInModal({
               placeholder="123456789-abc.apps.googleusercontent.com"
               spellCheck={false}
               autoComplete="off"
-              className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+              className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             />
           </label>
           <p className="mt-1 text-xs text-on-surface-variant">
@@ -1504,7 +1504,7 @@ function SignInModal({
                   type="button"
                   onClick={() => removeDomain(d)}
                   aria-label={`Remove ${d}`}
-                  className="tap-target rounded-full p-0.5 text-primary hover:bg-primary/20"
+                  className="tap-target rounded-full p-0.5 text-primary-tint-text hover:bg-primary/20"
                 >
                   <span aria-hidden="true" className="material-symbols-outlined text-[14px]">
                     close
@@ -1526,7 +1526,7 @@ function SignInModal({
               onChange={(e) => setNewDomain(e.target.value)}
               placeholder="example.com"
               maxLength={253}
-              className="flex-1 rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+              className="flex-1 rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             />
             <button
               type="submit"
@@ -1661,7 +1661,7 @@ function ProjectsTab() {
             aria-label={`TAM of ${p.name}`}
             value={p.tamId}
             onChange={(e) => handleReassign(p, Number(e.target.value))}
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 [@media(pointer:coarse)]:min-h-11"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1 text-xs text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 [@media(pointer:coarse)]:min-h-11"
           >
             {tamCandidates.map((u) => (
               <option key={u.id} value={u.id}>

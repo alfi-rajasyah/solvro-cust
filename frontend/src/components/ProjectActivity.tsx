@@ -11,9 +11,9 @@ import { ACTIVITY_MAX_PAGES, type ActivityEvent, useProjectActivity, useProjectM
 const ALL_PEOPLE = "all";
 
 const FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+  "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary";
 const FOCUS_RING_BORDERED =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
 
 /**
  * "Recent activity" on the project Overview (docs/archive/plans/collaboration-and-sharing.md,

@@ -123,7 +123,7 @@ export function ProjectTimeline() {
             [
               `${TOOLBAR_BOX} tap-target border font-semibold transition-colors`,
               active
-                ? "border-primary bg-primary/10 text-primary"
+                ? "border-primary bg-primary/10 text-primary-tint-text"
                 : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container",
             ].join(" ")
           }

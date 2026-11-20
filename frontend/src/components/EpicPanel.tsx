@@ -291,7 +291,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
             disabled={!canEdit}
             aria-label="Epic status"
             onChange={(e) => patch({ status: e.target.value as TaskStatus })}
-            className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
+            className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
           >
             {STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -310,7 +310,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
             onChange={(e) =>
               patch({ ownerId: e.target.value === "" ? null : Number(e.target.value) })
             }
-            className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
+            className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
           >
             <option value="">Unassigned</option>
             {ownerOptions.others.length === 0 ? (
@@ -382,7 +382,7 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
             rows={4}
             maxLength={2000}
             placeholder="What does this epic cover?"
-            className="w-full resize-none rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant/80 focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
+            className="w-full resize-none rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant/80 focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
           />
         </div>
 

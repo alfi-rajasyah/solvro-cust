@@ -48,7 +48,7 @@ export function Help() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search help…"
           aria-label="Search help"
-          className="w-full [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-sm text-on-surface placeholder:text-on-surface-variant focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 sm:w-80"
+          className="w-full [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-sm text-on-surface placeholder:text-on-surface-variant focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 sm:w-80"
         />
       </header>
 

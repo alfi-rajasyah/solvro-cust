@@ -102,7 +102,7 @@ export function LabelPicker({
               }}
               placeholder="Label name"
               maxLength={50}
-              className="[@media(pointer:coarse)]:min-h-11 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-xs focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:min-h-11 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-xs focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             />
             <button
               type="button"

@@ -4,7 +4,7 @@ import type { Epic, Label } from "@/lib/queries";
 import type { EpicFilter, TaskFilters } from "@/lib/taskFilters";
 
 const SELECT_CLASS =
-  "[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
+  "[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
 const FIELD_LABEL = "mb-1 block text-label-caps uppercase text-on-surface-variant";
 
 function epicToValue(epic: EpicFilter): string {

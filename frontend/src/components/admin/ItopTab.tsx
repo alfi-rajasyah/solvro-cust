@@ -270,7 +270,7 @@ function ConnectionCard() {
             placeholder="https://itop.example.com"
             spellCheck={false}
             autoComplete="off"
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
           <span className="mt-1 block text-meta text-on-surface-variant">
             Changing the URL removes every user&apos;s personal iTop token. Each user must connect
@@ -288,7 +288,7 @@ function ConnectionCard() {
             placeholder={settings.appTokenSet ? "•••••••• (set)" : "Auth-Token header"}
             spellCheck={false}
             autoComplete="off"
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
           {tokenRequired ? (
             <span className="mt-1 block text-meta text-on-surface-variant">
@@ -336,7 +336,7 @@ function ConnectionCard() {
                 setForm((f) => (f ? { ...f, refreshMinutes: e.target.value } : f))
               }
               onBlur={handleRefreshMinutesBlur}
-              className="w-24 rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+              className="w-24 rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             />
             <span className="text-sm text-on-surface-variant">min</span>
           </div>
@@ -357,7 +357,7 @@ function ConnectionCard() {
                 )
               }
               onBlur={handleCapacityBlur}
-              className="w-24 rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+              className="w-24 rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             />
             <span className="text-sm text-on-surface-variant">h / week</span>
           </div>
@@ -372,7 +372,7 @@ function ConnectionCard() {
           <select
             value={form.timezone}
             onChange={(e) => setForm((f) => (f ? { ...f, timezone: e.target.value } : f))}
-            className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           >
             {timezoneGroups.map((group) => (
               <optgroup key={group.region} label={group.region}>
@@ -829,7 +829,7 @@ function CustomersCard() {
                     value={row.itopOrgId ?? ""}
                     onChange={(e) => void handleOrgChange(row, e.target.value)}
                     disabled={orgsQuery.isError || pendingRowId === row.id}
-                    className="[@media(pointer:coarse)]:min-h-11 w-full max-w-[220px] rounded-sm border border-outline-variant bg-surface px-2 py-1 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
+                    className="[@media(pointer:coarse)]:min-h-11 w-full max-w-[220px] rounded-sm border border-outline-variant bg-surface px-2 py-1 text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-60"
                   >
                     <option value="">Choose an organisation…</option>
                     {orgs.map((org) => (

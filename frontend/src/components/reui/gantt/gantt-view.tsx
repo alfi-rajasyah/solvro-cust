@@ -2046,7 +2046,8 @@ function GanttView({
                 className={cn(
                   "flex min-w-0 items-center justify-center truncate px-1.5 text-center",
                   "text-muted-foreground",
-                  unit.isToday && "text-primary font-medium"
+                  // SOLVRO PATCH: text-primary-tint-text, not text-primary, for 4.5:1 on the bg-primary/10 today pill below
+                  unit.isToday && "text-primary-tint-text font-medium"
                 )}
                 style={{ flex: `${unit.weight} 0 0px` }}
               >

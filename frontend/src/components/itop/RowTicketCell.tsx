@@ -243,7 +243,7 @@ export function RowTicketCell({
                 <button
                   type="button"
                   onClick={() => setPinOpen(false)}
-                  className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm border border-outline-variant px-4 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-container focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   Cancel
                 </button>
@@ -270,7 +270,7 @@ export function RowTicketCell({
                 placeholder="R-000000"
                 spellCheck={false}
                 autoComplete="off"
-                className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 font-mono text-sm text-on-surface focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 font-mono text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
               />
             </label>
             {pinError && (
