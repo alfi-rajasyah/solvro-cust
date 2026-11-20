@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-20 — Keyboard focus treatment and primary-tint contrast
+
+- Bordered form controls across the app (project, task, risk and customer forms, the task and epic panels, date fields, the iTop and services screens, Admin) now share one focus treatment: a primary border and ring, plus a transparent outline so a focus indicator still shows in forced-colours (high-contrast) mode. It replaces an older variant that stacked two rings and showed no indicator in forced colours. A new design check in `.claude/scripts/gates.sh` (`design-focus-border`) stops the old form coming back.
+- Selected and hovered controls on a primary tint now use the darker tint text, so they meet 4.5:1 in both themes: the active Filter button on the List and Kanban, the project context toggle, the Gantt and Timeline toggles, the Task statuses add button, the Admin domain-chip remove button, the primary light badge (`reui/badge.tsx`) and the Gantt today header (`reui/gantt/gantt-view.tsx`).
+- The accessibility tests (`e2e/tests/axe.spec.ts`) now scan the List and Kanban with the Filter active, and check that the selected Filter and project context toggles use the tint text.
+
 ### Fixed — 2026-11-20 — Polish fixes: Portfolio Today marker, loaders, comment box, maskable icon
 
 - The Portfolio Today marker is a two-tone line (inverse-surface core, surface edge), shared by the desktop, phone and legend views, so it clears 3:1 over active and overdue project bars.

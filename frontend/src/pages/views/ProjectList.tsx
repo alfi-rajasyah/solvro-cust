@@ -576,7 +576,7 @@ export function ProjectList() {
             [
               `${TOOLBAR_BOX} tap-target border font-semibold transition-colors`,
               active
-                ? "border-primary bg-primary/10 text-primary"
+                ? "border-primary bg-primary/10 text-primary-tint-text"
                 : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container",
             ].join(" ")
           }
@@ -730,7 +730,7 @@ export function ProjectList() {
               onChange={(e) => setNewSectionName(e.target.value)}
               placeholder="Section name"
               maxLength={100}
-              className="w-64 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-xs focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+              className="w-64 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-xs focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             />
             <button
               type="submit"
@@ -903,7 +903,7 @@ function SectionGroup({
               onChange={(e) => onRenameChange(e.target.value)}
               maxLength={100}
               placeholder={section ? section.name : "Name this section to promote it"}
-              className="w-64 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-0.5 text-sm font-semibold focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+              className="w-64 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-0.5 text-sm font-semibold focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             />
             <button
               type="submit"

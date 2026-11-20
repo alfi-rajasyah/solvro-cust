@@ -480,7 +480,7 @@ function NoteEditorForm({
             <button
               type="button"
               onClick={onCancel}
-              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm border border-outline-variant px-3 py-1.5 font-display text-meta font-semibold text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm border border-outline-variant px-3 py-1.5 font-display text-meta font-semibold text-on-surface-variant hover:bg-surface-container focus-visible:outline-hidden focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
             >
               Cancel
             </button>

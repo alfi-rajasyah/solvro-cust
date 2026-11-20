@@ -24,7 +24,7 @@ import { TicketTimer } from "./TicketTimer";
 import { actionLabel, availableActions, teamsFromError } from "./ticketActions";
 
 const ACTION_BUTTON_CLASS =
-  "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-3 py-1.5 md:py-0.5 font-display text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:opacity-50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
+  "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-3 py-1.5 md:py-0.5 font-display text-xs font-semibold text-on-surface hover:border-primary hover:text-primary disabled:opacity-50 focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
 
 interface SheetState {
   mode: ActionSheetMode;

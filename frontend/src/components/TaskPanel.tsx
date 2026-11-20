@@ -699,7 +699,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     }}
                     maxLength={2000}
                     placeholder="Add a description"
-                    className="field-sizing-content min-h-24 max-h-64 w-full resize-y rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-base leading-snug text-on-surface placeholder:text-on-surface-variant focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:text-sm"
+                    className="field-sizing-content min-h-24 max-h-64 w-full resize-y rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-base leading-snug text-on-surface placeholder:text-on-surface-variant focus-visible:border-primary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 md:text-sm"
                   />
                   <p className="mt-1 text-meta text-on-surface-variant">
                     Saves when you click away.
@@ -758,7 +758,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     setEditingAssignee(false);
                   }}
                   onBlur={() => setEditingAssignee(false)}
-                  className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <option value="">Unassigned</option>
                   {assignableUsers(users ?? [], task.assignedToId).map((u) => (
@@ -908,7 +908,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     setEditingSection(false);
                   }}
                   onBlur={() => setEditingSection(false)}
-                  className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   <option value="">No section</option>
                   {(sections ?? []).map((s) => (
@@ -954,7 +954,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                           setEditingEpic(false);
                         }}
                         onBlur={() => setEditingEpic(false)}
-                        className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+                        className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 text-xs text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
                       >
                         <option value="">No epic</option>
                         {(epics ?? []).map((e) => (
@@ -1413,7 +1413,7 @@ function StoryPointsEditor({
             }
           }}
           onBlur={commit}
-          className="[@media(pointer:coarse)]:min-h-11 w-24 rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="[@media(pointer:coarse)]:min-h-11 w-24 rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 text-xs text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
         />
         {problem && (
           <p id={errorId} role="alert" className="mt-1 text-meta text-error">
@@ -1482,7 +1482,7 @@ function SubtaskAssigneePicker({
           setEditing(false);
         }}
         onBlur={() => setEditing(false)}
-        className="[@media(pointer:coarse)]:min-h-11 w-28 shrink-0 rounded-sm border border-outline-variant bg-surface-container-lowest px-1 py-0.5 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+        className="[@media(pointer:coarse)]:min-h-11 w-28 shrink-0 rounded-sm border border-outline-variant bg-surface-container-lowest px-1 py-0.5 text-xs text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
       >
         <option value="">Unassigned</option>
         {assignableUsers(users, value).map((u) => (

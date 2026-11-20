@@ -17,7 +17,7 @@ import {
 
 const LABEL_CLASS = "mb-1.5 block text-label-caps uppercase text-on-surface-variant";
 const FIELD_CLASS =
-  "[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30";
+  "[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
 
 const CLASS_OPTIONS: ReadonlyArray<{ value: ItopTicketClass; label: string }> = [
   { value: "UserRequest", label: "User request" },

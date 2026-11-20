@@ -227,7 +227,7 @@ if [ -d frontend/src/components/reui/data-grid ]; then
   else fail guardrail-datagrid-vendor "SOLVRO PATCH count $N != recorded $EXPECTED_DATAGRID_PATCHES"; fi
 else fail guardrail-datagrid-vendor "frontend/src/components/reui/data-grid/ missing"; fi
 
-EXPECTED_BADGE_PATCHES=5
+EXPECTED_BADGE_PATCHES=6
 if [ -f frontend/src/components/reui/badge.tsx ]; then
   N="$(grep -c 'SOLVRO PATCH' frontend/src/components/reui/badge.tsx)"
   if [ "$N" -eq "$EXPECTED_BADGE_PATCHES" ]; then pass guardrail-badge-vendor
@@ -257,6 +257,10 @@ design_check() { # design_check <gate> <reason> <hits>
 #    green is 2.86:1.
 design_check design-on-primary "text-white on bg-primary (use text-on-primary)" \
   "$(design_grep "bg-primary([^/-]|\$)[^\"'\`]*text-white|text-white[^\"'\`]*bg-primary([^/-]|\$)")"
+# 1b. The old focus form (border on :focus, not :focus-visible) is gone; the one
+#     treatment is in docs/DESIGN.md. Vendored ui/ and reui/ are excluded.
+design_check design-focus-border "focus:border-primary (use focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30)" \
+  "$(design_grep "focus:border-primary")"
 # 2 and 3 read whole files (a tag or a comment can span lines), so they use
 # perl rather than the line grep above.
 design_perl() { # design_perl <perl -ne body run once per file, file in $_>

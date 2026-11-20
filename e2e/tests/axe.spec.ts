@@ -112,6 +112,27 @@ for (const colorScheme of ["light", "dark"] as const) {
       expect(await violations(page)).toEqual([]);
     });
 
+    test("selected toggles (project context, active Filter) use the tint text", async ({ page, seededProject }) => {
+      // The selected state pairs the tint-text colour with bg-primary/10; it is
+      // off by default, so the page scans never reach it.
+      await loginViaUi(page);
+      const p = seededProject.projectId;
+      for (const view of ["list", "kanban"]) {
+        await page.goto(`/projects/${p}/${view}?epicFilter=none`, { waitUntil: "networkidle" });
+        await settle(page);
+        // The count badge renders only while a filter is on: this is the active trigger.
+        await expect(page.getByRole("button", { name: /^Filter\s*1$/ })).toHaveClass(/text-primary-tint-text/);
+        expect(await violations(page), `${view} with an active filter`).toEqual([]);
+      }
+      // The project-context toggle is desktop chrome (hidden below md).
+      const toggle = page.getByRole("button", { name: "Show project context" });
+      if (await toggle.isVisible()) {
+        await toggle.click();
+        // The glyph is aria-hidden, so axe skips it: assert the class directly.
+        await expect(page.getByRole("button", { name: "Hide project context" })).toHaveClass(/text-primary-tint-text/);
+      }
+    });
+
     test("share dialog has no axe violations", async ({ page, seededProject }) => {
       await loginViaUi(page);
       await page.goto(`/projects/${seededProject.projectId}/overview`, { waitUntil: "networkidle" });

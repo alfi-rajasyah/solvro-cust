@@ -59,8 +59,10 @@ const badgeVariants = cva(
         // info/invert. Dropped this variant and its "-light"/"-outline"
         // siblings below rather than invent an undefined token.
         invert: "bg-invert text-invert-foreground",
+        // SOLVRO PATCH: text-primary on the primary/10 and /15 tints measures
+        // 3.97-4.76:1; text-primary-tint-text clears 4.5:1 in both themes.
         "primary-light":
-          "border-primary/10 bg-primary/10 text-primary dark:border-primary/25 dark:bg-primary/15 dark:text-primary",
+          "border-primary/10 bg-primary/10 text-primary-tint-text dark:border-primary/25 dark:bg-primary/15 dark:text-primary-tint-text",
         // SOLVRO PATCH — this registry item's own cssVars define a distinct
         // "-foreground" shade per tone (e.g. `success-foreground` = a darker
         // emerald than `success`, for readability on a light tinted fill).

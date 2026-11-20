@@ -375,6 +375,30 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 
 ## Open — Accessibility & tokens
 
+### ISS-208 · P3 · About 35 borderless controls drop their focus indicator in forced-colours mode
+
+- **Type:** a11y · **Found:** 2026-11-20 · **Verified:** 2026-11-20 @ wave G3 review
+- **Where:** `focus-visible:outline-none` with a solid ring on borderless controls across frontend/src (e.g. TaskPanel.tsx ~1155, components/daily-review/, itop/DailyItopStrip.tsx, pages/views/ProjectList.tsx ~944-965)
+- **Problem:** DESIGN.md's borderless form is `outline-hidden focus-visible:ring-2 focus-visible:ring-primary`. `outline-none` removes the outline that forced-colours mode would show, and forced colours drops the ring, so these controls show no keyboard focus there.
+- **Why deferred / fix direction:** Outside the wave scope (the wave fixed bordered controls and the shared constants). Fix: swap to `outline-hidden` in one sweep, then extend `design-focus-border` in `.claude/scripts/gates.sh` to flag `focus-visible:outline-none` next to `focus-visible:ring-` in app code.
+- **Source:** wave G3 review (`docs/plans/issues-fix-waves.md`)
+
+### ISS-207 · P3 · Project context toggle and active bordered toggles have a weak keyboard focus cue
+
+- **Type:** a11y · **Found:** 2026-11-20 · **Verified:** 2026-11-20 @ wave G3 review
+- **Where:** frontend/src/pages/ProjectDetail.tsx (~330, the "Show project context" toggle); active Filter trigger in frontend/src/components/gantt-v2/SolvroGantt.tsx (~1186)
+- **Problem:** The context toggle has no focus classes and relies on the browser outline. Toggles that already show `border-primary` when active gain nothing from the focus border, so their only focus cue is the `ring-primary/30` ring (about 1.5:1).
+- **Why deferred / fix direction:** Outside the wave scope. Fix: give the toggle the DESIGN.md treatment, and give active bordered toggles a solid ring (or ring offset) on focus.
+- **Source:** wave G3 review (`docs/plans/issues-fix-waves.md`)
+
+### ISS-206 · P3 · Project context panel repeats a complementary landmark name
+
+- **Type:** a11y · **Found:** 2026-11-20 · **Verified:** 2026-11-20 @ wave G3
+- **Where:** frontend/src/pages/ProjectDetail.tsx (the panel opened by "Show project context")
+- **Problem:** With the panel open, axe reports `landmark-unique`: the panel is a complementary landmark without a name distinct from the other one on the page. The axe active-state scan runs contrast-only on this step for that reason.
+- **Why deferred / fix direction:** Found by the new scan, outside the wave scope. Fix: give the panel a distinct aria-label, then make that axe step a full scan.
+- **Source:** wave G3 (`docs/plans/issues-fix-waves.md`)
+
 ### ISS-084 · P3 · Favicon reads weakly on dark browser tab strips
 
 - **Type:** debt · **Found:** 2026-07-25 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -398,22 +422,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** White text on solid tint fills gives about 1.2:1 contrast in dark mode. No component uses these variants and status chips stay on their own pair.
 - **Why deferred / fix direction:** Trigger: anyone wires a solid tone variant. Then pick a solid-fill token family first.
 - **Source:** snapshot line 1305, section "ReUI Data Grid phase — deferred findings (2026-08-01)"
-
-### ISS-091 · P3 · Older focus:border-primary pattern persists at about 70 sites
-
-- **Type:** debt · **Found:** 2026-09-23 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** focus:border-primary across frontend/src (e.g. components/admin/ItopTab.tsx, components/itop/TaskTicketField.tsx)
-- **Problem:** DESIGN.md names one focus treatment and excludes border-primary, yet the older form still appears at about 70 sites and keeps spreading.
-- **Why deferred / fix direction:** Do one design-system sweep to align every site.
-- **Source:** snapshot line 2081, section "iTop integration Phase 4 — deferred findings (2026-09-23)"
-
-### ISS-194 · P2 · Primary text on primary tints still fails 4.5:1 in a few active states
-
-- **Type:** bug · **Found:** 2026-11-19 · **Verified:** 2026-11-19 @ wave 5 review
-- **Where:** selected toggles in frontend/src/pages/ProjectDetail.tsx (~312), pages/views/ProjectList.tsx (~478), kanban-v2/SolvroKanban.tsx (~617); hover in admin/TaskStatusesTab.tsx (~263); reui/badge.tsx primary-light; the Gantt today pill in reui/gantt/gantt-view.tsx
-- **Problem:** These still pair text-primary with primary/10 (3.97–4.76:1 light). The axe scan misses them only because they appear in states that are off by default.
-- **Why deferred / fix direction:** Fix: switch them to text-primary-tint-text (SOLVRO PATCH on the reui files) and add an axe scan of the active states.
-- **Source:** phase review of `docs/archive/plans/design-cleanup.md`
 
 ## Open — Gantt
 
@@ -928,6 +936,7 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-086 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · PortfolioCalendar uses rounded-full bars and raw font-mono
 - ISS-089 · 2026-11-19 · CHANGELOG "Chip contrast…", "Overview, Portfolio…" or "Type scale…" (design cleanup) · Gantt drag clone uses raw shadow-lg outside the elevation whitelist
 - ISS-090 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · ConfirmModal warning tone uses raw bg-amber-500 instead of the chip-amber pair
+- ISS-091 · 2026-11-20 · CHANGELOG "Keyboard focus treatment and primary-tint contrast" · Older focus:border-primary pattern persists at about 70 sites
 - ISS-092 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · Dialog focus trap lets Tab escape from a tabIndex=-1 element
 - ISS-093 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · usePanelFocus returns focus to the previous task's opener
 - ISS-094 · 2026-11-19 · CHANGELOG "Keyboard focus and contrast fixes" · Task statuses primary button has a weak keyboard focus cue
@@ -976,6 +985,7 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-190 · 2026-11-20 · CHANGELOG "A slow admin status save no longer fails task saves with a 500" · A slow admin status save can make status-setting task saves fail with a 500
 - ISS-191 · 2026-11-20 · CHANGELOG "Gantt connect-drag Escape, narrow tree pane, milestone arrows" · Escape during a Gantt dependency-connect drag also closes the task panel
 - ISS-192 · 2026-11-20 · CHANGELOG "Inactive users in pickers, service-save refetches, project tab preload" · The epic owner picker lists inactive users
+- ISS-194 · 2026-11-20 · CHANGELOG "Keyboard focus treatment and primary-tint contrast" · Primary text on primary tints still fails 4.5:1 in a few active states
 - ISS-195 · 2026-11-20 · CHANGELOG "Polish fixes: Portfolio Today marker, loaders, comment box, maskable icon" · The Portfolio Today line disappears over an active bar
 - ISS-196 · 2026-11-20 · CHANGELOG "Polish fixes: Portfolio Today marker, loaders, comment box, maskable icon" · Two bare pulse blocks remain in Project Overview, and the Risks Status cell is still native
 - ISS-198 · 2026-11-20 · CHANGELOG "Task panel title editor and filter popover" · The task panel title editor loses focus and can drop its draft on Escape

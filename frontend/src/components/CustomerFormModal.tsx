@@ -213,7 +213,7 @@ export function CustomerFormModal({ open, onClose, customer, canChangeOwner = tr
             onChange={(e) => setName(e.target.value)}
             maxLength={200}
             autoFocus
-            className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 focus:ring-2 focus:ring-primary/30"
+            className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
         </Field>
 
@@ -225,14 +225,14 @@ export function CustomerFormModal({ open, onClose, customer, canChangeOwner = tr
               onChange={(e) => setAccountManager(e.target.value)}
               maxLength={200}
               placeholder="Free text: anyone, internal or external"
-              className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 focus:ring-2 focus:ring-primary/30"
+              className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             />
           </Field>
           <Field label="Solution Architect">
             <select
               value={solutionArchitect}
               onChange={(e) => setSolutionArchitect(e.target.value)}
-              className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 focus:ring-2 focus:ring-primary/30"
+              className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <option value="">None</option>
               {solutionArchitectOptions.map((u) => (
@@ -251,7 +251,7 @@ export function CustomerFormModal({ open, onClose, customer, canChangeOwner = tr
               value={tam}
               onChange={(e) => setTam(e.target.value)}
               disabled={isEdit && !canChangeOwner}
-              className="[@media(pointer:coarse)]:min-h-11 w-full disabled:cursor-not-allowed disabled:opacity-70 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 focus:ring-2 focus:ring-primary/30"
+              className="[@media(pointer:coarse)]:min-h-11 w-full disabled:cursor-not-allowed disabled:opacity-70 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               {/* Always selectable for a view-all user; for a non-view-all
                   user only when it's the customer's current value on edit
@@ -285,7 +285,7 @@ export function CustomerFormModal({ open, onClose, customer, canChangeOwner = tr
           error={outlineUrlError}
           noun="customer"
           inputRef={outlineUrlInput}
-          inputClassName="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 focus:ring-2 focus:ring-primary/30"
+          inputClassName="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
         />
 
         <Field label="Description" required>
@@ -294,7 +294,7 @@ export function CustomerFormModal({ open, onClose, customer, canChangeOwner = tr
             onChange={(e) => setDescription(e.target.value)}
             rows={5}
             maxLength={5000}
-            className="w-full resize-y rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 focus:ring-2 focus:ring-primary/30"
+            className="w-full resize-y rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
         </Field>
 
