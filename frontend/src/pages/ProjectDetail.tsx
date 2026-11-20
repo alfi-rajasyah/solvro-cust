@@ -37,6 +37,7 @@ import { canOwnProject, saveErrorMessage } from "@/lib/ownerAccess";
 import { safeOutlineHref } from "@/lib/outlineUrl";
 import { preloadProjectTab, projectTabFromPath } from "@/lib/projectTabPreload";
 import { carryFilterSearch } from "@/lib/taskFilters";
+import { toggleFocus } from "@/lib/utils";
 import {
   type ProjectDetail as ProjectDetailType,
   useDeleteProject,
@@ -329,6 +330,7 @@ export function ProjectDetail() {
             title={contextOpen ? "Hide project context" : "Show project context"}
             className={[
               "tap-target hidden h-8 w-8 items-center justify-center rounded-sm border transition-colors md:inline-flex",
+              toggleFocus(contextOpen),
               contextOpen
                 ? "border-primary bg-primary/10 text-primary-tint-text"
                 : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container hover:text-on-surface",

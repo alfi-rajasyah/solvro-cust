@@ -2,6 +2,7 @@ import { useId, type ReactNode } from "react";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Epic, Label } from "@/lib/queries";
 import type { EpicFilter, TaskFilters } from "@/lib/taskFilters";
+import { cn, toggleFocus } from "@/lib/utils";
 
 const SELECT_CLASS =
   "[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
@@ -28,6 +29,8 @@ interface TaskFilterPopoverProps {
   children?: ReactNode;
   /** Classes for the trigger button; receives whether any filter is active. */
   triggerClassName: (active: boolean) => string;
+  /** Ring-offset class for the active focus ring: the surface the trigger sits on. */
+  focusOffsetClass?: string;
 }
 
 /**
@@ -47,6 +50,7 @@ export function TaskFilterPopover({
   labels,
   children,
   triggerClassName,
+  focusOffsetClass,
 }: TaskFilterPopoverProps) {
   const labelGroupId = useId();
   const epicSelectId = useId();
@@ -62,7 +66,7 @@ export function TaskFilterPopover({
 
   return (
     <Popover modal="trap-focus">
-      <PopoverTrigger className={triggerClassName(active)}>
+      <PopoverTrigger className={cn(triggerClassName(active), toggleFocus(active, focusOffsetClass))}>
         <span aria-hidden="true" className="material-symbols-outlined text-base">filter_alt</span>
         Filter
         {active && (

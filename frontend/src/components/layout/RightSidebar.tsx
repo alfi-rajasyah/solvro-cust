@@ -90,6 +90,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
       )}
       <aside
       ref={asideRef}
+      aria-label="Project context"
       aria-hidden={!open}
       className={[
         "fixed right-0 top-14 bottom-0 z-40 w-full transform border-l border-outline-variant bg-surface-container-low font-display transition-transform duration-200 ease-out md:z-30 md:w-context-panel",

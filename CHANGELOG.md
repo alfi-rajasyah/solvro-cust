@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-20 — Focus rings on toggles and forced-colours focus for borderless controls
+
+- The project context panel has its own accessible name ("Project context"), so screen readers no longer announce it as a second unnamed side region. The accessibility scan now checks the page with the panel open.
+- The project context toggle and the Filter button on the List, Kanban, Gantt and Timeline views show the standard keyboard focus ring; three of them had only the browser outline before. While a toggle is on, its border is already primary, so the focus ring is solid with a 2px gap and stays visible (`toggleFocus` in `frontend/src/lib/utils.ts`; rule added to `docs/DESIGN.md`).
+- Borderless links and icon buttons across the app (42 controls) keep a visible keyboard focus indicator in forced-colours (high-contrast) mode. A new design check in `.claude/scripts/gates.sh` (`design-outline-none`) stops the old form returning.
+
 ### Changed — 2026-11-20 — Test and tooling fixes
 
 - The Playwright auth and smoke specs pass on a stack with Google sign-in configured as well as without it: they read the sign-in config and skip the case that does not apply, and the smoke console-error check ignores only Google Identity Services origin messages. The e2e login helper retries brief network and 5xx failures (never a 4xx), and the UI login opens the collapsed admin sign-in form.

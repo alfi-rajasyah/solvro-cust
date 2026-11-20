@@ -33,7 +33,7 @@ const INPUT_CLASS =
   "w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-1 font-mono text-xs text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-60";
 
 const LINK_CLASS =
-  "[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1 font-display text-meta font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+  "[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1 font-display text-meta font-bold text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary";
 
 const AFFORDANCE_CLASS =
   "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 font-display text-meta font-semibold text-on-surface-variant underline hover:text-on-surface";

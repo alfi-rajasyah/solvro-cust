@@ -62,7 +62,7 @@ export function Help() {
                 <li key={t.id}>
                   <a
                     href={`#${t.id}`}
-                    className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <span aria-hidden="true" className="material-symbols-outlined text-[18px]">{t.icon}</span>
                     {t.title}
@@ -100,7 +100,7 @@ function HelpSection({ topic }: { topic: HelpTopic }) {
         {topic.route && (
           <Link
             to={topic.route}
-            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center text-xs font-medium text-primary hover:underline [@media(pointer:coarse)]:min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center text-xs font-medium text-primary hover:underline [@media(pointer:coarse)]:min-h-11 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
           >
             Open {topic.title}
           </Link>
