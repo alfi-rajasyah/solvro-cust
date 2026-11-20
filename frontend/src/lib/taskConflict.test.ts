@@ -61,6 +61,7 @@ function formFrom(t: Task, over: Partial<TaskFormValues> = {}): TaskFormValues {
     epicId: t.epicId,
     labelIds: t.labels.map((l) => l.id),
     isCriticalPath: t.isCriticalPath,
+    storyPoints: t.storyPoints,
     ...over,
   };
 }
@@ -144,6 +145,25 @@ describe("diffTaskForm", () => {
     const { patch, expected } = diffTaskForm(t, formFrom(t, { dueDate: "2026-11-01T00:00:00.000Z" }));
     expect(patch).toEqual({ dueDate: "2026-11-01T00:00:00.000Z" });
     expect(expected).toEqual({ dueDate: null });
+  });
+
+  it("diffs story points, including set and clear", () => {
+    expect(diffTaskForm(base, formFrom(base)).patch).toEqual({});
+    const set = diffTaskForm(base, formFrom(base, { storyPoints: 5 }));
+    expect(set.patch).toEqual({ storyPoints: 5 });
+    expect(set.expected).toEqual({ storyPoints: null });
+    const sized = makeTask({ storyPoints: 8 });
+    const cleared = diffTaskForm(sized, formFrom(sized, { storyPoints: null }));
+    expect(cleared.patch).toEqual({ storyPoints: null });
+    expect(cleared.expected).toEqual({ storyPoints: 8 });
+  });
+
+  it("names story points plainly in the conflict rows", () => {
+    const rows = formatConflictRows(
+      [{ field: "storyPoints", expected: null, current: 8 }],
+      { storyPoints: null },
+    );
+    expect(rows).toEqual([{ field: "storyPoints", label: "Story points", now: "8", yours: "Not estimated" }]);
   });
 
   it("compares labels as a set, regardless of order", () => {

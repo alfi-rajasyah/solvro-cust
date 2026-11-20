@@ -1894,6 +1894,8 @@ export interface UpdateTaskInput {
   // Epics (docs/archive/plans/epics-spec.md §4/§5). Backend rejects this on a task
   // that has (or is being given) a `parentTaskId` — 400 `epic_on_subtask`.
   epicId?: number | null;
+  /** Whole number 0-100; `null` clears the estimate. */
+  storyPoints?: number | null;
 }
 
 export interface LockBaselineInput {
@@ -2305,6 +2307,8 @@ export interface CreateTaskInput {
   epicId?: number | null;
   // Pins an iTop ticket at creation (docs/archive/plans/subtask-itop-tickets.md Task 5).
   itopTicketRef?: string | null;
+  /** Whole number 0-100; omit or `null` for not estimated. */
+  storyPoints?: number | null;
 }
 
 export function useCreateTask(projectId: number) {

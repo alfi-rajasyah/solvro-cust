@@ -221,6 +221,16 @@ export function TaskCard({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-1">
+          {task.storyPoints != null && (
+            <span
+              data-testid="card-story-points"
+              title="Story points"
+              className="inline-flex min-w-5 items-center justify-center rounded-sm bg-surface-container-high px-1 font-mono text-meta text-on-surface-variant"
+            >
+              {task.storyPoints}
+              <span className="sr-only"> story points</span>
+            </span>
+          )}
           {task.isCriticalPath && (
             // Icon variant (its `title` is the tooltip). The sr-only text keeps
             // "Critical Path" findable inside the card; the icon is hidden from

@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render as rtlRender, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import type { Task } from "@/lib/queries";
 import { TaskFormModal } from "./TaskFormModal";
+
+const createAsync = vi.fn();
+const updateAsync = vi.fn();
 
 const state = {
   permissions: ["task:write"] as string[],
@@ -33,8 +36,8 @@ vi.mock("@/lib/queries", async (importOriginal) => {
   const empty = () => ({ data: [] });
   return {
     ...actual,
-    useCreateTask: mutation,
-    useUpdateTask: mutation,
+    useCreateTask: () => ({ mutate: vi.fn(), mutateAsync: createAsync, isPending: false }),
+    useUpdateTask: () => ({ mutate: vi.fn(), mutateAsync: updateAsync, isPending: false }),
     useDeleteTask: mutation,
     useUsers: empty,
     useTaskStatuses: empty,
@@ -76,6 +79,8 @@ afterEach(() => {
   cleanup();
   state.permissions = ["task:write"];
   state.tasks = [];
+  createAsync.mockReset();
+  updateAsync.mockReset();
 });
 
 describe("TaskFormModal", () => {
@@ -139,5 +144,49 @@ describe("TaskFormModal", () => {
     );
     expect((screen.getByDisplayValue("Top level") as HTMLSelectElement).disabled).toBe(false);
     expect(screen.queryByText(/stays top level/i)).toBeNull();
+  });
+});
+
+describe("TaskFormModal story points", () => {
+  it("create: sends the number, and omits it when empty", async () => {
+    createAsync.mockResolvedValue({});
+    render(<TaskFormModal open onClose={() => {}} mode="create" projectId={1} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Story points" }), { target: { value: "13" } });
+    fireEvent.change(screen.getByPlaceholderText(/title/i), { target: { value: "New" } });
+    fireEvent.submit(screen.getByRole("textbox", { name: "Story points" }).closest("form")!);
+    await waitFor(() => expect(createAsync).toHaveBeenCalled());
+    expect(createAsync.mock.calls[0][0].storyPoints).toBe(13);
+  });
+
+  it("refuses a value outside 0 to 100 before sending", async () => {
+    render(<TaskFormModal open onClose={() => {}} mode="create" projectId={1} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Story points" }), { target: { value: "150" } });
+    fireEvent.change(screen.getByPlaceholderText(/title/i), { target: { value: "New" } });
+    fireEvent.submit(screen.getByRole("textbox", { name: "Story points" }).closest("form")!);
+    expect(await screen.findByText(/whole number from 0 to 100/)).toBeTruthy();
+    expect(createAsync).not.toHaveBeenCalled();
+  });
+
+  it("edit: sends only the changed estimate, with the old one as expected", async () => {
+    updateAsync.mockResolvedValue({});
+    const t = task({ id: 1, title: "Parent", storyPoints: 5 }) as Task;
+    state.tasks = [t];
+    render(<TaskFormModal open onClose={() => {}} mode="edit" projectId={1} task={t} />);
+    const box = screen.getByRole("textbox", { name: "Story points" }) as HTMLInputElement;
+    expect(box.value).toBe("5");
+    fireEvent.change(box, { target: { value: "" } });
+    fireEvent.submit(box.closest("form")!);
+    await waitFor(() => expect(updateAsync).toHaveBeenCalled());
+    expect(updateAsync.mock.calls[0][0]).toMatchObject({
+      patch: { storyPoints: null },
+      expected: { storyPoints: 5 },
+    });
+  });
+
+  it("is read-only without task:write", () => {
+    state.permissions = ["task:read"];
+    const t = task({ id: 1, title: "Parent", storyPoints: 5 }) as Task;
+    render(<TaskFormModal open onClose={() => {}} mode="edit" projectId={1} task={t} />);
+    expect((screen.getByRole("textbox", { name: "Story points" }) as HTMLInputElement).disabled).toBe(true);
   });
 });

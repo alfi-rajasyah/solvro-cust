@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { commitDraft, dayFromIso, isoFromDay } from "@/lib/dateField";
+import { parseStoryPoints } from "@/lib/storyPoints";
 import { StatusSelect } from "@/components/StatusSelect";
 import { PRIORITY_LABEL } from "@/lib/labels";
 import {
@@ -108,6 +109,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
   const [epicId, setEpicId] = useState<number | "">("");
   const [labelIds, setLabelIds] = useState<number[]>([]);
   const [isCriticalPath, setIsCriticalPath] = useState(false);
+  const [storyPoints, setStoryPoints] = useState("");
   // iTop ticket (docs/archive/plans/subtask-itop-tickets.md Task 5). A new task
   // holds the ref here and sends it with the create request; an existing task
   // pins/clears it straight away, like the side panel does.
@@ -155,6 +157,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
       setEpicId(editingTask.epicId ?? "");
       setLabelIds(editingTask.labels.map((l) => l.id));
       setIsCriticalPath(editingTask.isCriticalPath ?? false);
+      setStoryPoints(editingTask.storyPoints == null ? "" : String(editingTask.storyPoints));
       setItopRef(editingTask.itopTicketRef ?? null);
     } else {
       setTitle("");
@@ -169,6 +172,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
       setEpicId("");
       setLabelIds([]);
       setIsCriticalPath(false);
+      setStoryPoints("");
       setItopRef(null);
     }
     // Primitives only — the props OBJECT gets fresh identity on every parent
@@ -227,6 +231,12 @@ export function TaskFormModal(props: TaskFormModalProps) {
       return;
     }
 
+    const points = parseStoryPoints(storyPoints);
+    if (!points.ok) {
+      setError(points.error);
+      return;
+    }
+
     // Edit mode: pass through a date unchanged when its draft still matches
     // the day the original ISO was seeded from, instead of unconditionally
     // re-deriving the ISO — see `commitDraft`'s doc in `@/lib/dateField`.
@@ -261,6 +271,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
           epicId: parent === null ? (epicId === "" ? null : Number(epicId)) : null,
           labelIds,
           isCriticalPath,
+          storyPoints: points.value,
         });
         if (Object.keys(patch).length === 0) {
           requestClose();
@@ -294,6 +305,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
           epicId: parent === null ? (epicId === "" ? null : Number(epicId)) : null,
           labelIds: labelIds.length > 0 ? labelIds : undefined,
           isCriticalPath,
+          storyPoints: points.value ?? undefined,
           itopTicketRef: itopRef ?? undefined,
         });
       }
@@ -339,6 +351,9 @@ export function TaskFormModal(props: TaskFormModalProps) {
     if (adopt.has("epicId")) setEpicId(t.epicId ?? "");
     if (adopt.has("labelIds")) setLabelIds(t.labels.map((l) => l.id));
     if (adopt.has("isCriticalPath")) setIsCriticalPath(t.isCriticalPath ?? false);
+    if (adopt.has("storyPoints")) {
+      setStoryPoints(t.storyPoints == null ? "" : String(t.storyPoints));
+    }
     baseTaskRef.current = t;
     setConflict(null);
   }
@@ -589,6 +604,21 @@ export function TaskFormModal(props: TaskFormModalProps) {
                   return selected ? <EpicChip epic={selected} compact /> : null;
                 })()}
             </div>
+          </FieldRow>
+
+          {/* Story points */}
+          <FieldRow icon="pin" label="Story points">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={storyPoints}
+              onChange={(e) => setStoryPoints(e.target.value)}
+              disabled={!canEdit}
+              maxLength={3}
+              placeholder="Not estimated"
+              aria-label="Story points"
+              className="[@media(pointer:coarse)]:min-h-11 w-28 border-none bg-transparent text-xs font-semibold text-on-surface placeholder:font-normal placeholder:text-on-surface-variant focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default"
+            />
           </FieldRow>
 
           {/* Labels */}
