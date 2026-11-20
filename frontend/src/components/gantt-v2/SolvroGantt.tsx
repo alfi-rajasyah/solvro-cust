@@ -11,6 +11,17 @@ import { hasPermission, useAuth } from "@/lib/auth";
 import { dateToDay } from "@/lib/dateField";
 import { usePointerPressActivity } from "@/lib/dragActivity";
 import { fmtDateTime } from "@/lib/formatDate";
+import { TaskFilterPopover } from "@/components/TaskFilterPopover";
+import { useTaskFilters } from "@/hooks/useTaskFilters";
+import {
+  buildFilterContext,
+  clearPatch,
+  countActiveFilters,
+  reorderAmongVisible,
+  scopeFilters,
+  taskVisible,
+  visibleOrderUnchanged,
+} from "@/lib/taskFilters";
 import { useGanttExport } from "@/lib/gantt/exportContext";
 import { addDays, buildRows, rowsDateRange, startOfDay, type Row } from "@/lib/gantt/geometry";
 import {
@@ -230,7 +241,7 @@ const TREE_PANEL_MAX_WIDTH = 774;
 // the default — was 256px pre-T2), and on narrow desktop viewports the
 // engine renders the pane narrower than `treeWidth` without reporting it
 // (clampContainer, gantt-view.tsx:977-987), so a wide persisted width can
-// still clip the columns there — docs/ISSUES.md.
+// still clip the columns there — docs/ISSUES.md ISS-096, ISS-097.
 const TREE_DATES_COLUMN_WIDTH = 132;
 const TREE_COLOR_COLUMN_WIDTH = 24;
 // Height-style Status chip column. 100px comfortably fits the widest chip
@@ -352,6 +363,12 @@ export function SolvroGantt(props: SolvroGanttProps) {
   const { user } = useAuth();
   // Ported verbatim from GanttFrame.tsx:86-87.
   const canEdit = hasPermission(user, "task:write");
+  // Section routes (create, reorder, color) need project:write, not task:write
+  // — a custom role holding only task:write would see the action and get a 403.
+  // Gantt section reorder needs BOTH task:write and project:write: the row grip
+  // is a tree-wide control gated on task:write, and section rows then also need
+  // project:write (canReorderResource).
+  const canManageSections = hasPermission(user, "project:write");
   // Pauses the project queries' 30 s refresh while a bar move/resize, row
   // reorder or connect-dot drag is live (the vendored engine has no
   // start/end callbacks) — docs/archive/plans/collaboration-and-sharing.md.
@@ -501,10 +518,45 @@ export function SolvroGantt(props: SolvroGanttProps) {
   // toggles the ghosts and reports the lock state in the toggle's tooltip.
   const baselineLockedAtPretty = baselineLockedAt ? fmtDateTime(baselineLockedAt) : null;
 
-  const resources = useMemo(() => buildResources(tasks, sections), [tasks, sections]);
+  // Epic filter (shared with List, Kanban and Timeline through the URL). It only
+  // shapes what the chart shows: bars, rows, rollups and connectors. Reorder
+  // math (`allResources`, `tasks`) and the Excel/PDF export (`allRows`) keep
+  // reading the full project.
+  const { filters: urlFilters, setFilters } = useTaskFilters();
+  const filters = useMemo(() => scopeFilters(urlFilters, "epic"), [urlFilters]);
+  const filterCount = countActiveFilters(filters);
+  const filterActive = filterCount > 0;
+  const filterCtx = useMemo(() => buildFilterContext(tasks), [tasks]);
+  const visibleTasks = useMemo(
+    () => (filterActive ? tasks.filter((t) => taskVisible(t, filters, filterCtx)) : tasks),
+    [tasks, filterActive, filters, filterCtx],
+  );
+  // While the filter is active a section with no visible top-level task is hidden.
+  const visibleSections = useMemo(() => {
+    if (!filterActive) return sections;
+    const used = new Set(visibleTasks.filter((t) => t.parentTaskId === null).map((t) => t.sectionId));
+    // Colours are assigned by section index; resolve them on the full list and
+    // pin them, so hiding a section never repaints the others.
+    const colors = resolveSectionColors(sections);
+    return sections.filter((s) => used.has(s.id)).map((s) => ({ ...s, color: colors.get(s.id) ?? s.color }));
+  }, [sections, visibleTasks, filterActive]);
+  const visibleDependencies = useMemo(() => {
+    if (!filterActive) return dependencies;
+    const ids = new Set(visibleTasks.map((t) => t.id));
+    return dependencies.filter((d) => ids.has(d.predecessorTaskId) && ids.has(d.successorTaskId));
+  }, [dependencies, visibleTasks, filterActive]);
+
+  const allResources = useMemo(() => buildResources(tasks, sections), [tasks, sections]);
+  const resources = useMemo(
+    () => (filterActive ? buildResources(visibleTasks, visibleSections) : allResources),
+    [filterActive, visibleTasks, visibleSections, allResources],
+  );
   const events = useMemo<GanttEvent<Task>[]>(
-    () => [...buildEvents(tasks, sections, colorBy, canEdit), ...buildRollupEvents(tasks, sections)],
-    [tasks, sections, colorBy, canEdit],
+    () => [
+      ...buildEvents(visibleTasks, visibleSections, colorBy, canEdit),
+      ...buildRollupEvents(visibleTasks, visibleSections),
+    ],
+    [visibleTasks, visibleSections, colorBy, canEdit],
   );
   const years = useMemo(() => yearsCoveredBy(events), [events]);
   const { data: holidays = [] } = useHolidays(years);
@@ -562,10 +614,8 @@ export function SolvroGantt(props: SolvroGanttProps) {
       const patch = eventPatch(update);
       if (!patch) return false;
       setActionError(null);
-      updateTask.mutate(patch, {
-        onError: (err) => {
-          setActionError(err instanceof ApiError ? err.message : "Could not update task dates.");
-        },
+      updateTask.mutateAsync(patch).catch((err: unknown) => {
+        setActionError(err instanceof ApiError ? err.message : "Could not update task dates.");
       });
       return true;
     },
@@ -578,6 +628,12 @@ export function SolvroGantt(props: SolvroGanttProps) {
   // Returns `false` to reject; per gantt.tsx:127 the real contract is
   // `void | false` (never `true` — unlike onEventUpdate's GanttUpdateResult,
   // there is no accept-with-adjustment form here).
+  const canReorderResource = useCallback(
+    (proposal: GanttResourceReorder) =>
+      !proposal.resourceId.startsWith("section-") || canManageSections,
+    [canManageSections],
+  );
+
   const handleResourceReorder = useCallback(
     (proposal: GanttResourceReorder): void | false => {
       if (!canEdit) return false;
@@ -585,6 +641,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
 
       // ---- Section-group reorder (root level only) ----
       if (resourceId.startsWith("section-")) {
+        if (!canManageSections) return false;
         // The "(No section)" pseudo-group has no backing Section row — old
         // engine only starts a section drag when `sectionId !== null`
         // (GanttFrame.tsx:539).
@@ -601,11 +658,18 @@ export function SolvroGantt(props: SolvroGanttProps) {
         // then patch every REAL section whose position actually changed.
         // Mirrors GanttFrame.tsx:544-559's ordered/filtered/splice + diffed
         // Promise.all of useUpdateSection calls.
-        const currentRootIds = resources.map((r) => r.id);
-        const others = currentRootIds.filter((id) => id !== resourceId);
-        const clamped = Math.max(0, Math.min(index, others.length));
-        const nextRootOrder = [...others];
-        nextRootOrder.splice(clamped, 0, resourceId);
+        // `index` counts the rows the user sees (`resources`); the new order is
+        // computed on the full list (`allResources`), anchored on the visible
+        // neighbour the section was dropped next to, so sections hidden by the
+        // epic filter keep their place.
+        const nextRootOrder = reorderAmongVisible(
+          allResources.map((r) => r.id),
+          resources.map((r) => r.id),
+          resourceId,
+          index,
+        );
+        // Nothing moved on screen (or no other visible section): save nothing.
+        if (!nextRootOrder) return false;
 
         const patches = nextRootOrder
           .filter((id) => id !== sectionNodeId(null))
@@ -614,16 +678,11 @@ export function SolvroGantt(props: SolvroGanttProps) {
 
         if (patches.length === 0) return false; // no-op — nothing actually moved
         setActionError(null);
-        patches.forEach(({ id, position }) =>
-          updateSection.mutate(
-            { id, patch: { position } },
-            {
-              onError: (err) => {
-                setActionError(err instanceof ApiError ? err.message : "Could not reorder sections.");
-              },
-            },
-          ),
-        );
+        patches.forEach(({ id, position }) => {
+          updateSection.mutateAsync({ id, patch: { position } }).catch((err: unknown) => {
+            setActionError(err instanceof ApiError ? err.message : "Could not reorder sections.");
+          });
+        });
         return;
       }
 
@@ -643,14 +702,9 @@ export function SolvroGantt(props: SolvroGanttProps) {
         if (parentId !== taskNodeId(moved.parentTaskId)) return false;
         if (index === moved.position) return false; // no-op
         setActionError(null);
-        updateTask.mutate(
-          { id: taskId, patch: { position: index } },
-          {
-            onError: (err) => {
-              setActionError(err instanceof ApiError ? err.message : "Could not reorder subtask.");
-            },
-          },
-        );
+        updateTask.mutateAsync({ id: taskId, patch: { position: index } }).catch((err: unknown) => {
+          setActionError(err instanceof ApiError ? err.message : "Could not reorder subtask.");
+        });
         return;
       }
 
@@ -675,7 +729,9 @@ export function SolvroGantt(props: SolvroGanttProps) {
         .filter((t) => t.parentTaskId === null)
         .sort((a, b) => a.position - b.position || a.id - b.id);
       const others = topLevelOrdered.filter((t) => t.id !== taskId);
-      const targetSiblings = others.filter((t) => t.sectionId === targetSectionId);
+      // `index` counts the siblings the user sees; `others` stays the full order.
+      const visibleIds = new Set(visibleTasks.map((t) => t.id));
+      const targetSiblings = others.filter((t) => t.sectionId === targetSectionId && visibleIds.has(t.id));
       const crossSection = targetSectionId !== moved.sectionId;
 
       let position: number | undefined;
@@ -692,6 +748,13 @@ export function SolvroGantt(props: SolvroGanttProps) {
         position = others.findIndex((t) => t.id === before.id);
       }
 
+      if (!crossSection) {
+        // Dropped back where it was on screen: hidden siblings must not shift.
+        const visibleInSection = topLevelOrdered
+          .filter((t) => t.sectionId === targetSectionId && visibleIds.has(t.id))
+          .map((t) => t.id);
+        if (visibleOrderUnchanged(visibleInSection, taskId, index)) return false;
+      }
       if (!crossSection && (position === undefined || position === moved.position)) {
         return false; // no-op — same section, same slot (or nothing to reorder against)
       }
@@ -700,17 +763,12 @@ export function SolvroGantt(props: SolvroGanttProps) {
       if (crossSection) patch.sectionId = targetSectionId;
       if (position !== undefined) patch.position = position;
       setActionError(null);
-      updateTask.mutate(
-        { id: taskId, patch },
-        {
-          onError: (err) => {
-            setActionError(err instanceof ApiError ? err.message : "Could not move task.");
-          },
-        },
-      );
+      updateTask.mutateAsync({ id: taskId, patch }).catch((err: unknown) => {
+        setActionError(err instanceof ApiError ? err.message : "Could not move task.");
+      });
       return;
     },
-    [canEdit, resources, sections, tasks, taskById, updateTask, updateSection],
+    [canEdit, canManageSections, allResources, resources, sections, tasks, visibleTasks, taskById, updateTask, updateSection],
   );
 
   // Plan B Task 6 — connector create/delete, wired into GanttOverlay as
@@ -721,10 +779,8 @@ export function SolvroGantt(props: SolvroGanttProps) {
   const handleCreateDependency = useCallback(
     (input: CreateDependencyInput) => {
       setActionError(null);
-      createDependency.mutate(input, {
-        onError: (err) => {
-          setActionError(err instanceof ApiError ? err.message : "Could not create dependency.");
-        },
+      createDependency.mutateAsync(input).catch((err: unknown) => {
+        setActionError(err instanceof ApiError ? err.message : "Could not create dependency.");
       });
     },
     [createDependency],
@@ -733,10 +789,8 @@ export function SolvroGantt(props: SolvroGanttProps) {
   const handleDeleteDependency = useCallback(
     (id: number) => {
       setActionError(null);
-      deleteDependency.mutate(id, {
-        onError: (err) => {
-          setActionError(err instanceof ApiError ? err.message : "Could not delete dependency.");
-        },
+      deleteDependency.mutateAsync(id).catch((err: unknown) => {
+        setActionError(err instanceof ApiError ? err.message : "Could not delete dependency.");
       });
     },
     [deleteDependency],
@@ -745,21 +799,21 @@ export function SolvroGantt(props: SolvroGanttProps) {
   const handleUpdateDates = useCallback(
     (taskId: number, startISO: string | null, dueISO: string | null) => {
       setActionError(null);
-      updateTask.mutate(
-        { id: taskId, patch: { startDate: startISO, dueDate: dueISO } },
-        {
-          onError: (err) => {
-            setActionError(err instanceof ApiError ? err.message : "Could not update dates.");
-          },
-        },
-      );
+      updateTask
+        .mutateAsync({ id: taskId, patch: { startDate: startISO, dueDate: dueISO } })
+        .catch((err: unknown) => {
+          setActionError(err instanceof ApiError ? err.message : "Could not update dates.");
+        });
     },
     [updateTask],
   );
 
   const handleSetSectionColor = useCallback(
     (sectionId: number, color: string) => {
-      updateSection.mutate({ id: sectionId, patch: { color } });
+      setActionError(null);
+      updateSection.mutateAsync({ id: sectionId, patch: { color } }).catch((err: unknown) => {
+        setActionError(err instanceof ApiError ? err.message : "Could not change the section color.");
+      });
     },
     [updateSection],
   );
@@ -848,14 +902,14 @@ export function SolvroGantt(props: SolvroGanttProps) {
             <SectionColorCell
               sectionId={sectionId}
               color={sectionColors.get(sectionId) ?? DEFAULT_SECTION_COLOR}
-              canEdit={canEdit}
+              canEdit={canManageSections}
               onPick={handleSetSectionColor}
             />
           );
         },
       },
     ];
-  }, [sections, taskById, canEdit, handleUpdateDates, handleSetSectionColor, todayDay]);
+  }, [sections, taskById, canEdit, canManageSections, handleUpdateDates, handleSetSectionColor, todayDay]);
 
   // Plan B Task 7 — register Excel/PDF export handlers in the shared context
   // (`GanttExportProvider`, mounted by ProjectDetail.tsx around the whole
@@ -1072,9 +1126,9 @@ export function SolvroGantt(props: SolvroGanttProps) {
               onClick={() => setScale(s.mode)}
               className={cn(
                 TOOLBAR_ITEM_HEIGHT,
-                "inline-flex items-center rounded-sm px-2.5 font-display text-meta font-semibold tracking-wide outline-hidden transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+                "inline-flex items-center rounded-sm px-2.5 font-display text-meta font-semibold tracking-wide outline-hidden transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary",
                 s.mode === scale
-                  ? "bg-primary text-on-primary"
+                  ? "bg-primary text-on-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   : "text-on-surface-variant hover:text-on-surface",
               )}
             >
@@ -1083,39 +1137,63 @@ export function SolvroGantt(props: SolvroGanttProps) {
           ))}
         </div>
 
-        {canEdit && (
+        {(canEdit || canManageSections) && (
           <>
             <span className="mx-1 h-4 w-px bg-outline-variant" aria-hidden />
             {/* T6 — segmented shell mirrored from the scale-pill group above. */}
             <div className="inline-flex overflow-hidden rounded-md bg-surface-container-low p-0.5">
-              <button
-                type="button"
-                onClick={() => onCreateTaskOpen(null)}
-                className={cn(
-                  TOOLBAR_ITEM_HEIGHT,
-                  "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium text-on-surface outline-hidden transition-colors hover:text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => onCreateTaskOpen(null)}
+                  className={cn(
+                    TOOLBAR_ITEM_HEIGHT,
+                    "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium text-on-surface outline-hidden transition-colors hover:text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary",
                 )}
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-[15px]">add</span>
-                Task
-              </button>
-              <button
-                type="button"
-                onClick={() => setAddingSection(true)}
-                className={cn(
-                  TOOLBAR_ITEM_HEIGHT,
-                  "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-[15px]">add</span>
+                  Task
+                </button>
+              )}
+              {canManageSections && (
+                <button
+                  type="button"
+                  onClick={() => setAddingSection(true)}
+                  className={cn(
+                    TOOLBAR_ITEM_HEIGHT,
+                    "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary",
                 )}
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-[15px]">add</span>
-                Section
-              </button>
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-[15px]">add</span>
+                  Section
+                </button>
+              )}
             </div>
           </>
         )}
 
+        <div className="ml-2">
+          <TaskFilterPopover
+            filters={filters}
+            onChange={setFilters}
+            onClear={() => setFilters(clearPatch("epic"))}
+            activeCount={filterCount}
+            epics={epics}
+            layerClassName={{ backdrop: "z-40", panel: "z-50" }}
+            triggerClassName={(active) =>
+              cn(
+                TOOLBAR_ITEM_HEIGHT,
+                "inline-flex items-center gap-1 rounded-md border px-2.5 font-display text-meta font-semibold transition-colors focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+                active
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:text-on-surface",
+              )
+            }
+          />
+        </div>
+
         <span className="ml-2 hidden font-mono text-meta text-on-surface-variant lg:inline">
-          {tasks.filter((t) => t.startDate || t.dueDate).length} dated · {sections.length} sections
+          {visibleTasks.filter((t) => t.startDate || t.dueDate).length} dated · {visibleSections.length} sections
         </span>
 
         {/* `flex-1 min-w-0` + `flex-wrap` (2026-08-31): the cluster takes
@@ -1140,7 +1218,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
               disabled={resources.length === 0}
               className={cn(
                 TOOLBAR_ITEM_HEIGHT,
-                "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50",
+                "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50",
               )}
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[15px]">today</span>
@@ -1153,7 +1231,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
               aria-label="Previous period"
               className={cn(
                 TOOLBAR_ITEM_HEIGHT,
-                "inline-flex w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50",
+                "inline-flex w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50",
               )}
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[15px]">chevron_left</span>
@@ -1165,7 +1243,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
               aria-label="Next period"
               className={cn(
                 TOOLBAR_ITEM_HEIGHT,
-                "inline-flex w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50",
+                "inline-flex w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50",
               )}
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[15px]">chevron_right</span>
@@ -1200,9 +1278,9 @@ export function SolvroGantt(props: SolvroGanttProps) {
               }
               className={cn(
                 TOOLBAR_ITEM_HEIGHT,
-                "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium outline-hidden transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+                "inline-flex items-center gap-1 rounded-sm px-2.5 font-display text-meta font-medium outline-hidden transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary",
                 showBaseline
-                  ? "bg-primary text-on-primary"
+                  ? "bg-primary text-on-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   : "text-on-surface-variant hover:text-on-surface",
               )}
             >
@@ -1228,7 +1306,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                     type="button"
                     className={cn(
                       TOOLBAR_ITEM_HEIGHT,
-                      "inline-flex items-center gap-1.5 rounded-sm pl-2.5 pr-1.5 font-display text-meta font-medium text-on-surface outline-hidden transition-colors hover:text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+                      "inline-flex items-center gap-1.5 rounded-sm pl-2.5 pr-1.5 font-display text-meta font-medium text-on-surface outline-hidden transition-colors hover:text-primary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary",
                     )}
                   >
                     <span className="text-meta text-on-surface-variant">
@@ -1346,7 +1424,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                 title={exporting ? "Exporting…" : "Export"}
                 className={cn(
                   TOOLBAR_ITEM_HEIGHT,
-                  "inline-flex w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50",
+                  "inline-flex w-7 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50",
                 )}
               >
                 <span className="material-symbols-outlined text-[15px]" aria-hidden="true">
@@ -1427,7 +1505,9 @@ export function SolvroGantt(props: SolvroGanttProps) {
       {!isLoading && !isError && resources.length === 0 && (
         <div className="m-3 rounded-sm border border-dashed border-outline-variant p-12 text-center text-on-surface-variant">
           <p className="text-sm">
-            No tasks or sections yet. Use + Task or + Section above to start building the plan.
+            {filterActive
+              ? "No tasks match the current filters."
+              : "No tasks or sections yet. Use + Task or + Section above to start building the plan."}
           </p>
         </div>
       )}
@@ -1527,7 +1607,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                     <button
                       type="button"
                       aria-label="Task actions"
-                      className="text-on-surface-variant hover:text-on-surface ms-auto flex size-5 shrink-0 items-center justify-center rounded-sm outline-hidden opacity-0 transition-opacity group-hover/gantt-row:opacity-100 group-data-hover/gantt-row:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary/30 pointer-coarse:opacity-100"
+                      className="text-on-surface-variant hover:text-on-surface ms-auto flex size-5 shrink-0 items-center justify-center rounded-sm outline-hidden opacity-0 transition-opacity group-hover/gantt-row:opacity-100 group-data-hover/gantt-row:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary pointer-coarse:opacity-100"
                       onClick={(e) => {
                         e.stopPropagation();
                         const rect = e.currentTarget.getBoundingClientRect();
@@ -1587,14 +1667,12 @@ export function SolvroGantt(props: SolvroGanttProps) {
                           disabled={duplicateTask.isPending && duplicateTask.variables === task.id}
                           onClick={() => {
                             setActionError(null);
-                            duplicateTask.mutate(task.id, {
-                              onError: (err) => {
-                                setActionError(
-                                  err instanceof ApiError
-                                    ? err.message
-                                    : "Could not duplicate the task.",
-                                );
-                              },
+                            duplicateTask.mutateAsync(task.id).catch((err: unknown) => {
+                              setActionError(
+                                err instanceof ApiError
+                                  ? err.message
+                                  : "Could not duplicate the task.",
+                              );
                             });
                           }}
                         >
@@ -1614,21 +1692,18 @@ export function SolvroGantt(props: SolvroGanttProps) {
                         <ContextMenuItem
                           className="text-xs"
                           onClick={() =>
-                            updateTask.mutate(
-                              {
+                            updateTask
+                              .mutateAsync({
                                 id: task.id,
                                 patch: { isCriticalPath: !task.isCriticalPath },
-                              },
-                              {
-                                onError: (err) => {
-                                  setActionError(
-                                    err instanceof ApiError
-                                      ? err.message
-                                      : "Could not update the Critical Path mark.",
-                                  );
-                                },
-                              },
-                            )
+                              })
+                              .catch((err: unknown) => {
+                                setActionError(
+                                  err instanceof ApiError
+                                    ? err.message
+                                    : "Could not update the Critical Path mark.",
+                                );
+                              })
                           }
                         >
                           <span
@@ -1719,6 +1794,9 @@ export function SolvroGantt(props: SolvroGanttProps) {
             // not this.
             onEventUpdate={handleEventUpdate}
             onResourceReorder={canEdit ? handleResourceReorder : undefined}
+            // Section rows are refused (red indicator, no commit) without
+            // project:write; the grip itself is tree-wide, so it still shows.
+            canReorderResource={canReorderResource}
           >
             <GanttView />
             {/* T1 (fix round) — see GanttNavTitleSync's doc comment above. */}
@@ -1730,7 +1808,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
               tree already committed, reached via containerRef + a portal. */}
           <GanttOverlay
             containerRef={ganttContainerRef}
-            dependencies={dependencies}
+            dependencies={visibleDependencies}
             events={events}
             showBaseline={showBaseline}
             canEdit={canEdit}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AccountHeader, sumProjectHealth } from "@/components/customer/AccountHeader";
 import { AccountOverview } from "@/components/customer/AccountOverview";
+import { CustomerTeam } from "@/components/customer/CustomerTeam";
 import { CustomerDeleteBody, sharedProjectsOf } from "@/components/customer/CustomerDeleteBody";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { CustomerFormModal } from "@/components/CustomerFormModal";
@@ -18,7 +19,6 @@ import { canChangeCustomerOwner, canOwnCustomer, saveErrorMessage } from "@/lib/
 import {
   type CustomerDetail as CustomerDetailType,
   useCustomer,
-  useCustomerTickets,
   useCustomerWeeklyUpdates,
   useDeleteCustomer,
   useItopStatus,
@@ -26,7 +26,7 @@ import {
   useUpdateCustomerServices,
 } from "@/lib/queries";
 
-type Tab = "overview" | "services" | "tickets" | "docs";
+type Tab = "overview" | "services" | "team" | "tickets" | "docs";
 
 
 export function CustomerDetail() {
@@ -44,30 +44,16 @@ export function CustomerDetail() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // iTop Tickets tab gating (Task 1.8): the tab only exists when iTop is
-  // configured AND this customer is mapped to an iTop organisation. GET
-  // /customers/:id doesn't expose itopOrgId/itopOrgName (see routes/
-  // customers.ts's select), so "mapped" is derived from the tickets
-  // endpoint's own `mapped` flag instead of a second backend change — this
-  // gate query (scope "ongoing") also doubles as the data the Tickets tab
-  // itself first renders with, since react-query dedupes the identical key.
-  // Both hooks below run unconditionally (hook-order rule); `enabled` does
-  // the gating so a not-yet-loaded customerId or unconfigured iTop just
-  // skips the fetch rather than skipping the hook call.
+  // iTop Tickets tab gating: the tab only exists when iTop is configured, the
+  // caller can read customers, AND the customer has loaded with `itopOrgId`
+  // set (the mapping lives on the customer record).
   const itopStatus = useItopStatus();
   const itopConfigured = itopStatus.data?.configured ?? false;
   // The tickets endpoints require `customer:read` (403 otherwise), so a user
-  // without it never fires the gate query and never sees the tab.
+  // without it never sees the tab.
   const canReadTickets = hasPermission(user, "customer:read");
-  const itopTicketsGate = useCustomerTickets(customerId ?? -1, {
-    scope: "ongoing",
-    enabled: itopConfigured && canReadTickets && customerId !== null,
-    // This gate call runs on every customer page load (not just while the
-    // Tickets tab is open) — no background polling here. TicketsTab.tsx's
-    // own call opts into polling once the tab is actually visible.
-    poll: false,
-  });
-  const ticketsAvailable = itopConfigured && canReadTickets && itopTicketsGate.data?.mapped === true;
+  const ticketsAvailable =
+    itopConfigured && canReadTickets && customer?.itopOrgId != null;
 
   // Latest weekly update for the header's health line; AccountOverview reads
   // the same key (limit 1) until the reader expands the history.
@@ -76,6 +62,7 @@ export function CustomerDetail() {
   const TAB_ITEMS: ReadonlyArray<{ key: Tab; label: string }> = [
     { key: "overview", label: "Overview" },
     { key: "services", label: "Services" },
+    { key: "team", label: "Team" },
     ...(ticketsAvailable ? [{ key: "tickets" as const, label: "Tickets" }] : []),
     // Outline pages under the customer's link; only offered once an Outline address is set.
     ...(outlineConfig?.baseUrl ? [{ key: "docs" as const, label: "Docs" }] : []),
@@ -88,9 +75,9 @@ export function CustomerDetail() {
   const [tab, setTab] = useState<Tab>(initialTab);
 
   // Honor ?tab= changes from external navigation — `ticketsAvailable` is in the dep list too, so a
-  // `?tab=tickets` URL that arrived before the gate query resolved (tab
-  // falls back to "overview" on that first render, see `initialTab` above)
-  // is recovered once `ticketsAvailable` flips true, instead of staying
+  // `?tab=tickets` URL that arrived before `customer` loaded with `itopOrgId`
+  // set (tab falls back to "overview" on that first render, see `initialTab`
+  // above) is recovered once `ticketsAvailable` flips true, instead of staying
   // stuck on the fallback for the rest of the session.
   useEffect(() => {
     const t = searchParams.get("tab");
@@ -208,8 +195,7 @@ export function CustomerDetail() {
   }
 
   const totals = sumProjectHealth(customer.projects);
-  const itopOrgName =
-    ticketsAvailable && itopTicketsGate.data?.mapped ? (itopTicketsGate.data.orgName ?? EMPTY_VALUE) : null;
+  const itopOrgName = ticketsAvailable ? (customer.itopOrgName ?? EMPTY_VALUE) : null;
 
   return (
     <div className="space-y-6">
@@ -243,6 +229,7 @@ export function CustomerDetail() {
           />
         )}
         {tab === "services" && <ServicesTab customer={customer} canMutate={canMutate} />}
+        {tab === "team" && <CustomerTeam customerId={customer.id} />}
         {tab === "docs" && (
           <OutlineDocsTab
             scope="customers"

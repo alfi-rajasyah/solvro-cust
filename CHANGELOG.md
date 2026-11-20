@@ -15,6 +15,220 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-20 — Customer team
+
+- Each customer now has a team. A team member can open every project linked to the customer, including projects linked later, with the same access as a project member, and can edit the customer itself. They are not an owner: they cannot delete the customer or its projects, or change a customer's owner, a project's TAM or a project's customers. Assigning a task to a team member does not add them as a project member, and removing someone from the team ends their access on their next request. Team members are included in Daily Review and in notifications. A customer with no projects is visible to its team. Removing someone from a customer's team, unlinking a project from the customer, or deleting the customer also unassigns that person's tasks in projects they can no longer open (any other access they still have keeps them).
+- The customer page has a new Team tab listing the team with who added each person and when. The customer's owner (with `customer:write`), and anyone whose role has the new "Manage every customer team" permission (`customer:team-all`), can add active users from a picker and remove members after confirming. The Help page has a new "Customer team" entry. Tab rows (customer page, Admin, Settings, Tasks) now scroll sideways on narrow screens instead of cutting off tabs.
+- New endpoints `GET`, `POST` and `DELETE /customers/:id/team`, and `GET /projects/:id/team-access` (the users who reach a project through a customer team, so the assignee pickers no longer claim that assigning them adds them to the project); each change is recorded in the customer's activity log. Database: new `customer_team_members` table (migration `20261120072258_customer_team`), and the customer activity log can now hold team events as well as project deletions. (#93)
+
+### Added — 2026-11-20 — Bulk edit in the List view, and story points in the List
+
+- The List view has a checkbox on every task and subtask, plus a "select all visible" box in the header that follows the active filters. With tasks selected, a bulk action bar shows the count and lets you add or remove labels and set status, assignee, priority or epic for all of them in one request. The epic action is unavailable while a subtask is selected, inactive users are not offered as assignees, and a failed request keeps the selection and shows the server's message. Selecting more than 200 tasks disables the bulk actions, and select all only covers rows that are on screen (not collapsed sections or collapsed subtask lists). The edit controls appear only for users with task write access.
+- New endpoint `POST /tasks/bulk` applies one change set to up to 200 selected tasks of one project in a single transaction: add or remove labels, set the status, assignee (null clears it), priority, or epic (top-level tasks only). Every task must be visible to the caller and in the same project (404 otherwise); labels must belong to that project (400 `invalid_label`); an epic on a subtask is refused (400 `epic_on_subtask`); a deactivated assignee is refused (400 `assignee_inactive`), and a non-member assignee is added as a project member. Task order is never changed, and an activity event is recorded for each changed task.
+- The List shows a "Points" column on desktop and the value on phone rows when set, and each section header shows the story point total and the done total over top-level tasks. (#90, #91)
+
+### Added — 2026-11-20 — Workload tab on the Utilization page
+
+- Utilization has a new Workload tab that counts Solvro tasks per assignee for a chosen week: open tasks, due in the selected week, overdue, active in the selected week (start to due date overlaps the week), and open story points, plus one Unassigned row. Click a person to list their open tasks with project, status and due date; each links to the task panel. It works without iTop; when iTop is not connected, Workload is the only tab. Done-category tasks are not counted, subtasks count as separate tasks, and inactive users show only while they hold open tasks.
+- Two new role permissions control whose workload a user sees. With neither, a user sees only their own row. `workload:team` adds everyone assigned in projects the user owns, plus those projects' unassigned tasks. `workload:all` shows every assignee across all projects, including all unassigned tasks. With org-wide workload access, counts cover every project, but task names are shown only for projects you can open, with a plain count for the rest. `report:executive` does not grant either. Help and the role editor describe the new tab and permissions.
+- New endpoints `GET /utilization/workload` and `GET /utilization/workload/tasks`; who is visible is decided on the server from the caller's permissions. Task dates are calendar days, so the week runs Monday to Sunday by date, and the viewer's UTC offset decides which day counts as today for the overdue column. (#92)
+
+### Added — 2026-11-20 — Story points in the task form, task panel, Kanban cards and Epics tab
+
+- Tasks can carry an optional "Story points" estimate (whole numbers 0 to 100, empty means not estimated). Set it in the create and edit form or inline in the task panel; invalid values are refused before they are sent, and an edit that clashes with someone else's change names the field as "Story points" in the conflict dialog.
+- Kanban cards show the number when it is set.
+- The Epics tab has a "Story points" column giving the points done out of the total for each epic. Only top-level tasks count (subtasks do not), and the totals update as soon as a task is edited. (#91)
+
+### Added — 2026-11-20 — Epic and label filters across the task views
+
+- The List, Kanban, Gantt and Timeline tabs now share an epic filter ("All", "No epic" or one epic), and List and Kanban gain a label filter: pick one or more labels (a task needs at least one of them) or "No label". The filters combine with each other and with Kanban's assignee and priority filters, and the Filter badge counts each active control.
+- With an epic selected, subtasks follow their parent's epic, List and Gantt hide sections that have no matching task, and the Gantt draws no dependency arrows to hidden tasks. For labels, a subtask matches on its own labels and a parent stays visible while one of its subtasks matches.
+- The filters are kept in the page address (`epicFilter`, `labels`, `assignee`, `priority`) and carried by the project tab links, so they survive switching between List, Kanban, Gantt and Timeline and can be shared as a link. Dragging to reorder still works while a filter is active, and the Gantt Excel and PDF exports still contain the full project.
+- On phones the Filter popover opens as a scrollable panel inside the screen. (#94, #89)
+
+### Added — 2026-11-19 — Story points on tasks (API)
+
+- Tasks have an optional story points estimate, a whole number from 0 to 100. The API accepts `storyPoints` when creating a task and in `PATCH /tasks/:id`; a concurrent edit of the value is detected like other fields, duplicating a task or section copies it, and setting or changing it, including at creation, appears in the project activity log. New nullable `tasks.story_points` column (migration `20261119120000_task_story_points`). The screens that show and edit it follow separately. (#91)
+
+### Added — 2026-11-19 — Delete a project from the Projects list
+
+- Each project card on the Projects list has a ⋯ menu with "Delete project", shown to the people who can delete a project from its page (the project's TAM, the owner of a linked customer, or anyone with view-all access, with project write access). It opens the same confirmation dialog as the project page, and the list updates in place. (#95)
+- Project cards no longer nest controls inside one link: the card link and its actions menu are separate controls.
+
+### Added — 2026-11-19 — Task description in the task panel
+
+- The task panel shows the task description under the title, with line breaks kept. People who can edit tasks change it in place: it saves when you click away, Escape cancels, and clearing it removes the description. Everyone else sees it read-only. (#88)
+
+### Fixed — 2026-11-19 — Chip contrast, sidebar text, loading and shortcut hints
+
+- Light-theme green chips (customer primary mark, account overview and service mapping tags, comment mentions, customer avatars, Admin chips) are readable on tinted panels: their text uses the darker `primary-tint-text` token, 4.76:1 or better on every surface in both themes, and the remove icon on service mapping chips uses the same token. The accessibility scan no longer excludes these chips.
+- The sidebar rail uses fixed warm grey text tokens (`rail-text`, `rail-text-hover`, `rail-text-muted`) instead of cool slate greys; inactive nav text is 5.6:1 or better on the rail.
+- The sign-in check shows the delayed loading skeleton instead of plain "Loading…" text.
+- The command palette row drops a dead highlight class and matches the vendored row radius; the top bar search hint reads "Ctrl+K" off macOS.
+- The Admin role select shows Admin, TAM, Stakeholder and Pending in sentence case instead of raw uppercase values; custom roles show their stored names. Admin icon sizes use the type scale.
+
+### Changed — 2026-11-19 — Overview, Portfolio, project tabs and Risks polish
+
+- The Overview and project Overview loading placeholders use the shared delayed skeleton, and the Overview project id uses the data-mono type style.
+- Portfolio timeline bars and legend swatches use the standard square-corner radius, its year switcher uses the data-mono type style, and phones show the Today marker over each project's year track.
+- On narrow phones the active project tab scrolls into view, clear of the edge fade, when a tab is opened directly; the page itself never jumps.
+- The inline Prob and Impact editors on the project Risks table use the app's select component instead of a native dropdown; picking the current value sends no update.
+
+### Changed — 2026-11-19 — Type scale, Critical Path marks, sync form errors and section colours
+
+- Text sizes in the task panel, epic panel, service mapping list, board cards and the Critical Path mark use the named type scale instead of fixed pixel sizes.
+- The /tasks grid and board subtask rows show the Critical Path mark on critical-path tasks.
+- Mid-week and Reflection sync forms name the card missing its title ("Highlight 2 needs a title."), mark that field as invalid and move focus to it.
+- Sections never given a colour show the same colour in the List tab, the Executive page and the task panel as in the Gantt, instead of grey. The portfolio report returns each section's position and orders sections by position, then id.
+- The Gantt drag preview and the unused Gantt go-to-date popover use the standard overlay shadow.
+
+### Fixed — 2026-11-19 — Panels, forms and board accessibility
+
+- The epic owner picker lists people on the project (its TAM, linked customer owners, members) first and everyone else under "Not on this project", because the server refuses an owner who cannot see the project. The list stays ungrouped until project access has loaded.
+- A task that has subtasks can no longer pick a parent in the task form; the picker is disabled with a short reason.
+- The iTop ticket panel no longer shows "– ago" for "Last update" on a ticket with no update.
+- Pressing Escape while dragging with the keyboard cancels only the drag; it no longer also closes an open task, ticket or epic panel, a dialog or the side drawer.
+- The section reorder dialog checks the project-edit permission itself, and its Close button always works, even if a drag never ended.
+- Keyboard drag on the Kanban board and the iTop ticket board announces card titles or ticket refs and column names instead of raw ids, and names the card you are over when moving within a column. On the iTop board it also says when a target column is not an allowed move, when a drop changes nothing, and when a move waits for confirmation. Each drag handle is named after its card ("Move <title>", "Move <ref>").
+- A failed Gantt section colour change or task duplicate shows an error message instead of failing silently.
+
+### Fixed — 2026-11-19 — Guest link address, deadlocks and plain conflict messages
+
+- Guest links, including the one used by "Embed in Outline", are built from the server's configured public address (`APP_URL`) instead of the address the owner has open, so a link copied over a tunnel or proxy opens for the guest. When `APP_URL` is unset or names a loopback address such as `http://localhost`, the link still uses the browser address.
+- Deleting an epic or a section no longer deadlocks with a task save that links a task to it, and saving the admin status list no longer deadlocks with a task re-pack: all of them take the project's task-order lock first. A task save that sets no epic or section does not wait on that lock, and a status save that waits too long answers a retryable 409 instead of a server error.
+- A database refusal of text containing a NUL byte is logged (code only, never the row data) and answered with a neutral message.
+- Label names are trimmed on the server, so "bug" and "bug " can no longer both exist.
+- Creating or renaming a customer onto an existing name answers "A customer with that name already exists" instead of a database message.
+- The epic owner check is one shared check for creating and editing an epic.
+
+### Fixed — 2026-11-19 — Gantt errors, Dates cell and section permissions
+
+- Gantt: a failed date, reorder, move, Critical Path or dependency update always shows its error, even when another update starts right after it.
+- Gantt: the Dates cell no longer shows the date range twice while its editor is open. When the editor closes, focus returns to the cell only if nothing else took it.
+- Gantt: Add section, section reorder and section colour need the project-edit permission, matching the server, and a section row refuses a drop without it, so a role with task edit only no longer sees actions that end in a 403 or a drop that silently reverts.
+
+### Fixed — 2026-11-19 — Keyboard drag on boards and reorder lists
+
+- Keyboard drag works on the Kanban board and the iTop ticket board: the drag grip is a focusable button (Space to lift, arrow keys to move, Space to drop), and the card wrapper is no longer a stray button.
+- Reorder rows in the task panel, the section reorder dialog and the task status settings are no longer each a tab stop with a joined accessible name; only the reorder handle is focusable.
+
+### Fixed — 2026-11-19 — Service lists, Daily Review refresh, request timeouts, section chip
+
+- Saving a project's or customer's service list updates instantly and rolls back if the save fails.
+- Creating a task refreshes the Daily Review attention lists immediately.
+- Requests to the API time out after 30 seconds (60 seconds for the calls that wait on iTop), so a stuck save can no longer block later edits to the same task. A timed-out save says "The server did not answer in time. Check whether the change was saved before trying again."; a timeout never signs the user out.
+- During a drag between sections, an open task panel shows the new section right away.
+
+### Changed — 2026-11-19 — setup.sh and nginx
+
+- `setup.sh` passes `ITOP_ALLOW_PRIVATE_HOSTS` and `ITOP_SYNC_DISABLED` from `~/solvro/.env` to the backend, so they can be set without editing the generated compose file. Unset keeps the previous defaults.
+- A fresh install pulls the backend image first and, when the registry needs a login, stops with a `docker login ghcr.io` hint instead of Docker's raw error, before anything is changed on the server. `setup.sh` also warns when `APP_URL` is empty, because the API then accepts cross-origin requests from any website (`CORS_ORIGIN` falls back to `*`).
+- `frontend/nginx.conf` serves `/icons/` and `/favicon.png` with `Cache-Control: public, max-age=86400`.
+
+### Changed — 2026-11-19 — Wider typechecks and test hygiene
+
+- The frontend typecheck now also checks `vite.config.ts`, and the node tsconfig no longer lists deleted config files.
+- The backend has `npm run typecheck` (new `tsconfig.check.json`), which typechecks tests and scripts as well as `src`; CI uses it. Three loose type casts in backend tests were corrected.
+- The search API tests cover the 100-character query limit, result ordering, the 8-result cap for projects and tasks, and a literal underscore in the search escape. The search end-to-end test waits for the search button before pressing Ctrl/Cmd+K, and the date-picker and Gantt tests use the shared task-seeding helper.
+
+### Fixed — 2026-11-19 — Label permissions and duplicate label names
+
+- Creating a project label now needs the same permission as renaming or deleting one (`task:write` instead of `project:write`). A duplicate label name, on create or rename, now answers "A label with that name already exists" instead of a database error.
+
+### Fixed — 2026-11-19 — Keyboard focus and contrast fixes
+
+- Install banner: the dismiss control is a separate, keyboard-reachable button instead of a button nested inside a button; both banner buttons show a visible focus ring, and the banner keeps its 44px height on touch screens.
+- Dialogs: pressing Tab while focus is on a non-tabbable element inside a dialog (such as the Guest links heading) now wraps within the dialog instead of leaving it.
+- Task, epic and ticket panels: closing the panel returns focus to the control that opened it, not to the previous task's opener.
+- Admin > Task statuses: the primary button shows a solid focus ring with an offset.
+- Confirmation dialogs: the warning-tone confirm button uses the theme's amber chip colours in light and dark themes, with a darkening hover; the dialog buttons follow the app's keyboard focus styles.
+
+### Fixed — 2026-11-19 — Task form, task panel and section permissions
+
+- The create-task parent picker offers top-level tasks only; it no longer lists subtasks, which the server rejects as a parent.
+- The subtask "done" checkbox in the task form is disabled for users without task edit permission.
+- Errors in the task side panel (failed delete, duplicate or update) now appear at the top of the panel and scroll into view, instead of below the subtasks list.
+- The task side panel shows "Could not load this task" with a Retry button when the project's tasks fail to load, instead of "Loading task…" forever.
+- The section buttons in the list view (add, reorder, rename, duplicate, delete) now require project:write, matching the server; renaming the "No section" group also requires task:write.
+
+### Fixed — 2026-11-19 — Task ordering, date and epic-owner checks
+
+- Deleting a task now closes the gap in its sibling list, so positions stay 0..n-1.
+- Updating a task now rejects a due day before the start day, checked against the stored row, with a 400 validation error. This covers edits that send only one date.
+- Deleting a task, section or epic now waits for the project's task-order lock, so it can no longer deadlock with a concurrent task reorder. It returns a retryable 409 if the wait is too long.
+- Creating or updating an epic now requires the owner to be someone who can see the project (its TAM, a linked customer's owner, a member, or a user with access to all projects). Otherwise it returns 400 `owner_no_project_access`.
+
+### Fixed — 2026-11-19 — iTop customer-page e2e tests
+
+- The iTop Tickets board and ticket panel end-to-end tests now give the test customer an iTop organisation, which the customer page has required for its Tickets tab since the change that reads `itopOrgId` directly. Without it the tab never appeared and the tests timed out.
+
+### Fixed — 2026-11-18 — iTop hardening: log redaction, address token check, Refresh, services scope
+
+- The shared server logger now redacts secret-shaped fields (iTop application and personal tokens, `Authorization` and `Auth-Token` in any letter case listed, OAuth tokens, passwords and secrets) as `[Redacted]`, at the top level and up to two levels deep (`backend/src/logger.ts`).
+- Setting or changing the iTop address in Admin > iTop now requires the application token in the same save, and iTop must accept it (`itop_token_required`, `itop_token_rejected`). The stored token is no longer sent to an address typed in the request. A token saved before any address is set is still accepted; the settings response reports `appTokenUnverified` and the iTop tab asks for the token again together with the address.
+- A full sync requested by Refresh while another sync holds the lock is now retried every 30 s, for up to 30 minutes, instead of being dropped (`backend/src/lib/itop/scheduler.ts`).
+- The Utilization page shows an error when Refresh fails: the server's message (for example the rate limit), or a connection message.
+- `GET /itop/services` no longer returns every organisation's services to any signed-in user. It lists the services provided by, or covered by a customer contract of, the iTop organisations mapped to customers the caller can see. `project:view-all` and `customer:view-all` holders keep the full list.
+- The customer page decides whether to show the Tickets tab from the customer's `itopOrgId` and `itopOrgName`, instead of a separate tickets request on every load.
+
+### Added — 2026-11-18 — PR hygiene check and archive-path plan citations
+
+- New workflow **`.github/workflows/pr-hygiene.yml`**: its `attribution` job runs on every pull request into `develop` or `main`, docs-only ones included, and again when the description is edited. It fails when the description or a commit new to the pull request carries an AI attribution line or the hidden attribution comment some tools insert.
+- New **`.claude/settings.json`** turns off the attribution lines that the coding assistant would otherwise add to commits and pull requests.
+- Code and test comments in 28 files under `backend/`, `frontend/` and `e2e/` now cite plans at their archive path (`docs/archive/plans/…`, `docs/archive/prompts/…`) instead of the old `docs/plans/` path. Comment text only; no behaviour changes.
+- Code and test comments that cited a `docs/ISSUES.md` entry by its title now cite its `ISS-NNN` id, or the archived snapshot `docs/archive/ISSUES-2026-11-18-phase-log.md` when the entry has closed. Comment text only.
+
+### Fixed — 2026-11-18 — Unknown user ids and NUL bytes answer 400
+
+- Updating a project's TAM, a task's assignee or an epic's owner to a user id that does not exist now answers 400 (`tam_not_found`, `assignee_not_found`, `owner_not_found`), matching the create routes, instead of 404.
+- A NUL character (`\u0000`) in any validated request body, query or path parameter now answers 400 `validation_error` instead of 500; a Postgres 22021 error that still reaches the error handler is also answered as 400.
+
+### Changed — 2026-11-18 — Issue ledger and plan housekeeping
+
+- `docs/ISSUES.md` strikes 23 entries that already shipped or no longer apply. Each one has a dated note and the evidence (code location, commit or CHANGELOG line). The Gantt pane-clamp bullet gets a 2026-11-18 code check with the current figures (default pane 498, clamp below a ~699px container). The real-install re-test of Settings > iTop save moves to the open "Go-live iTop setting" bullet.
+- Eight shipped plans move from `docs/plans/` to `docs/archive/plans/`: customer visibility, date contract, Gantt visual refresh, internal sync, issues sweep, Outline integration, `solvro update`, and task panel subtask edit. The Outline knowledge-base idea and the date-contract prompt move to `docs/archive/ideas/` and `docs/archive/prompts/`. Code comments that cited the old paths point at the new ones. `docs/plans/setup-sh-hardening.md` stays, as its work is still open.
+
+### Fixed — 2026-11-18 — Reply-style rules load at session start
+
+- `.claude/settings.local.json`: the SessionStart hook now prints `.claude/reply-style.md` with `cat`. The old hook called `/usr/local/bin/node`, which does not exist on this host, so the rules never loaded. `.claude/hooks/reply-style.js` is deleted. The workflow reference pages in `docs/reference/` describe the new hook.
+
+### Fixed — 2026-11-13 — Focus returns to the task button after closing the drawer
+
+- Closing the task drawer (**`frontend/src/components/Drawer.tsx`**) now returns focus to the control that opened it. The task form focuses its title field when it opens, and the drawer had remembered that field instead of the opener, so focus was lost on close.
+
+### Fixed — 2026-11-13 — Dark "In progress" chip text contrast
+
+- New colour token `--primary-tint-text` in `frontend/src/index.css`: `#6dd183` in the dark theme, `#1f7533` (the light primary) in the light theme. The "blue" tone of `StatusChip` (In progress tasks, Planning and Completed projects, and the status controls that reuse it) uses it. Before, dark `#3aae51` text on the 20% green tint measured 3.04:1 on the selected-row surface and 3.33:1 on the hover surface. It now holds 4.58:1 or better on every surface. The primary green, buttons and links do not change.
+- `e2e/tests/axe.spec.ts`: the known-gap contrast skip (`CONTRAST_GAP`) also matches the chip with the new `text-primary-tint-text` class, so the light-theme scan skips the same chips as before. The light value is unchanged (`#1f7533`).
+- `frontend/src/lib/tokenContrast.test.ts` pins the new pair on five surfaces. `docs/DESIGN.md` lists the token.
+
+### Changed — 2026-11-13 — Standing approval to commit and open PRs to develop
+
+- `CLAUDE.md` (Guardrails and Agent Roster): a session may commit, push a feature branch and open a PR to `develop` once the local checks pass. A push or PR to `main`, a merge to `main` and a force-push to `develop` or `main` still wait for explicit user approval.
+
+### Changed — 2026-11-13 — Local smoke gate ports are configurable
+
+- `.claude/scripts/gates.sh` reads the smoke gate's targets from `API_URL` (default `http://localhost:3000`) and `BASE_URL` (default `http://localhost:5173`). A host that runs two Solvro stacks side by side can now point the smoke gate at the right one, for example `API_URL=http://localhost:3010 BASE_URL=http://localhost:5174`. Before, the sign-in pre-flight always called port 3000.
+
+### Added — 2026-11-13 — npm audit report in CI
+
+- `.github/workflows/ci.yml`: the typecheck job runs `npm audit --omit=dev --audit-level=high` for `backend/` and `frontend/` and reports the result in the job log and as a warning annotation. The step never fails the run. It becomes a gate only after the `zod` 4 upgrade clears the known advisory (GHSA-mrhx-c7xc-m3w5, see `docs/ISSUES.md`).
+
+### Added — 2026-11-12 — Keyboard focus in the drawer and the account menu
+
+- The account menu in the top bar (**`frontend/src/components/layout/TopBar.tsx`**) now works with the arrow keys: Down and Up move between the items and wrap around, Home and End jump to the first and last item, and Down on the account button opens the menu with the first item focused. Items hidden on the current screen size (Help and the theme toggle on desktop) are skipped. Tab closes the menu and moves on from the account button.
+- The side drawer (**`frontend/src/components/Drawer.tsx`**) gives focus back to the control that was focused when it opened, once it closes. It still does not trap focus and does not move focus when it opens, because the board behind it stays usable.
+
+### Removed — 2026-11-12 — Unused contrast helper
+
+- Deleted **`frontend/src/lib/contrast.ts`** (`pickContrast`). Nothing used it since label and epic chips moved to a tinted background with normal text.
+
+### Changed — 2026-11-12 — Stronger focus ring on borderless controls, one green
+
+- Borderless controls (card title buttons, icon-only buttons, text-link buttons, chips and similar, across `frontend/src/components/` and `frontend/src/pages/`) now use a solid `focus-visible:ring-primary` ring instead of `ring-primary/30`. The ring measures about 5.5:1 on dark and 5.1:1 on light, above the 3:1 that WCAG 1.4.11 asks for. Bordered controls keep the primary border plus the soft ring. Solid `bg-primary` and `bg-error` buttons also get a 2px ring offset so the ring stays visible against their fill.
+- `--inverse-primary` in the dark theme is `#1f7533` (was `#2d9042`), the same value as the light `primary` (`frontend/src/index.css`).
+- `docs/DESIGN.md` (frontmatter, section 1 and section 4) and `docs/CONFIGURATION.md` describe the new values.
+
 ## [1.2.1] — 2026-11-12
 
 ### Changed — 2026-11-12 — Version 1.2.1

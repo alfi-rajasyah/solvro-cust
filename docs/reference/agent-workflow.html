@@ -976,8 +976,7 @@ section[id] { scroll-margin-top: 86px; } /* clears the sticky nav on anchor jump
       <p><b>Two constraints make or break this.</b> The rules are scoped to conversation only: never code, comments, commit messages, CHANGELOG entries, or any file. And they are deliberately kept out of every CLAUDE.md. Every CLAUDE.md in the hierarchy reaches subagents, where "answer first" would strip the file:line evidence out of a reviewer's findings. A subagent's output is data for the orchestrator, not chat for a human, and it never gets a follow-up turn to supply the detail it cut.</p>
       <p>A <code>SessionStart</code> hook fires for the main session alone, which is exactly the scope wanted. Everything lives inside the repository, so <code>~/.claude</code> holds nothing about reply style.</p>
 <pre><b>.claude/reply-style.md</b>         the rules, edit here
-<b>.claude/hooks/reply-style.js</b>   prints them as additionalContext
-<b>.claude/settings.local.json</b>    registers the SessionStart hook</pre>
+<b>.claude/settings.local.json</b>    a SessionStart hook prints them with cat</pre>
       <p>Measured on 2026-07-29, not assumed: a subagent from a fresh session reported no reply-style rules in its context, a fresh session in the repository quoted rule 6 verbatim, and a session outside it had none. The same run showed an auto-memory index line <b>does</b> reach subagents, so the rules stay out of there too.</p>
     </div>
   </div>
@@ -1007,8 +1006,6 @@ section[id] { scroll-margin-top: 86px; } /* clears the sticky nav on anchor jump
 │  │  └─ solvro-docs-keeper.md  <s>sonnet-5, docs only</s>
 │  ├─ <i>scripts/</i>
 │  │  └─ gates.sh               <s>14 checks, single writer</s>
-│  ├─ <i>hooks/</i>
-│  │  └─ reply-style.js         <s>SessionStart context</s>
 │  ├─ reply-style.md            <s>lives here, not in ~/.claude</s>
 │  ├─ <i>settings.local.json</i>       <s>permissions, hook registration</s>
 │  └─ worktrees/                <s>isolation for overlapping waves</s>
@@ -1031,7 +1028,7 @@ section[id] { scroll-margin-top: 86px; } /* clears the sticky nav on anchor jump
         </div>
         <div class="note">
           <h4>The roster does not travel</h4>
-          <p>Because the layer is local, cloning the repository on a second machine gives you none of it. Copy <code>agents/</code>, <code>scripts/</code>, <code>hooks/</code>, and the settings file by hand. That trade was accepted deliberately: agent files must never reach the public repository.</p>
+          <p>Because the layer is local, cloning the repository on a second machine gives you none of it. Copy <code>agents/</code>, <code>scripts/</code>, <code>reply-style.md</code>, and the settings file by hand. That trade was accepted deliberately: agent files must never reach the public repository.</p>
         </div>
         <div class="note">
           <h4>Know what reaches a subagent</h4>

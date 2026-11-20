@@ -44,7 +44,7 @@ Note the `timezone` value in iTop's configuration file (Admin tools > Configurat
 
 Sign in to Solvro as an admin and open **Admin > iTop**.
 
-1. **Connection.** Enter the **iTop URL** (`https://...`) and the **Application token**. Click **Test connection**. Every check must pass. When you type a new address, Test connection needs the application token in the same request, so enter the token again. Saving a new application token checks it against iTop first; if iTop refuses it, nothing is saved.
+1. **Connection.** Enter the **iTop URL** (`https://...`) and the **Application token**. Click **Test connection**. Every check must pass. When you type a new address, enter the application token again: Test connection and Save both need it in the same request, and **Save** stays disabled until you do. Saving checks the token against iTop first; if iTop refuses it, nothing is saved.
 2. **Sync.** Set **Refresh every** (minutes between syncs, default 5) and **Capacity per TAM** (hours per week, default 40, used for utilisation percentages).
 3. **Timezone.** Set **iTop server timezone** to the same value as iTop's `timezone`. Save.
 4. **Customers → iTop organisations.** Choose the iTop organisation for each customer.
@@ -97,7 +97,7 @@ To stop the background sync, for example during iTop maintenance, set `ITOP_SYNC
 | Symptom | Cause and fix |
 |---|---|
 | Saving the settings fails with "baseUrl must be an https:// URL". | Solvro accepts only `https://`. Put iTop behind TLS and use that address. |
-| Saving the application token fails with `itop_token_rejected`, or Test connection with a new address fails with `app_token_required`. | iTop refused the token, or the request carried an address but no token. Check the token in iTop and enter it again together with the address. |
+| Saving fails with `itop_token_rejected` or `itop_token_required`, or Test connection with a new address fails with `app_token_required`. | iTop refused the token, or the request carried an address but no token. Check the token in iTop and enter it again together with the address. |
 | Refresh answers "too many requests" (429). | Refresh is limited per user and overall. Wait a minute and try again. |
 | **Test connection** fails a check. | The application token cannot read that class. Add read rights on `Organization`, `UserRequest`, `Incident`, `Person`, and `Service`, and check the `REST Services User` profile. |
 | A TAM is not matched. | The iTop Person email differs from the Solvro email. Correct the email in iTop, then run the match again. |

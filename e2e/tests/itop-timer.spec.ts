@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, loginViaUi, test } from "../fixtures/test";
+import { expect, loginViaUi, test, mockCustomerOrgMapping } from "../fixtures/test";
 
 // Ticket timer (Task 7.1, docs/archive/plans/itop-integration.md): Start/Stop
 // on the ticket panel's "Time" block, backed by POST /itop/tickets/:id/time.
@@ -96,6 +96,7 @@ async function mockCustomerTickets(
   customerId: number,
   tickets: ReturnType<typeof baseTicket>[],
 ): Promise<void> {
+  await mockCustomerOrgMapping(page);
   await page.route(`**/api/itop/customers/${customerId}/tickets*`, (route) =>
     route.fulfill({
       status: 200,

@@ -8,6 +8,7 @@ import { HttpError } from "../http/errors.js";
 import { dateInput } from "../lib/dateInput.js";
 import { validate } from "../http/validate.js";
 import { ensureProjectVisible } from "../lib/visibility.js";
+import { assertEpicOwnerCanSeeProject } from "../lib/epicOwner.js";
 import { recordActivity, shortLabel } from "../lib/activity.js";
 import { diffEpicChanges, epicSnapshotSelect } from "../lib/epicActivity.js";
 import { lockProjectOrder } from "../lib/orderLock.js";
@@ -136,6 +137,8 @@ epicsRouter.patch(
     const body = req.body as z.infer<typeof updateEpicSchema>;
     const { projectId } = await ensureEpicVisible(req.user!, id);
 
+    if (body.ownerId != null) await assertEpicOwnerCanSeeProject(prisma, projectId, body.ownerId);
+
     const data: Prisma.EpicUpdateInput = {};
     if (body.title !== undefined) data.title = body.title;
     if (body.description !== undefined) data.description = body.description;
@@ -201,8 +204,16 @@ epicsRouter.delete(
     // (docs/archive/plans/epics-spec.md §4) — they keep their data. The event
     // snapshots the title and how many tasks lost the link.
     await prisma.$transaction(async (tx) => {
+      // SetNull on Task.epicId updates task rows; serialise with a reorder.
+      await lockProjectOrder(tx, "tasks", projectId);
       const epic = await tx.epic.findUnique({ where: { id }, select: { title: true } });
       if (!epic) throw new HttpError(404, "not_found", "Epic not found");
+      // PATCH /tasks/:id takes the same order lock before it links an epic, so
+      // it is serialised with this delete. Defence in depth: also row-lock the
+      // epic's tasks (in id order) before the delete takes the epic row's
+      // exclusive lock, for any task writer that sets epicId without the
+      // order lock.
+      await tx.$queryRaw`SELECT id FROM tasks WHERE epic_id = ${id} ORDER BY id FOR NO KEY UPDATE`;
       const taskCount = await tx.task.count({ where: { epicId: id } });
       await tx.epic.delete({ where: { id } });
       await recordActivity(tx, {

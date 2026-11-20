@@ -122,6 +122,25 @@ export interface ItopServiceFields {
   org_id_friendlyname: string;
 }
 
+/**
+ * Entitlement: a `CustomerContract` (owned by a customer org) is linked to the
+ * services it covers by `lnkCustomerContractToService`. `GET /itop/services`
+ * reads both so a customer sees third-party-provided services it holds a
+ * contract for. A non-admin app token may be refused these classes.
+ */
+export const ITOP_CUSTOMER_CONTRACT_OUTPUT_FIELDS = "org_id";
+
+export interface ItopCustomerContractFields {
+  org_id: string;
+}
+
+export const ITOP_CONTRACT_SERVICE_LINK_OUTPUT_FIELDS = "customercontract_id,service_id";
+
+export interface ItopContractServiceLinkFields {
+  customercontract_id: string;
+  service_id: string;
+}
+
 export const ITOP_ORGANIZATION_OUTPUT_FIELDS = "id,name";
 
 export interface ItopOrganizationFields {

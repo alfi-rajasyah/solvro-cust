@@ -87,6 +87,50 @@ describe.each([":root", ".dark"] as const)("primary as text in %s", (selector) =
   });
 });
 
+// The StatusChip "blue" tone: text on a primary/20 tint (dark) over every
+// surface the chip can sit on, up to the selected-row surface.
+const TINT_SURFACES = [
+  "background",
+  "surface",
+  "surface-container",
+  "surface-container-high",
+  "surface-container-highest",
+];
+
+describe("primary-tint-text on its primary/20 tint in .dark", () => {
+  const tokens = block(".dark");
+
+  it.each(TINT_SURFACES)("--primary-tint-text on primary/20 over --%s is at least 4.5:1", (surface) => {
+    const tint = tokens.primary.map((c, i) => Math.round(c * 0.2 + tokens[surface][i] * 0.8)) as Rgb;
+    expect(contrast(tokens["primary-tint-text"], tint)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+// Light chips: primary-tint-text on the primary/10 and primary/15 tints over
+// every surface a chip can sit on (ISS-080).
+const LIGHT_TINT_SURFACES = [
+  "surface",
+  "surface-container-lowest",
+  "surface-container-low",
+  "surface-container",
+  "surface-container-high",
+  "surface-container-highest",
+];
+
+describe("primary-tint-text on its primary/10 and primary/15 tints in :root", () => {
+  const tokens = block(":root");
+
+  it.each(LIGHT_TINT_SURFACES.flatMap((s) => [0.1, 0.15].map((a) => [s, a] as const)))(
+    "--primary-tint-text on primary/%s alpha over --%s is at least 4.5:1",
+    (surface, alpha) => {
+      const tint = tokens.primary.map((c, i) =>
+        Math.round(c * alpha + tokens[surface][i] * (1 - alpha)),
+      ) as Rgb;
+      expect(contrast(tokens["primary-tint-text"], tint)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+});
+
 // The hover tint is pinned for light only. Dark Elitery Green (#3aae51) on
 // dark surface-container-high measures 4.4986:1, a hair under 4.5, and the
 // dark brand green is not this test's to move.

@@ -1,0 +1,10 @@
+{
+  // Typecheck-only config: tsconfig.json drives the build (rootDir src, dist),
+  // so tests and scripts are checked here without widening the build.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts", "vitest.config.ts"]
+}

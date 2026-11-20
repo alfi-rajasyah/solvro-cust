@@ -413,7 +413,7 @@ function Field({
 }
 
 const LINK_ACTION_CLASS =
-  "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm font-display text-meta font-semibold text-primary hover:underline outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
+  "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm font-display text-meta font-semibold text-primary hover:underline outline-hidden focus-visible:ring-2 focus-visible:ring-primary";
 
 // "Customers" list of Triage 05 (docs/archive/plans/multi-customer-projects.md):
 // a primary radio, the name, a Primary chip or "Set as primary", remove, and
@@ -477,7 +477,7 @@ function CustomersField({
                   disabled={links.length === 1}
                   aria-label={`Remove ${l.name}`}
                   title={links.length === 1 ? "A project needs at least one customer" : undefined}
-                  className="flex h-6 w-6 [@media(pointer:coarse)]:size-11 shrink-0 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex h-6 w-6 [@media(pointer:coarse)]:size-11 shrink-0 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <span aria-hidden="true" className="material-symbols-outlined text-[18px]">
                     close

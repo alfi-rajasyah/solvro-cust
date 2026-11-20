@@ -1,5 +1,5 @@
 // SolvroKanban — kanban-v2 container mounted at /projects/:id/kanban (T11
-// cutover; see docs/plans/kanban-reui-swap/plan.md T6, Architecture Decision 1).
+// cutover; see docs/archive/plans/kanban-reui-swap/plan.md T6, Architecture Decision 1).
 // Renders the vendored ReUI Kanban engine (frontend/src/components/reui/
 // kanban.tsx) over the pure adapter.ts projection. T7 wires
 // value/onValueChange/onValueCommit: a live local projection is authoritative
@@ -27,7 +27,7 @@
 // own `setNodeRef`, breaking that column as a drop target) and React 18's
 // lack of ref-as-prop for non-forwardRef function components (rules out
 // refing `<KanbanBoard>` directly too).
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useId, useRef, useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -53,6 +53,7 @@ import {
   type TaskStatusDef,
   queryKeys,
   useProjectEpics,
+  useProjectLabels,
   useProjectTasks,
   useTaskStatuses,
   useUpdateTask,
@@ -62,7 +63,11 @@ import { priorityOptions, TASK_CATEGORY_GROUP_LABEL } from "@/lib/labels";
 import { STATUS_CATEGORY_ICON } from "@/lib/taskStatuses";
 import { STATUS_TONE_DOT_CLASS } from "@/components/StatusChip";
 import { BoardSkeleton } from "@/components/skeletons";
+import { TaskFilterPopover } from "@/components/TaskFilterPopover";
+import { useTaskFilters } from "@/hooks/useTaskFilters";
+import { buildFilterContext, clearPatch, countActiveFilters, taskVisible } from "@/lib/taskFilters";
 import { TOOLBAR_BOX, TOOLBAR_BUTTON_PRIMARY } from "@/lib/utils";
+import { buildBoardAnnouncements } from "@/lib/dragAnnouncements";
 import { columnIdOf, projectToColumns, sortStatusDefsForBoard, sortTasksCanonical } from "./adapter";
 import { TaskCard } from "./cards";
 import { mapCommitToPatch, type KanbanCommitMetaLike } from "./commitMapper";
@@ -149,7 +154,7 @@ function ColumnMenu({ onAdd }: { onAdd: () => void }) {
       <button
         type="button"
         onClick={() => setMenuOpen((v) => !v)}
-        className="material-symbols-outlined cursor-pointer rounded [@media(pointer:coarse)]:p-3 text-base text-on-surface-variant hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+        className="material-symbols-outlined cursor-pointer rounded [@media(pointer:coarse)]:p-3 text-base text-on-surface-variant hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
         aria-label="Column options"
       >
         more_horiz
@@ -199,12 +204,12 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   // Done-category columns can be folded away (per viewer, not per project:
   // the status list is workspace-wide). Stored as def ids.
   const [collapsedIds, setCollapsedIds] = useState<number[]>(readCollapsedIds);
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [filterAssigneeId, setFilterAssigneeId] = useState<number | "">("");
-  const [filterPriority, setFilterPriority] = useState<Priority | "">("");
-  // Epic filter (docs/archive/plans/epics-spec.md §6/§7 T5): "" = All (inactive),
-  // `null` = "No epic" (task.epicId === null), a number = one project epic.
-  const [filterEpicId, setFilterEpicId] = useState<number | null | "">("");
+  // All board filters live in the URL (hooks/useTaskFilters.ts) so they survive
+  // a tab switch; the board applies the full "board" scope.
+  const { filters, setFilters } = useTaskFilters();
+  const { data: labels } = useProjectLabels(project.id);
+  const assigneeSelectId = useId();
+  const prioritySelectId = useId();
   const [mobileSheetTask, setMobileSheetTask] = useState<Task | null>(null);
   // A failed inline edit (drag, subtask toggle, mobile move) is rolled back by
   // useUpdateTask; without this the card just snapped back with no message.
@@ -312,22 +317,12 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   // projection) — mirrors ProjectKanban.tsx's `topLevel`/`grouped` (filtered,
   // rendering-only) vs `topLevelAll`/`groupedAll` (unfiltered, drop-math
   // source of truth) split (lines 183-203).
+  const filterCtx = useMemo(() => buildFilterContext(tasks ?? []), [tasks]);
   const isTaskVisible = useCallback(
-    (task: Task) => {
-      if (filterAssigneeId !== "" && task.assignedToId !== filterAssigneeId) return false;
-      if (filterPriority !== "" && task.priority !== filterPriority) return false;
-      if (filterEpicId !== "") {
-        if (filterEpicId === null) {
-          if (task.epicId !== null) return false;
-        } else if (task.epicId !== filterEpicId) {
-          return false;
-        }
-      }
-      return true;
-    },
-    [filterAssigneeId, filterPriority, filterEpicId],
+    (task: Task) => taskVisible(task, filters, filterCtx),
+    [filters, filterCtx],
   );
-  const filterActive = filterAssigneeId !== "" || filterPriority !== "" || filterEpicId !== "";
+  const filterCount = countActiveFilters(filters);
 
   const derivedColumns = useMemo(
     () => projectToColumns(topLevelAll, visibleDefs, isTaskVisible),
@@ -518,6 +513,26 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
   // `columns` itself hadn't changed.
   const getItemValue = useCallback((task: Task): string => String(task.id), []);
 
+  // Keyboard-drag announcements: card titles and column names, not raw ids.
+  const announcements = useMemo(() => {
+    const titleById = new Map<string, string>();
+    const colOfCard = new Map<string, string>();
+    for (const [colId, list] of Object.entries(columns)) {
+      for (const t of list) {
+        titleById.set(String(t.id), t.title);
+        colOfCard.set(String(t.id), colId);
+      }
+    }
+    const nameOfColumn = new Map(allDefs.map((d) => [columnIdOf(d), d.name]));
+    return buildBoardAnnouncements({
+      cardLabel: (id) => titleById.get(String(id)) ?? null,
+      columnLabelOf: (id) => {
+        const key = String(id);
+        return nameOfColumn.get(key) ?? nameOfColumn.get(colOfCard.get(key) ?? "") ?? null;
+      },
+    });
+  }, [columns, allDefs]);
+
   function openTask(taskId: number) {
     setSearchParams(
       (prev) => {
@@ -578,7 +593,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                 type="button"
                 onClick={() => setCollapsed(def.id, false)}
                 aria-label={`Show ${def.name} column`}
-                className="inline-flex items-center gap-1 rounded-sm px-2 py-1 [@media(pointer:coarse)]:py-3 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex items-center gap-1 rounded-sm px-2 py-1 [@media(pointer:coarse)]:py-3 text-xs font-semibold text-on-surface-variant transition-colors hover:bg-surface-container outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-sm">unfold_more</span>
                 {def.name} · {collapsedCounts.get(def.id) ?? 0} (hidden)
@@ -586,105 +601,61 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
             ))}
           </div>
         )}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setFilterOpen((v) => !v)}
-            className={[
+        <TaskFilterPopover
+          filters={filters}
+          onChange={setFilters}
+          onClear={() => setFilters(clearPatch("board"))}
+          activeCount={filterCount}
+          epics={epics ?? []}
+          labels={labels ?? []}
+          triggerClassName={(active) =>
+            [
               `${TOOLBAR_BOX} [@media(pointer:coarse)]:h-11 border font-semibold transition-colors`,
-              filterActive
+              active
                 ? "border-primary bg-primary/10 text-primary"
                 : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container",
-            ].join(" ")}
-          >
-            <span aria-hidden="true" className="material-symbols-outlined text-base">filter_alt</span>
-            Filter
-            {filterActive && (
-              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-meta leading-none font-bold text-on-primary">
-                {(filterAssigneeId !== "" ? 1 : 0) +
-                  (filterPriority !== "" ? 1 : 0) +
-                  (filterEpicId !== "" ? 1 : 0)}
-              </span>
-            )}
-          </button>
-          {filterOpen && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setFilterOpen(false)} />
-              <div className="absolute right-0 z-20 mt-2 w-64 rounded-sm border border-outline-variant bg-surface-container-lowest p-3 shadow-overlay">
-                <div className="mb-3">
-                  <label className="mb-1 block text-label-caps uppercase text-on-surface-variant">
-                    Assignee
-                  </label>
-                  <select
-                    value={filterAssigneeId === "" ? "" : String(filterAssigneeId)}
-                    onChange={(e) =>
-                      setFilterAssigneeId(e.target.value === "" ? "" : Number(e.target.value))
-                    }
-                    className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
-                  >
-                    <option value="">Everyone</option>
-                    {(users ?? []).map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.username}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="mb-3">
-                  <label className="mb-1 block text-label-caps uppercase text-on-surface-variant">
-                    Priority
-                  </label>
-                  <select
-                    value={filterPriority}
-                    onChange={(e) => setFilterPriority(e.target.value as Priority | "")}
-                    className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
-                  >
-                    <option value="">Any priority</option>
-                    {priorityOptions.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="mb-3">
-                  <label className="mb-1 block text-label-caps uppercase text-on-surface-variant">
-                    Epic
-                  </label>
-                  <select
-                    value={filterEpicId === "" ? "" : filterEpicId === null ? "none" : String(filterEpicId)}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setFilterEpicId(v === "" ? "" : v === "none" ? null : Number(v));
-                    }}
-                    className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
-                  >
-                    <option value="">All</option>
-                    <option value="none">No epic</option>
-                    {(epics ?? []).map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {filterActive && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFilterAssigneeId("");
-                      setFilterPriority("");
-                      setFilterEpicId("");
-                    }}
-                    className="tap-target text-xs font-semibold text-primary hover:underline"
-                  >
-                    Clear filters
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+            ].join(" ")
+          }
+        >
+          <div className="mb-3">
+            <label htmlFor={assigneeSelectId} className="mb-1 block text-label-caps uppercase text-on-surface-variant">
+              Assignee
+            </label>
+            <select
+              id={assigneeSelectId}
+              value={filters.assigneeId === null ? "" : String(filters.assigneeId)}
+              onChange={(e) =>
+                setFilters({ assigneeId: e.target.value === "" ? null : Number(e.target.value) })
+              }
+              className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+            >
+              <option value="">Everyone</option>
+              {(users ?? []).map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.username}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="mb-3">
+            <label htmlFor={prioritySelectId} className="mb-1 block text-label-caps uppercase text-on-surface-variant">
+              Priority
+            </label>
+            <select
+              id={prioritySelectId}
+              value={filters.priority ?? ""}
+              onChange={(e) => setFilters({ priority: (e.target.value || null) as Priority | null })}
+              className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+            >
+              <option value="">Any priority</option>
+              {priorityOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </TaskFilterPopover>
         {dragEnabled && defaultTodoDef && (
           <button
             type="button"
@@ -748,6 +719,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
         onDragCancel={handleDragCancel}
         restoreOnCancel
         getItemValue={getItemValue}
+        accessibility={{ announcements }}
         className="flex h-full flex-col md:min-h-0 md:flex-1"
       >
         {/* Scroll-snap pager container (<md) / grid container (md:+) — real
@@ -845,7 +817,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                           type="button"
                           onClick={() => setCollapsed(def.id, true)}
                           aria-label={`Collapse ${def.name} column`}
-                          className="material-symbols-outlined cursor-pointer rounded [@media(pointer:coarse)]:p-3 text-base text-on-surface-variant hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+                          className="material-symbols-outlined cursor-pointer rounded [@media(pointer:coarse)]:p-3 text-base text-on-surface-variant hover:text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                         >
                           unfold_less
                         </button>
@@ -873,22 +845,9 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                           // vendor's own opacity-50 for the same utility group.
                           // No vendor file touched.
                           className={dragEnabled ? undefined : "opacity-100"}
-                          // Keyboard: the card's title button is the entry point
-                          // (cards.tsx). The engine spreads dnd-kit's attributes
-                          // (role="button", tabIndex 0, "press space to pick
-                          // up") onto this wrapper, but its key listener sits on
-                          // the grip, which cannot take focus — so the wrapper
-                          // announced a keyboard drag that never worked and
-                          // nested the card's buttons inside a button. These
-                          // overrides win in the engine's mergeProps; no vendor
-                          // file touched. Moving a card by keyboard goes
-                          // through the task panel's status field.
-                          role={undefined}
-                          tabIndex={undefined}
-                          aria-roledescription={undefined}
-                          aria-describedby={undefined}
-                          aria-pressed={undefined}
-                          aria-disabled={undefined}
+                          // Keyboard: the card's grip is a focusable button (the
+                          // engine puts dnd-kit's attributes and key listener
+                          // on it); the title button opens the task.
                         >
                           <TaskCard
                             task={task}

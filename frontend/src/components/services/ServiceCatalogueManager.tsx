@@ -208,7 +208,7 @@ export function ServiceCatalogueManager() {
     getRowId: (row) => String(row.id),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    // Pagination stays OFF (pilot verdict — docs/plans/reui-data-grid.md
+    // Pagination stays OFF (pilot verdict — docs/archive/plans/reui-data-grid.md
     // Checkpoint B): no getPaginationRowModel, so the full sorted row model
     // renders. `pageSize` here only sizes the loading-skeleton row count.
     initialState: { pagination: { pageSize: 8 } },

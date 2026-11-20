@@ -17,6 +17,7 @@ import {
   assertLabelsInProject,
   assertSectionInProject,
   assertValidParent,
+  closeGap,
   insertManyAfter,
   moveTaskWithinSiblings,
   siblingKeyEquals,
@@ -27,8 +28,11 @@ import { assertEpicNotOnSubtask, assertValidEpic } from "../lib/epics.js";
 import { duplicateTaskTree } from "../lib/duplicate.js";
 import { lockStatusListShared, resolveStatusWrite, statusDefInclude } from "../lib/taskStatuses.js";
 import { ensureAssigneeIsMember } from "../lib/projectMembers.js";
+import { assertUserExists } from "../lib/userRefs.js";
 import { diffTaskChanges, recordActivity } from "../lib/activity.js";
 import { filterActiveUsersWhoCanSeeProject, notifyForEvent } from "../lib/notifications.js";
+import { storyPointsField } from "../lib/storyPoints.js";
+import { bulkTasksSchema, bulkUpdateTasks, type BulkTasksBody } from "../lib/bulkTasks.js";
 
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 
@@ -51,6 +55,7 @@ const expectedTaskSchema = z.object({
   parentTaskId: z.number().int().positive().nullable().optional(),
   isMilestone: z.boolean().optional(),
   isCriticalPath: z.boolean().optional(),
+  storyPoints: storyPointsField.optional(),
   labelIds: z.array(z.number().int().positive()).optional(),
 });
 type ExpectedTask = z.infer<typeof expectedTaskSchema>;
@@ -79,6 +84,7 @@ const updateTaskSchema = z
     dueDate: dateInput.nullable().optional(),
     isMilestone: z.boolean().optional(),
     isCriticalPath: z.boolean().optional(),
+    storyPoints: storyPointsField.optional(),
     // baselineStartDate / baselineDueDate are intentionally NOT accepted here —
     // they are server-set only, snapshotted by POST /projects/:id/baseline.
     // Accepting them from clients would let any task:write user overwrite the
@@ -197,6 +203,7 @@ function findStaleFields(
     "parentTaskId",
     "isMilestone",
     "isCriticalPath",
+    "storyPoints",
   ] as const;
   for (const field of scalarFields) {
     const want = expected[field];
@@ -342,6 +349,17 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
   );
 });
 
+// Registered before the "/:id" routes so a literal "bulk" is never read as an id.
+tasksRouter.post(
+  "/bulk",
+  requirePermission("task:write"),
+  validate("body", bulkTasksSchema),
+  async (req, res) => {
+    const updated = await bulkUpdateTasks(req.user!, req.body as BulkTasksBody);
+    res.json({ updated });
+  },
+);
+
 tasksRouter.patch(
   "/:id",
   requirePermission("task:write"),
@@ -369,6 +387,7 @@ tasksRouter.patch(
       status: TaskStatus;
       parentTaskId: number | null;
       isMilestone: boolean;
+      startDate: Date | null;
       dueDate: Date | null;
       assignedToId: number | null;
     }) => {
@@ -398,10 +417,18 @@ tasksRouter.patch(
       // other lock (see lib/taskStatuses.ts), so an admin category change or
       // delete cannot interleave with it.
       if (body.status !== undefined || body.statusId !== undefined) await lockStatusListShared(tx);
-      // A reorder or re-parent re-packs the project's task order: take that
-      // lock before the row lock below (see lib/orderLock.ts for why the order
-      // matters). The project id is read without a lock; it never changes.
-      if (body.position !== undefined || body.parentTaskId !== undefined) {
+      // A reorder or re-parent re-packs the project's task order, and linking
+      // an epic or section (a non-null id; null takes no key-share lock) locks
+      // that row, which an epic or section delete holds exclusively while it
+      // updates this task. Take the order lock before the row lock below (see
+      // lib/orderLock.ts for why the order matters). The project id is read
+      // without a lock; it never changes.
+      if (
+        body.position !== undefined ||
+        body.parentTaskId !== undefined ||
+        body.epicId != null ||
+        body.sectionId != null
+      ) {
         const [row] = await tx.$queryRaw<{ project_id: number }[]>`SELECT project_id FROM tasks WHERE id = ${id}`;
         if (row) await lockProjectOrder(tx, "tasks", row.project_id);
       }
@@ -481,6 +508,26 @@ tasksRouter.patch(
         });
       }
 
+      // The patch can carry one date only (the panel sends just the changed
+      // field), so check the merged result. A milestone is exempt: its start
+      // is forced to its due date below. Only when this patch touches a date,
+      // so an unrelated edit of a legacy row with due < start still saves.
+      if (body.startDate !== undefined || body.dueDate !== undefined) {
+        const mergedStart = body.startDate !== undefined ? body.startDate : cur.startDate;
+        const mergedDue = body.dueDate !== undefined ? body.dueDate : cur.dueDate;
+        if (
+          !(body.isMilestone ?? cur.isMilestone) &&
+          mergedStart &&
+          mergedDue &&
+          utcMidnightOf(mergedDue).getTime() < utcMidnightOf(mergedStart).getTime()
+        ) {
+          throw new HttpError(400, "validation_error", "Due date must not be before the start date", {
+            formErrors: [],
+            fieldErrors: { dueDate: ["Due date must not be before the start date"] },
+          });
+        }
+      }
+
       if (nextParentTaskId !== null) {
         await assertValidParent(tx, cur.projectId, id, nextParentTaskId);
       }
@@ -511,6 +558,10 @@ tasksRouter.patch(
         epicIdUpdate = body.epicId;
       } else if (body.parentTaskId !== undefined && body.parentTaskId !== null) {
         epicIdUpdate = null;
+      }
+
+      if (body.assignedToId != null) {
+        await assertUserExists(tx, body.assignedToId, "assignee_not_found", "Assignee not found");
       }
 
       // Assigning someone who cannot see the project adds them as a member
@@ -545,6 +596,7 @@ tasksRouter.patch(
       if (body.dueDate !== undefined) data.dueDate = body.dueDate;
       if (body.isMilestone !== undefined) data.isMilestone = body.isMilestone;
       if (body.isCriticalPath !== undefined) data.isCriticalPath = body.isCriticalPath;
+      if (body.storyPoints !== undefined) data.storyPoints = body.storyPoints;
       if (body.itopTicketRef !== undefined) data.itopTicketRef = body.itopTicketRef;
       // Milestone due-date lockstep: whatever this patch results in, a
       // milestone with a due date must have startDate === dueDate.
@@ -634,10 +686,13 @@ tasksRouter.delete(
     await prisma.$transaction(async (tx) => {
       const task = await tx.task.findUnique({
         where: { id },
-        select: { projectId: true, title: true },
+        select: { projectId: true, title: true, parentTaskId: true },
       });
       if (!task) throw new HttpError(404, "not_found", "Task not found");
+      // The delete re-packs the sibling list: take the order lock first.
+      await lockProjectOrder(tx, "tasks", task.projectId);
       await tx.task.delete({ where: { id } });
+      await closeGap(tx, { projectId: task.projectId, parentTaskId: task.parentTaskId }, id);
       await recordActivity(tx, {
         projectId: task.projectId,
         actorId: req.user!.sub,
@@ -654,7 +709,7 @@ tasksRouter.delete(
 // Duplicate a task (and, when it's a top-level task, its subtasks) — no
 // body. A top-level source copies with its subtasks nested under the copy;
 // a subtask source copies just that one row under the same parentTaskId.
-// See docs/plans/duplicate-tasks-sections.md §3-4 for the settled field
+// See docs/archive/plans/duplicate-tasks-sections.md §3-4 for the settled field
 // rules (status -> TODO, baseline cleared, dependencies dropped, comments
 // never copied) implemented by duplicateTaskTree.
 tasksRouter.post(
@@ -682,10 +737,10 @@ tasksRouter.post(
       // The copy lands at the end of the same sibling list duplicateTaskTree
       // appended it to (source's own list, since no overrides were passed) —
       // move it to right after the source. Placed by the source's identity
-      // (insertManyAfter), not `source.position + 1` as an index: DELETE
-      // /tasks/:id never re-packs its sibling list, so a stale position
-      // value can point at the wrong row once an earlier sibling was
-      // deleted. insertManyAfter re-packs the whole list dense regardless.
+      // (insertManyAfter), not `source.position + 1` as an index: positions
+      // written before DELETE /tasks/:id closed its gap may still be sparse,
+      // so a stored position can point at the wrong row. insertManyAfter
+      // re-packs the whole list dense regardless.
       const key: SiblingKey = { projectId: source.projectId, parentTaskId: source.parentTaskId };
       await insertManyAfter(tx, key, id, [newId]);
 

@@ -147,7 +147,7 @@ function TaskRow({
         {/* Stretched link: the whole row is the click target, one link for assistive tech. */}
         <EmbedExternalLink
           href={embedOpenHref(projectId, task.id)}
-          className="line-clamp-2 wrap-break-word text-sm font-medium text-on-surface outline-hidden after:absolute after:inset-0 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="line-clamp-2 wrap-break-word text-sm font-medium text-on-surface outline-hidden after:absolute after:inset-0 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary"
         >
           {task.title}
         </EmbedExternalLink>

@@ -21,6 +21,7 @@ import { taskStatusesRouter } from "./routes/taskStatuses.js";
 import { overviewRouter } from "./routes/overview.js";
 import { labelsRouter } from "./routes/labels.js";
 import { customersRouter } from "./routes/customers.js";
+import { customerTeamRouter } from "./routes/customerTeam.js";
 import { sectionsRouter } from "./routes/sections.js";
 import { epicsRouter } from "./routes/epics.js";
 import { holidaysRouter } from "./routes/holidays.js";
@@ -82,6 +83,7 @@ export function createApp(opts: { logger?: Logger } = {}): Express {
   app.use("/overview", overviewRouter);
   app.use("/customers", customersRouter);
   app.use("/customers", customerOutlineDocsRouter);
+  app.use("/customers", customerTeamRouter);
   app.use("/projects", projectsRouter);
   app.use("/projects", projectMembersRouter);
   app.use("/projects", shareLinksRouter);

@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import { apiBase, expect, loginViaUi, test } from "../fixtures/test";
 import { createTask, isoDateOffset } from "../fixtures/seed";
 
-// Daily Review v2 (docs/plans/daily-review-v2-spec.md §9; weekly sync tables
+// Daily Review v2 (docs/archive/plans/daily-review-v2-spec.md §9; weekly sync tables
 // per docs/archive/plans/weekly-sync-tables.md): one end-to-end pass through the
 // rewritten /daily-review page — a project note, an operations note, Mark
 // reviewed, an overdue-task status change, the Reflection sync modal's

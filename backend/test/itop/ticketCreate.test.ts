@@ -162,8 +162,20 @@ afterEach(async () => {
 });
 
 describe("GET /itop/services", () => {
-  it("returns the service picklist sorted by name, with the provider org as providerName", async () => {
+  it("returns the caller's visible orgs' services sorted by name, with the provider org as providerName", async () => {
     const res = await call("get", "/itop/services", fixture.rina.token);
+
+    // Rina's only customer maps to org 1; org 2's "Service Desk" is not hers.
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([
+      { id: 3, name: "Backup", providerName: "Northwind Freight Sdn Bhd" },
+      { id: 1, name: "Network / WAN", providerName: "Northwind Freight Sdn Bhd" },
+    ]);
+  });
+
+  it("returns every service to an admin, including orgs no customer maps to", async () => {
+    const admin = await createUserWithRole("ADMIN");
+    const res = await call("get", "/itop/services", admin.token);
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual([
@@ -171,6 +183,98 @@ describe("GET /itop/services", () => {
       { id: 1, name: "Network / WAN", providerName: "Northwind Freight Sdn Bhd" },
       { id: 2, name: "Service Desk", providerName: "PT Sinar Logistik" },
     ]);
+  });
+
+  it("scopes each caller separately off the shared cache — no leak between callers", async () => {
+    const admin = await createUserWithRole("ADMIN");
+    const names = async (token: string) =>
+      ((await call("get", "/itop/services", token)).body as { name: string }[]).map((s) => s.name);
+
+    // Admin warms the cache with the full catalogue; the TAMs must still be scoped.
+    expect(await names(admin.token)).toHaveLength(3);
+    expect(await names(fixture.rina.token)).toEqual(["Backup", "Network / WAN"]);
+    expect(await names(fixture.dedi.token)).toEqual(["Service Desk"]);
+    expect(await names(fixture.rina.token)).toEqual(["Backup", "Network / WAN"]);
+  });
+
+  it("shows a third-party provider's service to a customer that holds a contract for it, and hides it otherwise", async () => {
+    // Org 2 (dedi's customer) provides "Service Desk"; org 1 (rina's) buys it.
+    fixture.state.customerContracts.set(1, { id: 1, org_id: 1 });
+    fixture.state.contractServiceLinks.set(1, { id: 1, customercontract_id: 1, service_id: 2 });
+
+    const withContract = await call("get", "/itop/services", fixture.rina.token);
+    expect((withContract.body as { name: string }[]).map((s) => s.name)).toEqual([
+      "Backup",
+      "Network / WAN",
+      "Service Desk",
+    ]);
+
+    // Same provider, no contract: hidden again (cache busted so the fake is re-read).
+    fixture.state.contractServiceLinks.clear();
+    bustItopServicesCache();
+    const without = await call("get", "/itop/services", fixture.rina.token);
+    expect((without.body as { name: string }[]).map((s) => s.name)).toEqual(["Backup", "Network / WAN"]);
+  });
+
+  it("shows a service to the org that holds the contract, not to a caller whose orgs neither provide nor hold it", async () => {
+    // Service 4 is provided by an UNMAPPED org (3); only org 2 (dedi's customer) holds a contract for it.
+    // Dedi sees it purely through the holder arm; rina (org 1) must not.
+    fixture.state.services.set(4, { id: 4, name: "Managed Hosting", org_id: 3 });
+    fixture.state.customerContracts.set(1, { id: 1, org_id: 2 });
+    fixture.state.contractServiceLinks.set(1, { id: 1, customercontract_id: 1, service_id: 4 });
+
+    const dedi = await call("get", "/itop/services", fixture.dedi.token);
+    expect((dedi.body as { name: string }[]).map((s) => s.name)).toEqual(["Managed Hosting", "Service Desk"]);
+    const rina = await call("get", "/itop/services", fixture.rina.token);
+    expect((rina.body as { name: string }[]).map((s) => s.name)).toEqual(["Backup", "Network / WAN"]);
+  });
+
+  it("answers 502 when the contract read fails in transport, and the retry is not served from cache", async () => {
+    fixture.state.failNextGetForClass = "CustomerContract";
+    const failed = await call("get", "/itop/services", fixture.rina.token);
+    expect(failed.status).toBe(502);
+
+    const before = fixture.state.requestCount;
+    const retry = await call("get", "/itop/services", fixture.rina.token);
+    expect(retry.status).toBe(200);
+    expect(fixture.state.requestCount).toBeGreaterThan(before);
+  });
+
+  it("falls back to provider-only scoping, never a 500 or an empty list, when iTop refuses the contract read", async () => {
+    fixture.state.customerContracts.set(1, { id: 1, org_id: 1 });
+    fixture.state.contractServiceLinks.set(1, { id: 1, customercontract_id: 1, service_id: 2 });
+    fixture.state.disabledClasses.add("CustomerContract");
+
+    const res = await call("get", "/itop/services", fixture.rina.token);
+    expect(res.status).toBe(200);
+    // Provider-only: org 1's own services; the contract-granted Service Desk is not offered.
+    expect((res.body as { name: string }[]).map((s) => s.name)).toEqual(["Backup", "Network / WAN"]);
+  });
+
+  it("shows an unowned (tamId null) mapped customer's services to an unrelated TAM", async () => {
+    // itop_org_id is unique, so the unowned customer maps to a third org with its own service.
+    fixture.state.services.set(4, { id: 4, name: "Shared Hosting", org_id: 3 });
+    await prisma.customer.create({
+      data: {
+        name: `iTop create test unowned ${Date.now()}-${Math.random()}`,
+        description: "d",
+        tamId: null,
+        itopOrgId: 3,
+        itopOrgName: "Unowned Org",
+      },
+    });
+    const other = await createUserWithRole("TAM");
+    const res = await call("get", "/itop/services", other.token);
+    expect((res.body as { name: string }[]).map((s) => s.name)).toEqual(["Shared Hosting"]);
+  });
+
+  it("returns nothing to a TAM with no visible mapped customer", async () => {
+    const other = await createUserWithRole("TAM");
+    const res = await call("get", "/itop/services", other.token);
+    expect(res.status).toBe(200);
+    // Unowned (tamId null) mapped customers are visible to every TAM by design,
+    // so the fixture's two owned customers are the only mapped ones here.
+    expect(res.body).toEqual([]);
   });
 
   it("caches the result for 5 minutes — a second call never reaches the fake", async () => {

@@ -51,12 +51,15 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   { value: "customer:view-all", label: "See all customers", hint: "See every customer and its notes and weekly updates. Projects stay limited to the ones you can already see." },
   { value: "customer:read", label: "View customers", hint: "See customers, their notes, weekly updates and services." },
   { value: "customer:write", label: "Manage customers", hint: "Create and edit customers, notes, weekly updates and services." },
+  { value: "customer:team-all", label: "Manage every customer team", hint: "Add and remove team members on any customer you can see, including customers without an owner. A customer's owner with Manage customers can always manage their own customer's team." },
   { value: "project:read", label: "View projects", hint: "See projects, risks, sections, notes." },
   { value: "project:write", label: "Manage projects", hint: "Create/edit projects, risks, sections, baselines." },
   { value: "task:read", label: "View tasks", hint: "See tasks and subtasks." },
   { value: "task:write", label: "Manage tasks", hint: "Create, edit, move, and delete tasks." },
   { value: "task:comment", label: "Comment on tasks", hint: "Post comments and mention people on tasks the user can see. Read-only roles can have this without any write permission." },
   { value: "report:executive", label: "Executive dashboard", hint: "See the org-wide Executive portfolio dashboard (all projects across all TAMs) and overdue-projects monitoring. Read-only." },
+  { value: "workload:team", label: "Team workload", hint: "On the Utilization page's Workload tab, see the open tasks of every person assigned to a project this user owns, plus the unassigned tasks in those projects. Without it a user sees only their own row. Read-only." },
+  { value: "workload:all", label: "Org-wide workload", hint: "On the Utilization page's Workload tab, see every assignee's open tasks and all unassigned tasks. Counts cover every project; task names show only for projects the user can open. Read-only." },
 ];
 
 /**

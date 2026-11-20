@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Solvro quality gates — deterministic replacement for the retired solvro-qa agent.
-# Pipeline v2 (approved 2026-07-28): gates run per task; review runs per phase,
-# except spine touches which require an instant opus review (enforced here, not by
-# model judgment). Design: docs/archive/plans/pipeline-v2-design.md
+# Full runs are orchestrator-owned and serial: once per lane-D or lane-S change, and per wave
+# integration plus at close for a phase (lanes: root CLAUDE.md roster). Spine touches
+# require an instant opus review in any lane (enforced here, not by model judgment).
+# Design: docs/archive/plans/pipeline-v2-design.md, docs/archive/plans/pipeline-v3-simplify.md
 #
 # Usage: .claude/scripts/gates.sh [options]
 #   --base=<ref>                diff base, merge-base semantics (default: origin/develop)
@@ -10,6 +11,10 @@
 #   --all                       force both areas
 #   --skip-smoke                skip the Playwright smoke gate
 #   --performed-review=<none|opus>  review already performed for spine touches (default: none)
+#
+# Smoke targets: API_URL (default http://localhost:3000) and BASE_URL (default
+# http://localhost:5173). Set both when the stack runs on other ports, e.g. a host
+# that also runs the sibling stack: API_URL=http://localhost:3010 BASE_URL=http://localhost:5174.
 #
 # Test hook: GATES_DIFF_OVERRIDE (newline-separated paths) stands in for the real diff.
 # Output: one "PASS <gate>" / "FAIL <gate> — reason" line per gate; failing command
@@ -78,11 +83,11 @@ smoke_gate() {
   # have twice reset this user's password via create-admin.ts for their own
   # verification — fail here with a one-line diagnosis instead.
   local code
-  code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:3000/auth/login \
+  code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${API_URL:-http://localhost:3000}/auth/login" \
     -H 'Content-Type: application/json' \
     -d "{\"email\":\"${ADMIN_EMAIL:-qa@solvro.test}\",\"password\":\"${ADMIN_PASSWORD:-QaTest1234!}\"}")
   if [ "$code" = "000" ]; then
-    echo "backend unreachable on :3000 — the stack isn't up (docker compose up -d), not a fixture problem"
+    echo "backend unreachable at ${API_URL:-http://localhost:3000} — the stack isn't up (docker compose up -d), not a fixture problem"
     return 1
   fi
   if [ "$code" != "200" ]; then
@@ -94,7 +99,7 @@ smoke_gate() {
 }
 
 if [ "$F_BACK" -eq 1 ]; then
-  run_gate backend-typecheck docker compose exec -T backend npx tsc --noEmit
+  run_gate backend-typecheck docker compose exec -T backend npm run typecheck  # src, test, scripts
   run_gate backend-vitest backend_vitest
 fi
 if [ "$F_FRONT" -eq 1 ]; then
@@ -103,7 +108,12 @@ if [ "$F_FRONT" -eq 1 ]; then
   # East-of-UTC run: pins the date-contract invariant (dateField.ts) — a reintroduced
   # local-midnight serialization is invisible under the container's default UTC clock.
   run_gate frontend-vitest-tz docker compose exec -T -e TZ=Asia/Jakarta frontend npm test
-  if [ "$SKIP_SMOKE" -eq 0 ]; then run_gate playwright-smoke smoke_gate; else echo "SKIP playwright-smoke (--skip-smoke)"; fi
+  # A frontend diff of test files only renders nothing new, so smoke has nothing
+  # to prove; typecheck and both vitest runs above still cover it.
+  FRONT_NON_TEST="$(echo "$DIFF_FILES" | grep -E '^frontend/' | grep -vE '\.test\.tsx?$' | sed '/^$/d')"
+  if [ "$SKIP_SMOKE" -eq 1 ]; then echo "SKIP playwright-smoke (--skip-smoke)"
+  elif touches '^frontend/' && [ -z "$FRONT_NON_TEST" ]; then echo "SKIP playwright-smoke (test-only frontend diff)"
+  else run_gate playwright-smoke smoke_gate; fi
 fi
 
 # ---------- changelog presence (always) ----------
@@ -114,6 +124,28 @@ if [ -n "$NON_DOC" ]; then
   if echo "$DIFF_FILES" | grep -qx 'CHANGELOG.md'; then pass changelog-presence
   else fail changelog-presence "code/config changed without a CHANGELOG.md entry"; fi
 else pass "changelog-presence (no code changes in diff)"; fi
+
+# ---------- plan-doc hygiene (always) ----------
+# Plans are cited by their archive path from the start (root CLAUDE.md, Map), so a
+# cited docs/archive/plans/<x> must exist there or still be live in docs/plans/.
+# Code never cites a live docs/plans|docs/prompts path: it goes stale at archive time.
+CITE_BAD=""
+for p in $(git grep --untracked -ohE 'docs/archive/plans/[A-Za-z0-9._/-]+\.md' | sort -u); do
+  [ -e "$p" ] || [ -e "docs/plans/${p#docs/archive/plans/}" ] || CITE_BAD="$CITE_BAD $p"
+done
+CODE_LIVE="$(git grep --untracked -nE 'docs/(plans|prompts)/' -- backend frontend e2e ':!*CLAUDE.md' | head -3)"
+if [ -n "$CITE_BAD" ]; then fail docs-plan-citations "cited plan exists neither in docs/archive/plans/ nor docs/plans/:$CITE_BAD"
+elif [ -n "$CODE_LIVE" ]; then fail docs-plan-citations "code cites a live docs/plans or docs/prompts path (cite docs/archive/...): $(echo "$CODE_LIVE" | cut -c1-120 | tr '\n' ' ')"
+else pass docs-plan-citations; fi
+# Every live plan states its status; a shipped one belongs in docs/archive/plans/.
+STATUS_BAD=""
+for f in docs/plans/*.md; do
+  [ -f "$f" ] || continue
+  s="$(grep -m1 -iE '^([>-]\s*)?\**status\**:' "$f")"
+  if [ -z "$s" ]; then STATUS_BAD="$STATUS_BAD $f(no Status line)"
+  elif echo "$s" | grep -qiE 'status\**:\**\s*\**(shipped|complete)'; then STATUS_BAD="$STATUS_BAD $f(shipped: git mv it to docs/archive/plans/)"; fi
+done
+if [ -n "$STATUS_BAD" ]; then fail docs-plans-status "$STATUS_BAD"; else pass docs-plans-status; fi
 
 # ---------- standing guardrail checks (always) ----------
 if [ -f frontend/src/pages/Tasks.tsx ] && grep -q 'path="tasks"' frontend/src/App.tsx; then
@@ -154,15 +186,15 @@ if [ -n "$(git ls-files -- .claude CLAUDE.md backend/CLAUDE.md frontend/CLAUDE.m
 else fail guardrail-local-only-tracked "the agent workflow files (.claude/, CLAUDE.md, docs/) must stay tracked in this repository, and .superpowers must not be"; fi
 
 # Update EXPECTED_KANBAN_PATCHES together with the CHANGELOG when a sanctioned patch lands.
-EXPECTED_KANBAN_PATCHES=0
+EXPECTED_KANBAN_PATCHES=3  # keyboard drag: attributes on the handle (ISS-078, 2026-11-19)
 if [ -f frontend/src/components/reui/kanban.tsx ]; then
   N="$(grep -c 'SOLVRO PATCH' frontend/src/components/reui/kanban.tsx)"
   if [ "$N" -eq "$EXPECTED_KANBAN_PATCHES" ]; then pass guardrail-kanban-vendor
   else fail guardrail-kanban-vendor "SOLVRO PATCH count $N != recorded $EXPECTED_KANBAN_PATCHES"; fi
 else fail guardrail-kanban-vendor "frontend/src/components/reui/kanban.tsx missing"; fi
 
-# Same drift guard for the vendored Sortable (vendored 2026-07-30, zero sanctioned patches).
-EXPECTED_SORTABLE_PATCHES=0
+# Same drift guard for the vendored Sortable (vendored 2026-07-30; 3 sanctioned patches 2026-11-19, ISS-079).
+EXPECTED_SORTABLE_PATCHES=3  # drag attributes on the handle (ISS-079)
 if [ -f frontend/src/components/reui/sortable.tsx ]; then
   N="$(grep -c 'SOLVRO PATCH' frontend/src/components/reui/sortable.tsx)"
   if [ "$N" -eq "$EXPECTED_SORTABLE_PATCHES" ]; then pass guardrail-sortable-vendor

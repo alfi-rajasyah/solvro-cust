@@ -9,7 +9,14 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { ApiError, apiRequest, apiRequestWithHeaders, setToken, setTokenRotating } from "./api";
+import {
+  ApiError,
+  LONG_TIMEOUT_MS,
+  apiRequest,
+  apiRequestWithHeaders,
+  setToken,
+  setTokenRotating,
+} from "./api";
 import { useAuth, type Role } from "./auth";
 import { dateToDay, dayFromIso, isoFromDay } from "./dateField";
 import { shouldPauseRefresh, subscribeDragActivity } from "./dragActivity";
@@ -154,6 +161,10 @@ export interface ProjectServiceAssignment {
 }
 
 export interface CustomerDetail extends CustomerSummary {
+  // iTop organisation this customer is mapped to; both null when unmapped.
+  // GET /customers/:id returns every Customer scalar, so these are on the wire.
+  itopOrgId: number | null;
+  itopOrgName: string | null;
   projects: ProjectSummary[];
   services: CustomerServiceAssignment[];
 }
@@ -267,6 +278,22 @@ export interface ProjectMember {
   assignedTaskCount: number;
 }
 
+/** One member of a customer's team (GET /customers/:id/team). */
+export interface CustomerTeamMember {
+  userId: number;
+  username: string;
+  email: string;
+  active: boolean;
+  addedAt: string;
+  addedBy: { id: number; username: string } | null;
+}
+
+export interface CustomerTeam {
+  members: CustomerTeamMember[];
+  /** The caller may add and remove members: the customer's owner, or `customer:team-all`. */
+  canManage: boolean;
+}
+
 export type ActivityEntityType =
   | "project"
   | "task"
@@ -320,11 +347,16 @@ export interface ShareLink {
   createdBy: { id: number; username: string } | null;
 }
 
-/** POST /projects/:id/share-links — `url` is the `/share/<token>` link, shown once. */
+/**
+ * POST /projects/:id/share-links — `url` is the `/share/<token>` link, shown
+ * once. `baseUrl` is the server's configured public address (APP_URL), or null
+ * when none is set; the link a guest opens is `baseUrl` + `url`.
+ */
 export interface CreatedShareLink {
   id: number;
   label: string | null;
   url: string;
+  baseUrl: string | null;
   expiresAt: string;
   createdAt: string;
 }
@@ -358,6 +390,7 @@ export interface Task {
   dueDate: string | null;
   isMilestone: boolean;
   isCriticalPath: boolean;
+  storyPoints: number | null;
   baselineStartDate: string | null;
   baselineDueDate: string | null;
   assignedToId: number | null;
@@ -446,7 +479,7 @@ export interface PortfolioProjectRow {
   isOverdue: boolean;
   daysOverdue: number;
   updatedAt: string;
-  sections: { id: number; name: string; color: string }[];
+  sections: { id: number; name: string; color: string; position: number }[];
 }
 
 export interface OverviewResponse {
@@ -591,7 +624,7 @@ export interface ProjectsFilter {
 
 // ─────────────────────────────────────────────────────────────────────────
 // Daily Review v2 — mirrors backend/src/routes/dailyReview.ts's response
-// shape 1:1 (docs/plans/daily-review-v2-spec.md §5.1). Date fields
+// shape 1:1 (docs/archive/plans/daily-review-v2-spec.md §5.1). Date fields
 // (`noteDate`, `weekStart`, `dueDate`, `doneAt`, `updatedAt`, `createdAt`,
 // `reviewDate`) all arrive as ISO strings — the backend's `@db.Date` columns
 // serialise as `T00:00:00.000Z` instants; read the calendar day via
@@ -792,6 +825,8 @@ export const queryKeys = {
   projectTasks: (id: number) => ["projects", id, "tasks"] as const,
   projectLabels: (id: number) => ["projects", id, "labels"] as const,
   projectSections: (id: number) => ["projects", id, "sections"] as const,
+  // Users with project access through a customer team (not project members).
+  projectTeamAccess: (id: number) => ["projects", id, "team-access"] as const,
   projectMembers: (id: number) => ["projects", id, "members"] as const,
   // Guest links (docs/archive/plans/collaboration-and-sharing.md, L4).
   projectShareLinks: (id: number) => ["projects", id, "share-links"] as const,
@@ -832,6 +867,7 @@ export const queryKeys = {
   // the bare `["customers", id, "weekly-updates"]` PREFIX (see
   // useSaveWeeklyUpdate below), not this full key, for the same reason
   // `projectNotes` above documents.
+  customerTeam: (id: number) => ["customers", id, "team"] as const,
   customerWeeklyUpdates: (id: number, limit?: number) =>
     ["customers", id, "weekly-updates", limit ?? null] as const,
   // Newest-first customer (operations) notes for the account Overview.
@@ -917,6 +953,14 @@ export const queryKeys = {
   utilizationRoot: ["itop", "utilization"] as const,
   utilization: (week: string, scope: UtilizationScope, utcOffsetMinutes: number) =>
     [...queryKeys.utilizationRoot, week, scope, utcOffsetMinutes] as const,
+  // Utilization > Workload tab (docs/archive/plans/workload-tab.md): Solvro task
+  // counts per assignee, keyed by week and the viewer's UTC offset. The server
+  // decides who is visible from the caller's permissions, so no scope in the key.
+  workloadRoot: ["workload"] as const,
+  workload: (week: string, utcOffsetMinutes: number) =>
+    [...queryKeys.workloadRoot, "table", week, utcOffsetMinutes] as const,
+  workloadTasks: (assignee: number | "unassigned") =>
+    [...queryKeys.workloadRoot, "tasks", assignee] as const,
   // New ticket sheet (Task 6.2, docs/archive/plans/itop-integration.md):
   // services are a global iTop catalogue (not customer-scoped); contacts are
   // the org's callers for one customer, so keyed by customer id.
@@ -1117,6 +1161,66 @@ export function useCustomer(id: number | null) {
   });
 }
 
+export function useCustomerTeam(customerId: number | null) {
+  const live = useLiveRefresh();
+  return useQuery({
+    ...live,
+    queryKey: customerId ? queryKeys.customerTeam(customerId) : ["customers", "noop", "team"],
+    queryFn: ({ signal }) =>
+      apiRequest<CustomerTeam>(`/customers/${customerId}/team`, { signal }),
+    enabled: customerId !== null,
+  });
+}
+
+// A team change alters which projects and customers the affected user can
+// see. That only matters to this session when the user changed their own
+// membership (`selfId`), so only then are the customer and project lists
+// refreshed; otherwise the team list is enough.
+function invalidateCustomerTeamWrite(
+  qc: QueryClient,
+  customerId: number,
+  userId: number,
+  selfId: number | undefined,
+) {
+  qc.invalidateQueries({ queryKey: queryKeys.customerTeam(customerId) });
+  // Any project of this customer may now grant or drop access to this user.
+  qc.invalidateQueries({
+    predicate: ({ queryKey: k }) => k[0] === "projects" && k[2] === "team-access",
+  });
+  if (selfId !== undefined && userId === selfId) {
+    qc.invalidateQueries({ queryKey: queryKeys.customers });
+    qc.invalidateQueries({ queryKey: ["projects"] });
+    qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+    qc.invalidateQueries({ queryKey: queryKeys.navBadgesRoot });
+    qc.invalidateQueries({ queryKey: queryKeys.overview });
+    qc.invalidateQueries({ queryKey: ["tasks"] });
+    qc.invalidateQueries({ queryKey: ["search"] });
+  }
+}
+
+export function useAddCustomerTeamMember(customerId: number, selfId?: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: number) =>
+      apiRequest<CustomerTeamMember>(`/customers/${customerId}/team`, {
+        method: "POST",
+        body: { userId },
+      }),
+    onSettled: (_data, _err, userId) =>
+      invalidateCustomerTeamWrite(qc, customerId, userId, selfId),
+  });
+}
+
+export function useRemoveCustomerTeamMember(customerId: number, selfId?: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: number) =>
+      apiRequest<void>(`/customers/${customerId}/team/${userId}`, { method: "DELETE" }),
+    onSettled: (_data, _err, userId) =>
+      invalidateCustomerTeamWrite(qc, customerId, userId, selfId),
+  });
+}
+
 export function useProject(id: number | null) {
   // `health.overdueCount` depends on the caller's local day — see useProjects.
   const today = dateToDay(new Date())!;
@@ -1148,6 +1252,17 @@ export function useProjectMembers(projectId: number | null) {
     queryKey: projectId ? queryKeys.projectMembers(projectId) : ["projects", "noop", "members"],
     queryFn: ({ signal }) =>
       apiRequest<ProjectMember[]>(`/projects/${projectId}/members`, { signal }),
+    enabled: projectId !== null,
+  });
+}
+
+export function useProjectTeamAccess(projectId: number | null) {
+  const live = useLiveRefresh();
+  return useQuery({
+    ...live,
+    queryKey: projectId ? queryKeys.projectTeamAccess(projectId) : ["projects", "noop", "team-access"],
+    queryFn: ({ signal }) =>
+      apiRequest<{ teamAccessUserIds: number[] }>(`/projects/${projectId}/team-access`, { signal }),
     enabled: projectId !== null,
   });
 }
@@ -1404,6 +1519,7 @@ export function useRemoveProjectMember(projectId: number) {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: queryKeys.overview });
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
       invalidateProjectHealth(qc, projectId);
       invalidateProjectActivity(qc, projectId);
     },
@@ -1432,6 +1548,15 @@ export function useProjectLabels(id: number | null) {
 // non-day string or extra segments instead.
 const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const isDayKey = (v: unknown): boolean => typeof v === "string" && DAY_KEY_RE.test(v);
+
+// The cached detail queries (`useProject` / `useCustomer`), told apart from
+// their subqueries by key shape.
+function isProjectDetailKey(k: readonly unknown[], id: number): boolean {
+  return k[0] === "projects" && k[1] === id && k.length === 3 && isDayKey(k[2]);
+}
+function isCustomerDetailKey(k: readonly unknown[], id: number): boolean {
+  return k[0] === "customers" && k[1] === id && k.length === 3 && isDayKey(k[2]);
+}
 
 // Every write the activity log records refreshes the log at once (all person
 // filters, via the key prefix).
@@ -1612,6 +1737,7 @@ export function useDeleteProject() {
       qc.invalidateQueries({ queryKey: queryKeys.overview });
       qc.invalidateQueries({ queryKey: queryKeys.customers });
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
       qc.invalidateQueries({ queryKey: queryKeys.recentNotesRoot });
       qc.invalidateQueries({ queryKey: queryKeys.executiveReport() });
     },
@@ -1640,6 +1766,7 @@ export function useCreateCustomer() {
       // A new customer's `tamId` can put it straight into the Daily
       // Review page's customer scope (Decision 14).
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
     },
   });
 }
@@ -1655,6 +1782,7 @@ export function useUpdateCustomer(id: number) {
       // Reassigning `tamId` can add or remove this customer from the Daily
       // Review page's customer scope (Decision 14).
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
       // Same for the customer Docs tab and its Outline link.
       qc.invalidateQueries({ queryKey: queryKeys.outlineDocs("customers", id) });
     },
@@ -1727,6 +1855,34 @@ export interface ServiceAssignmentInput {
   tools: string[];
 }
 
+/**
+ * The `services[]` an optimistic assignment save should show: an existing
+ * assignment keeps its row and takes the new tools, a newly added service is
+ * built from the catalogue cache (a service missing from it is left out until
+ * the refetch), and a removed one drops out.
+ */
+export function applyServiceAssignments<
+  A extends { id: number; serviceId: number; service: Service; tools: string[]; createdAt: string },
+>(
+  current: A[],
+  assignments: ServiceAssignmentInput[],
+  catalogue: Service[] | undefined,
+  make: (serviceId: number, service: Service, tools: string[]) => A,
+): A[] {
+  const out: A[] = [];
+  assignments.forEach((a, i) => {
+    const existing = current.find((c) => c.serviceId === a.serviceId);
+    if (existing) {
+      out.push({ ...existing, tools: a.tools });
+      return;
+    }
+    const service = catalogue?.find((s) => s.id === a.serviceId);
+    // Negative id: never collides with a real row, replaced by the refetch.
+    if (service) out.push({ ...make(a.serviceId, service, a.tools), id: -(i + 1) });
+  });
+  return out;
+}
+
 export function useUpdateCustomerServices(customerId: number) {
   const qc = useQueryClient();
   return useMutation({
@@ -1735,8 +1891,38 @@ export function useUpdateCustomerServices(customerId: number) {
         method: "PUT",
         body: { assignments },
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.customer(customerId) });
+    onMutate: async (assignments) => {
+      const filters = { predicate: (q: { queryKey: readonly unknown[] }) => isCustomerDetailKey(q.queryKey, customerId) };
+      await qc.cancelQueries(filters);
+      const prev = qc.getQueriesData<CustomerDetail>(filters);
+      const catalogue = qc.getQueryData<Service[]>(["services"]);
+      qc.setQueriesData<CustomerDetail>(filters, (old) =>
+        old
+          ? {
+              ...old,
+              services: applyServiceAssignments(
+                old.services,
+                assignments,
+                catalogue,
+                (serviceId, service, tools) => ({
+                  id: 0,
+                  customerId,
+                  serviceId,
+                  service,
+                  tools,
+                  createdAt: new Date().toISOString(),
+                }),
+              ),
+            }
+          : old,
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      for (const [key, data] of ctx?.prev ?? []) qc.setQueryData(key, data);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ predicate: (q) => isCustomerDetailKey(q.queryKey, customerId) });
       qc.invalidateQueries({ queryKey: queryKeys.customers });
     },
   });
@@ -1750,8 +1936,38 @@ export function useUpdateProjectServices(projectId: number) {
         method: "PUT",
         body: { assignments },
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.project(projectId) });
+    onMutate: async (assignments) => {
+      const filters = { predicate: (q: { queryKey: readonly unknown[] }) => isProjectDetailKey(q.queryKey, projectId) };
+      await qc.cancelQueries(filters);
+      const prev = qc.getQueriesData<ProjectDetail>(filters);
+      const catalogue = qc.getQueryData<Service[]>(["services"]);
+      qc.setQueriesData<ProjectDetail>(filters, (old) =>
+        old
+          ? {
+              ...old,
+              services: applyServiceAssignments(
+                old.services,
+                assignments,
+                catalogue,
+                (serviceId, service, tools) => ({
+                  id: 0,
+                  projectId,
+                  serviceId,
+                  service,
+                  tools,
+                  createdAt: new Date().toISOString(),
+                }),
+              ),
+            }
+          : old,
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      for (const [key, data] of ctx?.prev ?? []) qc.setQueryData(key, data);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ predicate: (q) => isProjectDetailKey(q.queryKey, projectId) });
       qc.invalidateQueries({ queryKey: ["projects"] });
     },
   });
@@ -1780,6 +1996,8 @@ export interface UpdateTaskInput {
   // Epics (docs/archive/plans/epics-spec.md §4/§5). Backend rejects this on a task
   // that has (or is being given) a `parentTaskId` — 400 `epic_on_subtask`.
   epicId?: number | null;
+  /** Whole number 0-100; `null` clears the estimate. */
+  storyPoints?: number | null;
 }
 
 export interface LockBaselineInput {
@@ -1815,6 +2033,22 @@ function siblingListId(t: Pick<Task, "parentTaskId" | "status">): string {
 }
 
 /**
+ * The nested `section` object for a task moving to `nextSectionId`: the one it
+ * has when the id is unchanged, else rebuilt from the sections cache. Null when
+ * the target is not cached, so a stale chip never outlives the move.
+ */
+export function sectionForTask(
+  current: Pick<Task, "sectionId" | "section">,
+  nextSectionId: number | null,
+  sections: Section[] | undefined,
+): Task["section"] {
+  if (nextSectionId === current.sectionId) return current.section;
+  if (nextSectionId === null) return null;
+  const s = sections?.find((x) => x.id === nextSectionId);
+  return s ? { id: s.id, name: s.name, position: s.position, color: s.color } : null;
+}
+
+/**
  * Reorders/re-parents `id` inside a locally-cached task list exactly the way
  * the backend's moveTaskWithinSiblings does: remove from the old sibling
  * list (re-packing it), then insert into the new sibling list at the
@@ -1831,6 +2065,7 @@ export function reorderTasksLocally(
   tasks: Task[],
   id: number,
   patch: Pick<UpdateTaskInput, "status" | "parentTaskId" | "position" | "sectionId">,
+  sections?: Section[],
 ): Task[] {
   const current = tasks.find((t) => t.id === id);
   if (!current) return tasks;
@@ -1845,6 +2080,9 @@ export function reorderTasksLocally(
     status: nextStatus,
     parentTaskId: nextParentTaskId,
     sectionId: nextSectionId,
+    // The nested object travels with the id, so an open task panel shows the
+    // new section at once instead of the old chip until the refetch.
+    section: sectionForTask(current, nextSectionId, sections),
     // Mirror the backend: re-parenting under a parent clears epicId in the
     // same transaction (§4) — a subtask never carries its own epic link.
     epicId: nextParentTaskId !== null ? null : current.epicId,
@@ -1975,12 +2213,26 @@ export function useUpdateTask(projectId: number) {
             });
         const touchesOrdering = patch.position !== undefined || listChanged;
         const next = touchesOrdering
-          ? reorderTasksLocally(prev, id, patch)
+          ? reorderTasksLocally(
+              prev,
+              id,
+              patch,
+              qc.getQueryData<Section[]>(queryKeys.projectSections(projectId)),
+            )
           : prev.map((t) =>
               t.id === id
                 ? ({
                     ...t,
                     ...patch,
+                    ...(patch.sectionId !== undefined
+                      ? {
+                          section: sectionForTask(
+                            t,
+                            patch.sectionId,
+                            qc.getQueryData<Section[]>(queryKeys.projectSections(projectId)),
+                          ),
+                        }
+                      : {}),
                     // Same server mirror as reorderTasksLocally above, for
                     // whichever plain-merge patch also touches parentTaskId.
                     ...(patch.parentTaskId != null ? { epicId: null } : {}),
@@ -2071,6 +2323,7 @@ export function useUpdateTask(projectId: number) {
       // status inline (daily-review-v2-spec.md §6.3) — keep that cache in
       // sync too.
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
       // Epic progress (done/total) derives from task status + epicId (§4) —
       // any update here (status flip, epic reassignment, or a reorder that
       // crosses sibling lists) can change it, so the epics list always
@@ -2100,6 +2353,53 @@ export function useUpdateTask(projectId: number) {
   });
 }
 
+/** Body of `POST /tasks/bulk`: the ids plus at least one action. */
+export interface BulkUpdateTasksInput {
+  taskIds: number[];
+  addLabelIds?: number[];
+  removeLabelIds?: number[];
+  statusId?: number;
+  assignedToId?: number | null;
+  priority?: Priority;
+  epicId?: number | null;
+}
+
+/**
+ * Applies one change to many tasks in a single request (all or nothing on the
+ * server). No optimistic write: the server decides the outcome, and a refused
+ * request must leave the list as it was. Invalidates what a single task update
+ * invalidates, since a bulk edit can touch any of the same derived views.
+ */
+export function useBulkUpdateTasks(projectId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: BulkUpdateTasksInput) =>
+      apiRequest<{ updated: number }>("/tasks/bulk", { method: "POST", body: input }),
+    onSettled: (_data, _err, input) => {
+      // Same guard as useUpdateTask: while a single-task save is in flight, a
+      // refetch would return its in-between state; that save refetches itself.
+      if (qc.isMutating({ mutationKey: ["updateTask", projectId] }) === 0) {
+        qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
+      }
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: queryKeys.overview });
+      invalidateProjectHealth(qc, projectId);
+      invalidateProjectActivity(qc, projectId);
+      qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
+      // Epic progress derives from task status and epicId, and the bulk call
+      // does not say which epics the tasks left, so every cached epic detail
+      // is refreshed along with the list.
+      qc.invalidateQueries({ queryKey: queryKeys.projectEpics(projectId) });
+      qc.invalidateQueries({ predicate: ({ queryKey: k }) => k[0] === "epics" });
+      // Assigning a non-member adds them to the project server-side.
+      if (input.assignedToId != null) {
+        qc.invalidateQueries({ queryKey: queryKeys.projectMembers(projectId) });
+      }
+    },
+  });
+}
+
 export function useDeleteTask(projectId: number) {
   const qc = useQueryClient();
   return useMutation({
@@ -2121,6 +2421,7 @@ export function useDeleteTask(projectId: number) {
       // Same rationale as useUpdateTask above — a deleted task can drop out
       // of the Daily Review page's overdue-tasks attention list.
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
       // A deleted task drops out of its epic's done/total count (§11 risk).
       qc.invalidateQueries({ queryKey: queryKeys.projectEpics(projectId) });
       if (ctx?.epicId !== null && ctx?.epicId !== undefined) {
@@ -2157,6 +2458,8 @@ export interface CreateTaskInput {
   epicId?: number | null;
   // Pins an iTop ticket at creation (docs/archive/plans/subtask-itop-tickets.md Task 5).
   itopTicketRef?: string | null;
+  /** Whole number 0-100; omit or `null` for not estimated. */
+  storyPoints?: number | null;
 }
 
 export function useCreateTask(projectId: number) {
@@ -2173,6 +2476,9 @@ export function useCreateTask(projectId: number) {
       qc.invalidateQueries({ queryKey: queryKeys.overview });
       invalidateProjectHealth(qc, projectId);
       invalidateProjectActivity(qc, projectId);
+      // A new overdue or unassigned task joins the Daily Review attention lists.
+      qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
       // Same as useUpdateTask: an assignee who is not yet a member becomes one.
       if (variables.assignedToId != null) {
         qc.invalidateQueries({ queryKey: queryKeys.projectMembers(projectId) });
@@ -2207,6 +2513,7 @@ export function useDuplicateTask(projectId: number) {
         // Same rationale as useUpdateTask/useDeleteTask above — a duplicated
         // task can newly appear in the Daily Review page's attention lists.
         qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot }),
+        qc.invalidateQueries({ queryKey: queryKeys.workloadRoot }),
         // lib/duplicate.ts copies keep `epicId` (§4) — the duplicate can
         // count toward the same epic's total.
         qc.invalidateQueries({ queryKey: queryKeys.projectEpics(projectId) }),
@@ -2377,6 +2684,7 @@ export function useDuplicateSection(projectId: number) {
         qc.invalidateQueries({ queryKey: queryKeys.overview }),
         invalidateProjectHealth(qc, projectId),
         qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot }),
+        qc.invalidateQueries({ queryKey: queryKeys.workloadRoot }),
         invalidateProjectActivity(qc, projectId),
         // The section's duplicated tasks keep their `epicId` (§4) — their
         // epics' done/total counts can change. Which epics is unknown here
@@ -2544,6 +2852,7 @@ export function useUpdateRisk(projectId: number) {
       // Same rationale as useUpdateTask above — open risks are
       // inline-editable from the Daily Review page's attention lists too.
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
     },
   });
 }
@@ -2560,6 +2869,7 @@ export function useDeleteRisk(projectId: number) {
       // Same rationale as useUpdateRisk above — a deleted risk can drop out
       // of the Daily Review page's open-risks attention list.
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
     },
   });
 }
@@ -2785,6 +3095,7 @@ export function useAddProjectNote(projectId: number) {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
       qc.invalidateQueries({ queryKey: queryKeys.recentNotesRoot });
       // Every visibility/window-bucketed key for this project (see
       // queryKeys.projectNotes's doc) — not just the "all, unwindowed" one.
@@ -2830,6 +3141,7 @@ export function useUpdateProjectNote(projectId: number) {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
       qc.invalidateQueries({ queryKey: queryKeys.recentNotesRoot });
       qc.invalidateQueries({ queryKey: ["projects", projectId, "notes"] });
       invalidateProjectActivity(qc, projectId);
@@ -2863,6 +3175,7 @@ export function useDeleteProjectNote(projectId: number) {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
       qc.invalidateQueries({ queryKey: queryKeys.recentNotesRoot });
       qc.invalidateQueries({ queryKey: ["projects", projectId, "notes"] });
       invalidateProjectActivity(qc, projectId);
@@ -2906,6 +3219,7 @@ export function useMarkProjectReviewed(projectId: number) {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
       qc.invalidateQueries({ queryKey: queryKeys.navBadgesRoot });
     },
   });
@@ -2936,6 +3250,7 @@ export function useUnmarkProjectReviewed(projectId: number) {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
       qc.invalidateQueries({ queryKey: queryKeys.navBadgesRoot });
     },
   });
@@ -2990,6 +3305,7 @@ export function useAddCustomerNote(customerId: number) {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
       qc.invalidateQueries({ queryKey: queryKeys.recentNotesRoot });
       qc.invalidateQueries({ queryKey: queryKeys.customerNotesRoot(customerId) });
     },
@@ -3039,6 +3355,7 @@ export function useUpdateCustomerNote(customerId: number) {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
       qc.invalidateQueries({ queryKey: queryKeys.recentNotesRoot });
       qc.invalidateQueries({ queryKey: queryKeys.customerNotesRoot(customerId) });
     },
@@ -3071,6 +3388,7 @@ export function useDeleteCustomerNote(customerId: number) {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
       qc.invalidateQueries({ queryKey: queryKeys.recentNotesRoot });
       qc.invalidateQueries({ queryKey: queryKeys.customerNotesRoot(customerId) });
     },
@@ -3128,6 +3446,7 @@ export function useSaveWeeklyUpdate(customerId: number) {
       }),
     onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
       // The bare PREFIX (not queryKeys.customerWeeklyUpdates(customerId),
       // which now bakes a specific `limit` into the key) — so a save
       // refreshes every limit-bucketed cache entry for this customer, not
@@ -3619,6 +3938,7 @@ export function useLogTicketTimeFor() {
       apiRequest<ItopTimeLogWriteResult>(`/itop/tickets/${ticketId}/time`, {
         method: "POST",
         body: { startedAt, endedAt, ...(title ? { title } : {}) },
+        timeoutMs: LONG_TIMEOUT_MS,
       }),
     onSuccess: (_result, variables) => {
       // No `setQueryData` here (see the module comment above) — the ticket
@@ -3673,6 +3993,7 @@ export function useTicketActionFor(customerId: number) {
       apiRequest<ItopTicketWriteResult>(`/itop/tickets/${ticketId}/actions`, {
         method: "POST",
         body: { action, fields },
+        timeoutMs: LONG_TIMEOUT_MS,
       }),
     onSuccess: (fresh, variables) => {
       if (fresh.staleAfterWrite) {
@@ -3717,6 +4038,7 @@ export function useAddTicketLog(ticketId: number, customerId: number) {
       apiRequest<ItopTicketWriteResult>(`/itop/tickets/${ticketId}/log`, {
         method: "POST",
         body: input,
+        timeoutMs: LONG_TIMEOUT_MS,
       }),
     onSuccess: (fresh) => {
       if (fresh.staleAfterWrite) {
@@ -3808,7 +4130,11 @@ export function useCreateTicket(customerId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateTicketInput) =>
-      apiRequest<ItopTicketCreateResult>("/itop/tickets", { method: "POST", body: input }),
+      apiRequest<ItopTicketCreateResult>("/itop/tickets", {
+        method: "POST",
+        body: input,
+        timeoutMs: LONG_TIMEOUT_MS,
+      }),
     onSuccess: (result) => {
       // 201 only — a 202 stale create's shape has no ticket fields to seed
       // the cache with yet (see `ItopTicketCreateStale`). Seeding this
@@ -3949,6 +4275,92 @@ export function useUtilization(
   });
 }
 
+// Workload tab (docs/archive/plans/workload-tab.md): open Solvro tasks per
+// assignee for an ISO week, from GET /utilization/workload. Works without iTop.
+// `scope` echoes which level the server granted: "own" (no workload
+// permission), "team" (`workload:team`) or "all" (`workload:all`).
+export type WorkloadScope = "own" | "team" | "all";
+
+export interface WorkloadRow {
+  key: string;
+  /** Null on the Unassigned row. */
+  userId: number | null;
+  name: string;
+  active: boolean;
+  open: number;
+  dueThisWeek: number;
+  overdue: number;
+  activeInWeek: number;
+  /** Sum of the open tasks' own story points (a task without points counts 0). */
+  storyPoints: number;
+}
+
+export interface WorkloadTotals {
+  open: number;
+  dueThisWeek: number;
+  overdue: number;
+  activeInWeek: number;
+  storyPoints: number;
+}
+
+export interface WorkloadResponse {
+  week: { key: string; start: string; days: string[] };
+  utcOffsetMinutes: number;
+  /** The viewer's local day ("yyyy-MM-dd"); "overdue" is measured against it. */
+  today: string;
+  scope: WorkloadScope;
+  rows: WorkloadRow[];
+  totals: WorkloadTotals;
+}
+
+export interface WorkloadTask {
+  id: number;
+  title: string;
+  projectId: number;
+  projectName: string;
+  status: TaskStatus;
+  statusDef: { id: number; name: string; category: TaskStatus; color: StatusTone };
+  startDate: string | null;
+  dueDate: string | null;
+  storyPoints: number | null;
+  parentTaskId: number | null;
+}
+
+export interface WorkloadTasksResponse {
+  tasks: WorkloadTask[];
+  /** Open tasks counted in the row that sit in projects the caller cannot open (`workload:all`); never named. */
+  hiddenCount: number;
+  /** True when the person holds more visible open tasks than the list returns. */
+  truncated: boolean;
+}
+
+export function useWorkload(week: string, { enabled = true }: { enabled?: boolean } = {}) {
+  const utcOffsetMinutes = -new Date().getTimezoneOffset();
+  return useQuery({
+    queryKey: queryKeys.workload(week, utcOffsetMinutes),
+    queryFn: ({ signal }) =>
+      apiRequest<WorkloadResponse>(
+        `/utilization/workload?week=${encodeURIComponent(week)}&utcOffsetMinutes=${utcOffsetMinutes}`,
+        { signal },
+      ),
+    enabled,
+    staleTime: 10_000,
+  });
+}
+
+export function useWorkloadTasks(
+  assignee: number | "unassigned" | null,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  return useQuery({
+    queryKey: queryKeys.workloadTasks(assignee ?? "unassigned"),
+    queryFn: ({ signal }) =>
+      apiRequest<WorkloadTasksResponse>(`/utilization/workload/tasks?assignee=${assignee}`, { signal }),
+    enabled: enabled && assignee !== null,
+    staleTime: 10_000,
+  });
+}
+
 export interface AdminUser {
   id: number;
   username: string;
@@ -4048,6 +4460,7 @@ export function useSaveTaskStatuses() {
       qc.invalidateQueries({ queryKey: ["projects"] });
       qc.invalidateQueries({ queryKey: queryKeys.overview });
       qc.invalidateQueries({ queryKey: queryKeys.dailyReviewRoot });
+      qc.invalidateQueries({ queryKey: queryKeys.workloadRoot });
       qc.invalidateQueries({ queryKey: queryKeys.customers });
       qc.invalidateQueries({ queryKey: queryKeys.executiveReport() });
       qc.invalidateQueries({ queryKey: ["search"] }); // every search(q) key
@@ -4297,6 +4710,7 @@ export interface ItopProbeResult {
 export interface ItopSettings {
   baseUrl: string | null;
   appTokenSet: boolean;
+  appTokenUnverified: boolean;
   webhookSecretSet: boolean;
   refreshMinutes: number;
   readClasses: ItopReadClass[];
@@ -4607,6 +5021,7 @@ export function useUpdateItopSettings() {
       apiRequest<ItopSettings>("/admin/itop/settings", {
         method: "PATCH",
         body: input,
+        timeoutMs: LONG_TIMEOUT_MS,
       }),
     onSuccess: (fresh) => {
       qc.setQueryData(adminQueryKeys.itopSettings, fresh);
@@ -4659,6 +5074,7 @@ export function useTestItopConnection() {
       apiRequest<ItopTestResult>("/admin/itop/test", {
         method: "POST",
         body: input,
+        timeoutMs: LONG_TIMEOUT_MS,
       }),
   });
 }
@@ -4720,6 +5136,8 @@ export function useMapItopCustomer() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: adminQueryKeys.itopCustomers });
       qc.invalidateQueries({ queryKey: adminQueryKeys.itopOrganizations });
+      // `itopOrgId` lives on the customer record: refresh the customer list and detail (prefix ["customers"]).
+      qc.invalidateQueries({ queryKey: queryKeys.customers });
     },
   });
 }
@@ -4736,6 +5154,8 @@ export function useAutomatchItopCustomers() {
       qc.setQueryData(adminQueryKeys.itopCustomers, fresh.customers);
       qc.invalidateQueries({ queryKey: adminQueryKeys.itopCustomers });
       qc.invalidateQueries({ queryKey: adminQueryKeys.itopOrganizations });
+      // `itopOrgId` lives on the customer record: refresh the customer list and detail (prefix ["customers"]).
+      qc.invalidateQueries({ queryKey: queryKeys.customers });
     },
   });
 }
@@ -4754,6 +5174,7 @@ export function useMatchItopPersons() {
     mutationFn: () =>
       apiRequest<ItopPersonsResponse>("/admin/itop/persons/match", {
         method: "POST",
+        timeoutMs: LONG_TIMEOUT_MS,
       }),
     onSuccess: (fresh) => {
       qc.setQueryData(adminQueryKeys.itopPersons, fresh);

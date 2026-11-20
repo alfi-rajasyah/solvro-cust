@@ -87,7 +87,7 @@ export function CopyLinkButton({
         aria-label={label}
         title={label}
         className={cn(
-          "inline-flex items-center justify-center [@media(pointer:coarse)]:size-11 text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary/30",
+          "inline-flex items-center justify-center [@media(pointer:coarse)]:size-11 text-on-surface-variant outline-hidden transition-colors hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary",
           className,
         )}
       >

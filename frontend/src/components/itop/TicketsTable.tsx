@@ -32,7 +32,7 @@ const EMPTY_MESSAGE: Record<ItopTicketScope, string> = {
 };
 
 const OPEN_LINK_CLASS =
-  "[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1 font-display text-meta font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "[@media(pointer:coarse)]:min-h-11 inline-flex items-center gap-1 font-display text-meta font-bold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
 
 // The ref cell/span is the keyboard-reachable control that opens the panel —
 // before this, the row/card's onClick (mouse-only) left the trailing "Open
@@ -40,7 +40,7 @@ const OPEN_LINK_CLASS =
 // never reach the panel at all. `stopPropagation` avoids a double `onOpen`
 // call when the row's own onClick also fires for a mouse click.
 const REF_BUTTON_CLASS =
-  "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm font-mono text-xs text-on-surface hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm font-mono text-xs text-on-surface hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
 
 export function TicketsTable({
   tickets,

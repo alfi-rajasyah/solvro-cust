@@ -29,6 +29,11 @@ describe("assigneeAddsMember", () => {
     expect(assigneeAddsMember(9, 1, members, true)).toBe(true);
   });
 
+  it("is false for a user with access through a customer team", () => {
+    expect(assigneeAddsMember(9, 1, members, true, [9])).toBe(false);
+    expect(assigneeAddsMember(8, 1, members, true, [9])).toBe(true);
+  });
+
   it("stays silent while membership is unknown", () => {
     expect(assigneeAddsMember(9, 1, undefined)).toBe(false);
     expect(assigneeAddsMember(9, undefined, members)).toBe(false);

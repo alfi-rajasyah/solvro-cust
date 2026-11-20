@@ -1,6 +1,6 @@
 // Copied from the legacy frontend/src/pages/views/ProjectKanban.tsx (TaskCard
 // lines 874-1021, SubtaskRow lines 1057-1121, the old "N Days" duration,
-// pre-T11 cutover) per Architecture Decision 2 (docs/plans/kanban-reui-swap/
+// pre-T11 cutover) per Architecture Decision 2 (docs/archive/plans/kanban-reui-swap/
 // plan.md): copy, don't extract. The legacy file is gone as of T11 cutover
 // (git history preserves it) — this duplication is now permanent, not
 // temporary.
@@ -103,18 +103,18 @@ export function TaskCard({
           the card, from `md:` up; below `md` it is always visible. */}
       <div className="mb-1.5 flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-start gap-1.5">
-          {/* Real drag activator (T7): KanbanItemHandle attaches dnd-kit's
-              pointer listeners (from the enclosing KanbanItem's context) only
-              to this handle, not the card body — handle-only activation,
+          {/* Real drag activator (T7): KanbanItemHandle carries dnd-kit's
+              listeners and attributes (from the enclosing KanbanItem's
+              context) on this handle only, not the card body — handle-only activation,
               matching the old board. `cursor` (default true) handles the
               grab/grabbing cursor swap itself via isDragging context. */}
           {canDrag && (
             <KanbanItemHandle
-              // Pointer and touch only (it cannot take focus), so it is hidden
-              // from assistive tech; the label stays for tests and hover tooling.
-              aria-hidden="true"
-              aria-label="Drag to reorder"
-              className="mt-0.5 inline-flex shrink-0 touch-none items-center text-on-surface-variant/80 transition-opacity md:pointer-fine:opacity-0 md:pointer-fine:group-focus-within/card:opacity-100 md:pointer-fine:group-hover/card:opacity-100"
+              // Focusable: the engine puts dnd-kit's button role, tab stop and
+              // key listener here, so Tab, Space, arrows, Space moves a card.
+              aria-hidden={dragging || undefined}
+              aria-label={`Move ${task.title}`}
+              className="mt-0.5 rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary inline-flex shrink-0 touch-none items-center text-on-surface-variant/80 transition-opacity md:pointer-fine:opacity-0 md:pointer-fine:group-focus-within/card:opacity-100 md:pointer-fine:group-hover/card:opacity-100"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[16px]">drag_indicator</span>
             </KanbanItemHandle>
@@ -126,7 +126,7 @@ export function TaskCard({
           {onClick ? (
             <button
               type="button"
-              className="[@media(pointer:coarse)]:min-h-11 min-w-0 [@media(pointer:coarse)]:min-w-11 rounded-sm text-left text-sm font-bold leading-tight text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:min-h-11 min-w-0 [@media(pointer:coarse)]:min-w-11 rounded-sm text-left text-sm font-bold leading-tight text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
             >
               <CardTitle task={task} />
             </button>
@@ -181,7 +181,7 @@ export function TaskCard({
       {subtasks.length > 0 && (
         <div className="mb-2">
           <div className="mb-1 flex items-center gap-1 font-display text-label-caps uppercase text-on-surface-variant">
-            <span aria-hidden="true" className="material-symbols-outlined text-[12px]">check_circle</span>
+            <span aria-hidden="true" className="material-symbols-outlined text-meta">check_circle</span>
             Subtasks {subtasksDone}/{subtasks.length}
           </div>
           <ul className="space-y-0.5 border-l border-outline-variant/60 pl-2">
@@ -221,6 +221,16 @@ export function TaskCard({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-1">
+          {task.storyPoints != null && (
+            <span
+              data-testid="card-story-points"
+              title="Story points"
+              className="inline-flex min-w-5 items-center justify-center rounded-sm bg-surface-container-high px-1 font-mono text-meta text-on-surface-variant"
+            >
+              {task.storyPoints}
+              <span className="sr-only"> story points</span>
+            </span>
+          )}
           {task.isCriticalPath && (
             // Icon variant (its `title` is the tooltip). The sr-only text keeps
             // "Critical Path" findable inside the card; the icon is hidden from
@@ -286,6 +296,14 @@ export function SubtaskRow({
       >
         {task.title}
       </span>
+      {task.isCriticalPath && (
+        <>
+          <span aria-hidden="true" className="inline-flex shrink-0">
+            <CriticalPathMark variant="glyph" />
+          </span>
+          <span className="sr-only">{CRITICAL_PATH_LABEL}</span>
+        </>
+      )}
       {task.assignedTo && (
         <span onPointerDown={(e) => e.stopPropagation()}>
           <AssigneeAvatar user={task.assignedTo} size="xs" />

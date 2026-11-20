@@ -20,6 +20,21 @@ const NONE = Symbol("none");
 export function usePanelFocus(ref: RefObject<HTMLElement | null>, item: unknown, shell?: unknown): void {
   const opener = useRef<HTMLElement | null>(null);
   const focusedItem = useRef<unknown>(NONE);
+  // Last element focused outside the panel. A click on a button does not focus
+  // it in Safari and Firefox on macOS, so `activeElement` alone can still be
+  // the previous task's opener when the panel switches to a new task.
+  const lastOutside = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    function onFocusIn(e: FocusEvent) {
+      const target = e.target;
+      if (!(target instanceof HTMLElement) || target === document.body) return;
+      if (ref.current?.contains(target)) return;
+      lastOutside.current = target;
+    }
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, [ref]);
 
   useEffect(() => {
     const panel = ref.current;
@@ -30,10 +45,18 @@ export function usePanelFocus(ref: RefObject<HTMLElement | null>, item: unknown,
       return;
     }
     const lost = active === null || active === document.body;
-    if (!lost && Object.is(focusedItem.current, item)) return;
-    // Remember who opened (or re-targeted) the panel, unless focus was lost.
-    if (!lost) opener.current = active;
-    focusedItem.current = item;
+    const itemChanged = !Object.is(focusedItem.current, item);
+    if (!lost && !itemChanged) return;
+    if (itemChanged) {
+      // Remember who opened (or re-targeted) the panel. With focus lost, fall
+      // back to the last outside focus seen since the previous target; if
+      // there is none the opener is unknown, so closing returns focus nowhere
+      // rather than to the previous item's opener. A shell swap for the same
+      // item keeps the opener it already has.
+      opener.current = lost ? lastOutside.current : active;
+      lastOutside.current = null;
+      focusedItem.current = item;
+    }
     panel.focus({ preventScroll: true });
   }, [ref, item, shell]);
 

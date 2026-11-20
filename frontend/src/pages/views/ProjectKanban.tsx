@@ -1,5 +1,5 @@
 // Thin view wrapper for the /projects/:id/kanban route, serving the ReUI
-// Kanban engine (docs/plans/kanban-reui-swap/plan.md, T11 cutover) — mirrors
+// Kanban engine (docs/archive/plans/kanban-reui-swap/plan.md, T11 cutover) — mirrors
 // the ProjectGantt -> SolvroGantt precedent: this file owns the
 // useProjectContext() call and passes `project` down as an explicit prop, so
 // SolvroKanban itself stays context-free (props-only, easier to test/reuse).

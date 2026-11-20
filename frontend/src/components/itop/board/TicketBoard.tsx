@@ -46,6 +46,7 @@ import {
 import { ActionSheet, type ActionSheetMode } from "../ActionSheet";
 import { teamsFromError } from "../ticketActions";
 import { BOARD_COLUMNS, ticketsToColumns, type BoardColumn } from "./boardAdapter";
+import { buildBoardAnnouncements } from "@/lib/dragAnnouncements";
 import { allowedTargets, mapDropToAction } from "./dropMapper";
 import { TicketCard } from "./TicketCard";
 
@@ -117,6 +118,43 @@ export function TicketBoard({
   function findColumnOf(ticketId: string): BoardColumn | null {
     return BOARD_COLUMNS.find((c) => columns[c].some((t) => String(t.id) === ticketId)) ?? null;
   }
+
+  const announcements = useMemo(() => {
+    const colOf = (id: string): BoardColumn | null =>
+      (BOARD_COLUMNS as readonly string[]).includes(id)
+        ? (id as BoardColumn)
+        : (BOARD_COLUMNS.find((c) => columns[c].some((t) => String(t.id) === id)) ?? null);
+    return buildBoardAnnouncements({
+      cardLabel: (id) => {
+        for (const c of BOARD_COLUMNS) {
+          const t = columns[c].find((x) => String(x.id) === String(id));
+          if (t) return t.ref;
+        }
+        return null;
+      },
+      columnLabelOf: (id) => {
+        const col = colOf(String(id));
+        return col ? COLUMN_LABELS[col] : null;
+      },
+      isForbiddenTarget: (activeId, overId) => {
+        const from = colOf(String(activeId));
+        const to = colOf(String(overId));
+        return from !== null && to !== null && from !== to && !allowedTargets(from).includes(to);
+      },
+      dropOutcome: (activeId, overId) => {
+        const from = colOf(String(activeId));
+        const to = colOf(String(overId));
+        if (!from || !to) return null;
+        if (from === to) return "was dropped in the same column. Nothing changed.";
+        const mapping = mapDropToAction(from, to);
+        if (!mapping) return `cannot move to ${COLUMN_LABELS[to]}. Nothing changed.`;
+        if (mapping.needsSheet) {
+          return `is waiting for confirmation before moving to ${COLUMN_LABELS[to]}.`;
+        }
+        return null;
+      },
+    });
+  }, [columns]);
 
   function showForbiddenNotice(fromColumn: BoardColumn, toColumn: BoardColumn) {
     if (forbiddenTimerRef.current) clearTimeout(forbiddenTimerRef.current);
@@ -236,6 +274,7 @@ export function TicketBoard({
         onValueChange={() => {}}
         onMove={handleMove}
         getItemValue={getItemValue}
+        accessibility={{ announcements }}
         onDragStart={(event) => {
           setDragFromColumn(findColumnOf(String(event.active.id)));
           if (forbiddenTimerRef.current) clearTimeout(forbiddenTimerRef.current);
@@ -299,16 +338,9 @@ export function TicketBoard({
                         key={ticket.id}
                         value={getItemValue(ticket)}
                         disabled={!canAct}
-                        // Keyboard: the card's title button is the entry point.
-                        // The engine's dnd-kit attributes announce a keyboard
-                        // drag the grip cannot start (it takes no focus), so
-                        // they are dropped here, as in kanban-v2/SolvroKanban.tsx.
-                        role={undefined}
-                        tabIndex={undefined}
-                        aria-roledescription={undefined}
-                        aria-describedby={undefined}
-                        aria-pressed={undefined}
-                        aria-disabled={undefined}
+                        // Keyboard: the card's grip is a focusable button (the
+                        // engine puts dnd-kit's attributes and key listener
+                        // on it); the title button opens the ticket.
                       >
                         <TicketCard
                           ticket={ticket}

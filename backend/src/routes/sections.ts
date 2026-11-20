@@ -161,7 +161,7 @@ sectionsRouter.patch(
 
 // Duplicate a section — its own name/color plus every top-level task
 // (sectionId = id, parentTaskId = null) and each of THEIR subtasks — no
-// body. See docs/plans/duplicate-tasks-sections.md §3-4 for the settled
+// body. See docs/archive/plans/duplicate-tasks-sections.md §3-4 for the settled
 // field rules (status -> TODO, baseline cleared, dependencies dropped,
 // comments never copied) implemented by duplicateTaskTree — the same
 // engine POST /tasks/:id/duplicate uses. The new section carries the
@@ -261,9 +261,14 @@ sectionsRouter.delete(
   validate("params", idParamSchema),
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
-    await ensureSectionVisible(req.user!, id);
+    const { projectId } = await ensureSectionVisible(req.user!, id);
     // Tasks in this section have sectionId set to NULL via onDelete: SetNull.
-    await prisma.section.delete({ where: { id } });
+    // Take the project's task-order lock first, like a reorder does, so the
+    // SetNull update cannot deadlock with a concurrent re-pack.
+    await prisma.$transaction(async (tx) => {
+      await lockProjectOrder(tx, "tasks", projectId);
+      await tx.section.delete({ where: { id } });
+    });
     res.status(204).end();
   },
 );

@@ -26,11 +26,14 @@ export function assigneeAddsMember(
   members: readonly MemberLike[] | undefined,
   /** The picked user's `active` flag; the server never adds an inactive user. */
   active: boolean = true,
+  /** Users who already have project access through a customer team. */
+  teamAccessIds: readonly number[] = [],
 ): boolean {
   if (assigneeId === null || assigneeId === undefined) return false;
   if (!active) return false;
   if (tamId === undefined || members === undefined) return false;
   if (assigneeId === tamId) return false;
+  if (teamAccessIds.includes(assigneeId)) return false;
   return !members.some((m) => m.userId === assigneeId);
 }
 

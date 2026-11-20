@@ -1,0 +1,61 @@
+name: PR hygiene
+
+# Runs on every PR, docs-only ones included, and again whenever the PR body is
+# edited, so it can be a required check on both develop and main. ci.yml skips
+# docs-only changes and never sees body edits, which is why this is separate.
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: pr-hygiene-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # No AI attribution in a PR body or in any commit message (root CLAUDE.md,
+  # Guardrails), hidden metadata included.
+  attribution:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check the PR body and commit messages
+        env:
+          # Passed through env, never interpolated into the script: the body is
+          # untrusted text.
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A missing base or head would make the commit scan see nothing and pass.
+          git cat-file -e "$BASE_SHA^{commit}" && git cat-file -e "$HEAD_SHA^{commit}" \
+            || { echo "::error::base or head commit missing from the clone"; exit 1; }
+          pattern='co-authored-by:.*(claude|anthropic)|generated with \[?claude|claude-projects-attribution|noreply@anthropic\.com'
+          bad=0
+          if printf '%s\n%s' "$PR_TITLE" "$PR_BODY" | grep -qiE "$pattern"; then
+            echo "::error::The PR title or body contains AI attribution:"
+            printf '%s\n%s' "$PR_TITLE" "$PR_BODY" | grep -inE "$pattern"
+            bad=1
+          fi
+          # Commits already on main are published history (a merge of main into
+          # develop brings them in); only commits new to this PR are checked.
+          git rev-parse -q --verify refs/remotes/origin/main >/dev/null \
+            || git fetch -q --no-tags origin main:refs/remotes/origin/main
+          log="$(git log --format='%h %B' "$BASE_SHA..$HEAD_SHA" --not refs/remotes/origin/main)"
+          hits="$(printf '%s\n' "$log" | grep -iE "$pattern" || [ $? -eq 1 ])"
+          if [ -n "$hits" ]; then
+            echo "::error::A commit message contains AI attribution:"
+            echo "$hits"
+            bad=1
+          fi
+          [ "$bad" -eq 0 ] && echo "No AI attribution found."
+          exit "$bad"

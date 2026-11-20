@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { InlineDateRangeEditor } from "@/components/InlineDateRangeEditor";
 import { STATUS_TONE_DOT_CLASS, TaskStatusChip } from "@/components/StatusChip";
 import { dayFromIso, dayToDate } from "@/lib/dateField";
@@ -46,10 +46,27 @@ interface TaskDatesCellProps {
  */
 export function TaskDatesCell({ task, canEdit, onSave, todayDay }: TaskDatesCellProps) {
   const [editing, setEditing] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const wasEditing = useRef(false);
+  // The cell button is `invisible` while the editor is open (it keeps its box,
+  // so the row height and the editor's anchor do not move, but the range is
+  // not drawn twice and the hidden button leaves the tab order). Focus goes
+  // back to the cell once the editor closes, so keyboard users keep their place.
+  useEffect(() => {
+    // Only when nothing else holds focus: a click elsewhere that dismissed the
+    // editor has already moved focus to its target, which must keep it.
+    const active = document.activeElement;
+    if (wasEditing.current && !editing && (!active || active === document.body)) {
+      buttonRef.current?.focus();
+    }
+    wasEditing.current = editing;
+  }, [editing]);
   const overdue = isTaskOverdue(task.status, task.dueDate, todayDay);
+  const editorOpen = editing && canEdit;
   return (
     <div className="relative flex w-full min-w-0 items-center justify-end">
       <button
+        ref={buttonRef}
         type="button"
         disabled={!canEdit}
         onClick={(e) => {
@@ -58,6 +75,7 @@ export function TaskDatesCell({ task, canEdit, onSave, todayDay }: TaskDatesCell
         }}
         className={cn(
           "w-full truncate text-right text-meta",
+          editorOpen && "invisible",
           overdue ? "font-semibold text-error" : "text-on-surface-variant",
           // Overdue red must survive hover — hover:text-primary would flip
           // the signal to green exactly while the TAM points at it.

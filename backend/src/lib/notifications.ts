@@ -39,20 +39,25 @@ function assigneeFromChanges(event: ActivityEvent): number | null {
 /**
  * Which of `userIds` are active users who can see `projectId`, in a fixed
  * number of queries (users + roles, then the project's TAM / customer owner /
- * candidate members) however many ids are passed. It loads the project's facts
+ * candidate members and customer team members) however many ids are passed. It loads the project's facts
  * and applies `canUserSeeProject` (lib/visibility.ts), the pure twin of
  * `projectVisibilityFilter`; test/notifications.test.ts compares the two.
+ * `activeOnly: false` skips the active check (default true) for a caller that
+ * only needs the visibility answer, e.g. an epic owner (ISS-029 is the open
+ * decision on inactive users).
  */
 export async function filterActiveUsersWhoCanSeeProject(
   tx: Tx,
   projectId: number,
   userIds: readonly number[],
+  options: { activeOnly?: boolean } = {},
 ): Promise<Set<number>> {
+  const activeOnly = options.activeOnly ?? true;
   const ids = [...new Set(userIds)];
   if (ids.length === 0) return new Set();
-  const [users, project, linkedCustomers] = await Promise.all([
+  const [users, project, linkedCustomers, teamRows] = await Promise.all([
     tx.user.findMany({
-      where: { id: { in: ids }, active: true },
+      where: { id: { in: ids }, ...(activeOnly ? { active: true } : {}) },
       select: { id: true, role: { select: { roleName: true, permissions: true } } },
     }),
     tx.project.findUnique({
@@ -67,6 +72,11 @@ export async function filterActiveUsersWhoCanSeeProject(
       where: { projects: { some: { projectId } }, tamId: { not: null } },
       select: { tamId: true },
     }),
+    // Team members of ANY linked customer among the candidates.
+    tx.customerTeamMember.findMany({
+      where: { userId: { in: ids }, customer: { projects: { some: { projectId } } } },
+      select: { userId: true },
+    }),
   ]);
   const visible = new Set<number>();
   if (!project) return visible;
@@ -76,6 +86,7 @@ export async function filterActiveUsersWhoCanSeeProject(
       linkedCustomers.map((c) => c.tamId).filter((id): id is number => id !== null),
     ),
     memberIds: new Set(project.members.map((m) => m.userId)),
+    teamMemberIds: new Set(teamRows.map((r) => r.userId)),
   };
   for (const u of users) {
     const permissions = Array.isArray(u.role.permissions)
@@ -141,4 +152,18 @@ export async function notifyForEvent(
   if (rows.length === 0) return 0;
   const { count } = await tx.notification.createMany({ data: rows });
   return count;
+}
+
+/**
+ * Which of `userIds` can see the project, active or not. For a caller that
+ * only needs the visibility answer, such as an epic owner (ISS-029 is the open
+ * decision on inactive users). Same visibility rules as
+ * `filterActiveUsersWhoCanSeeProject`, without its active-account filter.
+ */
+export function filterUsersWhoCanSeeProject(
+  tx: Tx,
+  projectId: number,
+  userIds: readonly number[],
+): Promise<Set<number>> {
+  return filterActiveUsersWhoCanSeeProject(tx, projectId, userIds, { activeOnly: false });
 }

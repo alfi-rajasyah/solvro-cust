@@ -129,6 +129,8 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
   const [confirmReopen, setConfirmReopen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingFocusKey, setPendingFocusKey] = useState<string | null>(null);
+  // Card whose title blocked the last save; marks the field until it is typed in.
+  const [invalidKey, setInvalidKey] = useState<string | null>(null);
   const titleRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
 
   useEffect(() => {
@@ -197,9 +199,12 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
 
   function submit(status: WeeklyStatus) {
     setError(null);
+    setInvalidKey(null);
     const rows = keptAchievements(state.achievements);
-    if (rows.some((a) => a.title.trim() === "")) {
-      setError("Every achievement needs a title.");
+    const untitled = rows.find((a) => a.title.trim() === "");
+    if (untitled) {
+      setInvalidKey(untitled.key);
+      setPendingFocusKey(untitled.key);
       return;
     }
     if (rows.length > MAX_ACHIEVEMENTS) {
@@ -240,9 +245,13 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
     }
   }
 
+  // Computed at render so the number follows the card if others are removed.
+  const blockedIndex = invalidKey ? state.achievements.findIndex((x) => x.key === invalidKey) : -1;
+  const bannerText = blockedIndex >= 0 ? `Achievement ${blockedIndex + 1} needs a title.` : error;
+
   const fieldId = (name: string) => `reflection-${customer.id}-${name}`;
   const linkClass =
-    "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+    "[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
 
   // Modal.tsx registers one document-level Escape listener per open
   // instance with no stopPropagation, so a single Escape press would
@@ -316,9 +325,9 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
     >
       <>
         <div className="space-y-4" onKeyDown={handleKeyDown}>
-          {error && (
+          {bannerText && (
             <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>{bannerText}</AlertDescription>
             </Alert>
           )}
 
@@ -371,7 +380,7 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
                       type="button"
                       onClick={() => removeAchievement(a.key)}
                       aria-label={`Remove achievement ${n}`}
-                      className="tap-target text-meta font-semibold text-on-surface-variant hover:text-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                      className="tap-target text-meta font-semibold text-on-surface-variant hover:text-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       Remove
                     </button>
@@ -384,7 +393,11 @@ export function ReflectionSyncModal({ customer, week, onClose }: ReflectionSyncM
                         titleRefs.current.set(a.key, el);
                       }}
                       value={a.title}
-                      onChange={(e) => patchAchievement(a.key, { title: e.target.value })}
+                      onChange={(e) => {
+                        if (invalidKey === a.key) setInvalidKey(null);
+                        patchAchievement(a.key, { title: e.target.value });
+                      }}
+                      aria-invalid={invalidKey === a.key || undefined}
                       maxLength={200}
                       aria-label={`Achievement ${n} title for ${customer.name}`}
                     />

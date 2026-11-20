@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-table";
 import { AssigneeAvatar } from "@/components/AssigneeAvatar";
 import { LabelChip } from "@/components/LabelChip";
+import { CRITICAL_PATH_LABEL, CriticalPathMark } from "@/components/CriticalPathMark";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import { Tabs } from "@/components/Tabs";
@@ -313,7 +314,19 @@ export function Tasks() {
         id: "priority",
         accessorFn: (row) => PRIORITY_ORDER[row.priority],
         header: ({ column }) => <DataGridColumnHeader column={column} title="Priority" />,
-        cell: ({ row }) => <PriorityBadge priority={row.original.priority} compact />,
+        cell: ({ row }) => (
+          <span className="inline-flex items-center gap-1.5">
+            <PriorityBadge priority={row.original.priority} compact />
+            {row.original.isCriticalPath && (
+              <>
+                <span aria-hidden="true" className="inline-flex shrink-0">
+                  <CriticalPathMark variant="glyph" />
+                </span>
+                <span className="sr-only">{CRITICAL_PATH_LABEL}</span>
+              </>
+            )}
+          </span>
+        ),
         meta: { skeleton: <Skeleton className="h-4 w-10 rounded-full" /> },
       },
       {
@@ -368,7 +381,7 @@ export function Tasks() {
     getRowId: (row) => String(row.id),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    // Pagination stays OFF (pilot verdict — see docs/plans/reui-data-grid.md
+    // Pagination stays OFF (pilot verdict — see docs/archive/plans/reui-data-grid.md
     // Checkpoint B): no getPaginationRowModel, so the full sorted row model
     // renders. `pageSize` here only sizes the loading-skeleton row count.
     initialState: { pagination: { pageSize: 8 } },
@@ -541,7 +554,7 @@ function PersonChip({ label, onClear }: { label: string; onClear: () => void }) 
         type="button"
         aria-label={`Remove filter: ${label}`}
         onClick={onClear}
-        className="tap-target flex h-5 w-5 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:text-primary outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+        className="tap-target flex h-5 w-5 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:text-primary outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
       >
         <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
       </button>

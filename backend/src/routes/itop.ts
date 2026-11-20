@@ -39,6 +39,8 @@ import { open, SecretBoxError } from "../lib/secretBox.js";
 import { ITOP_TRANSPORT_ERROR_CODES, ItopError, type ItopGetResult, type ItopObjectRow } from "../lib/itop/client.js";
 import { TIME_ENTRY_WINDOW_MS, formatItopDate, upsertTicketFromItop, upsertTimeEntryFromItop } from "../lib/itop/sync.js";
 import {
+  ITOP_CONTRACT_SERVICE_LINK_OUTPUT_FIELDS,
+  ITOP_CUSTOMER_CONTRACT_OUTPUT_FIELDS,
   ITOP_LNK_PERSON_TO_TEAM_OUTPUT_FIELDS,
   ITOP_PERSON_OUTPUT_FIELDS,
   ITOP_SERVICE_OUTPUT_FIELDS,
@@ -48,6 +50,8 @@ import {
   ITOP_TIME_SPENT_OUTPUT_FIELDS,
   ITOP_TIME_SPENT_TICKET_REF_FIELD,
   type ItopCaseLogEntry,
+  type ItopContractServiceLinkFields,
+  type ItopCustomerContractFields,
   type ItopLnkPersonToTeamFields,
   type ItopPersonFields,
   type ItopServiceFields,
@@ -1027,13 +1031,29 @@ interface ServiceOption {
   providerName: string | null;
 }
 
-/** In-process, 5-minute TTL — the service catalogue changes rarely and every "New ticket" sheet open would otherwise re-fetch it. Mirrors lib/itop/config.ts's ItopConfig cache shape. Module-level (not per-request), so it's shared across callers; there's no per-customer variation to key on. */
-const SERVICES_CACHE_TTL_MS = 5 * 60_000;
-let servicesCache: { value: ServiceOption[]; expiresAt: number } | null = null;
+/** The cached, UNSCOPED catalogue row: `orgId` (the providing iTop organisation) is what each caller's view is filtered on and is never sent to the client. */
+interface CachedService extends ServiceOption {
+  orgId: number | null;
+}
 
 /**
- * Busts the `GET /services` cache. iTop's own service catalogue and org
- * names are admin-side data — `routes/itopAdmin.ts` calls this alongside
+ * The raw, caller-independent catalogue. `entitledOrgs` maps a service id to
+ * the organisations holding a CustomerContract that covers it; it is `null`
+ * when the app token was refused those classes, in which case scoping falls
+ * back to the provider org alone.
+ */
+interface ServiceCatalogue {
+  services: CachedService[];
+  entitledOrgs: Map<number, Set<number>> | null;
+}
+
+/** In-process, 5-minute TTL — the service catalogue changes rarely and every "New ticket" sheet open would otherwise re-fetch it. Mirrors lib/itop/config.ts's ItopConfig cache shape. Module-level (not per-request), so it's shared across callers: it holds the RAW catalogue and entitlements only and every response is filtered per caller after the cache read, so one caller's scope can never leak into another's. */
+const SERVICES_CACHE_TTL_MS = 5 * 60_000;
+let servicesCache: { value: ServiceCatalogue; expiresAt: number } | null = null;
+
+/**
+ * Busts the `GET /services` cache. iTop's own service catalogue, contracts and
+ * org names are admin-side data — `routes/itopAdmin.ts` calls this alongside
  * every `bustItopConfigCache()` (settings PATCH, token change, manual sync)
  * so a base-URL/token change or a sync-driven org rename doesn't leave a
  * stale service list cached for up to 5 more minutes. Exported (not
@@ -1045,12 +1065,14 @@ export function bustItopServicesCache(): void {
   servicesCache = null;
 }
 
-itopRouter.get("/services", async (_req, res) => {
+function positiveInt(raw: unknown): number | null {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+async function loadServiceCatalogue(): Promise<ServiceCatalogue> {
   const now = Date.now();
-  if (servicesCache && servicesCache.expiresAt > now) {
-    res.json(servicesCache.value);
-    return;
-  }
+  if (servicesCache && servicesCache.expiresAt > now) return servicesCache.value;
 
   // Throws 409 itop_not_configured itself when the admin hasn't connected
   // iTop yet — no separate isItopConfigured check needed here.
@@ -1063,12 +1085,95 @@ itopRouter.get("/services", async (_req, res) => {
     mapItopReadError(err);
   }
 
-  const rows: ServiceOption[] = result.objects
-    .map((row) => ({ id: row.key, name: row.fields.name, providerName: row.fields.org_id_friendlyname || null }))
+  const services: CachedService[] = result.objects
+    .map((row) => ({
+      id: row.key,
+      name: row.fields.name,
+      providerName: row.fields.org_id_friendlyname || null,
+      orgId: positiveInt(row.fields.org_id),
+    }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  servicesCache = { value: rows, expiresAt: now + SERVICES_CACHE_TTL_MS };
-  res.json(rows);
+  // Entitlement: contract -> owning org, link -> (contract, service). A
+  // REFUSAL by iTop (numeric code, e.g. the app token can't read the class)
+  // degrades to provider-only scoping with a warning; a transport failure is
+  // still a 502 like the catalogue read above.
+  let entitledOrgs: Map<number, Set<number>> | null = null;
+  try {
+    const [contracts, links] = await Promise.all([
+      client.get<ItopCustomerContractFields>(
+        "CustomerContract",
+        "SELECT CustomerContract",
+        ITOP_CUSTOMER_CONTRACT_OUTPUT_FIELDS,
+      ),
+      client.get<ItopContractServiceLinkFields>(
+        "lnkCustomerContractToService",
+        "SELECT lnkCustomerContractToService",
+        ITOP_CONTRACT_SERVICE_LINK_OUTPUT_FIELDS,
+      ),
+    ]);
+    const orgOfContract = new Map<number, number>();
+    for (const c of contracts.objects) {
+      const orgId = positiveInt(c.fields.org_id);
+      if (orgId !== null) orgOfContract.set(c.key, orgId);
+    }
+    entitledOrgs = new Map();
+    for (const l of links.objects) {
+      const contractId = positiveInt(l.fields.customercontract_id);
+      const serviceId = positiveInt(l.fields.service_id);
+      const orgId = contractId === null ? undefined : orgOfContract.get(contractId);
+      if (serviceId === null || orgId === undefined) continue;
+      const set = entitledOrgs.get(serviceId) ?? new Set<number>();
+      set.add(orgId);
+      entitledOrgs.set(serviceId, set);
+    }
+  } catch (err) {
+    if (err instanceof ItopError && !ITOP_TRANSPORT_ERROR_CODES.has(err.code)) {
+      logger.warn(
+        { code: err.code, message: err.message },
+        "iTop refused the CustomerContract read for GET /itop/services; scoping by provider organisation only",
+      );
+    } else {
+      mapItopReadError(err);
+    }
+  }
+
+  const value: ServiceCatalogue = { services, entitledOrgs };
+  servicesCache = { value, expiresAt: now + SERVICES_CACHE_TTL_MS };
+  return value;
+}
+
+// Scoped to the iTop organisations of the customers the caller can see
+// (customerVisibilityFilter): a service is visible when one of those orgs
+// provides it OR holds a customer contract covering it. A TAM never learns
+// another account's catalogue. `project:view-all` / `customer:view-all`
+// holders (admins) keep the full list, including services of organisations
+// no customer maps to.
+itopRouter.get("/services", async (req, res) => {
+  const user = req.user!;
+  const { services, entitledOrgs } = await loadServiceCatalogue();
+  const strip = ({ id, name, providerName }: CachedService): ServiceOption => ({ id, name, providerName });
+
+  if (hasPermission(user, "project:view-all") || hasPermission(user, "customer:view-all")) {
+    res.json(services.map(strip));
+    return;
+  }
+
+  const visible = await prisma.customer.findMany({
+    where: { itopOrgId: { not: null }, ...customerVisibilityFilter(user) },
+    select: { itopOrgId: true },
+  });
+  const orgIds = new Set<number>();
+  for (const c of visible) if (c.itopOrgId !== null) orgIds.add(c.itopOrgId);
+
+  const isVisible = (s: CachedService): boolean => {
+    if (s.orgId !== null && orgIds.has(s.orgId)) return true;
+    const holders = entitledOrgs?.get(s.id);
+    if (!holders) return false;
+    for (const o of holders) if (orgIds.has(o)) return true;
+    return false;
+  };
+  res.json(services.filter(isVisible).map(strip));
 });
 
 // ---- GET /customers/:id/contacts ---------------------------------------------

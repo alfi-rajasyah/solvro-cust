@@ -315,3 +315,14 @@ What changed:
 Everything else above stands: pipeline-stage division, merged reviewer with the
 design lens, no-commit rule, local-only roster, model pins (sonnet implementor /
 opus reviewer — cheap generation, expensive judgment).
+
+## v3 addendum (2026-11-18): lanes, merge as the approval
+
+Full rationale and decisions: `docs/archive/plans/pipeline-v3-simplify.md` (ported from the source repository the same day).
+
+- **Superseded in the v2 list above:** "no-commit rule" and "local-only roster". The roster and the rest of `.claude/` are tracked in git (user decision 2026-09-29). Since 2026-11-18, agents commit, push feature branches and open PRs into `develop` without asking; no agent merges, and the user's merge is the approval (`gh pr merge` is denied in `.claude/settings.local.json`).
+- **Three lanes** replace the single phase flow: D (docs/agent only), S (a small fix of at most 3 commits, one writer), P (a phase; tasks run in order by default, parallel waves only for independent tasks). The root `CLAUDE.md` roster holds the criteria and the step table.
+- **Review:** lane S gets the opus reviewer only on a spine touch (instant mode); the user's PR review is the judgment layer for the rest. Lane P keeps one phase review.
+- **Delivery Gate** runs only when a change is visible to a user.
+- **Mechanical backstops** instead of model behaviour: `gates.sh` gains `docs-plan-citations` and `docs-plans-status`; `.github/workflows/pr-hygiene.yml` fails a PR that carries AI attribution; the GitHub merge settings are to pin merge methods (squash into `develop`, merge commit into `main`) and require the `attribution` check on both branches (left for the user, see the plan).
+- **Branch hygiene:** the SessionStart hook reports local branches whose remote is gone and remote branches other than `develop`/`main`; agent worktree and integration branches are deleted after the phase PR merges, with the user's approval.

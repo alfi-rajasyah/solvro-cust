@@ -6,6 +6,7 @@ import { HttpError } from "../http/errors.js";
 import { validate } from "../http/validate.js";
 import { ensureProjectOwnerAccess } from "../lib/visibility.js";
 import { recordActivity } from "../lib/activity.js";
+import { configuredPublicBaseUrl } from "../lib/publicBaseUrl.js";
 import {
   SHARE_DEFAULT_EXPIRY_DAYS,
   SHARE_LABEL_MAX,
@@ -88,9 +89,11 @@ shareLinksRouter.post(
       return created;
     });
 
-    // Relative on purpose: the backend has no public-base-URL setting, so the
-    // client prefixes window.location.origin. Returned only here.
-    res.status(201).json({ ...link, url: `/share/${token}` });
+    // `url` stays relative; `baseUrl` is the operator's APP_URL (null when
+    // unset), which the client prefixes in place of its own address - an owner
+    // on a tunnel or localhost would otherwise copy a link a guest cannot open.
+    // The token is returned only here and is never logged.
+    res.status(201).json({ ...link, url: `/share/${token}`, baseUrl: configuredPublicBaseUrl() });
   },
 );
 

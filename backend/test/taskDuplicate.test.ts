@@ -6,7 +6,7 @@ import { prisma } from "../src/prisma.js";
 import { createAdminAndToken, createUserWithRole, seedRoles } from "./testAuth.js";
 import { duplicateTaskTree } from "../src/lib/duplicate.js";
 
-// POST /tasks/:id/duplicate — docs/plans/duplicate-tasks-sections.md §3-4.
+// POST /tasks/:id/duplicate — docs/archive/plans/duplicate-tasks-sections.md §3-4.
 // Settled rules: title copied verbatim; status resets to TODO for the copy
 // AND every copied subtask; baselineStartDate/baselineDueDate reset to
 // null; no TaskDependency rows for the copy or its subtasks; comments never

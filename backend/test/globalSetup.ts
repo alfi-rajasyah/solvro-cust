@@ -8,7 +8,7 @@ import { PrismaClient } from "@prisma/client";
 // test` invocation starts from a clean, empty `solvro_test` database
 // instead of accumulating rows across runs (the root cause of the
 // `taskOrdering.test.ts` take-200 accumulation flake — see
-// backend/CLAUDE.md and docs/ISSUES.md).
+// backend/CLAUDE.md and docs/archive/ISSUES-2026-11-18-phase-log.md).
 export default async function setup() {
   const databaseUrl =
     process.env.DATABASE_URL ?? "postgresql://solvro:test@localhost:5433/solvro?schema=public";

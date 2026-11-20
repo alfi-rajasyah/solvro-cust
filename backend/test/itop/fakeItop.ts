@@ -41,6 +41,17 @@ interface ServiceRecord {
   org_id: number;
 }
 
+/** Entitlement data behind `GET /itop/services`: a customer org's contract and the services it covers. */
+interface CustomerContractRecord {
+  id: number;
+  org_id: number;
+}
+interface ContractServiceLinkRecord {
+  id: number;
+  customercontract_id: number;
+  service_id: number;
+}
+
 interface UserRecord {
   id: number;
   contactid: number;
@@ -120,6 +131,8 @@ export interface FakeItopState {
   persons: Map<number, PersonRecord>;
   users: Map<number, UserRecord>;
   services: Map<number, ServiceRecord>;
+  customerContracts: Map<number, CustomerContractRecord>;
+  contractServiceLinks: Map<number, ContractServiceLinkRecord>;
   tickets: Map<number, TicketRecord>;
   timeSpent: Map<number, TimeSpentRecord>;
   lnkPersonToTeam: Map<number, LnkPersonToTeamRecord>;
@@ -138,6 +151,8 @@ export interface FakeItopState {
    * mid-request — set this right before triggering the write.
    */
   failNextGetForToken: { token: string; message: string } | null;
+  /** One-shot trap: the NEXT `core/get` for exactly this class answers HTTP 500 (a transport-level failure, not an iTop refusal), then clears itself. */
+  failNextGetForClass: string | null;
   nextId: number;
   /** Every request that reached `rest.php`, regardless of operation/outcome — lets a test prove a route's in-process cache (Task 6.2's `GET /itop/services`, 5-minute TTL) didn't re-hit the fake on a second call. */
   requestCount: number;
@@ -153,6 +168,8 @@ export function createEmptyState(): FakeItopState {
     persons: new Map(),
     users: new Map(),
     services: new Map(),
+    customerContracts: new Map(),
+    contractServiceLinks: new Map(),
     tickets: new Map(),
     timeSpent: new Map(),
     lnkPersonToTeam: new Map(),
@@ -160,6 +177,7 @@ export function createEmptyState(): FakeItopState {
     disabledClasses: new Set(),
     currentContactUnsupported: false,
     failNextGetForToken: null,
+    failNextGetForClass: null,
     writeLog: [],
     nextId: 1,
     requestCount: 0,
@@ -188,6 +206,8 @@ const SUPPORTED_CLASSES = [
   "Person",
   "User",
   "Service",
+  "CustomerContract",
+  "lnkCustomerContractToService",
   "TimeSpent",
   "lnkPersonToTeam",
   "PersonalToken",
@@ -535,6 +555,13 @@ function collectionFor(
       return [...state.users.values()].map((u) => ({ id: u.id, fields: userFields(u) }));
     case "Service":
       return [...state.services.values()].map((s) => ({ id: s.id, fields: serviceFields(state, s) }));
+    case "CustomerContract":
+      return [...state.customerContracts.values()].map((c) => ({ id: c.id, fields: { id: String(c.id), org_id: String(c.org_id) } }));
+    case "lnkCustomerContractToService":
+      return [...state.contractServiceLinks.values()].map((l) => ({
+        id: l.id,
+        fields: { id: String(l.id), customercontract_id: String(l.customercontract_id), service_id: String(l.service_id) },
+      }));
     case "UserRequest":
     case "Incident":
       return [...state.tickets.values()]
@@ -732,6 +759,11 @@ export function createFakeItop(seed: FakeItopState = createEmptyState()): FakeIt
       }
 
       const className = String(payload.class);
+      if (state.failNextGetForClass !== null && state.failNextGetForClass === className) {
+        state.failNextGetForClass = null;
+        res.status(500).send("Internal Server Error");
+        return;
+      }
       const outputFields = String(payload.output_fields ?? "*");
       const key = payload.key;
 

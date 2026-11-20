@@ -14,8 +14,8 @@ import { getTasks, setWipLimits, type SeededTask, createEpic } from "../fixtures
 import type { Page } from "@playwright/test";
 
 // Ported from the QA gate script qa-wave2.mjs, then rewritten against the
-// ReUI board (docs/plans/kanban-reui-swap/plan.md, T10) per the binding
-// scenario table (docs/plans/kanban-reui-swap/scenarios.md) and its e2e
+// ReUI board (docs/archive/plans/kanban-reui-swap/plan.md, T10) per the binding
+// scenario table (docs/archive/plans/kanban-reui-swap/scenarios.md) and its e2e
 // Coverage Audit (T2) section. `openKanban` (fixtures/test.ts) targets
 // `KANBAN_ROUTE` ("kanban" as of the T11 cutover).
 // Mouse-drag cases only make sense on the desktop project (dnd-kit
@@ -81,29 +81,6 @@ async function apiPatchTask(
 async function setPriority(base: string, token: string, id: number, priority: string): Promise<void> {
   await apiPatchTask(base, token, id, { priority });
 }
-
-/** G10's fixture-setup tool: creates a fresh subtask via the API, independent
- * of whatever the RG-2/RG-3 modal-path rewrites below did to Alpha's ORIGINAL
- * seeded subtasks (Sub one/Sub two) — decouples G10's "Alpha has subtasks"
- * precondition from file-order coupling. */
-async function createSubtask(
-  base: string,
-  token: string,
-  projectId: number,
-  parentTaskId: number,
-  title: string,
-): Promise<SeededTask> {
-  const res = await fetch(`${base}/api/projects/${projectId}/tasks`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ title, parentTaskId }),
-  });
-  if (!res.ok) {
-    throw new Error(`POST /projects/${projectId}/tasks failed: ${res.status} ${await res.text()}`);
-  }
-  return res.json();
-}
-
 
 /** T10 Fix 3: the modal trio (subtask re-parent, subtask promote, G10) moved
  * off the Gantt/Timeline paths — the Gantt route never actually opened the
@@ -190,7 +167,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
   test("reorder within column: Gamma onto Alpha -> Gamma before Alpha", async ({ page, seededProject }) => {
     await openKanban(page, seededProject.projectId);
 
-    const grip = await gripFor(page, "Gamma", "Drag to reorder");
+    const grip = await gripFor(page, "Gamma", "Move");
     const alpha = await page.getByText("Alpha", { exact: true }).first().boundingBox();
     expect(grip, "grip for Gamma not found").toBeTruthy();
     expect(alpha, "Alpha card not found").toBeTruthy();
@@ -228,7 +205,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
       expect(before.length, "need at least two TODO cards").toBeGreaterThanOrEqual(2);
       const mover = before[before.length - 1];
       const target = before[0];
-      const grip = await gripFor(page, mover, "Drag to reorder");
+      const grip = await gripFor(page, mover, "Move");
       const targetBox = await page.getByText(target, { exact: true }).first().boundingBox();
       expect(grip, `grip for ${mover} not found`).toBeTruthy();
       expect(targetBox, `${target} card not found`).toBeTruthy();
@@ -252,7 +229,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
   test("cross-column drag: Beta -> In Progress column", async ({ page, seededProject }) => {
     await openKanban(page, seededProject.projectId);
 
-    const grip = await gripFor(page, "Beta", "Drag to reorder");
+    const grip = await gripFor(page, "Beta", "Move");
     const col =
       (await page.locator("h3", { hasText: "In progress" }).first().boundingBox()) ??
       (await page.getByText("In progress", { exact: true }).first().boundingBox());
@@ -291,9 +268,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     await expect(panel.getByText("Sub two", { exact: true })).toBeVisible();
 
     // Sub one seeds at position 0, Sub two at 1 → Sub two owns the second
-    // "Reorder subtask" handle in the panel's subtask list. exact: true —
-    // dnd-kit also puts role="button" on each row, whose accessible name
-    // CONTAINS the handle's label (docs/ISSUES.md, sortable deferred #4).
+    // "Reorder subtask" handle in the panel's subtask list.
     const handles = panel.getByRole("button", { name: "Reorder subtask", exact: true });
     await expect(handles).toHaveCount(2);
     const subTwoHandle = handles.nth(1);
@@ -376,7 +351,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     const source = globalTopLevel(before).find((t) => t.status !== "DONE");
     expect(source, "need a non-DONE top-level task to drag").toBeTruthy();
 
-    const grip = await gripFor(page, source!.title, "Drag to reorder");
+    const grip = await gripFor(page, source!.title, "Move");
     const doneHdr = await page.locator("h3", { hasText: /done/i }).first().boundingBox();
     expect(grip, `grip for ${source!.title} not found`).toBeTruthy();
     expect(doneHdr, "Done column header not found").toBeTruthy();
@@ -443,7 +418,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     expect(todoFirst?.id, "todoFirst must be the pinned TODO task").toBe(pinnedTodo.id);
     expect(nonTodo?.id, "nonTodo must be the pinned mover task").toBe(pinnedMover.id);
 
-    const grip = await gripFor(page, nonTodo!.title, "Drag to reorder");
+    const grip = await gripFor(page, nonTodo!.title, "Move");
     const targetBox = await page.getByText(todoFirst!.title, { exact: true }).first().boundingBox();
     expect(grip, `grip for ${nonTodo!.title} not found`).toBeTruthy();
     expect(targetBox, `${todoFirst!.title} card not found`).toBeTruthy();
@@ -487,7 +462,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     const [moved, target] = todoSorted;
     const movedIndexBefore = before.findIndex((t) => t.id === moved.id);
 
-    const grip = await gripFor(page, moved.title, "Drag to reorder");
+    const grip = await gripFor(page, moved.title, "Move");
     // T10 stabilization: the FULL card box (`cardBoxFor`), not just the
     // title text's own bbox — see its doc comment. Load-bearing for the
     // overshoot gesture below when `target` carries extra content (e.g. a
@@ -510,29 +485,9 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // `arrayMove` swap cancels the move outright (zero PATCH — the captured
     // failure this fix addresses).
     //
-    // The prescribed fix is a KEYBOARD drag — dnd-kit's KeyboardSensor +
-    // sortableKeyboardCoordinates ARE wired in reui/kanban.tsx (`useSensors`
-    // includes `useSensor(KeyboardSensor, ...)`), and `KeyboardSensor
-    // .activators` is `[{ eventName: "onKeyDown", ... }]`. Investigated
-    // interactively against the running dev server before writing this:
-    // `attributes` (role="button", tabIndex=0 — what makes an element
-    // focusable/Tab-reachable) is spread only onto `KanbanItem`'s OUTER
-    // wrapper (reui/kanban.tsx ~line 796, `[data-slot="kanban-item"]`),
-    // while `listeners` (the actual onKeyDown activator) reaches only
-    // `KanbanItemHandle` via `ItemContext` (~line 838) and carries no
-    // tabIndex/role of its own. Confirmed via direct DOM inspection: the
-    // handle (`[aria-label="Drag to reorder"]`) has neither `tabindex` nor
-    // `role`, so it can never become `document.activeElement` — and pressing
-    // Space on the outer wrapper never set `data-dragging` because the
-    // wrapper has no onKeyDown listener. (Since 2026-10-23 the Solvro layer
-    // drops those wrapper attributes, so the wrapper takes no focus at all;
-    // a card opens from the keyboard via its title button instead.) With
-    // `attributes` and `listeners` split across two different
-    // DOM nodes, no real keyboard interaction (Tab, click-then-Space) can
-    // ever reach the sensor's activator — keyboard drag is a dead end here,
-    // not a gesture-timing issue. Falling back to the prescribed mouse
-    // alternative: drag PAST the target's card so the pointer lands solidly
-    // below the post-reshuffle boundary rather than riding it.
+    // This case stays a mouse test; the keyboard path is covered by the
+    // keyboard drag case above. Drag PAST the target's card so the pointer
+    // lands solidly below the post-reshuffle boundary rather than riding it.
     //
     // T10 stabilization: a height-*multiplied* overshoot (originally 1.5x)
     // doesn't scale safely — against a real 3-card TODO column where the
@@ -562,6 +517,59 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     expect(movedIndexAfter).toBeGreaterThan(targetIndexAfter);
   });
 
+  // ISS-078: dnd-kit's button role, tab stop and key listener now sit on the
+  // grip together, so a card can be moved without a pointer.
+  test("keyboard drag: focus the grip, Space, ArrowDown, Space moves a card one slot (ISS-078)", async ({
+    page,
+    seededProject,
+  }) => {
+    const base = apiBase(test.info());
+    await openKanban(page, seededProject.projectId);
+
+    const before = globalTopLevel(await getTasks(base, seededProject.token, seededProject.projectId));
+    const todoSorted = before.filter((t) => t.status === "TODO");
+    expect(todoSorted.length, "need at least two TODO tasks").toBeGreaterThanOrEqual(2);
+    const [moved, target] = todoSorted;
+
+    const card = page.locator('[data-slot="kanban-item"]', { hasText: moved.title }).first();
+    const grip = card.getByRole("button", { name: /^Move / });
+    await expect(grip).toHaveAttribute("tabindex", "0");
+    // The card wrapper itself is not a tab stop or a button.
+    await expect(card).not.toHaveAttribute("tabindex", /.*/);
+    await grip.focus();
+    await expect(grip).toBeFocused();
+
+    const status = page.locator('[id^="DndLiveRegion"]');
+    await page.keyboard.press("Space");
+    await expect(status).not.toBeEmpty();
+
+    const requests = await captureTaskRequests(page, async () => {
+      // The live preview reorders the column as the card moves, so the move
+      // is observable as the lifted card (data-dragging) sitting after the
+      // target in DOM order. The sensor is attached by now (live region
+      // non-empty above), so a single press is enough.
+      await page.keyboard.press("ArrowDown");
+      await expect
+        .poll(() =>
+          page.evaluate(
+            ({ m, t }) => {
+              const ids = Array.from(document.querySelectorAll('[data-slot="kanban-item"]')).map((e) =>
+                e.getAttribute("data-value"),
+              );
+              return ids.indexOf(m) > ids.indexOf(t);
+            },
+            { m: String(moved.id), t: String(target.id) },
+          ),
+        )
+        .toBe(true);
+      await page.keyboard.press("Space");
+    });
+
+    expect(requests.length).toBe(1);
+    const after = globalTopLevel(await getTasks(base, seededProject.token, seededProject.projectId));
+    expect(after.findIndex((t) => t.id === moved.id)).toBeGreaterThan(after.findIndex((t) => t.id === target.id));
+  });
+
   test("G3: drop-in-place fires no request (SC-3/NO-1)", async ({ page, seededProject }) => {
     const base = apiBase(test.info());
     await openKanban(page, seededProject.projectId);
@@ -570,7 +578,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     const target = tasks[0];
     expect(target, "need at least one top-level task").toBeTruthy();
 
-    const grip = await gripFor(page, target.title, "Drag to reorder");
+    const grip = await gripFor(page, target.title, "Move");
     expect(grip, `grip for ${target.title} not found`).toBeTruthy();
 
     const requests = await captureTaskRequests(page, async () => {
@@ -600,7 +608,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     expect(todoSorted.length, "need at least one TODO task").toBeGreaterThanOrEqual(1);
     const last = todoSorted[todoSorted.length - 1];
 
-    const grip = await gripFor(page, last.title, "Drag to reorder");
+    const grip = await gripFor(page, last.title, "Move");
     const lastBox = await page.getByText(last.title, { exact: true }).first().boundingBox();
     expect(grip, `grip for ${last.title} not found`).toBeTruthy();
     expect(lastBox, `${last.title} card not found`).toBeTruthy();
@@ -634,7 +642,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
       .sort((a, b) => a[1] - b[1])
       .map(([title]) => title);
 
-    const grip = await gripFor(page, moved.title, "Drag to reorder");
+    const grip = await gripFor(page, moved.title, "Move");
     const targetBox = await page.getByText(target.title, { exact: true }).first().boundingBox();
     expect(grip, `grip for ${moved.title} not found`).toBeTruthy();
     expect(targetBox, `${target.title} card not found`).toBeTruthy();
@@ -729,7 +737,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // consistently — a settle wait, not a geometry tweak, was the fix.
     await page.waitForTimeout(400);
 
-    const grip = await gripFor(page, v2.title, "Drag to reorder");
+    const grip = await gripFor(page, v2.title, "Move");
     // T10 stabilization: FULL card box (`cardBoxFor`) — v1 is picked
     // dynamically from whatever top-level tasks exist and can land on a
     // card with extra content (e.g. Alpha's subtask checklist), which the
@@ -809,7 +817,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // before measuring geometry, not just before the drag starts.
     await page.waitForTimeout(400);
 
-    const grip = await gripFor(page, source.title, "Drag to reorder");
+    const grip = await gripFor(page, source.title, "Move");
     const lastVisibleBox = await page.getByText(visibleOther.title, { exact: true }).first().boundingBox();
     expect(grip, `grip for ${source.title} not found`).toBeTruthy();
     expect(lastVisibleBox, `${visibleOther.title} card not found`).toBeTruthy();
@@ -880,7 +888,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     await prioritySelect.selectOption("MEDIUM");
     await closeFilterPopover(page);
 
-    const grip = await gripFor(page, target.title, "Drag to reorder");
+    const grip = await gripFor(page, target.title, "Move");
     expect(grip, `grip for ${target.title} not found`).toBeTruthy();
 
     const requests = await captureTaskRequests(page, async () => {
@@ -951,7 +959,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // Drag the only visible (filtered) card cross-column — drop math must
     // still derive from `topLevelAll`, per SolvroKanban.tsx's `isTaskVisible`
     // comments.
-    const grip = await gripFor(page, tagged.title, "Drag to reorder");
+    const grip = await gripFor(page, tagged.title, "Move");
     const col =
       (await page.locator("h3", { hasText: "In progress" }).first().boundingBox()) ??
       (await page.getByText("In progress", { exact: true }).first().boundingBox());
@@ -1080,29 +1088,40 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     expect(globalTitles[globalTitles.length - 1]).toBe("Sub two");
   });
 
-  // G10 (RG-5 in scenarios.md): the reachable form of `max_depth_exceeded`
-  // through the UI — giving a parent to a task that already has subtasks.
-  // Creates its own temporary subtask of Alpha so this case's precondition
-  // ("Alpha has subtasks") holds regardless of what the RG-2/RG-3 rewrites
-  // above did to Alpha's ORIGINAL seeded subtasks (Sub one/Sub two both
-  // moved away from Alpha by that point). Opened via `/tasks` under its
-  // DEFAULT filter (`topLevel: true`) — Alpha is top-level, so no checkbox
-  // toggle is needed here (unlike the re-parent/promote cases above).
-  test("G10: modal error path — giving Alpha (has subtasks) a Parent surfaces max_depth_exceeded", async ({
+  // G10 (RG-5 in scenarios.md): the modal's error path — a server refusal on
+  // Save shows an alert, keeps the dialog open and applies nothing. The UI no
+  // longer lets a task WITH subtasks pick a parent (the Parent select is
+  // disabled, ISS-179), so the real `max_depth_exceeded` refusal is not
+  // reachable by hand any more. Instead this picks a parent for a task
+  // WITHOUT subtasks (a normal, allowed action) and forces the server's exact
+  // max_depth_exceeded answer for that PATCH through page.route. Opened via
+  // `/tasks` under its DEFAULT filter (`topLevel: true`).
+  test("G10: modal error path — a refused Parent change surfaces the server error and applies nothing", async ({
     page,
     seededProject,
   }) => {
     const base = apiBase(test.info());
-    await createSubtask(base, seededProject.token, seededProject.projectId, seededProject.alpha.id, "G10 temp subtask");
-
     const before = await getTasks(base, seededProject.token, seededProject.projectId);
-    const alphaBefore = byTitle(before, "Alpha");
-    expect(alphaBefore?.parentTaskId).toBeNull();
-    const candidateParent = globalTopLevel(before).find((t) => t.title !== "Alpha");
+    const topLevel = globalTopLevel(before);
+    const target = topLevel.find((t) => !before.some((c) => c.parentTaskId === t.id));
+    expect(target, "need a top-level task without subtasks").toBeTruthy();
+    const candidateParent = topLevel.find((t) => t.id !== target!.id);
     expect(candidateParent, "need another top-level task to attempt as parent").toBeTruthy();
 
+    await page.route(`**/api/tasks/${target!.id}`, async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
+      await route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Cannot give a parent to a task that already has subtasks (max depth is 1)",
+          code: "max_depth_exceeded",
+        }),
+      });
+    });
+
     await openTasksPage(page, seededProject.customerName);
-    await clickTaskRow(page, seededProject.projectId, "Alpha");
+    await clickTaskRow(page, seededProject.projectId, target!.title);
     const dialog = page.getByRole("dialog", { name: "Edit task" });
     await expect(dialog).toBeVisible();
 
@@ -1110,6 +1129,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // ("option", ...) }) — see the first "subtask re-parent" test above for
     // why the getByRole form hangs indefinitely on this page.
     const parentSelect = dialog.locator('div.flex.items-center.gap-3:has(span:text-is("Parent")) select');
+    await expect(parentSelect).toBeEnabled();
     await parentSelect.selectOption(String(candidateParent!.id));
 
     await dialog.getByRole("button", { name: "Save", exact: true }).click();
@@ -1122,8 +1142,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     await expect(dialog).toBeVisible();
 
     const after = await getTasks(base, seededProject.token, seededProject.projectId);
-    const alphaAfter = byTitle(after, "Alpha");
-    expect(alphaAfter?.parentTaskId).toBeNull();
+    expect(byTitle(after, target!.title)?.parentTaskId).toBeNull();
   });
 
   // R3: cross-view parity (risk register R3). By this point in the file, many
@@ -1157,7 +1176,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     page.on("pageerror", (e) => errors.push(e.message));
 
     await openKanban(page, seededProject.projectId);
-    const grip = await gripFor(page, "Gamma", "Drag to reorder");
+    const grip = await gripFor(page, "Gamma", "Move");
     const alpha = await page.getByText("Alpha", { exact: true }).first().boundingBox();
     if (grip && alpha) {
       await mouseDrag(page, center(grip), { x: alpha.x + 60, y: alpha.y + 8 });
@@ -1188,7 +1207,7 @@ test.describe("kanban drag & drop — mobile (touch)", () => {
     // internals; appending to the end is the one outcome dnd-kit guarantees.
     await openKanban(page, seededProject.projectId);
 
-    const grip = await gripFor(page, "Alpha", "Drag to reorder");
+    const grip = await gripFor(page, "Alpha", "Move");
     const gamma = await page.getByText("Gamma", { exact: true }).first().boundingBox();
     expect(grip, "grip for Alpha not found").toBeTruthy();
     expect(gamma, "Gamma card not found").toBeTruthy();
@@ -1255,7 +1274,7 @@ test.describe("kanban drag & drop — mobile (touch)", () => {
     page.on("pageerror", (e) => errors.push(e.message));
 
     await openKanban(page, seededProject.projectId);
-    const grip = await gripFor(page, "Alpha", "Drag to reorder");
+    const grip = await gripFor(page, "Alpha", "Move");
     const beta = await page.getByText("Beta", { exact: true }).first().boundingBox();
     if (grip && beta) {
       await touchDrag(page, center(grip), { x: beta.x + 40, y: beta.y + 20 });

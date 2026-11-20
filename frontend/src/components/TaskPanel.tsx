@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { resolveSectionColors } from "@/lib/gantt/palette";
 import { usePanelFocus } from "@/hooks/usePanelFocus";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { ConfirmModal } from "./ConfirmModal";
+import { isDragActive } from "./Modal";
 import { CopyLinkButton } from "./CopyLinkButton";
 import {
   CRITICAL_PATH_GLYPH,
@@ -19,12 +21,15 @@ import { TaskTicketField } from "@/components/itop/TaskTicketField";
 import { useCanCreateItopTicket } from "@/components/itop/useCanCreateItopTicket";
 import { useItopOrgChoice } from "@/components/itop/useItopOrgChoice";
 import { Alert, AlertDescription } from "@/components/reui/alert";
+import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import { Sortable, SortableItem, SortableItemHandle } from "@/components/reui/sortable";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { CommentBody, CommentComposer } from "@/components/CommentMentions";
 import { fmtAgo, fmtRange } from "@/lib/formatDate";
+import { parseStoryPoints } from "@/lib/storyPoints";
 import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
+import { isApplePlatform } from "@/lib/platform";
 import { PRIORITY_LABEL } from "@/lib/labels";
 import {
   buildExpected,
@@ -107,8 +112,9 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const { data: itopStatusData } = useItopStatus();
   const subtaskCreateGate = useCanCreateItopTicket(itopOrg.customerId, itopOrg.customerName);
 
-  const { data: tasks } = useProjectTasks(projectId);
+  const { data: tasks, isError: tasksError, error: tasksLoadError, refetch: refetchTasks } = useProjectTasks(projectId);
   const { data: sections } = useProjectSections(projectId);
+  const sectionColors = useMemo(() => resolveSectionColors(sections ?? []), [sections]);
   const { data: epics, isLoading: epicsLoading } = useProjectEpics(projectId);
   const { data: users } = useUsers();
   const { data: statusDefs } = useTaskStatuses();
@@ -171,6 +177,8 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const [menuOpen, setMenuOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionDraft, setDescriptionDraft] = useState("");
   const [editingDates, setEditingDates] = useState(false);
   const [editingAssignee, setEditingAssignee] = useState(false);
   const [editingSection, setEditingSection] = useState(false);
@@ -191,6 +199,13 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   } | null>(null);
 
   const panelRef = useRef<HTMLDivElement | null>(null);
+  // The error alert sits at the top of the scroll area; bring it into view when
+  // one appears so a failed Delete/Duplicate is seen even if the user has
+  // scrolled down to the subtasks (ISS-059).
+  const errorRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: "nearest" });
+  }, [error]);
   // Focus moves into the panel on open (and when the loading shell is
   // replaced by the loaded panel) and returns to the opener on close.
   usePanelFocus(panelRef, taskId, task ? "ready" : "loading");
@@ -204,6 +219,11 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const renameSettledRef = useRef(false);
   // Same guard for the panel's own title editor; reset when it opens.
   const titleSettledRef = useRef(false);
+  // And for the description editor: blur and Escape can both end one edit.
+  const descriptionSettledRef = useRef(false);
+  const descriptionId = useId();
+  const descriptionButtonRef = useRef<HTMLButtonElement | null>(null);
+  const focusDescriptionRef = useRef(false);
   // The task as it was when a title or date edit began. Those editors stay open
   // for a while and the 30 s live refresh can land meanwhile; `expected` and the
   // "did anything change" check must measure against what the user started
@@ -226,7 +246,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const modalOpen = conflict !== null || confirmDelete || nestedSheetOpen || rowOverlayCount > 0;
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !modalOpen) onClose();
+      if (e.key === "Escape" && !modalOpen && !isDragActive()) onClose();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -234,6 +254,8 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
 
   useEffect(() => {
     setEditingTitle(false);
+    setEditingDescription(false);
+    descriptionSettledRef.current = true;
     setEditingDates(false);
     setEditingAssignee(false);
     setEditingSection(false);
@@ -244,22 +266,33 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     setConflict(null);
   }, [taskId]);
 
+  // After Escape, hand focus back to the button that opened the editor.
+  useEffect(() => {
+    if (!editingDescription && focusDescriptionRef.current) {
+      focusDescriptionRef.current = false;
+      descriptionButtonRef.current?.focus();
+    }
+  }, [editingDescription]);
+
   if (!task) {
     // `tasks` undefined = still loading; once it has loaded, a missing task was
     // deleted (or is not visible to this user) — say so instead of spinning.
     const notFound = tasks !== undefined;
+    // A failed fetch leaves `tasks` undefined: show the error with a retry
+    // instead of an endless "Loading task…" (ISS-066).
+    const loadFailed = tasks === undefined && tasksError;
     return (
       <div
         ref={panelRef}
         role="dialog"
         aria-label="Task details"
-        aria-busy={!notFound}
+        aria-busy={!notFound && !loadFailed}
         tabIndex={-1}
         className="fixed right-0 top-14 bottom-0 z-40 flex w-full flex-col border-l border-outline-variant bg-surface-container px-5 py-4 outline-hidden md:w-[380px]"
       >
         <div className="flex items-center justify-between">
           <span className="text-sm text-on-surface-variant">
-            {notFound ? "Task not found" : "Loading task…"}
+            {notFound ? "Task not found" : loadFailed ? "Task details" : "Loading task…"}
           </span>
           <button
             type="button"
@@ -270,6 +303,14 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
             <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
           </button>
         </div>
+        {loadFailed && (
+          <QueryErrorAlert
+            title="Could not load this task"
+            error={tasksLoadError}
+            onRetry={() => refetchTasks()}
+            className="mt-4"
+          />
+        )}
       </div>
     );
   }
@@ -328,6 +369,29 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
     setEditingTitle(false);
     const base = editBase ?? task!;
     if (trimmed && trimmed !== base.title) patch({ title: trimmed }, base);
+  }
+
+  // Blur saves, Escape cancels (handled in the textarea's onKeyDown). Clearing
+  // the text saves null. Line breaks are kept; only the outer whitespace goes.
+  function commitDescription() {
+    if (descriptionSettledRef.current) return;
+    // The panel moved to another task mid-edit: the draft belongs to the old one.
+    if (editBase && task && editBase.id !== task.id) {
+      descriptionSettledRef.current = true;
+      setEditingDescription(false);
+      return;
+    }
+    descriptionSettledRef.current = true;
+    setEditingDescription(false);
+    const base = editBase ?? task!;
+    const next = descriptionDraft.trim() || null;
+    if (next !== (base.description?.trim() || null)) patch({ description: next }, base);
+  }
+
+  function cancelDescription() {
+    descriptionSettledRef.current = true;
+    focusDescriptionRef.current = true;
+    setEditingDescription(false);
   }
 
   async function handleAddSubtask(e: FormEvent) {
@@ -510,6 +574,16 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
+          {/* Top of the scroll area so a failed save, duplicate or delete is seen
+              even on a task with many subtasks (ISS-059). */}
+          {error && (
+            <div ref={errorRef} className="mb-4">
+              <Alert variant="destructive">
+                <AlertDescription className="text-xs">{error}</AlertDescription>
+              </Alert>
+            </div>
+          )}
+
           {/* Parent breadcrumb — the only way back out of a subtask. */}
           {parentTask && (
             <div className="mb-1 flex max-w-full items-center gap-1.5">
@@ -518,7 +592,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                 onClick={() => onOpenTask(parentTask.id)}
                 className="[@media(pointer:coarse)]:min-h-11 flex min-w-0 items-center gap-0.5 rounded-sm text-meta text-on-surface-variant hover:text-primary outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
               >
-                <span className="material-symbols-outlined text-[13px]" aria-hidden="true">
+                <span className="material-symbols-outlined text-xs" aria-hidden="true">
                   arrow_back
                 </span>
                 <span className="truncate">{parentTask.title}</span>
@@ -537,7 +611,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                 onChange={(e) => setTitleDraft(e.target.value)}
                 onBlur={handleTitleSubmit}
                 maxLength={200}
-                className="[@media(pointer:coarse)]:min-h-11 w-full border-none bg-transparent text-lg font-bold text-on-surface rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="[@media(pointer:coarse)]:min-h-11 w-full border-none bg-transparent text-lg font-bold text-on-surface rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
               />
             </form>
           ) : (
@@ -557,6 +631,89 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
           )}
           {task.section && (
             <p className="mt-0.5 text-meta text-on-surface-variant">in {sectionName}</p>
+          )}
+
+          {/* Description: under the title so List and Gantt users can read it.
+              Read-only users get the text or nothing (label included); editors
+              get a placeholder. */}
+          {(task.description || canEdit) && (
+            <div className="mt-3">
+              {editingDescription ? (
+                <label
+                  htmlFor={descriptionId}
+                  className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant"
+                >
+                  Description
+                </label>
+              ) : (
+                <p className="mb-1 font-display text-label-caps uppercase text-on-surface-variant">
+                  Description
+                </p>
+              )}
+              {editingDescription ? (
+                <>
+                  <textarea
+                    id={descriptionId}
+                    autoFocus
+                    value={descriptionDraft}
+                    onChange={(e) => setDescriptionDraft(e.target.value)}
+                    onBlur={commitDescription}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        if (e.nativeEvent.isComposing) return;
+                        // Cancel this edit only; the panel-level Escape listener must not close the panel.
+                        e.stopPropagation();
+                        cancelDescription();
+                      } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        // Keyboard save: focus goes back to the button (not on blur-save).
+                        focusDescriptionRef.current = true;
+                        commitDescription();
+                      }
+                    }}
+                    maxLength={2000}
+                    placeholder="Add a description"
+                    className="field-sizing-content min-h-24 max-h-64 w-full resize-y rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-base leading-snug text-on-surface placeholder:text-on-surface-variant focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:text-sm"
+                  />
+                  <p className="mt-1 text-meta text-on-surface-variant">
+                    Saves when you click away.
+                    <span className="hidden md:[@media(pointer:fine)]:inline">
+                      {" "}
+                      {isApplePlatform() ? "⌘Enter" : "Ctrl+Enter"} saves, Esc cancels.
+                    </span>
+                  </p>
+                </>
+              ) : canEdit ? (
+                <button
+                  ref={descriptionButtonRef}
+                  type="button"
+                  aria-label={task.description ? "Edit description" : undefined}
+                  aria-describedby={task.description ? `${descriptionId}-text` : undefined}
+                  onClick={() => {
+                    descriptionSettledRef.current = false;
+                    setEditBase(task);
+                    setDescriptionDraft(task.description ?? "");
+                    setEditingDescription(true);
+                  }}
+                  className="[@media(pointer:coarse)]:min-h-11 -mx-2 block w-[calc(100%+1rem)] rounded-sm border border-transparent px-2 py-1 text-left text-base leading-snug outline-hidden hover:bg-surface-container-high focus-visible:ring-2 focus-visible:ring-primary md:text-sm"
+                >
+                  <span
+                    id={`${descriptionId}-text`}
+                    className={`block ${
+                      task.description
+                        ? "whitespace-pre-wrap wrap-break-word text-on-surface"
+                        : "text-on-surface-variant"
+                    }`}
+                  >
+                    {task.description || "Add a description"}
+                  </span>
+                </button>
+              ) : (
+                <p className="whitespace-pre-wrap wrap-break-word text-base leading-snug text-on-surface md:text-sm">
+                  {task.description}
+                </p>
+              )}
+            </div>
           )}
 
           {/* Meta grid */}
@@ -660,6 +817,19 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               <span className="text-on-surface">{PRIORITY_LABEL[task.priority]}</span>
             </button>
 
+            <span
+              id={STORY_POINTS_LABEL_ID}
+              className="self-center font-display text-label-caps uppercase text-on-surface-variant"
+            >
+              Story points
+            </span>
+            <StoryPointsEditor
+              key={task.id}
+              value={task.storyPoints ?? null}
+              canEdit={canEdit}
+              onCommit={(storyPoints) => patch({ storyPoints })}
+            />
+
             <span className="self-center font-display text-label-caps uppercase text-on-surface-variant">
               Type
             </span>
@@ -731,7 +901,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                   {task.section && (
                     <span
                       className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: task.section.color }}
+                      style={{ backgroundColor: sectionColors.get(task.section.id) ?? task.section.color }}
                     />
                   )}
                   <span className="text-on-surface">{sectionName}</span>
@@ -909,7 +1079,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                           }}
                           maxLength={200}
                           aria-label="Subtask title"
-                          className="[@media(pointer:coarse)]:min-h-11 w-full border-none bg-transparent text-xs text-on-surface rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+                          className="[@media(pointer:coarse)]:min-h-11 w-full border-none bg-transparent text-xs text-on-surface rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                         />
                       </form>
                     ) : (
@@ -956,7 +1126,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         type="button"
                         onClick={() => startSubtaskRename(s)}
                         aria-label={`Rename ${s.title}`}
-                        className="material-symbols-outlined -m-2 [@media(pointer:coarse)]:m-0 shrink-0 rounded-sm p-2 [@media(pointer:coarse)]:p-3.5 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100"
+                        className="material-symbols-outlined -m-2 [@media(pointer:coarse)]:m-0 shrink-0 rounded-sm p-2 [@media(pointer:coarse)]:p-3.5 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100"
                       >
                         edit
                       </button>
@@ -967,7 +1137,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                         disabled={duplicateTask.isPending && duplicateTask.variables === s.id}
                         onClick={() => void handleSubtaskDuplicate(s)}
                         aria-label={`Duplicate ${s.title}`}
-                        className="material-symbols-outlined -m-2 [@media(pointer:coarse)]:m-0 shrink-0 rounded-sm p-2 [@media(pointer:coarse)]:p-3.5 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100 disabled:cursor-default disabled:opacity-50"
+                        className="material-symbols-outlined -m-2 [@media(pointer:coarse)]:m-0 shrink-0 rounded-sm p-2 [@media(pointer:coarse)]:p-3.5 text-sm text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover/subtask:opacity-100 md:focus-visible:opacity-100 disabled:cursor-default disabled:opacity-50"
                       >
                         content_copy
                       </button>
@@ -996,7 +1166,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
               </Sortable>
               {canEdit && (
                 <form onSubmit={handleAddSubtask} className="mt-1.5 flex items-center gap-1.5">
-                  <span aria-hidden="true" className="material-symbols-outlined text-[13px] text-primary">add</span>
+                  <span aria-hidden="true" className="material-symbols-outlined text-xs text-primary">add</span>
                   <input
                     type="text"
                     value={newSubtask}
@@ -1004,7 +1174,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
                     placeholder="Add subtask"
                     maxLength={200}
                     readOnly={createTask.isPending}
-                    className="[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 border-none bg-transparent text-xs text-on-surface rounded-sm outline-hidden placeholder:text-on-surface-variant/80 focus-visible:ring-2 focus-visible:ring-primary/30"
+                    className="[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 border-none bg-transparent text-xs text-on-surface rounded-sm outline-hidden placeholder:text-on-surface-variant/80 focus-visible:ring-2 focus-visible:ring-primary"
                   />
                   <SubtaskAssigneePicker
                     canEdit={canEdit}
@@ -1022,12 +1192,6 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
 
           {/* Outline pages that link to this task (hidden when there is nothing to show). */}
           <OutlineMentions scope={{ kind: "task", id: task.id }} variant="block" />
-
-          {error && (
-            <Alert variant="destructive" className="mt-4">
-              <AlertDescription className="text-xs">{error}</AlertDescription>
-            </Alert>
-          )}
 
           {/* Comments */}
           <div className="mt-5 border-t border-outline-variant pt-4">
@@ -1163,6 +1327,100 @@ function PanelComments({ taskId, projectId }: { taskId: number; projectId: numbe
   );
 }
 
+const STORY_POINTS_LABEL_ID = "task-panel-story-points-label";
+const STORY_POINTS_VALUE_ID = "task-panel-story-points-value";
+
+/**
+ * Story points row: reads as text, becomes a number field on click. Enter or
+ * leaving the field saves, Escape cancels; empty clears the estimate, anything
+ * outside whole numbers 0-100 is refused here before it reaches the API.
+ */
+function StoryPointsEditor({
+  value,
+  canEdit,
+  onCommit,
+}: {
+  value: number | null;
+  canEdit: boolean;
+  onCommit: (value: number | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [problem, setProblem] = useState<string | null>(null);
+  const errorId = useId();
+
+  function commit() {
+    const parsed = parseStoryPoints(draft);
+    if (!parsed.ok) {
+      setProblem(parsed.error);
+      return;
+    }
+    setProblem(null);
+    setEditing(false);
+    if (parsed.value !== value) onCommit(parsed.value);
+  }
+
+  if (editing && canEdit) {
+    return (
+      <div>
+        <input
+          autoFocus
+          type="text"
+          inputMode="numeric"
+          maxLength={3}
+          aria-labelledby={STORY_POINTS_LABEL_ID}
+          aria-invalid={problem ? true : undefined}
+          aria-describedby={problem ? errorId : undefined}
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setProblem(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit();
+            } else if (e.key === "Escape") {
+              e.stopPropagation();
+              setProblem(null);
+              setEditing(false);
+            }
+          }}
+          onBlur={commit}
+          className="[@media(pointer:coarse)]:min-h-11 w-24 rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 text-xs text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+        />
+        {problem && (
+          <p id={errorId} role="alert" className="mt-1 text-meta text-error">
+            {problem}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={!canEdit}
+      onClick={() => {
+        setDraft(value === null ? "" : String(value));
+        setProblem(null);
+        setEditing(true);
+      }}
+      className="[@media(pointer:coarse)]:min-h-11 flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-surface-container-high disabled:cursor-default"
+      title={canEdit ? "Click to set story points" : undefined}
+      aria-labelledby={`${STORY_POINTS_LABEL_ID} ${STORY_POINTS_VALUE_ID}`}
+    >
+      <span
+        id={STORY_POINTS_VALUE_ID}
+        className={value === null ? "text-on-surface-variant" : "text-on-surface"}
+      >
+        {value === null ? "Not estimated" : value}
+      </span>
+    </button>
+  );
+}
+
 /**
  * Avatar-only assignee control for the panel's narrow subtask rows: the avatar
  * is the trigger, and picking swaps in a native select (same pattern as the
@@ -1217,7 +1475,7 @@ function SubtaskAssigneePicker({
       onClick={() => setEditing(true)}
       aria-label={label}
       title={assignee ? assignee.username : "Unassigned"}
-      className="tap-target shrink-0 rounded-full outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
+      className="tap-target shrink-0 rounded-full outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default"
     >
       <AssigneeAvatar user={assignee ?? null} size="xs" />
     </button>

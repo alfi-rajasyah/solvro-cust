@@ -17,6 +17,12 @@
       "Bash(npx tsc *)",
       "Bash(npx prisma *)",
       "Bash(gh pr create *)"
+    ],
+    "deny": [
+      "Bash(gh pr merge *)",
+      "Bash(gh pr merge)",
+      "Bash(gh api *merge*)",
+      "Bash(gh api *Merge*)"
     ]
   },
   "hooks": {
@@ -25,9 +31,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "git fetch --quiet origin develop main 2>/dev/null; for b in develop main; do behind=$(git rev-list --count \"$b..origin/$b\" 2>/dev/null); if [ -n \"$behind\" ] && [ \"$behind\" -gt 0 ]; then echo \"⚠ Local $b is $behind commit(s) behind origin/$b — pull/rebase before editing (hot files: schema.prisma, queries.ts)\"; fi; done; true",
+            "command": "git fetch --quiet --prune origin 2>/dev/null; for b in develop main; do behind=$(git rev-list --count \"$b..origin/$b\" 2>/dev/null); if [ -n \"$behind\" ] && [ \"$behind\" -gt 0 ]; then echo \"⚠ Local $b is $behind commit(s) behind origin/$b — pull/rebase before editing (hot files: schema.prisma, queries.ts)\"; fi; done; heads=$(git ls-remote --heads origin 2>/dev/null) && { gone=$(git for-each-ref --format='%(refname:short)' refs/heads | while read -r b; do m=$(git config \"branch.$b.merge\"); [ \"$(git config \"branch.$b.remote\")\" = origin ] && [ -n \"$m\" ] && ! printf '%s\\n' \"$heads\" | awk -v m=\"$m\" '$2==m{f=1} END{exit !f}' && printf '%s ' \"$b\"; done); [ -n \"$gone\" ] && echo \"⚠ Local branches whose remote branch is gone: ${gone}— check git log origin/develop..<branch> for unmerged work before git branch -D\"; extra=$(printf '%s\\n' \"$heads\" | sed 's#.*refs/heads/##' | grep -vxE 'develop|main' | tr '\\n' ' '); [ -n \"$extra\" ] && echo \"ℹ Remote branches besides develop and main: ${extra}— delete each once its work has landed or been dropped, with the user's approval\"; }; true",
             "timeout": 15,
-            "statusMessage": "Checking origin for new commits"
+            "statusMessage": "Checking origin for new commits and stale branches"
           }
         ]
       },
@@ -35,7 +41,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/local/bin/node \"$CLAUDE_PROJECT_DIR/.claude/hooks/reply-style.js\"",
+            "command": "cat \"$CLAUDE_PROJECT_DIR/.claude/reply-style.md\" 2>/dev/null || true",
             "timeout": 5,
             "statusMessage": "Loading reply-style rules"
           }

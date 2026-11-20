@@ -11,7 +11,7 @@ import { getTasks, type SeededTask, createEpic } from "../fixtures/seed";
 import type { Page } from "@playwright/test";
 
 // Regression coverage for unified-task-ordering
-// (docs/plans/unified-task-ordering-plan.md, Task 6): List-view row reorder
+// (docs/archive/plans/unified-task-ordering-plan.md, Task 6): List-view row reorder
 // + status-chip parity, and Gantt list-pane row reorder. Mirrors
 // kanban-dnd.spec.ts's fixtures, mouse-drag helper, and
 // (position, id)-sorted-order assertion idiom — mouse-drag cases only make

@@ -1,5 +1,17 @@
-import { useCallback, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { resolveSectionColors } from "@/lib/gantt/palette";
+import { TaskFilterPopover } from "@/components/TaskFilterPopover";
+import { useTaskFilters } from "@/hooks/useTaskFilters";
+import {
+  buildFilterContext,
+  clearPatch,
+  countActiveFilters,
+  scopeFilters,
+  taskVisible,
+} from "@/lib/taskFilters";
 import { TOOLBAR_BOX, TOOLBAR_BUTTON_OUTLINE, TOOLBAR_BUTTON_PRIMARY } from "@/lib/utils";
+import { BulkActionBar, type BulkChange } from "@/components/BulkActionBar";
+import { SelectionCheckbox } from "@/components/SelectionCheckbox";
 import { useItopOrgChoice } from "@/components/itop/useItopOrgChoice";
 import {
   DndContext,
@@ -45,12 +57,14 @@ import {
   type Priority,
   type Section,
   type Task,
+  useBulkUpdateTasks,
   useCreateSection,
   useDeleteSection,
   useDuplicateSection,
   useItopStatus,
   useItopTicketsByRefs,
   useProjectEpics,
+  useProjectLabels,
   useProjectSections,
   useProjectTasks,
   useUpdateSection,
@@ -58,6 +72,16 @@ import {
   useUsers,
 } from "@/lib/queries";
 import { EMPTY_VALUE } from "@/lib/emptyValue";
+import {
+  bulkResultMessage,
+  collectVisibleIds,
+  pruneSelection,
+  selectAllState,
+  selectionHasSubtask,
+  toggleAllVisible,
+  toggleSelected,
+} from "@/lib/listSelection";
+import { sumStoryPoints } from "@/lib/storyPoints";
 
 const PRIORITY_ORDER: Priority[] = ["LOW", "MEDIUM", "HIGH"];
 const PRIORITY_ICON_CLASS: Record<Priority, string> = {
@@ -73,14 +97,27 @@ function nextPriority(p: Priority): Priority {
   return PRIORITY_ORDER[(idx + 1) % PRIORITY_ORDER.length];
 }
 
-// List grid templates. The Ticket column exists only when iTop is configured;
-// without it the grid is exactly the pre-iTop one (no layout shift). Full
-// literals so Tailwind sees them.
-const GRID_BASE = "grid-cols-[28px_minmax(200px,1fr)_60px_70px_50px_100px]";
-const GRID_TICKET = "grid-cols-[28px_minmax(200px,1fr)_120px_60px_70px_50px_100px]";
-const MD_GRID_BASE = "md:grid-cols-[28px_minmax(200px,1fr)_60px_70px_50px_100px]";
-const MD_GRID_TICKET = "md:grid-cols-[28px_minmax(200px,1fr)_120px_60px_70px_50px_100px]";
+// List grid templates. Optional columns: the Select checkbox (task:write
+// holders only) and the iTop Ticket column (only when iTop is configured);
+// without them the grid is the base one (no layout shift). Full literals so
+// Tailwind sees them. Order: [select] grip name [ticket] owner due points prio status.
+const GRIDS = {
+  base: "grid-cols-[28px_minmax(200px,1fr)_60px_70px_56px_50px_100px]",
+  ticket: "grid-cols-[28px_minmax(200px,1fr)_120px_60px_70px_56px_50px_100px]",
+  select: "grid-cols-[28px_28px_minmax(200px,1fr)_60px_70px_56px_50px_100px]",
+  selectTicket: "grid-cols-[28px_28px_minmax(200px,1fr)_120px_60px_70px_56px_50px_100px]",
+};
+const MD_GRIDS = {
+  base: "md:grid-cols-[28px_minmax(200px,1fr)_60px_70px_56px_50px_100px]",
+  ticket: "md:grid-cols-[28px_minmax(200px,1fr)_120px_60px_70px_56px_50px_100px]",
+  select: "md:grid-cols-[28px_28px_minmax(200px,1fr)_60px_70px_56px_50px_100px]",
+  selectTicket: "md:grid-cols-[28px_28px_minmax(200px,1fr)_120px_60px_70px_56px_50px_100px]",
+};
 
+function gridKey(ticket: boolean, select: boolean): keyof typeof GRIDS {
+  if (select) return ticket ? "selectTicket" : "select";
+  return ticket ? "ticket" : "base";
+}
 
 interface TaskNode {
   task: Task;
@@ -126,12 +163,16 @@ export function ProjectList() {
   const { project } = useProjectContext();
   const { user } = useAuth();
   const canEdit = hasPermission(user, "task:write");
+  // Section create/rename/reorder/duplicate/delete routes require project:write,
+  // not task:write (backend/src/routes/sections.ts, routes/projects.ts).
+  const canManageSections = hasPermission(user, "project:write");
   const [, setSearchParams] = useSearchParams();
 
   const { data: tasks, isLoading: tasksLoading, isError, error } = useProjectTasks(project.id);
   const { data: sections, isLoading: sectionsLoading } = useProjectSections(project.id);
   const { data: users } = useUsers();
   const { data: epics } = useProjectEpics(project.id);
+  const { data: labels } = useProjectLabels(project.id);
   const updateTask = useUpdateTask(project.id);
 
   // Ticket column: one batched by-refs request per render covers every pinned
@@ -190,11 +231,10 @@ export function ProjectList() {
   const [renameValue, setRenameValue] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [deletingSection, setDeletingSection] = useState<Section | null>(null);
-  const [filterOpen, setFilterOpen] = useState(false);
-  // Epic filter (docs/archive/plans/epics-spec.md §6/§7 T6): "" = All (inactive),
-  // `null` = "No epic" (task.epicId === null), a number = one project epic —
-  // same three-state shape as SolvroKanban.tsx's filterEpicId.
-  const [filterEpicId, setFilterEpicId] = useState<number | null | "">("");
+  // Epic and label filters live in the URL (hooks/useTaskFilters.ts) so they
+  // survive a tab switch; this view applies the "list" scope (epic + labels).
+  const { filters: urlFilters, setFilters } = useTaskFilters();
+  const filters = useMemo(() => scopeFilters(urlFilters, "list"), [urlFilters]);
 
   // Pauses the project queries' 30 s refresh while a row/section drag is live
   // (docs/archive/plans/collaboration-and-sharing.md).
@@ -219,27 +259,87 @@ export function ProjectList() {
   // rendered `visibleGrouped` projection below — mirrors SolvroKanban.tsx's
   // `topLevelAll` (unfiltered, drop-math source) vs `derivedColumns`
   // (filtered, render-only) split.
+  const sectionColors = useMemo(() => resolveSectionColors(sections ?? []), [sections]);
   const grouped = useMemo(() => groupBySection(tasks ?? [], sections ?? []), [tasks, sections]);
 
-  const isTaskVisible = useCallback(
-    (task: Task) => {
-      if (filterEpicId !== "") {
-        if (filterEpicId === null) {
-          if (task.epicId !== null) return false;
-        } else if (task.epicId !== filterEpicId) {
-          return false;
-        }
-      }
-      return true;
-    },
-    [filterEpicId],
-  );
-  const filterActive = filterEpicId !== "";
+  const filterCtx = useMemo(() => buildFilterContext(tasks ?? []), [tasks]);
+  const filterCount = countActiveFilters(filters);
+  const filterActive = filterCount > 0;
 
-  const visibleGrouped = useMemo(
-    () => grouped.map((g) => ({ ...g, tasks: g.tasks.filter((n) => isTaskVisible(n.task)) })),
-    [grouped, isTaskVisible],
+  // Render-only projection: hides rows (and, while a filter is active, the
+  // sections left with no visible row). Drag math below never reads it.
+  const visibleGrouped = useMemo(() => {
+    if (!filterActive) return grouped;
+    return grouped
+      .map((g) => ({
+        ...g,
+        tasks: g.tasks
+          .filter((n) => taskVisible(n.task, filters, filterCtx))
+          .map((n) => ({ ...n, subtasks: n.subtasks.filter((s) => taskVisible(s, filters, filterCtx)) })),
+      }))
+      .filter((g) => g.tasks.length > 0);
+  }, [grouped, filterActive, filters, filterCtx]);
+
+  // Bulk edit selection, by task id. Only ids the user can currently see stay
+  // selected: a filter change, a deleted task, or collapsing a section or a
+  // row's subtask list drops them.
+  const [selected, setSelected] = useState<Set<number>>(() => new Set());
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkNotice, setBulkNotice] = useState<string | null>(null);
+  const bulkUpdate = useBulkUpdateTasks(project.id);
+  // Rows whose subtask list the user collapsed (rows start expanded). Kept here,
+  // not in TaskRow, so "select all visible" can leave their subtasks out.
+  const [collapsedRows, setCollapsedRows] = useState<Set<number>>(() => new Set());
+  const toggleRow = (id: number) => setCollapsedRows((cur) => toggleSelected(cur, id));
+  // What is on screen: filtered rows, minus collapsed sections and collapsed subtask lists.
+  const visibleIds = useMemo(
+    () =>
+      collectVisibleIds(
+        visibleGrouped
+          .filter((g) => !collapsed.has(groupKeyOf(g.section?.id ?? null)))
+          .flatMap((g) => g.tasks),
+        collapsedRows,
+      ),
+    [visibleGrouped, collapsed, collapsedRows],
   );
+  const visibleIdSet = useMemo(() => new Set(visibleIds), [visibleIds]);
+  useEffect(() => {
+    setSelected((cur) => pruneSelection(cur, visibleIdSet));
+  }, [visibleIdSet]);
+  const selectAll = selectAllState(selected, visibleIds);
+  const selectedHasSubtask = useMemo(() => selectionHasSubtask(selected, tasks ?? []), [selected, tasks]);
+
+  function onToggleSelect(id: number) {
+    setBulkError(null);
+    setBulkNotice(null);
+    setSelected((cur) => toggleSelected(cur, id));
+  }
+
+  function onToggleSelectAll() {
+    setBulkError(null);
+    setBulkNotice(null);
+    setSelected((cur) => toggleAllVisible(cur, visibleIds));
+  }
+
+  function clearSelection() {
+    setBulkError(null);
+    setSelected(new Set());
+  }
+
+  async function applyBulk(change: BulkChange) {
+    const taskIds = [...selected];
+    if (taskIds.length === 0) return;
+    setBulkError(null);
+    setBulkNotice(null);
+    try {
+      const { updated } = await bulkUpdate.mutateAsync({ taskIds, ...change });
+      setSelected(new Set());
+      setBulkNotice(bulkResultMessage(updated));
+    } catch (err) {
+      // The selection stays so the user can fix the choice and retry.
+      setBulkError(err instanceof ApiError ? err.message : "Could not update the selected tasks.");
+    }
+  }
 
   function openTask(id: number) {
     setSearchParams(
@@ -310,7 +410,7 @@ export function ProjectList() {
     }
   }
 
-  // One click, no confirm dialog (Decision 7, docs/plans/duplicate-tasks-sections.md) —
+  // One click, no confirm dialog (Decision 7, docs/archive/plans/duplicate-tasks-sections.md) —
   // same error-surfacing pattern as handleDeleteSection above.
   async function handleDuplicateSection(s: Section) {
     setActionError(null);
@@ -463,65 +563,24 @@ export function ProjectList() {
 
   return (
     <>
-      <div className="mb-3 flex items-center justify-end gap-2">
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setFilterOpen((v) => !v)}
-            className={[
+      <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+        <TaskFilterPopover
+          filters={filters}
+          onChange={setFilters}
+          onClear={() => setFilters(clearPatch("list"))}
+          activeCount={filterCount}
+          epics={epics ?? []}
+          labels={labels ?? []}
+          triggerClassName={(active) =>
+            [
               `${TOOLBAR_BOX} tap-target border font-semibold transition-colors`,
-              filterActive
+              active
                 ? "border-primary bg-primary/10 text-primary"
                 : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container",
-            ].join(" ")}
-          >
-            <span aria-hidden="true" className="material-symbols-outlined text-base">filter_alt</span>
-            Filter
-            {filterActive && (
-              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-meta leading-none font-bold text-on-primary">
-                1
-              </span>
-            )}
-          </button>
-          {filterOpen && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setFilterOpen(false)} />
-              <div className="absolute right-0 z-20 mt-2 w-64 rounded-sm border border-outline-variant bg-surface-container-lowest p-3 shadow-overlay">
-                <div className="mb-3">
-                  <label className="mb-1 block text-label-caps uppercase text-on-surface-variant">
-                    Epic
-                  </label>
-                  <select
-                    value={filterEpicId === "" ? "" : filterEpicId === null ? "none" : String(filterEpicId)}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setFilterEpicId(v === "" ? "" : v === "none" ? null : Number(v));
-                    }}
-                    className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
-                  >
-                    <option value="">All</option>
-                    <option value="none">No epic</option>
-                    {(epics ?? []).map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {filterActive && (
-                  <button
-                    type="button"
-                    onClick={() => setFilterEpicId("")}
-                    className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-xs font-semibold text-primary hover:underline"
-                  >
-                    Clear filters
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-        {canEdit && (sections?.length ?? 0) >= 2 && (
+            ].join(" ")
+          }
+        />
+        {canManageSections && (sections?.length ?? 0) >= 2 && (
           <button
             type="button"
             onClick={() => setReorderingSections(true)}
@@ -531,7 +590,7 @@ export function ProjectList() {
             Reorder sections
           </button>
         )}
-        {canEdit && (
+        {canManageSections && (
           <button
             type="button"
             onClick={() => setAddingSection(true)}
@@ -553,6 +612,12 @@ export function ProjectList() {
         )}
       </div>
 
+      {bulkNotice && (
+        <p role="status" className="mb-3 text-xs text-on-surface-variant">
+          {bulkNotice}
+        </p>
+      )}
+
       {actionError && (
         <Alert variant="destructive" className="mb-3">
           <AlertDescription className="text-xs">{actionError}</AlertDescription>
@@ -561,15 +626,42 @@ export function ProjectList() {
 
       <div className="overflow-x-auto rounded-sm border border-outline-variant bg-surface-container-lowest md:min-h-0 md:flex-1 md:overflow-y-auto">
         {/* Column headers */}
-        <div className={`hidden ${ticketCtx ? GRID_TICKET : GRID_BASE} items-center gap-2 border-b border-outline-variant px-3 py-2 font-display text-label-caps uppercase text-on-surface-variant md:grid`}>
+        <div className={`hidden ${GRIDS[gridKey(ticketCtx !== null, canEdit)]} items-center gap-2 border-b border-outline-variant px-3 py-2 font-display text-label-caps uppercase text-on-surface-variant md:grid`}>
+          {canEdit && (
+            <SelectionCheckbox
+              checked={selectAll === "all"}
+              indeterminate={selectAll === "some"}
+              onChange={onToggleSelectAll}
+              label="Select all visible tasks"
+            />
+          )}
           <span></span>
           <span>Name</span>
           {ticketCtx && <span>Ticket</span>}
           <span>Owner</span>
           <span>Due</span>
+          <span title="Story points">Points</span>
           <span>Prio</span>
           <span>Status</span>
         </div>
+
+        {canEdit && visibleIds.length > 0 && (
+          <label className="flex cursor-pointer items-center gap-2 border-b border-outline-variant px-3 py-1 md:hidden">
+            <SelectionCheckbox
+              checked={selectAll === "all"}
+              indeterminate={selectAll === "some"}
+              onChange={onToggleSelectAll}
+              label="Select all visible tasks"
+            />
+            <span className="text-meta text-on-surface-variant">Select all visible</span>
+          </label>
+        )}
+
+        {filterActive && visibleGrouped.length === 0 && (
+          <p className="px-3 py-6 text-center text-sm text-on-surface-variant">
+            No tasks match the current filters.
+          </p>
+        )}
 
         <DndContext
           sensors={sensors}
@@ -582,12 +674,18 @@ export function ProjectList() {
             <SectionGroup
               key={g.section?.id ?? "none"}
               section={g.section}
+              sectionColors={sectionColors}
               nodes={g.tasks}
               collapsed={collapsed.has(groupKeyOf(g.section?.id ?? null))}
               canEdit={canEdit}
+              canManageSections={canManageSections}
               users={users ?? []}
               epicMap={epicMap}
               ticketCtx={ticketCtx}
+              selected={selected}
+              onToggleSelect={onToggleSelect}
+              collapsedRows={collapsedRows}
+              onToggleRow={toggleRow}
               onToggle={() => toggleGroup(groupKeyOf(g.section?.id ?? null))}
               onAddTask={() =>
                 setCreateTaskCtx({ sectionId: g.section?.id ?? null, parentTaskId: null })
@@ -654,6 +752,21 @@ export function ProjectList() {
         )}
       </div>
 
+      {canEdit && selected.size > 0 && (
+        <BulkActionBar
+          projectId={project.id}
+          count={selected.size}
+          hasSubtask={selectedHasSubtask}
+          labels={labels ?? []}
+          epics={epics ?? []}
+          users={users ?? []}
+          pending={bulkUpdate.isPending}
+          error={bulkError}
+          onApply={(change) => void applyBulk(change)}
+          onClear={clearSelection}
+        />
+      )}
+
       {createTaskCtx && (
         <TaskFormModal
           mode="create"
@@ -687,12 +800,19 @@ export function ProjectList() {
 
 interface SectionGroupProps {
   section: Section | null;
+  /** Gantt-resolved color per section id (resolveSectionColors), computed once by ProjectList. */
+  sectionColors: Map<number, string>;
   nodes: TaskNode[];
   collapsed: boolean;
   canEdit: boolean;
+  canManageSections: boolean;
   users: { id: number; username: string }[];
   epicMap: Map<number, Epic>;
   ticketCtx: RowTicketContext | null;
+  selected: Set<number>;
+  onToggleSelect: (id: number) => void;
+  collapsedRows: Set<number>;
+  onToggleRow: (id: number) => void;
   onToggle: () => void;
   onAddTask: () => void;
   onAddSubtask: (parentId: number) => void;
@@ -715,12 +835,18 @@ interface SectionGroupProps {
 
 function SectionGroup({
   section,
+  sectionColors,
   nodes,
   collapsed,
   canEdit,
+  canManageSections,
   users,
   epicMap,
   ticketCtx,
+  selected,
+  onToggleSelect,
+  collapsedRows,
+  onToggleRow,
   onToggle,
   onAddTask,
   onAddSubtask,
@@ -744,6 +870,8 @@ function SectionGroup({
   const isRenaming = renamingKey === key;
   const { setNodeRef, isOver } = useDroppable({ id: groupId(key) });
   const sortableIds = nodes.map((n) => rowId(n.task.id));
+  // Top-level tasks only, matching the Epics tab; subtasks never add points.
+  const points = sumStoryPoints(nodes.map((n) => n.task));
 
   return (
     <div className="border-b border-outline-variant last:border-b-0">
@@ -764,7 +892,7 @@ function SectionGroup({
             {collapsed ? "chevron_right" : "expand_more"}
           </span>
         </button>
-        {section && <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: section.color }} />}
+        {section && <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: sectionColors.get(section.id) ?? section.color }} />}
         {isRenaming ? (
           <form onSubmit={(e) => onRenameSubmit(key, e)} className="flex items-center gap-2">
             <input
@@ -799,12 +927,20 @@ function SectionGroup({
         <span className="rounded-full bg-surface-container-high px-1.5 py-0 font-mono text-meta text-on-surface-variant">
           {nodes.length}
         </span>
-        {canEdit && !isRenaming && (
+        {points.estimated > 0 && (
+          <span
+            className="font-mono text-meta text-on-surface-variant"
+            title={`Story points: ${points.total} in total, ${points.done} in done tasks`}
+          >
+            {points.total} pts, {points.done} done
+          </span>
+        )}
+        {canManageSections && (section !== null || canEdit) && !isRenaming && (
           <div className="ml-auto flex items-center gap-1 [@media(pointer:coarse)]:gap-5">
             <button
               type="button"
               onClick={() => onRename(section)}
-              className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               title={section ? "Rename section" : "Promote into a real section"}
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[17px]">edit</span>
@@ -814,7 +950,7 @@ function SectionGroup({
                 type="button"
                 onClick={() => onDuplicate(section)}
                 disabled={duplicatingSectionId === section.id}
-                className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default disabled:opacity-50"
+                className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default disabled:opacity-50"
                 title="Duplicate section"
                 aria-label="Duplicate section"
               >
@@ -825,7 +961,7 @@ function SectionGroup({
               <button
                 type="button"
                 onClick={() => onDelete(section)}
-                className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-error-container hover:text-on-error-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-error-container hover:text-on-error-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 title="Delete section"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[17px]">delete</span>
@@ -845,6 +981,10 @@ function SectionGroup({
               users={users}
               epicMap={epicMap}
               ticketCtx={ticketCtx}
+              selected={selected}
+              onToggleSelect={onToggleSelect}
+              expanded={node.subtasks.length > 0 && !collapsedRows.has(node.task.id)}
+              onToggleExpand={() => onToggleRow(node.task.id)}
               onAddSubtask={onAddSubtask}
               onOpenTask={onOpenTask}
               onToggleDone={onToggleDone}
@@ -881,6 +1021,10 @@ function TaskRow({
   users,
   epicMap,
   ticketCtx,
+  selected,
+  onToggleSelect,
+  expanded,
+  onToggleExpand,
   onAddSubtask,
   onOpenTask,
   onToggleDone,
@@ -894,6 +1038,10 @@ function TaskRow({
   users: { id: number; username: string }[];
   epicMap: Map<number, Epic>;
   ticketCtx: RowTicketContext | null;
+  selected: Set<number>;
+  onToggleSelect: (id: number) => void;
+  expanded: boolean;
+  onToggleExpand: () => void;
   onAddSubtask: (parentId: number) => void;
   onOpenTask: (id: number) => void;
   onToggleDone: (t: Task) => void;
@@ -904,7 +1052,6 @@ function TaskRow({
 }) {
   const { task, subtasks } = node;
   const epic = task.epicId !== null ? epicMap.get(task.epicId) : undefined;
-  const [expanded, setExpanded] = useState(subtasks.length > 0);
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
     useSortable({ id: rowId(task.id), disabled: !canEdit });
 
@@ -917,10 +1064,17 @@ function TaskRow({
         style={style}
         onClick={() => onOpenTask(task.id)}
         className={[
-          `hidden cursor-pointer ${ticketCtx ? GRID_TICKET : GRID_BASE} items-center gap-2 border-t border-outline-variant px-3 py-1.5 hover:bg-surface-container-low md:grid`,
+          `hidden cursor-pointer ${GRIDS[gridKey(ticketCtx !== null, canEdit)]} items-center gap-2 border-t border-outline-variant px-3 py-1.5 hover:bg-surface-container-low md:grid`,
           isDragging ? "opacity-40" : "",
         ].join(" ")}
       >
+        {canEdit && (
+          <SelectionCheckbox
+            checked={selected.has(task.id)}
+            onChange={() => onToggleSelect(task.id)}
+            label={`Select ${task.title}`}
+          />
+        )}
         <span
           ref={setActivatorNodeRef}
           {...attributes}
@@ -941,7 +1095,7 @@ function TaskRow({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setExpanded((v) => !v);
+                onToggleExpand();
               }}
               aria-label={expanded ? "Collapse subtasks" : "Expand subtasks"}
               aria-expanded={expanded}
@@ -959,7 +1113,7 @@ function TaskRow({
           <button
             type="button"
             className={[
-              "[@media(pointer:coarse)]:min-h-11 min-w-0 truncate text-sm rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30",
+              "[@media(pointer:coarse)]:min-h-11 min-w-0 truncate text-sm rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary",
               task.status === "DONE" ? "text-on-surface-variant line-through" : "text-on-surface",
             ].join(" ")}
           >
@@ -992,6 +1146,10 @@ function TaskRow({
             done={task.status === "DONE"}
             onSave={(s, d) => onSetDates(task, s, d)}
           />
+        </span>
+
+        <span className="font-mono text-meta text-on-surface-variant">
+          {task.storyPoints ?? EMPTY_VALUE}
         </span>
 
         <span className="flex items-center gap-0.5">
@@ -1031,12 +1189,19 @@ function TaskRow({
         className="flex cursor-pointer flex-col gap-1.5 border-t border-outline-variant px-3 py-2 md:hidden [@media(pointer:coarse)]:min-h-11"
       >
         <div className="flex items-center gap-2">
+          {canEdit && (
+            <SelectionCheckbox
+              checked={selected.has(task.id)}
+              onChange={() => onToggleSelect(task.id)}
+              label={`Select ${task.title}`}
+            />
+          )}
           {subtasks.length > 0 && (
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setExpanded((v) => !v);
+                onToggleExpand();
               }}
               aria-label={expanded ? "Collapse subtasks" : "Expand subtasks"}
               aria-expanded={expanded}
@@ -1050,7 +1215,7 @@ function TaskRow({
           <button
             type="button"
             className={[
-              "[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 truncate text-sm rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30",
+              "[@media(pointer:coarse)]:min-h-11 min-w-0 flex-1 truncate text-sm rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary",
               task.status === "DONE" ? "text-on-surface-variant line-through" : "text-on-surface",
             ].join(" ")}
           >
@@ -1077,7 +1242,14 @@ function TaskRow({
             <AssigneeAvatar user={task.assignedTo} size="xs" />
             <span className="text-meta text-on-surface-variant">{fmt(task.dueDate, task.status === "DONE")}</span>
           </span>
-          <TaskStatusChip status={task.status} def={task.statusDef} />
+          <span className="flex items-center gap-2">
+            {task.storyPoints != null && (
+              <span className="font-mono text-meta text-on-surface-variant" title="Story points">
+                {task.storyPoints} pts
+              </span>
+            )}
+            <TaskStatusChip status={task.status} def={task.statusDef} />
+          </span>
         </div>
       </div>
 
@@ -1094,6 +1266,8 @@ function TaskRow({
               canEdit={canEdit}
               users={users}
               ticketCtx={ticketCtx}
+              selected={selected}
+              onToggleSelect={onToggleSelect}
               onOpenTask={onOpenTask}
               onToggleDone={onToggleDone}
               onSetAssignee={onSetAssignee}
@@ -1121,6 +1295,8 @@ function SubtaskRow({
   canEdit,
   users,
   ticketCtx,
+  selected,
+  onToggleSelect,
   onOpenTask,
   onToggleDone,
   onSetAssignee,
@@ -1130,6 +1306,8 @@ function SubtaskRow({
   canEdit: boolean;
   users: { id: number; username: string }[];
   ticketCtx: RowTicketContext | null;
+  selected: Set<number>;
+  onToggleSelect: (id: number) => void;
   onOpenTask: (id: number) => void;
   onToggleDone: (t: Task) => void;
   onSetAssignee: (t: Task, assignedToId: number | null) => void;
@@ -1144,10 +1322,17 @@ function SubtaskRow({
       style={style}
       onClick={() => onOpenTask(task.id)}
       className={[
-        `flex cursor-pointer items-center gap-2 border-t border-outline-variant bg-surface-container-low/40 px-3 py-1 text-[12.5px] hover:bg-surface-container-low md:grid ${ticketCtx ? MD_GRID_TICKET : MD_GRID_BASE}`,
+        `flex cursor-pointer items-center gap-2 border-t border-outline-variant bg-surface-container-low/40 px-3 py-1 text-[12.5px] hover:bg-surface-container-low md:grid ${MD_GRIDS[gridKey(ticketCtx !== null, canEdit)]}`,
         isDragging ? "opacity-40" : "",
       ].join(" ")}
     >
+      {canEdit && (
+        <SelectionCheckbox
+          checked={selected.has(task.id)}
+          onChange={() => onToggleSelect(task.id)}
+          label={`Select subtask ${task.title}`}
+        />
+      )}
       <span className="flex min-w-0 flex-1 items-center gap-2 pl-[22px] md:col-span-2">
       <span
         ref={setActivatorNodeRef}
@@ -1188,7 +1373,7 @@ function SubtaskRow({
         <button
           type="button"
           className={[
-            "[@media(pointer:coarse)]:min-h-11 min-w-0 truncate rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30",
+            "[@media(pointer:coarse)]:min-h-11 min-w-0 truncate rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary",
             done ? "text-on-surface-variant line-through" : "text-on-surface",
           ].join(" ")}
         >

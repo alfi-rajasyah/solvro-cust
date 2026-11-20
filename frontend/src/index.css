@@ -37,6 +37,7 @@
   --color-primary-container: rgb(var(--primary-container));
   --color-on-primary-container: rgb(var(--on-primary-container));
   --color-inverse-primary: rgb(var(--inverse-primary));
+  --color-primary-tint-text: rgb(var(--primary-tint-text));
   --color-secondary: rgb(var(--secondary));
   --color-on-secondary: rgb(var(--on-secondary));
   --color-secondary-container: rgb(var(--secondary-container));
@@ -62,6 +63,12 @@
   --color-ink: #191919;
   --color-ink-hover: #2e2e2e;
   --color-sidebar: #232321;
+  /* Text on the always-dark rail (Sidebar.tsx, pinned `dark`). Fixed warm greys
+     on #232321, never theme-flipping: `secondary` (#888780) is 4.37:1 there,
+     these are 6.46 / 5.59 (on white/5 hover) / 5.59 and 13.48. */
+  --color-rail-text: #a8a69f;
+  --color-rail-text-hover: #f0ede8;
+  --color-rail-text-muted: #9c9a93;
 
   /* — Radius: v4 defaults already match DESIGN.md after the Task 1 renames
        (rounded-xs .125 / rounded-sm .25 / md .375 / lg .5 / xl .75).
@@ -208,6 +215,9 @@
     --primary-container: 200 230 207;
     --on-primary-container: 15 43 22;
     --inverse-primary: 58 174 81;
+    /* Darker than --primary: text on primary/10 and primary/15 chip tints over
+       surface-container-highest is 4.76:1 (plain primary there is 3.52:1). */
+    --primary-tint-text: 23 95 38;
     --secondary: 95 94 87;
     --on-secondary: 255 255 255;
     --secondary-container: 224 223 216;
@@ -254,7 +264,10 @@
     --on-primary: 15 43 22;
     --primary-container: 45 144 66;
     --on-primary-container: 232 247 235;
-    --inverse-primary: 45 144 66;
+    --inverse-primary: 31 117 51;
+    /* Green text on a primary/20 tint (StatusChip "blue" tone). Plain primary is
+       3.04:1 there on surface-container-highest; this lighter green holds 4.5:1. */
+    --primary-tint-text: 109 209 131;
     --secondary: 136 135 128;
     --on-secondary: 26 26 24;
     --secondary-container: 50 50 48;

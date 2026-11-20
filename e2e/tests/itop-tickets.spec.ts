@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, loginViaUi, test } from "../fixtures/test";
+import { expect, loginViaUi, test, mockCustomerOrgMapping } from "../fixtures/test";
 
 // Customer Tickets tab (docs/archive/plans/itop-integration.md Task 1.8):
 // GET /itop/status and GET /itop/customers/:id/tickets are both intercepted
@@ -134,6 +134,7 @@ async function mockItopStatus(page: Page): Promise<void> {
 }
 
 async function mockTickets(page: Page, mapped: boolean): Promise<void> {
+  if (mapped) await mockCustomerOrgMapping(page);
   await page.route("**/api/itop/customers/*/tickets*", (route) => {
     const body = mapped
       ? {

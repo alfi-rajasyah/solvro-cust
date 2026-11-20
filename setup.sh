@@ -288,6 +288,12 @@ COMPOSE_HEAD
       # "true" accepts a personal iTop token Solvro cannot confirm as the
       # user's own (docs/CONFIGURATION.md); set it in ~/solvro/.env.
       ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS: "${ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS:-false}"
+      # ITOP_ALLOW_PRIVATE_HOSTS="false" refuses a private or local iTop
+      # address (public iTop); ITOP_SYNC_DISABLED="true" turns the background
+      # iTop sync off. Unset keeps the backend defaults (true / false); set
+      # either in ~/solvro/.env.
+      ITOP_ALLOW_PRIVATE_HOSTS: "${ITOP_ALLOW_PRIVATE_HOSTS:-true}"
+      ITOP_SYNC_DISABLED: "${ITOP_SYNC_DISABLED:-false}"
     ports:
       # Local only, whatever BIND_ADDR is: the website's nginx proxies /api/
       # inside the compose network, and a directly reachable API would bypass
@@ -770,10 +776,11 @@ if [[ -f "$ENV_FILE" ]]; then
   elif DERIVED_APP_URL="$(normalise_origin "$(app_url)")"; then
     APP_URL="$DERIVED_APP_URL"
     env_file_set APP_URL "$APP_URL"
-    echo "NOTE: APP_URL was not set; saved $APP_URL. If users reach Solvro on another address, re-run with APP_URL=https://... or edit $ENV_FILE."
+    echo "NOTE: APP_URL was not set; saved $APP_URL. Outline links and guest links use it, and a localhost address is ignored for guest links (they fall back to the address the owner has open). If users reach Solvro on another address, re-run with APP_URL=https://... or edit $ENV_FILE."
   else
     APP_URL=""
     echo "NOTE: APP_URL is not set and no address could be derived from this server; the Outline integration stays disabled. Re-run with APP_URL=https://... or edit $ENV_FILE."
+    echo "WARNING: with APP_URL empty the API accepts cross-origin requests from any website (CORS_ORIGIN falls back to *). Set APP_URL as soon as you can."
   fi
   export APP_URL
 
@@ -993,6 +1000,7 @@ else
   # save a placeholder — the Outline integration stays disabled until it is set.
   APP_URL=""
   echo "NOTE: could not derive a public address; APP_URL is left unset (Outline integration disabled). Set it in $ENV_FILE later."
+  echo "WARNING: with APP_URL empty the API accepts cross-origin requests from any website (CORS_ORIGIN falls back to *). Set APP_URL as soon as you can."
 fi
 if [[ -n "$EMBED_FRAME_ANCESTORS" ]]; then
   EMBED_FRAME_ANCESTORS="$(normalise_frame_origins "$EMBED_FRAME_ANCESTORS")" || {
@@ -1009,6 +1017,16 @@ JWT_SECRET=$(openssl rand -hex 48)
 SECRETS_KEY=$(openssl rand -base64 32)
 
 IMAGE_TAG="$SOLVRO_IMAGE_TAG"
+
+# Pull the backend image on its own first, as `solvro update` does, before anything is written
+# or wiped, so a registry that needs a login fails with a hint instead of Docker's raw error.
+echo "Checking registry access..."
+BACKEND_IMAGE="ghcr.io/alfi-rajasyah/solvro-cust-backend:$IMAGE_TAG"
+if ! docker pull -q "$BACKEND_IMAGE" >/dev/null; then
+  echo "ERROR: could not pull $BACKEND_IMAGE (is this server logged in? docker login ghcr.io)."
+  exit 1
+fi
+
 cat > "$ENV_FILE" <<EOF
 IMAGE_TAG=$IMAGE_TAG
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD

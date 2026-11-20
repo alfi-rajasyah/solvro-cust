@@ -1,6 +1,6 @@
 import { test, expect, loginViaUi } from "../fixtures/test";
 
-// Regression cover for the "duplicate-chip mouse race" (docs/ISSUES.md, ReUI
+// Regression cover for the "duplicate-chip mouse race" (docs/archive/ISSUES-2026-11-18-phase-log.md, ReUI
 // Filters phase deferred findings): Base UI's `useMenuItemCommonProps` can
 // fire a programmatic `itemRef.current.click()` on mouseup once
 // `allowMouseUpTriggerRef` is armed by a press held >=200ms, and
@@ -23,7 +23,7 @@ import { test, expect, loginViaUi } from "../fixtures/test";
 // submenu flow (never the plain field-only `addFilter` path). Both also set
 // `allowMultiple={false}`, which already removes an added field from the
 // root add-filter list before a raced second activation typically lands
-// (docs/ISSUES.md describes this as "incidental" shielding, observed 0/6 on
+// (the archived docs/archive/ISSUES-2026-11-18-phase-log.md describes this as "incidental" shielding, observed 0/6 on
 // repro, not a guaranteed backstop) — so this spec can't force the exact
 // upstream timing deterministically. It drives the closest reproducible
 // approximation (a >=200ms press-hold directly on the value checkbox item,

@@ -11,7 +11,9 @@ import { HttpError } from "../http/errors.js";
 // owned-customer groups are actionable, not read-only), and every project
 // they were added to as a member (`ProjectMember` — user decision 2026-09-29,
 // docs/archive/plans/collaboration-and-sharing.md; members get the same full
-// access as the TAM, and task assignment adds one automatically). Admin grants
+// access as the TAM, and task assignment adds one automatically), and every
+// project of a customer whose team (`CustomerTeamMember`, GitHub #93) they are
+// on, projects linked later included — also the same access as a member. Admin grants
 // broader access by adding "project:view-all" (or "*") to a role's permissions
 // in Admin > Roles.
 //
@@ -22,7 +24,7 @@ import { HttpError } from "../http/errors.js";
 // without taking a dependency on routes/projects.ts — avoiding the circular
 // import that arises when projects.ts itself needs to import sibling routes.
 //
-// `{ viaMembership: false }` drops the member arm: it is the rule for actions
+// `{ viaMembership: false }` drops the member arm AND the customer-team arm: it is the rule for actions
 // that membership alone must not allow (changing a project's TAM or customer,
 // deleting a project, changing/deleting a customer — see the *OwnerAccess
 // helpers below).
@@ -60,6 +62,9 @@ export function projectVisibilityFilter(
   ];
   if (opts.viaMembership !== false) {
     arms.push({ members: { some: { userId: user.sub } } });
+    // Customer team (GitHub #93): a member of ANY linked customer's team has
+    // the same access as a project member, projects linked later included.
+    arms.push({ customers: { some: { customer: { teamMembers: { some: { userId: user.sub } } } } } });
   }
   return { OR: arms };
 }
@@ -71,19 +76,22 @@ export interface ProjectVisibilityFacts {
   customerTamIds: ReadonlySet<number>;
   /** Members among the users being checked (or all members). */
   memberIds: ReadonlySet<number>;
+  /** Users on the customer team of ANY linked customer (among those being checked). */
+  teamMemberIds: ReadonlySet<number>;
 }
 
 /**
  * Pure counterpart of `projectVisibilityFilter(user)` for one project whose
  * facts are already loaded: view-all, the project's TAM, the owner of any
- * linked customer, or a member. Keep the two in step (see the note above them).
+ * linked customer, a member, or a team member of any linked customer. Keep the two in step (see the note above them).
  */
 export function canUserSeeProject(user: JwtPayload, project: ProjectVisibilityFacts): boolean {
   return (
     hasPermission(user, "project:view-all") ||
     project.tamId === user.sub ||
     project.customerTamIds.has(user.sub) ||
-    project.memberIds.has(user.sub)
+    project.memberIds.has(user.sub) ||
+    project.teamMemberIds.has(user.sub)
   );
 }
 
@@ -133,7 +141,7 @@ export async function ensureTaskVisible(
   if (!task) throw new HttpError(404, "not_found", "Task not found");
 }
 
-// Customer-scoping (docs/plans/customer-visibility-spec.md §3, Decisions 1-2):
+// Customer-scoping (docs/archive/plans/customer-visibility-spec.md §3, Decisions 1-2):
 // `project:view-all` (or "*") sees every customer, as does `customer:view-all`
 // (visibility, and the writes that follow visibility — never ownership; see below). Everyone else sees a
 // customer when they own it (`Customer.tamId`), when nobody owns it
@@ -167,6 +175,12 @@ export function customerVisibilityFilter(
     OR: [
       { tamId: user.sub },
       { tamId: null },
+      // Customer team (GitHub #93): visible even with no projects at all. Like
+      // the member arm it is dropped by `viaMembership: false`, and an
+      // ownership check never counts it.
+      ...(opts.viaMembership !== false && !opts.ownership
+        ? [{ teamMembers: { some: { userId: user.sub } } }]
+        : []),
       // Plain visibility: any project the caller can see. An OWNER check
       // (`ownership`) narrows this to projects the caller is TAM of: the owner
       // of one linked customer owns the shared PROJECT, never the other

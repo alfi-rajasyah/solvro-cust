@@ -17,6 +17,7 @@ import { RiskFormModal } from "@/components/RiskFormModal";
 import { RiskScoreChip } from "@/components/RiskScoreChip";
 import { Chip, type Tone } from "@/components/StatusChip";
 import { TOOLBAR_BUTTON_PRIMARY, TOOLBAR_STAT } from "@/lib/utils";
+import { Select as UiSelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { RISK_CATEGORY_LABEL, RISK_STATUS_LABEL } from "@/lib/labels";
@@ -312,7 +313,7 @@ function RisksDataGrid({
                 // Prose-overflow sweep (GH #57 convention): the pre-DataGrid
                 // table's `max-w-md` cell had no wrap-hardening, so a long
                 // unbroken description could stretch the table past its
-                // `overflow-x-auto` bound (docs/ISSUES.md deferred finding).
+                // `overflow-x-auto` bound (docs/archive/ISSUES-2026-11-18-phase-log.md deferred finding).
                 // `whitespace-pre-wrap` preserves operator-entered line
                 // breaks (this text comes from a `<textarea>`); `wrap-
                 // break-word` is Tailwind v4's renamed `break-words` (see
@@ -375,20 +376,13 @@ function RisksDataGrid({
         cell: ({ row }) => {
           const risk = row.original;
           return canEdit ? (
-            <select
-              aria-label={`Probability of risk: ${risk.description}`}
+            <ScaleSelect
+              label={`Probability of risk: ${risk.description}`}
               value={risk.probability}
-              onChange={(e) => onChange(risk.id, { probability: Number(e.target.value) })}
-              className="[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 font-mono text-xs"
-            >
-              {SCALE.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
+              onChange={(n) => onChange(risk.id, { probability: n })}
+            />
           ) : (
-            <span className="font-mono text-xs">{risk.probability}</span>
+            <span className="text-data-mono font-mono">{risk.probability}</span>
           );
         },
         meta: {
@@ -406,20 +400,13 @@ function RisksDataGrid({
         cell: ({ row }) => {
           const risk = row.original;
           return canEdit ? (
-            <select
-              aria-label={`Impact of risk: ${risk.description}`}
+            <ScaleSelect
+              label={`Impact of risk: ${risk.description}`}
               value={risk.impact}
-              onChange={(e) => onChange(risk.id, { impact: Number(e.target.value) })}
-              className="[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 font-mono text-xs"
-            >
-              {SCALE.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
+              onChange={(n) => onChange(risk.id, { impact: n })}
+            />
           ) : (
-            <span className="font-mono text-xs">{risk.impact}</span>
+            <span className="text-data-mono font-mono">{risk.impact}</span>
           );
         },
         meta: {
@@ -515,7 +502,7 @@ function RisksDataGrid({
     getRowId: (row) => String(row.id),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    // Pagination stays OFF (pilot verdict — docs/plans/reui-data-grid.md
+    // Pagination stays OFF (pilot verdict — docs/archive/plans/reui-data-grid.md
     // Checkpoint B): no getPaginationRowModel, so the full sorted row model
     // renders. `pageSize` here only sizes the loading-skeleton row count.
     initialState: { pagination: { pageSize: 8 } },
@@ -609,6 +596,43 @@ function RiskCard({
         </div>
       )}
     </div>
+  );
+}
+
+// 1-5 scale picker for the inline Prob / Impact cells (ui/select, Base-UI).
+// Compact trigger: the value is a single mono digit, so no min width beyond the chevron.
+function ScaleSelect({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (n: number) => void;
+}) {
+  return (
+    <UiSelect
+      items={SCALE.map((n) => ({ value: String(n), label: String(n) }))}
+      value={String(value)}
+      onValueChange={(v) => {
+        if (v !== null && Number(v) !== value) onChange(Number(v));
+      }}
+    >
+      <SelectTrigger
+        size="sm"
+        aria-label={label}
+        className="mx-auto gap-1 px-2 text-data-mono font-mono [@media(pointer:coarse)]:min-h-11"
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent side="bottom" align="center" alignItemWithTrigger={false} className="min-w-16 shadow-overlay!">
+        {SCALE.map((n) => (
+          <SelectItem key={n} value={String(n)}>
+            {n}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </UiSelect>
   );
 }
 

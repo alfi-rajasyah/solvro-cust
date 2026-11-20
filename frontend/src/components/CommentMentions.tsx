@@ -31,7 +31,7 @@ export function CommentBody({
           <span
             key={i}
             data-testid="mention-chip"
-            className="rounded-sm bg-primary/10 px-1 py-px font-semibold text-primary"
+            className="rounded-sm bg-primary/10 px-1 py-px font-semibold text-primary-tint-text"
           >
             {piece.text}
           </span>

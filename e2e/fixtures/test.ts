@@ -1,10 +1,12 @@
 import { test as base, type Page, type Request, type TestInfo } from "@playwright/test";
 import { seedFixture, type SeededFixture } from "./seed";
 
-// Worker-scoped fixture: one seeded project per worker (effectively per test
-// file, since playwright.config.ts pins workers: 1 and each spec file below
-// only needs a single fresh project). Avoids reseeding per-test while still
-// guaranteeing specs never depend on pre-existing data beyond the admin user.
+// Worker-scoped fixture: one seeded project per worker. playwright.config.ts
+// pins workers: 1, so the whole run (every spec file) shares ONE project and
+// earlier specs leave their tasks behind for later ones. Specs must derive
+// state from the API rather than assume a clean project, and should seed their
+// own rows instead of relying on the project being empty. (CI shards each get
+// a fresh stack, so a spec must not depend on another spec file's data.)
 interface WorkerFixtures {
   seededProject: SeededFixture;
 }
@@ -73,7 +75,7 @@ export async function submitLoginForm(
 /**
  * Route segment for the Kanban board under test — the ReUI-engine board,
  * cut over to the real `/kanban` route at
- * `docs/plans/kanban-reui-swap/plan.md` T11. Single source of truth so specs
+ * `docs/archive/plans/kanban-reui-swap/plan.md` T11. Single source of truth so specs
  * don't hardcode the segment.
  */
 export const KANBAN_ROUTE = "kanban";
@@ -135,7 +137,9 @@ export async function gripFor(page: Page, text: string, gripLabel: string) {
   const target = page.getByText(text, { exact: true }).first();
   const tb = await target.boundingBox();
   if (!tb) return null;
-  const grips = page.locator(`[aria-label="${gripLabel}"]`);
+  // Card grips are named "<gripLabel> <text>" ("Move Alpha"); list grips are the bare label.
+  const q = (v: string) => v.replace(/"/g, '\\"');
+  const grips = page.locator(`[aria-label="${q(gripLabel)}"], [aria-label="${q(`${gripLabel} ${text}`)}"]`);
   const n = await grips.count();
   let best: { x: number; y: number; width: number; height: number } | null = null;
   let bestDist = Infinity;
@@ -195,4 +199,19 @@ export async function touchDrag(
   }
   await dispatch("touchEnd", 0, 0);
   await page.waitForTimeout(1500);
+}
+
+/** The customer page shows the Tickets tab only for a customer mapped to an
+ * iTop organisation (`itopOrgId`, CustomerDetail.tsx). The seeded customer is
+ * not mapped, so the customer read is patched with a mapping. */
+export async function mockCustomerOrgMapping(page: Page): Promise<void> {
+  await page.route("**/api/customers/*", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { ...body, itopOrgId: 4242, itopOrgName: "Northwind Freight Sdn Bhd" },
+    });
+  });
 }

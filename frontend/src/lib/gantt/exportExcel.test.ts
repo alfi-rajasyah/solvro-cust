@@ -52,6 +52,7 @@ function taskFixture(overrides: Partial<Task> = {}): Task {
     dueDate: null,
     isMilestone: false,
     isCriticalPath: false,
+    storyPoints: null,
     baselineStartDate: null,
     baselineDueDate: null,
     assignedToId: null,

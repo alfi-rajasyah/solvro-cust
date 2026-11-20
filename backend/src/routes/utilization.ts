@@ -19,6 +19,14 @@ import { validate } from "../http/validate.js";
 import { getItopConfig, isItopConfigured } from "../lib/itop/config.js";
 import { parseWeekKey } from "../lib/isoWeek.js";
 import { utcMidnightOfDayString } from "../lib/dateBoundary.js";
+import { projectVisibilityFilter } from "../lib/visibility.js";
+import {
+  WORKLOAD_DETAIL_LIMIT,
+  canOpenAssignee,
+  computeWorkload,
+  resolveWorkloadAccess,
+  workloadWindow,
+} from "../lib/workload.js";
 
 export const utilizationRouter = Router();
 
@@ -292,3 +300,75 @@ utilizationRouter.get(
     });
   },
 );
+
+// ---- Workload (Solvro tasks per assignee; works without iTop) -------------
+// Who is visible is decided server-side from the caller's permissions
+// (lib/workload.ts) — there is deliberately no scope parameter.
+const workloadQuerySchema = z.object({
+  week: z.string().refine((w) => parseWeekKey(w) !== null, { message: "invalid_week" }),
+  utcOffsetMinutes: z.coerce.number().int().min(-840).max(840).default(0),
+});
+
+const workloadTasksQuerySchema = z.object({
+  assignee: z.union([z.literal("unassigned"), z.coerce.number().int().positive()]),
+});
+
+utilizationRouter.get("/workload", validate("query", workloadQuerySchema), async (req, res) => {
+  const { week: weekKey, utcOffsetMinutes } = req.query as unknown as z.infer<typeof workloadQuerySchema>;
+  const week = parseWeekKey(weekKey)!;
+  const win = workloadWindow(week, utcOffsetMinutes);
+  const { scope, rows, totals } = await computeWorkload(req.user!, win);
+  res.json({
+    week: { key: week.key, start: week.start, days: week.days },
+    utcOffsetMinutes,
+    today: win.today.toISOString().slice(0, 10),
+    scope,
+    rows,
+    totals,
+  });
+});
+
+// One person's open tasks (the ones the row's numbers count), soonest due
+// first. `workload:all` counts every project, but a task's title and project
+// name are returned only for projects the caller can see
+// (projectVisibilityFilter); the rest are summed into `hiddenCount`.
+utilizationRouter.get("/workload/tasks", validate("query", workloadTasksQuerySchema), async (req, res) => {
+  const { assignee } = req.query as unknown as z.infer<typeof workloadTasksQuerySchema>;
+  const user = req.user!;
+  const access = await resolveWorkloadAccess(user);
+  if (!canOpenAssignee(access, assignee)) {
+    throw new HttpError(403, "forbidden", "You cannot view this person's workload");
+  }
+  const counted: Prisma.TaskWhereInput = {
+    AND: [access.openWhere, { assignedToId: assignee === "unassigned" ? null : assignee }],
+  };
+  const visible: Prisma.TaskWhereInput = { AND: [counted, { project: projectVisibilityFilter(user) }] };
+  const [rows, countedTotal, visibleTotal] = await Promise.all([
+    prisma.task.findMany({
+      where: visible,
+      select: {
+        id: true,
+        title: true,
+        projectId: true,
+        project: { select: { name: true } },
+        status: true,
+        statusDef: { select: { id: true, name: true, category: true, color: true } },
+        startDate: true,
+        dueDate: true,
+        storyPoints: true,
+        parentTaskId: true,
+      },
+      orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { id: "asc" }],
+      take: WORKLOAD_DETAIL_LIMIT + 1,
+    }),
+    prisma.task.count({ where: counted }),
+    prisma.task.count({ where: visible }),
+  ]);
+  const truncated = rows.length > WORKLOAD_DETAIL_LIMIT;
+  if (truncated) rows.length = WORKLOAD_DETAIL_LIMIT;
+  res.json({
+    tasks: rows.map(({ project, ...t }) => ({ ...t, projectName: project.name })),
+    hiddenCount: countedTotal - visibleTotal,
+    truncated,
+  });
+});

@@ -253,6 +253,14 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
         ],
       },
       {
+        title: "Customer team",
+        points: [
+          "The Team tab lists the people who work on this customer. Everyone on the team can open and edit every project of the customer, including projects added later, but is not an owner: they cannot delete the customer or its projects or change owners.",
+          "The customer's owner (with \"Manage customers\") can add and remove team members, as can anyone whose role has \"Manage every customer team\", on any customer they can see. Pick a person under \"Person to add\" and click \"Add\". Inactive users cannot be added.",
+          "Click \"Remove\" next to a name and confirm. The person loses the access they had through the team right away, and their tasks in this customer's projects are unassigned, unless they have access another way.",
+        ],
+      },
+      {
         title: "Services and tools",
         points: [
           "Tick a service to include it; type a tool name and press Enter or \",\" to add it. Backspace removes the last tool.",
@@ -365,15 +373,25 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     icon: "schedule",
     route: "/utilization",
     requires: "project:read",
-    summary: "Hours logged per customer per day, read from iTop's time tracking.",
+    summary: "Hours per customer per day from iTop's time tracking, and open tasks per person from Solvro.",
     entries: [
       {
         title: "Read your hours",
         points: [
-          "\"Me\" shows your own week. Users with Executive access also get \"By TAM\" and \"By customer\".",
+          "With iTop connected, \"Me\" shows your own week. Users with Executive access also get \"By TAM\" and \"By customer\".",
           "Move between weeks with the arrows. Solvro keeps the last 8 weeks of time entries.",
           "The summary row shows hours logged against your weekly capacity (the number and the bar turn amber at capacity), customers touched, and hours not tied to a customer.",
           "Hours come from iTop. To change a number, edit the time entry in iTop, then click \"Refresh from iTop\".",
+        ],
+      },
+      {
+        title: "See who has how much work",
+        points: [
+          "The Workload tab counts open tasks per person for the selected week. Subtasks count as separate tasks, and a task in a done status is not open.",
+          "Columns: Open, Due in week, Overdue, Active in week (the task's start to due dates overlap the week) and Story points. Open and Story points count every open task; Overdue is measured against today; Due and Active cover the week you picked.",
+          "Click a person to list their open tasks, with project, status and due date. Each task opens its panel. Unassigned open tasks sit in one Unassigned row.",
+          "What you see depends on your role. By default it is your own row. \"Team workload\" adds everyone assigned on projects you own, and \"Org-wide workload\" shows everyone; counts then cover every project, but task names show only for projects you can open. Admins set these in Admin > Roles.",
+          "Without iTop connected, Workload is the only tab on this page.",
         ],
       },
     ],

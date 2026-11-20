@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useProjectContext } from "../ProjectDetail";
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -15,9 +15,11 @@ import {
   useCreateEpic,
   useDeleteEpic,
   useProjectEpics,
+  useProjectTasks,
   useUpdateEpic,
 } from "@/lib/queries";
 import { EMPTY_VALUE } from "@/lib/emptyValue";
+import { type StoryPointTotals, storyPointTotalsByEpic } from "@/lib/storyPoints";
 import { TOOLBAR_BUTTON_PRIMARY } from "@/lib/utils";
 
 /**
@@ -37,6 +39,10 @@ export function ProjectEpics() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const { data: epics, isLoading, isError, error } = useProjectEpics(project.id);
+  // Story point totals derive from the loaded task list, so they follow every
+  // task edit without a request of their own.
+  const { data: projectTasks } = useProjectTasks(project.id);
+  const pointTotals = useMemo(() => storyPointTotalsByEpic(projectTasks ?? []), [projectTasks]);
   const createEpic = useCreateEpic(project.id);
   const updateEpic = useUpdateEpic();
   const deleteEpic = useDeleteEpic();
@@ -264,6 +270,9 @@ export function ProjectEpics() {
                     <th scope="col" className="px-3 py-2 font-display text-label-caps uppercase text-on-surface-variant">
                       Progress
                     </th>
+                    <th scope="col" className="px-3 py-2 font-display text-label-caps uppercase text-on-surface-variant">
+                      Story points
+                    </th>
                     {canEdit && (
                       <th scope="col" className="px-3 py-2 text-right font-display text-label-caps uppercase text-on-surface-variant">
                         Actions
@@ -276,6 +285,7 @@ export function ProjectEpics() {
                     <EpicRow
                       key={epic.id}
                       epic={epic}
+                      points={pointTotals.get(epic.id)}
                       canEdit={canEdit}
                       isRenaming={renamingId === epic.id}
                       renameValue={renameValue}
@@ -297,6 +307,7 @@ export function ProjectEpics() {
                 <EpicCard
                   key={epic.id}
                   epic={epic}
+                  points={pointTotals.get(epic.id)}
                   canEdit={canEdit}
                   isRenaming={renamingId === epic.id}
                   renameValue={renameValue}
@@ -347,6 +358,8 @@ export function ProjectEpics() {
 
 interface RowProps {
   epic: Epic;
+  /** Undefined while tasks load, or when the epic has no top-level task. */
+  points: StoryPointTotals | undefined;
   canEdit: boolean;
   isRenaming: boolean;
   renameValue: string;
@@ -373,6 +386,18 @@ function ProgressBar({ done, total }: { done: number; total: number }) {
         {done}/{total}
       </span>
     </div>
+  );
+}
+
+function StoryPointsSummary({ points }: { points: StoryPointTotals | undefined }) {
+  if (!points || points.estimated === 0) {
+    return <span className="text-meta text-on-surface-variant">{EMPTY_VALUE}</span>;
+  }
+  return (
+    <span data-testid="epic-story-points" className="font-mono text-meta text-on-surface-variant">
+      {points.done}/{points.total}
+      <span className="sr-only"> story points done</span>
+    </span>
   );
 }
 
@@ -444,7 +469,7 @@ function TitleCell({
   onCancelRename,
   onPickColor,
   onOpen,
-}: Omit<RowProps, "onDelete">) {
+}: Omit<RowProps, "onDelete" | "points">) {
   return (
     <div className="flex min-w-0 items-center gap-2">
       <ColorDot color={epic.color} canEdit={canEdit} onPick={onPickColor} />
@@ -485,7 +510,7 @@ function TitleCell({
             onStartRename();
           }}
           aria-label={`Rename ${epic.title}`}
-          className="tap-target material-symbols-outlined shrink-0 rounded-sm p-1 text-[15px] text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="tap-target material-symbols-outlined shrink-0 rounded-sm p-1 text-[15px] text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           edit
         </button>
@@ -515,6 +540,9 @@ function EpicRow(props: RowProps) {
       </td>
       <td className="px-3 py-2 align-middle">
         <ProgressBar done={epic.progress.done} total={epic.progress.total} />
+      </td>
+      <td className="px-3 py-2 align-middle">
+        <StoryPointsSummary points={props.points} />
       </td>
       {canEdit && (
         <td className="px-3 py-2 align-middle text-right" onClick={(e) => e.stopPropagation()}>
@@ -557,8 +585,13 @@ function EpicCard(props: RowProps) {
           <span className="text-on-surface-variant">{epic.owner?.username ?? "Unassigned"}</span>
           <span className="text-on-surface-variant">{fmtDay(epic.dueDate) || EMPTY_VALUE}</span>
         </div>
-        <div className="mt-2">
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
           <ProgressBar done={epic.progress.done} total={epic.progress.total} />
+          {props.points && props.points.estimated > 0 && (
+            <span className="text-meta text-on-surface-variant">
+              Story points <StoryPointsSummary points={props.points} />
+            </span>
+          )}
         </div>
       </button>
     </div>

@@ -41,6 +41,7 @@ import { PERMISSION_CATALOG, useAuth } from "@/lib/auth";
 import { copyText } from "@/lib/clipboard";
 import { EMPTY_VALUE } from "@/lib/emptyValue";
 import { fmtDateTime } from "@/lib/formatDate";
+import { roleLabel } from "@/lib/labels";
 import { personNameSortingFn } from "@/lib/tableSort";
 import { DataGrid, DataGridContainer } from "@/components/reui/data-grid/data-grid";
 import { DataGridColumnHeader } from "@/components/reui/data-grid/data-grid-column-header";
@@ -240,7 +241,8 @@ function UsersTab() {
       header: ({ column }) => <DataGridColumnHeader column={column} title="Role" />,
       // Not a person column — role names are operator-entered, uppercase
       // ASCII only (create/rename validates `[A-Z0-9_]+`), so the
-      // "alphanumeric" built-in is enough. Still explicit per decision 7's
+      // "alphanumeric" built-in is enough. Sorting is on the stored name;
+      // the select shows the sentence-case word from roleLabel. Still explicit per decision 7's
       // ≤10-row auto-detection gap (see "user"/"email" above) — same
       // deliberate choice as Tasks.tsx's project-name column.
       sortingFn: "alphanumeric",
@@ -254,19 +256,14 @@ function UsersTab() {
               value={u.role}
               disabled={isSelf}
               onChange={(e) => handleRoleChange(u, e.target.value as Role)}
-              // text-label-caps (12px/700/0.05em) replaces the carried-over
-              // text-[12px] font-bold ... tracking-wider combo. Near-exact:
-              // size/weight/tracking match the token, but the token also
-              // sets line-height 1 where text-[12px] inherited ~1.35 — the
-              // select renders ~4px shorter, accepted as a density win.
-              // font-bold stays explicit — see data-grid-column-header.tsx's
-              // comment on why the token's baked-in weight needs the guard.
-              className="rounded-sm border border-outline-variant bg-surface px-2 py-1 font-display text-label-caps uppercase text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60 [@media(pointer:coarse)]:min-h-11"
+              // Sentence-case role words (roleLabel), not the raw uppercase enum
+              // value; text-xs keeps the control at the table's body size.
+              className="rounded-sm border border-outline-variant bg-surface px-2 py-1 font-display text-xs font-medium text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60 [@media(pointer:coarse)]:min-h-11"
               title={isSelf ? "You cannot change your own role" : undefined}
             >
               {roleOptionsFor(u.role).map((r) => (
                 <option key={r} value={r} disabled={r === "PENDING"}>
-                  {r}
+                  {roleLabel(r)}
                 </option>
               ))}
             </select>
@@ -378,7 +375,7 @@ function UsersTab() {
     getRowId: (row) => String(row.id),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    // Pagination stays OFF (docs/plans/reui-data-grid.md Checkpoint B,
+    // Pagination stays OFF (docs/archive/plans/reui-data-grid.md Checkpoint B,
     // binding for every DataGrid table this phase): no
     // getPaginationRowModel, so the full sorted row model renders.
     // `pageSize` here only sizes the loading-skeleton row count.
@@ -661,15 +658,15 @@ function UsersTab() {
 function ProviderChip({ provider }: { provider: "google" | "password" }) {
   if (provider === "google") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 font-display text-meta font-semibold text-primary dark:bg-primary/20">
-        <span aria-hidden="true" className="material-symbols-outlined text-[12px]">mail</span>
+      <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 font-display text-meta font-semibold text-primary-tint-text dark:bg-primary/20">
+        <span aria-hidden="true" className="material-symbols-outlined text-meta">mail</span>
         Google
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-surface-container-high px-2 py-0.5 font-display text-meta font-semibold text-on-surface-variant">
-      <span aria-hidden="true" className="material-symbols-outlined text-[12px]">key</span>
+      <span aria-hidden="true" className="material-symbols-outlined text-meta">key</span>
       Password
     </span>
   );
@@ -841,7 +838,7 @@ function RolesTab() {
                 key={p}
                 className={`rounded-sm px-1.5 py-0.5 font-mono text-meta ${
                   p === "*"
-                    ? "bg-primary/15 text-primary"
+                    ? "bg-primary/15 text-primary-tint-text"
                     : "bg-surface-container-high text-on-surface"
                 }`}
               >
@@ -1224,7 +1221,7 @@ function SignInTab() {
                 {data.googleAllowedDomains.map((d) => (
                   <span
                     key={d}
-                    className="rounded-full bg-primary/10 px-2.5 py-0.5 font-mono text-meta text-primary dark:bg-primary/20"
+                    className="rounded-full bg-primary/10 px-2.5 py-0.5 font-mono text-meta text-primary-tint-text dark:bg-primary/20"
                   >
                     {d}
                   </span>
@@ -1503,7 +1500,7 @@ function SignInModal({
             {domains.map((d) => (
               <span
                 key={d}
-                className="inline-flex items-center gap-1 [@media(pointer:coarse)]:gap-3.5 rounded-full bg-primary/10 px-3 py-1 font-mono text-meta text-primary dark:bg-primary/20"
+                className="inline-flex items-center gap-1 [@media(pointer:coarse)]:gap-3.5 rounded-full bg-primary/10 px-3 py-1 font-mono text-meta text-primary-tint-text dark:bg-primary/20"
               >
                 {d}
                 <button

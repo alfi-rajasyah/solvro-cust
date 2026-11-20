@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { isDragActive } from "./Modal";
 
 interface DrawerProps {
   open: boolean;
@@ -69,11 +70,34 @@ export function Drawer({
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !isDragActive()) onClose();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  // Focus: the drawer is non-modal, so nothing moves on open and there is
+  // no trap. We only remember the opener and hand focus back when the
+  // drawer closes or unmounts (if the opener is still in the document).
+  // The opener is read during render, before the children mount: a child
+  // with `autoFocus` (the task form's title) takes focus at mount, ahead of
+  // any effect, and would otherwise be remembered as the opener.
+  const openerRef = useRef<HTMLElement | null>(null);
+  const wasOpenRef = useRef(false);
+  if (open && !wasOpenRef.current) {
+    openerRef.current = document.activeElement as HTMLElement | null;
+  }
+  wasOpenRef.current = open;
+
+  useEffect(() => {
+    if (!open) return;
+    const opener = openerRef.current;
+    return () => {
+      if (opener && opener !== document.body && opener.isConnected) {
+        opener.focus();
+      }
+    };
+  }, [open]);
 
   if (!open) return null;
 

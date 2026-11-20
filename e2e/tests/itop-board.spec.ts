@@ -1,5 +1,5 @@
 import type { Page, Request } from "@playwright/test";
-import { center, expect, gripFor, loginViaUi, mouseDrag, test, touchDrag } from "../fixtures/test";
+import { center, expect, gripFor, loginViaUi, mouseDrag, test, touchDrag, mockCustomerOrgMapping } from "../fixtures/test";
 
 // Tickets tab Board view (Task 6.1, docs/archive/plans/itop-integration.md
 // — mockup "5 · The Tickets tab gets a Board" in
@@ -129,6 +129,7 @@ async function mockMyToken(page: Page, set: boolean): Promise<void> {
  * post-action refetch (triggered by TicketBoard's own cache invalidation)
  * picks up the new status without a second route registration. */
 async function mockCustomerTickets(page: Page, tickets: MockTicket[]): Promise<void> {
+  await mockCustomerOrgMapping(page);
   await page.route("**/api/itop/customers/*/tickets*", (route) =>
     route.fulfill({
       status: 200,
@@ -196,8 +197,8 @@ async function captureActionRequests(
 async function openBoard(page: Page, customerId: number): Promise<void> {
   // Plain navigate + explicit tab/switch clicks (same convention as
   // itop-tickets.spec.ts / itop-ticket-panel.spec.ts) rather than a
-  // `?tab=tickets&view=board` deep link — avoids racing the mapped-customer
-  // gate query that decides whether "Tickets" even appears in `TAB_ITEMS`
+  // `?tab=tickets&view=board` deep link — avoids racing the customer read
+  // whose `itopOrgId` decides whether "Tickets" even appears in `TAB_ITEMS`
   // on first render (CustomerDetail.tsx).
   await page.goto(`/customers/${customerId}`, { waitUntil: "networkidle" });
   await page.waitForTimeout(500);
@@ -273,7 +274,7 @@ test.describe("Tickets Board — desktop (mouse)", () => {
     // 2026-09-24 against a real iTop 3.2.2 install: `ev_pending` 400s there
     // without `fields.pending_reason`) — the card only lands in Pending once
     // the sheet is confirmed.
-    const assignedGrip = await gripFor(page, "R-911", "Drag ticket");
+    const assignedGrip = await gripFor(page, "R-911", "Move");
     const pendingColumnBox = await boardColumn(page, "pending").boundingBox();
     expect(assignedGrip, "grip for R-911 not found").toBeTruthy();
     expect(pendingColumnBox, "Pending column not found").toBeTruthy();
@@ -298,7 +299,7 @@ test.describe("Tickets Board — desktop (mouse)", () => {
 
     // Forbidden step: New (R-910) -> Closed fires no request at all, and the
     // card stays in New.
-    const newGrip = await gripFor(page, "R-910", "Drag ticket");
+    const newGrip = await gripFor(page, "R-910", "Move");
     const closedColumnBox = await boardColumn(page, "closed").boundingBox();
     expect(newGrip, "grip for R-910 not found").toBeTruthy();
     expect(closedColumnBox, "Closed column not found").toBeTruthy();
@@ -312,7 +313,7 @@ test.describe("Tickets Board — desktop (mouse)", () => {
 
     // Resolve step: dragging Pending's R-912 -> Resolved opens the shared
     // resolve ActionSheet instead of firing the action directly.
-    const pendingGrip = await gripFor(page, "R-912", "Drag ticket");
+    const pendingGrip = await gripFor(page, "R-912", "Move");
     const resolvedColumnBox = await boardColumn(page, "resolved").boundingBox();
     expect(pendingGrip, "grip for R-912 not found").toBeTruthy();
     expect(resolvedColumnBox, "Resolved column not found").toBeTruthy();
@@ -370,7 +371,7 @@ test.describe("Tickets Board — desktop (mouse)", () => {
 
     await openBoard(page, seededProject.customerId);
 
-    const newGrip = await gripFor(page, "R-910", "Drag ticket");
+    const newGrip = await gripFor(page, "R-910", "Move");
     const assignedColumnBox = await boardColumn(page, "assigned").boundingBox();
     expect(newGrip, "grip for R-910 not found").toBeTruthy();
     expect(assignedColumnBox, "Assigned column not found").toBeTruthy();
@@ -406,7 +407,7 @@ test.describe("Tickets Board — desktop (mouse)", () => {
 
     await openBoard(page, seededProject.customerId);
 
-    const pendingGrip = await gripFor(page, "R-912", "Drag ticket");
+    const pendingGrip = await gripFor(page, "R-912", "Move");
     const assignedColumnBox = await boardColumn(page, "assigned").boundingBox();
     expect(pendingGrip, "grip for R-912 not found").toBeTruthy();
     expect(assignedColumnBox, "Assigned column not found").toBeTruthy();
@@ -445,7 +446,7 @@ test.describe("Tickets Board — mobile (touch)", () => {
     // taller than the old squashed `auto-rows-fr` bug ever let them render.
     await boardCard(page, "R-911").evaluate((el) => el.scrollIntoView({ block: "center" }));
 
-    const assignedGrip = await gripFor(page, "R-911", "Drag ticket");
+    const assignedGrip = await gripFor(page, "R-911", "Move");
     const pendingColumnBox = await boardColumn(page, "pending").boundingBox();
     expect(assignedGrip, "grip for R-911 not found").toBeTruthy();
     expect(pendingColumnBox, "Pending column not found").toBeTruthy();
@@ -534,7 +535,7 @@ test.describe("Tickets Board — read-only without a token", () => {
     await expect(page.getByText("Add your personal iTop token in")).toBeVisible();
     await expect(page.getByRole("button", { name: "New ticket" })).toHaveCount(0);
     // No drag handle rendered anywhere on the board in read-only mode.
-    await expect(page.locator('[aria-label="Drag ticket"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="itop-board-card"] [aria-label^="Move "]')).toHaveCount(0);
   });
 });
 

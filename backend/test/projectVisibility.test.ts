@@ -1,4 +1,4 @@
-// projectVisibilityFilter — the owned-customer arm (docs/plans/
+// projectVisibilityFilter — the owned-customer arm (docs/archive/plans/
 // customer-visibility-spec.md §3 Decision 14): a user who owns a customer as
 // TAM (`Customer.tamId`) sees every project of that customer, including the
 // ones where another user is the project TAM, and can act on them (reviews,

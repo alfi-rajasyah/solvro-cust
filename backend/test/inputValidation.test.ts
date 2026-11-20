@@ -245,3 +245,96 @@ describe("errorHandler: a foreign-key violation is a 400", () => {
     expect(res.body).toEqual({ error: "Invalid reference to a related record", code: "invalid_reference" });
   });
 });
+
+describe("unknown user ids on update answer 400, like create", () => {
+  it("PATCH /projects/:id with an unknown tamId → 400 tam_not_found, TAM unchanged", async () => {
+    const { tam, project } = await fixture();
+    const res = await request(app)
+      .patch(`/projects/${project.id}`)
+      .set(auth(tam.token))
+      .send({ tamId: UNKNOWN_USER_ID });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("tam_not_found");
+    const after = await prisma.project.findUniqueOrThrow({ where: { id: project.id } });
+    expect(after.tamId).toBe(tam.userId);
+  });
+
+  it("PATCH /tasks/:id with an unknown assignee → 400 assignee_not_found, task unchanged", async () => {
+    const { tam, project } = await fixture();
+    const task = await prisma.task.create({
+      data: { statusId: SID.TODO, projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
+    });
+    const res = await request(app)
+      .patch(`/tasks/${task.id}`)
+      .set(auth(tam.token))
+      .send({ assignedToId: UNKNOWN_USER_ID });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("assignee_not_found");
+    const after = await prisma.task.findUniqueOrThrow({ where: { id: task.id } });
+    expect(after.assignedToId).toBeNull();
+  });
+
+  it("PATCH /epics/:id with an unknown owner → 400 owner_not_found, epic unchanged", async () => {
+    const { tam, project } = await fixture();
+    const epic = await prisma.epic.create({ data: { projectId: project.id, title: "E", position: 0 } });
+    const res = await request(app)
+      .patch(`/epics/${epic.id}`)
+      .set(auth(tam.token))
+      .send({ ownerId: UNKNOWN_USER_ID });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("owner_not_found");
+    const after = await prisma.epic.findUniqueOrThrow({ where: { id: epic.id } });
+    expect(after.ownerId).toBeNull();
+  });
+});
+
+describe("a NUL byte in text input answers 400, not 500", () => {
+  it("POST /projects/:id/tasks with NUL in the title → 400, nothing written", async () => {
+    const { tam, project } = await fixture();
+    const res = await request(app)
+      .post(`/projects/${project.id}/tasks`)
+      .set(auth(tam.token))
+      .send({ title: "bad\u0000title" });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("validation_error");
+    expect(await prisma.task.count({ where: { projectId: project.id } })).toBe(0);
+  });
+
+  it("PATCH /tasks/:id with NUL in a nested description → 400, task unchanged", async () => {
+    const { tam, project } = await fixture();
+    const task = await prisma.task.create({
+      data: { statusId: SID.TODO, projectId: project.id, title: "T", status: "TODO", priority: "MEDIUM", position: 0 },
+    });
+    const res = await request(app)
+      .patch(`/tasks/${task.id}`)
+      .set(auth(tam.token))
+      .send({ title: "U", description: "a\u0000b" });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("validation_error");
+    const after = await prisma.task.findUniqueOrThrow({ where: { id: task.id } });
+    expect(after.title).toBe("T");
+  });
+
+  it("a query string with NUL → 400", async () => {
+    const { tam, project } = await fixture();
+    const res = await request(app)
+      .get(`/projects/${project.id}/tasks`)
+      .query({ q: "a\u0000b" })
+      .set(auth(tam.token));
+    expect(res.status).toBe(400);
+  });
+
+  it("errorHandler: a Postgres 22021 that reaches it is a 400, not a 500", async () => {
+    const stub = express();
+    stub.get("/", () => {
+      throw new Prisma.PrismaClientUnknownRequestError(
+        'Invalid `prisma.task.create()` invocation: PostgresError { code: "22021", message: "invalid byte sequence" }',
+        { clientVersion: "test" },
+      );
+    });
+    stub.use(errorHandler);
+    const res = await request(stub).get("/");
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("validation_error");
+  });
+});

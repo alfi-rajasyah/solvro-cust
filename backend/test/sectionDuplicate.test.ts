@@ -5,7 +5,7 @@ import { createApp } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { createAdminAndToken, createUserWithRole, seedRoles } from "./testAuth.js";
 
-// POST /sections/:id/duplicate — docs/plans/duplicate-tasks-sections.md §3-4.
+// POST /sections/:id/duplicate — docs/archive/plans/duplicate-tasks-sections.md §3-4.
 // Settled rules: name/color copied verbatim; the new section lands directly
 // after the source BY IDENTITY (not `source.position + 1` as an index —
 // section lists can be sparse after a delete); every top-level task under

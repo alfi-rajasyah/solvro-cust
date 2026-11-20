@@ -3,9 +3,29 @@ import { createPortal } from "react-dom";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
 
+/**
+ * True while a dnd-kit drag is lifted. dnd-kit marks the activator
+ * `aria-pressed="true"` and an `aria-roledescription` (`draggable` from
+ * useDraggable, `sortable` from useSortable) for the whole drag, pointer or
+ * keyboard. Escape cancels the drag in dnd-kit's own `document` listener, so an
+ * overlay's Escape listener must skip its close while this holds, or one
+ * keypress cancels the drag and closes the overlay (ISS-188). The listeners stay
+ * in the bubble phase so an inner widget that consumes Escape (mention picker,
+ * inline rename) can stop it first.
+ */
+export function isDragActive(): boolean {
+  return (
+    document.querySelector(
+      '[aria-pressed="true"][aria-roledescription="draggable"], [aria-pressed="true"][aria-roledescription="sortable"]',
+    ) !== null
+  );
+}
+
 interface ModalProps {
   open: boolean;
   onClose: () => void;
+  /** Close handler for the header X only; defaults to `onClose`. */
+  onHeaderClose?: () => void;
   title: string;
   customHeader?: ReactNode;
   children: ReactNode;
@@ -16,6 +36,7 @@ interface ModalProps {
 export function Modal({
   open,
   onClose,
+  onHeaderClose,
   title,
   customHeader,
   children,
@@ -28,7 +49,7 @@ export function Modal({
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !isDragActive()) onClose();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -60,7 +81,7 @@ export function Modal({
             </span>
             <button
               type="button"
-              onClick={onClose}
+              onClick={onHeaderClose ?? onClose}
               className="tap-target flex h-9 w-9 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
               aria-label="Close"
             >

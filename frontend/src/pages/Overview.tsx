@@ -5,6 +5,8 @@ import {
 } from "@/components/portfolio/PortfolioCalendar";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { QueryErrorAlert } from "@/components/QueryErrorAlert";
+import { SkeletonRegion } from "@/components/skeletons/SkeletonRegion";
+import { Skeleton } from "@/components/ui/skeleton";
 import { StatStrip } from "@/components/StatStrip";
 import { Chip, ProjectStatusChip } from "@/components/StatusChip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -162,7 +164,7 @@ function PersonPicker({
           type="button"
           aria-label={`Clear ${label} filter`}
           onClick={() => onChange(undefined)}
-          className="tap-target flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:text-primary outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="tap-target flex h-8 w-8 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:text-primary outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
         >
           <span aria-hidden="true" className="material-symbols-outlined text-base">close</span>
         </button>
@@ -294,7 +296,7 @@ function OverviewBody({ data, filters }: { data: OverviewResponse; filters: Over
                         to={`/projects/${p.id}`}
                         className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 transition-colors hover:border-primary md:flex-nowrap [@media(pointer:coarse)]:min-h-11"
                       >
-                        <span className="font-mono text-meta text-on-surface-variant">P-{String(p.id).padStart(3, "0")}</span>
+                        <span className="text-data-mono font-mono text-on-surface-variant">P-{String(p.id).padStart(3, "0")}</span>
                         <span className="min-w-0 flex-1 basis-[70%] text-sm font-semibold text-on-surface md:basis-auto md:truncate" title={p.name}>{p.name}</span>
                         {overdueTasks > 0 && (
                           <span
@@ -456,14 +458,14 @@ function EmptyHint({ label }: { label: string }) {
 
 function SkeletonGrid() {
   return (
-    <>
-      <div className="h-16 animate-pulse rounded-sm bg-surface-container-low md:h-[46px]" />
+    <SkeletonRegion className="space-y-6">
+      <Skeleton className="h-16 rounded-sm bg-surface-container-low md:h-[46px]" />
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="h-64 animate-pulse rounded-sm bg-surface-container-low lg:col-span-2" />
-        <div className="h-64 animate-pulse rounded-sm bg-surface-container-low" />
+        <Skeleton className="h-64 rounded-sm bg-surface-container-low lg:col-span-2" />
+        <Skeleton className="h-64 rounded-sm bg-surface-container-low" />
       </div>
-      <div className="h-64 animate-pulse rounded-sm bg-surface-container-low" />
-    </>
+      <Skeleton className="h-64 rounded-sm bg-surface-container-low" />
+    </SkeletonRegion>
   );
 }
 

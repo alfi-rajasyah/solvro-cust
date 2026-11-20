@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { commitDraft, dayFromIso, isoFromDay } from "@/lib/dateField";
+import { parseStoryPoints } from "@/lib/storyPoints";
 import { StatusSelect } from "@/components/StatusSelect";
 import { PRIORITY_LABEL } from "@/lib/labels";
 import {
@@ -108,6 +109,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
   const [epicId, setEpicId] = useState<number | "">("");
   const [labelIds, setLabelIds] = useState<number[]>([]);
   const [isCriticalPath, setIsCriticalPath] = useState(false);
+  const [storyPoints, setStoryPoints] = useState("");
   // iTop ticket (docs/archive/plans/subtask-itop-tickets.md Task 5). A new task
   // holds the ref here and sends it with the create request; an existing task
   // pins/clears it straight away, like the side panel does.
@@ -155,6 +157,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
       setEpicId(editingTask.epicId ?? "");
       setLabelIds(editingTask.labels.map((l) => l.id));
       setIsCriticalPath(editingTask.isCriticalPath ?? false);
+      setStoryPoints(editingTask.storyPoints == null ? "" : String(editingTask.storyPoints));
       setItopRef(editingTask.itopTicketRef ?? null);
     } else {
       setTitle("");
@@ -169,6 +172,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
       setEpicId("");
       setLabelIds([]);
       setIsCriticalPath(false);
+      setStoryPoints("");
       setItopRef(null);
     }
     // Primitives only — the props OBJECT gets fresh identity on every parent
@@ -193,8 +197,12 @@ export function TaskFormModal(props: TaskFormModalProps) {
     if (parentTaskId !== "") setEpicId("");
   }, [parentTaskId]);
 
+  // A task that already has subtasks cannot itself become a subtask: the
+  // server's depth guard refuses a three-level tree (ISS-179).
+  const hasSubtasks =
+    !!editingTask && (projectTasks ?? []).some((t) => t.parentTaskId === editingTask.id);
   const possibleParents = (projectTasks ?? []).filter(
-    (t) => !editingTask || (t.id !== editingTask.id && t.parentTaskId === null),
+    (t) => t.parentTaskId === null && (!editingTask || t.id !== editingTask.id),
   );
   const subtasks = editingTask
     ? (projectTasks ?? [])
@@ -220,6 +228,12 @@ export function TaskFormModal(props: TaskFormModalProps) {
     }
     if (startDate && dueDate && dueDate < startDate) {
       setError("Due date must be on or after start date.");
+      return;
+    }
+
+    const points = parseStoryPoints(storyPoints);
+    if (!points.ok) {
+      setError(points.error);
       return;
     }
 
@@ -257,6 +271,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
           epicId: parent === null ? (epicId === "" ? null : Number(epicId)) : null,
           labelIds,
           isCriticalPath,
+          storyPoints: points.value,
         });
         if (Object.keys(patch).length === 0) {
           requestClose();
@@ -290,6 +305,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
           epicId: parent === null ? (epicId === "" ? null : Number(epicId)) : null,
           labelIds: labelIds.length > 0 ? labelIds : undefined,
           isCriticalPath,
+          storyPoints: points.value ?? undefined,
           itopTicketRef: itopRef ?? undefined,
         });
       }
@@ -335,6 +351,9 @@ export function TaskFormModal(props: TaskFormModalProps) {
     if (adopt.has("epicId")) setEpicId(t.epicId ?? "");
     if (adopt.has("labelIds")) setLabelIds(t.labels.map((l) => l.id));
     if (adopt.has("isCriticalPath")) setIsCriticalPath(t.isCriticalPath ?? false);
+    if (adopt.has("storyPoints")) {
+      setStoryPoints(t.storyPoints == null ? "" : String(t.storyPoints));
+    }
     baseTaskRef.current = t;
     setConflict(null);
   }
@@ -430,7 +449,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
             maxLength={200}
             autoFocus
             placeholder="Task title"
-            className="[@media(pointer:coarse)]:min-h-11 flex-1 border-none bg-transparent text-lg font-bold text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="[@media(pointer:coarse)]:min-h-11 flex-1 border-none bg-transparent text-lg font-bold text-on-surface outline-hidden placeholder:text-on-surface-variant/80 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
           />
         </div>
 
@@ -442,7 +461,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
               value={priority}
               onChange={(e) => setPriority(e.target.value as Priority)}
               disabled={!canEdit}
-              className={`[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default ${PRIORITY_COLOR[priority]}`}
+              className={`[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default ${PRIORITY_COLOR[priority]}`}
             >
               {PRIORITIES.map((p) => (
                 <option key={p} value={p}>
@@ -485,7 +504,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                 setAssignedToId(e.target.value === "" ? "" : Number(e.target.value))
               }
               disabled={!canEdit}
-              className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
+              className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default"
             >
               <option value="">Unassigned</option>
               {(users ?? []).map((u) => (
@@ -524,8 +543,9 @@ export function TaskFormModal(props: TaskFormModalProps) {
               onChange={(e) =>
                 setParentTaskId(e.target.value === "" ? "" : Number(e.target.value))
               }
-              disabled={!canEdit}
-              className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
+              disabled={!canEdit || hasSubtasks}
+              aria-describedby={hasSubtasks ? "parent-locked-reason" : undefined}
+              className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default"
             >
               <option value="">Top level</option>
               {possibleParents.map((t) => (
@@ -534,6 +554,11 @@ export function TaskFormModal(props: TaskFormModalProps) {
                 </option>
               ))}
             </select>
+            {hasSubtasks && (
+              <span id="parent-locked-reason" className="ml-2 text-meta text-on-surface-variant">
+                Has subtasks, so it stays top level.
+              </span>
+            )}
           </FieldRow>
 
           {/* Section */}
@@ -544,7 +569,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                 setSectionId(e.target.value === "" ? "" : Number(e.target.value))
               }
               disabled={!canEdit}
-              className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
+              className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default"
             >
               <option value="">No section</option>
               {(sections ?? []).map((s) => (
@@ -564,7 +589,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                 value={epicId === "" ? "" : String(epicId)}
                 onChange={(e) => setEpicId(e.target.value === "" ? "" : Number(e.target.value))}
                 disabled={!canEdit || parentTaskId !== ""}
-                className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
+                className="[@media(pointer:coarse)]:min-h-11 cursor-pointer border-none bg-transparent text-xs font-semibold text-on-surface focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default"
               >
                 <option value="">No epic</option>
                 {(epics ?? []).map((e) => (
@@ -579,6 +604,21 @@ export function TaskFormModal(props: TaskFormModalProps) {
                   return selected ? <EpicChip epic={selected} compact /> : null;
                 })()}
             </div>
+          </FieldRow>
+
+          {/* Story points */}
+          <FieldRow icon="pin" label="Story points">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={storyPoints}
+              onChange={(e) => setStoryPoints(e.target.value)}
+              disabled={!canEdit}
+              maxLength={3}
+              placeholder="Not estimated"
+              aria-label="Story points"
+              className="[@media(pointer:coarse)]:min-h-11 w-28 border-none bg-transparent text-xs font-semibold text-on-surface placeholder:font-normal placeholder:text-on-surface-variant focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default"
+            />
           </FieldRow>
 
           {/* Labels */}
@@ -666,6 +706,7 @@ export function TaskFormModal(props: TaskFormModalProps) {
                     <input
                       type="checkbox"
                       checked={s.status === "DONE"}
+                      disabled={!canEdit}
                       onChange={() =>
                         update.mutate({
                           id: s.id,

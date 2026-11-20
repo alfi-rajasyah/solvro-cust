@@ -13,6 +13,7 @@ import { prisma } from "../prisma.js";
 import { logger } from "../logger.js";
 import { hasPermission, requireAuth, requirePermission } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
+import { isLabelNameConflict, labelExistsError } from "../lib/labelConflict.js";
 import { dateInput } from "../lib/dateInput.js";
 import { validate } from "../http/validate.js";
 import { outlineUrlSchema } from "../lib/outlineUrl.js";
@@ -36,7 +37,7 @@ import {
 } from "../lib/taskOrdering.js";
 import { assertEpicNotOnSubtask, assertValidEpic } from "../lib/epics.js";
 import { computeProjectHealth, computeSlipDays } from "../lib/projectHealth.js";
-import { ensureAssigneeIsMember } from "../lib/projectMembers.js";
+import { ensureAssigneeIsMember, unassignWhereAccessLost } from "../lib/projectMembers.js";
 import { assertUserExists } from "../lib/userRefs.js";
 import {
   diffProjectChanges,
@@ -45,8 +46,10 @@ import {
   shortLabel,
   taskCreatedChanges,
 } from "../lib/activity.js";
+import { storyPointsField } from "../lib/storyPoints.js";
 import { epicCreatedChanges } from "../lib/epicActivity.js";
 import { notifyForEvent } from "../lib/notifications.js";
+import { assertEpicOwnerCanSeeProject } from "../lib/epicOwner.js";
 import {
   customerLinksSchema,
   customerNotFound,
@@ -154,6 +157,7 @@ const createTaskSchema = z
     dueDate: dateInput.nullable().optional(),
     isMilestone: z.boolean().optional(),
     isCriticalPath: z.boolean().optional(),
+    storyPoints: storyPointsField.optional(),
     assignedToId: z.number().int().positive().nullable().optional(),
     parentTaskId: z.number().int().positive().nullable().optional(),
     sectionId: z.number().int().positive().nullable().optional(),
@@ -468,6 +472,10 @@ projectsRouter.patch(
       }
     }
 
+    if (body.tamId !== undefined) {
+      await assertUserExists(prisma, body.tamId, "tam_not_found", "TAM not found");
+    }
+
     const data: Prisma.ProjectUpdateInput = {};
     if (body.name !== undefined) data.name = body.name;
     if (body.description !== undefined) data.description = body.description;
@@ -488,6 +496,11 @@ projectsRouter.patch(
       // Status-list lock before any row lock (same order as task writes), so a
       // WIP-limit save cannot race an admin delete of a status it names.
       await lockStatusListShared(tx);
+      // Changing customer links can unassign tasks (customer-team access
+      // loss), which takes the task-order lock; take it before the project
+      // row lock below, the order baseline POST/DELETE use, so the two never
+      // invert.
+      if (links !== undefined) await lockProjectOrder(tx, "tasks", id);
       await assertWipLimitKeys(tx, body.wipLimits);
       // Lock first so a concurrent save serialises and the diff is against the
       // row this write actually replaced.
@@ -502,7 +515,29 @@ projectsRouter.patch(
       });
       const namesBefore = await linkedCustomerNames(tx, id);
       const result = await tx.project.update({ where: { id }, data });
-      if (links !== undefined) await syncProjectCustomers(tx, id, links);
+      if (links !== undefined) {
+        const linkedBefore = await tx.projectCustomer.findMany({
+          where: { projectId: id },
+          select: { customerId: true },
+        });
+        await syncProjectCustomers(tx, id, links);
+        // Team members of a customer just unlinked lose the access it gave
+        // them; tasks they hold here are unassigned unless another path keeps it.
+        const kept = new Set(links.map((l) => l.id));
+        const unlinked = linkedBefore.map((l) => l.customerId).filter((c) => !kept.has(c));
+        if (unlinked.length > 0) {
+          const team = await tx.customerTeamMember.findMany({
+            where: { customerId: { in: unlinked } },
+            distinct: ["userId"],
+            select: { userId: true },
+          });
+          await unassignWhereAccessLost(tx, {
+            userIds: team.map((t) => t.userId),
+            projectIds: [id],
+            actorId: req.user!.sub,
+          });
+        }
+      }
       const namesAfter = links === undefined ? namesBefore : await linkedCustomerNames(tx, id);
       // Name, status, customer and the TAM seat are logged (ids and usernames
       // only); a re-save records nothing.
@@ -689,6 +724,7 @@ projectsRouter.post(
           dueDate: body.dueDate ?? null,
           isMilestone: body.isMilestone ?? false,
           isCriticalPath: body.isCriticalPath ?? false,
+          storyPoints: body.storyPoints ?? null,
           assignedToId: body.assignedToId ?? null,
           parentTaskId: body.parentTaskId ?? null,
           sectionId: body.sectionId ?? null,
@@ -813,13 +849,9 @@ projectsRouter.post(
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
     const body = req.body as z.infer<typeof createEpicSchema>;
     await ensureProjectVisible(req.user!, id);
-    if (body.ownerId != null) {
-      await assertUserExists(prisma, body.ownerId, "owner_not_found", "Epic owner not found");
-    }
+    if (body.ownerId != null) await assertEpicOwnerCanSeeProject(prisma, id, body.ownerId);
 
-    // Appends at the end. Epics have no re-pack on delete (unlike tasks'
-    // countSiblings, which is safe because DELETE /tasks/:id never re-packs
-    // either, but nothing here re-packs the epic list after a delete), so a
+    // Appends at the end. Nothing re-packs the epic list after a delete, so a
     // plain count would collide with — or land before — an existing epic
     // once any earlier epic has been deleted (count != max position + 1).
     // max(position) + 1 mirrors the sections POST /:id/sections above.
@@ -1286,7 +1318,7 @@ projectsRouter.post(
 
 // Project-scoped labels (kept on the projects router for the nested URL)
 const createLabelSchema = z.object({
-  name: z.string().min(1).max(50),
+  name: z.string().trim().min(1).max(50),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
 });
 
@@ -1306,20 +1338,25 @@ projectsRouter.get(
 
 projectsRouter.post(
   "/:id/labels",
-  requirePermission("project:write"),
+  requirePermission("task:write"),
   validate("params", idParamSchema),
   validate("body", createLabelSchema),
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
     const body = req.body as z.infer<typeof createLabelSchema>;
     await ensureProjectVisible(req.user!, id);
-    const label = await prisma.label.create({
-      data: {
-        projectId: id,
-        name: body.name,
-        color: body.color ?? "#3aae51",
-      },
-    });
-    res.status(201).json(label);
+    try {
+      const label = await prisma.label.create({
+        data: {
+          projectId: id,
+          name: body.name,
+          color: body.color ?? "#3aae51",
+        },
+      });
+      res.status(201).json(label);
+    } catch (e) {
+      if (isLabelNameConflict(e)) throw labelExistsError();
+      throw e;
+    }
   },
 );

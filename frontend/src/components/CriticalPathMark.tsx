@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 // Single spec for the manual Critical Path mark — reused by every surface
 // (Gantt tree, Kanban card, Timeline card, List row, task panel, task form).
-// See docs/plans/critical-path-mark.md §3.
+// See docs/archive/plans/critical-path-mark.md §3.
 export const CRITICAL_PATH_LABEL = "Critical Path";
 export const CRITICAL_PATH_HELPER_TEXT = "Slip here moves the end date.";
 export const CRITICAL_PATH_GLYPH = "conversion_path";
@@ -56,11 +56,11 @@ export function CriticalPathMark({
     <span className={cn("flex [&>span]:px-1.5", className)}>
       <Chip tone="violet">
         {/* Same unlayered-font-size cascade issue as the glyph variant
-            above — `!` forces the 13px size instead of Google Fonts'
+            above — `!` forces the 13px size (text-xs) instead of Google Fonts'
             24px default. */}
         <span
           aria-hidden="true"
-          className="material-symbols-outlined inline-flex items-center text-[13px]! leading-none"
+          className="material-symbols-outlined inline-flex items-center text-xs! leading-none"
         >
           {CRITICAL_PATH_GLYPH}
         </span>
