@@ -262,7 +262,7 @@ All guides: [docs/guides/](docs/guides/index.md).
 
 | Path | Contents |
 |---|---|
-| `backend/` | Express API (`src/routes`, `src/lib`, `src/http`), Prisma schema and migrations, seed, `scripts/` (`create-admin.ts`, `normalize-day-dates.ts`), Vitest suite in `test/` |
+| `backend/` | Express API (`src/routes`, `src/lib`, `src/http`), Prisma schema and migrations, seed, `scripts/` (`create-admin.ts`, `normalize-day-dates.ts`; dev-stack-only tools such as the demo seed and the e2e data cleanup in `scripts/dev/`, which the production image never contains), Vitest suite in `test/` |
 | `frontend/` | React SPA: pages and views, feature components, vendored drag engines, Base UI primitives, the CSS-first theme, and `nginx.conf` for the production image |
 | `e2e/` | Playwright suite — auth, Kanban and List drag, Gantt, date picker, Daily Review, Weekly Sync, search, PWA, smoke |
 | `ci/` | The production-shaped compose stack GitHub Actions builds and tests |
