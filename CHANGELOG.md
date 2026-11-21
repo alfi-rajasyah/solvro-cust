@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-21 — Faster e2e checks in CI
+
+- The Playwright suite in `.github/workflows/ci.yml` now runs in 10 shards instead of 4, and `--fully-parallel` makes Playwright split the shards by test instead of by spec file, so one long spec file no longer holds a whole shard back. Each shard still runs one worker against its own stack and database.
+- The backend and frontend images build at the same time in one `docker/bake-action` step instead of two sequential build steps, and the job no longer tears its stack down, because the runner is discarded at the end of the job.
+- A pull request run into `develop` took 4.8 minutes in a test run with changed backend and frontend source, against 9.6 minutes before. The repository is public, so the extra shards use no paid Actions minutes.
+
 ### Added — 2026-11-20 — Cleanup of e2e fixture rows in the dev database
 
 - `backend/scripts/dev/cleanup-e2e-data.ts` removes the rows local Playwright runs leave in a dev database: customers whose description starts with `e2e` and whose name carries a fixture stamp, projects linked to them or named with a fixture stamp, and `@solvro.test` users other than the e2e sign-in account (`ADMIN_EMAIL`). It is a dry run unless `E2E_CLEANUP_CONFIRM=delete` is set. It is a dev-stack tool only: it refuses to run unless `NODE_ENV` is `development`, and no production image layer contains `scripts/dev/`: `backend/Dockerfile` drops it in the build stage and copies `scripts/` into the runtime image from there, checked by a new `guardrail-dev-scripts-excluded` gate.
