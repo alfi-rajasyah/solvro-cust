@@ -19,6 +19,7 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 - The Playwright suite in `.github/workflows/ci.yml` now runs in 10 shards instead of 4, and `--fully-parallel` makes Playwright split the shards by test instead of by spec file, so one long spec file no longer holds a whole shard back. Each shard still runs one worker against its own stack and database.
 - The backend and frontend images build at the same time in one `docker/bake-action` step instead of two sequential build steps, and the job no longer tears its stack down, because the runner is discarded at the end of the job.
+- On a push to `main`, mobile e2e runs in 8 shards next to the 10 desktop shards, so the run stays within the 20 jobs GitHub starts at the same time. A test run took 4.5 minutes, against 9.2 to 11.1 minutes before.
 - A pull request run into `develop` took 4.8 minutes in a test run with changed backend and frontend source, against 9.6 minutes before. The repository is public, so the extra shards use no paid Actions minutes.
 
 ### Added — 2026-11-20 — Cleanup of e2e fixture rows in the dev database
