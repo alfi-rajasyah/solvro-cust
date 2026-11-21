@@ -98,12 +98,12 @@ test.describe("Comment mentions", () => {
     const panel = page.getByRole("dialog", { name: "Task details" });
     await expect(panel).toBeVisible();
 
-    const composer = panel.getByRole("combobox", { name: "Write a comment" });
+    const composer = panel.getByRole("textbox", { name: "Write a comment" });
     await composer.click();
     await composer.pressSequentially("hey @e2e-mn.b");
     const picker = panel.getByRole("listbox", { name: "Mention someone" });
     await expect(picker).toBeVisible();
-    await expect(composer).toHaveAttribute("aria-expanded", "true");
+    await expect(composer).toHaveAttribute("aria-controls", await picker.getAttribute("id") ?? "");
     // The query narrows the list to B.
     await expect(picker.getByRole("option")).toHaveCount(1);
     await expect(picker.getByRole("option", { name: new RegExp(b.username) })).toHaveAttribute(
@@ -157,7 +157,7 @@ test.describe("Comment mentions", () => {
     await loginViaUi(page, a.email, PASSWORD);
     await page.goto(`/projects/${projectId}/list?task=${taskId}`, { waitUntil: "networkidle" });
     const panel = page.getByRole("dialog", { name: "Task details" });
-    const composer = panel.getByRole("combobox", { name: "Write a comment" });
+    const composer = panel.getByRole("textbox", { name: "Write a comment" });
     await composer.click();
 
     // Escape dismisses the picker but leaves the task panel open.

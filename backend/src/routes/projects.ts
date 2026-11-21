@@ -456,6 +456,7 @@ projectsRouter.patch(
     // Changing the customer links (add, remove, or move the primary) is
     // owner-only too (docs/archive/plans/multi-customer-projects.md).
     let links: CustomerLinkInput[] | undefined;
+    let tamChanged = false;
     if (body.tamId !== undefined || body.customers !== undefined || body.customerId !== undefined) {
       const current = await prisma.project.findUniqueOrThrow({
         where: { id },
@@ -467,7 +468,8 @@ projectsRouter.patch(
       const linksChanged =
         links !== undefined &&
         sig(links) !== sig(current.customers.map((c) => ({ id: c.customerId, isPrimary: c.isPrimary })));
-      if ((body.tamId !== undefined && body.tamId !== current.tamId) || linksChanged) {
+      tamChanged = body.tamId !== undefined && body.tamId !== current.tamId;
+      if (tamChanged || linksChanged) {
         await ensureProjectOwnerAccess(req.user!, id);
       }
     }
@@ -496,11 +498,10 @@ projectsRouter.patch(
       // Status-list lock before any row lock (same order as task writes), so a
       // WIP-limit save cannot race an admin delete of a status it names.
       await lockStatusListShared(tx);
-      // Changing customer links can unassign tasks (customer-team access
-      // loss), which takes the task-order lock; take it before the project
-      // row lock below, the order baseline POST/DELETE use, so the two never
-      // invert.
-      if (links !== undefined) await lockProjectOrder(tx, "tasks", id);
+      // Changing customer links or the TAM can unassign tasks (access loss),
+      // which takes the task-order lock; take it before the project row lock
+      // below, the order baseline POST/DELETE use, so the two never invert.
+      if (links !== undefined || body.tamId !== undefined) await lockProjectOrder(tx, "tasks", id);
       await assertWipLimitKeys(tx, body.wipLimits);
       // Lock first so a concurrent save serialises and the diff is against the
       // row this write actually replaced.
@@ -537,6 +538,17 @@ projectsRouter.patch(
             actorId: req.user!.sub,
           });
         }
+      }
+      // The old TAM loses the seat; their tasks here are unassigned unless
+      // another path (member, owned or team customer, view-all) keeps access.
+      // Runs after the link sync so a customer they own no longer counts.
+      if (result.tamId !== before.tam.id) {
+        await unassignWhereAccessLost(tx, {
+          userIds: [before.tam.id],
+          projectIds: [id],
+          actorId: req.user!.sub,
+          via: "tamChange",
+        });
       }
       const namesAfter = links === undefined ? namesBefore : await linkedCustomerNames(tx, id);
       // Name, status, customer and the TAM seat are logged (ids and usernames

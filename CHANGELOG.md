@@ -15,6 +15,92 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-20 — Cleanup of e2e fixture rows in the dev database
+
+- `backend/scripts/dev/cleanup-e2e-data.ts` removes the rows local Playwright runs leave in a dev database: customers whose description starts with `e2e` and whose name carries a fixture stamp, projects linked to them or named with a fixture stamp, and `@solvro.test` users other than the e2e sign-in account (`ADMIN_EMAIL`). It is a dry run unless `E2E_CLEANUP_CONFIRM=delete` is set. It is a dev-stack tool only: it refuses to run unless `NODE_ENV` is `development`, and no production image layer contains `scripts/dev/`: `backend/Dockerfile` drops it in the build stage and copies `scripts/` into the runtime image from there, checked by a new `guardrail-dev-scripts-excluded` gate.
+- The demo workspace seed moved to `backend/scripts/dev/seed-demo.ts`, so the database-wiping script no longer ships in the release image either; it now also refuses to run unless `NODE_ENV` is `development`. Run it with `docker compose exec -e DEMO_SEED_CONFIRM=wipe backend npx tsx scripts/dev/seed-demo.ts`. `.claude/scripts/gates.sh` runs it after its Playwright step against the default dev stack, so the demo data stays usable for manual QA.
+
+### Fixed — 2026-11-20 — Keyboard focus ring on tab links
+
+- The project tabs (Overview, List, Kanban and the rest) and the shared tab bar (`components/Tabs.tsx`) show a primary focus ring from the keyboard instead of the browser outline. The ring is drawn inside the tab because the scrolling tab bar would clip it outside, and `e2e/tests/axe.spec.ts` checks it.
+
+### Fixed — 2026-11-20 — Focus rings on toggles and forced-colours focus for borderless controls
+
+- The project context panel has its own accessible name ("Project context"), so screen readers no longer announce it as a second unnamed side region. The accessibility scan now checks the page with the panel open.
+- The project context toggle and the Filter button on the List, Kanban, Gantt and Timeline views show the standard keyboard focus ring; three of them had only the browser outline before. While a toggle is on, its border is already primary, so the focus ring is solid with a 2px gap and stays visible (`toggleFocus` in `frontend/src/lib/utils.ts`; rule added to `docs/DESIGN.md`).
+- Borderless links and icon buttons across the app (42 controls) keep a visible keyboard focus indicator in forced-colours (high-contrast) mode. A new design check in `.claude/scripts/gates.sh` (`design-outline-none`) stops the old form returning.
+
+### Changed — 2026-11-20 — Test and tooling fixes
+
+- The Playwright auth and smoke specs pass on a stack with Google sign-in configured as well as without it: they read the sign-in config and skip the case that does not apply, and the smoke console-error check ignores only Google Identity Services origin messages. The e2e login helper retries brief network and 5xx failures (never a 4xx), and the UI login opens the collapsed admin sign-in form.
+- The Daily Review spec creates and deletes its own customer and project instead of leaving changed rows behind. Two backend tests (cross-project task ordering, and `epicId` on the global task list) filter by their own TAM instead of depending on the global 200-row task window.
+- New end-to-end checks: the Gantt color-by choice survives a reload, Login and the sidebar stay dark under the light theme, sections and subtasks reorder by drag, and both connectors of a milestone with an incoming and an outgoing dependency draw finite paths with no console error.
+- The simultaneous-assignment tests for task activity and notifications send 8 concurrent requests, so they fail reliably if the task row lock is removed.
+- The backend typecheck covers `prisma/` (the seed script, whose role import now uses its `.js` extension), and the frontend typecheck covers `vitest.config.ts`.
+- `.claude/scripts/gates.sh` also runs every e2e spec added or changed in a diff, including diffs that touch no frontend code, and lists the specs it ran on a pass as well as a failure. It also guards the vendored autocomplete patch count and no longer drops untracked paths that contain spaces.
+- The frontend version test skips its VERSION-file comparison when that file is not mounted (the dev container) and still runs it in CI.
+- The command palette's search-input styling override is now a named constant with a test guarding it, and the vendored `reui/autocomplete.tsx` header records its patch-marker count. A stale `index.css` comment about the violet chip colour is corrected.
+
+### Fixed — 2026-11-20 — Keyboard focus treatment and primary-tint contrast
+
+- Bordered form controls across the app (project, task, risk and customer forms, the task and epic panels, date fields, the iTop and services screens, Admin) now share one focus treatment: a primary border and ring, plus a transparent outline so a focus indicator still shows in forced-colours (high-contrast) mode. It replaces an older variant that stacked two rings and showed no indicator in forced colours. A new design check in `.claude/scripts/gates.sh` (`design-focus-border`) stops the old form coming back.
+- Selected and hovered controls on a primary tint now use the darker tint text, so they meet 4.5:1 in both themes: the active Filter button on the List and Kanban, the project context toggle, the Gantt and Timeline toggles, the Task statuses add button, the Admin domain-chip remove button, the primary light badge (`reui/badge.tsx`) and the Gantt today header (`reui/gantt/gantt-view.tsx`).
+- The accessibility tests (`e2e/tests/axe.spec.ts`) now scan the List and Kanban with the Filter active, and check that the selected Filter and project context toggles use the tint text.
+
+### Fixed — 2026-11-20 — Polish fixes: Portfolio Today marker, loaders, comment box, maskable icon
+
+- The Portfolio Today marker is a two-tone line (inverse-surface core, surface edge), shared by the desktop, phone and legend views, so it clears 3:1 over active and overdue project bars.
+- Project Overview's Top open risks and Notes panels load through the shared skeleton, and the Risks table's Status cell uses the same select as its sibling cells.
+- Admin's "Needs role" chip is sentence case instead of uppercase.
+- The task comment box is an auto-growing textarea. On desktop Enter sends and Shift+Enter adds a new line; on a phone Enter adds a line and only the Send button sends. The Enter that confirms an IME conversion no longer sends. @mentions work as before, and the mention picker is announced to screen readers with the number of people found and the arrow-key hint.
+- The PWA manifest now lists a 192px maskable icon next to the 512px one, so low-density Android launchers no longer downscale the large one.
+
+### Fixed — 2026-11-20 — Page landmarks and heading order pass the accessibility scan
+
+- The sidebar navigation and tab strips now have distinct accessible names ("Main", "Sections"), and the mobile install banner is a named region, so every page's content sits in a landmark and no landmark name repeats.
+- Page headings no longer skip a level: card, row, column and panel titles under a page's h1 are now h2 (same look). Affects Projects, Overview, Customers, Project Overview and its Recent activity, the Kanban columns, the List sections, the task panel's Comments heading, the customer Tickets board columns and the Outline API and webhook cards.
+- Dialog, drawer and notifications-popover headers and footers no longer register as extra page banner or footer landmarks (`Modal.tsx`, `Drawer.tsx`, `NotificationBell.tsx`; same look).
+- The accessibility test now enforces the region, landmark-unique and heading-order rules, and also scans an open task panel (from the Kanban and the Gantt tab), the share dialog and the customer Tickets board.
+
+### Fixed — 2026-11-20 — Task panel title editor and filter popover
+
+- The task panel's title editor now behaves like the description editor: Escape cancels the edit and keeps the panel open, the draft saves once on Enter or blur, focus returns to the title after Enter or Escape, and the title button shows a focus ring (`TaskPanel.tsx`).
+- An epic or label that no longer exists is dropped from the task filter in the URL once the project's epics and labels have loaded, instead of leaving List, Kanban, Gantt and Timeline empty behind a hidden filter (`useTaskFilters.ts`).
+- The task filter popover now uses the Base-UI popover. Focus is trapped inside it while open, Escape or an outside click closes it and returns focus to the Filter button, a Done button closes it, the Done and Clear filters buttons show a full-contrast focus ring, and at 375px it stays inside the viewport (`TaskFilterPopover.tsx`, `ui/popover.tsx`).
+
+### Fixed — 2026-11-20 — Gantt connect-drag Escape, narrow tree pane, milestone arrows
+
+- Pressing Escape during a Gantt dependency-connect drag now cancels only the drag and no longer also closes the task panel.
+- The Gantt name column now follows the tree pane's real width, both on containers narrower than about 699px and live while dragging the splitter, so the Dates, Status and color columns no longer clip or snap back on release.
+- Dependency arrows into a milestone now end at the diamond's left point instead of the edge of its day box, and arrows out of a milestone leave from the end of its bar, so no line crosses the diamond or its title.
+- The Gantt legend no longer sorts sections twice, and the Excel export revokes its download URL on a later task so the browser can start the download first.
+
+### Fixed — 2026-11-20 — Inactive users in pickers, service-save refetches, project tab preload
+
+- Assignee and epic-owner pickers (task panel, subtasks, new-task form, List row, epic panel) share one rule: inactive users are hidden, and the current inactive assignee or owner stays selectable, labelled "(inactive)" so the field does not go blank (`lib/assignableUsers.ts`).
+- Saving a project's or a customer's services now refetches only that project's or customer's detail, instead of every project and customer query.
+- The active project tab's code now starts loading while the project data is still being fetched, and when a tab link is hovered or focused, so tabs no longer wait for the project fetch before loading.
+
+### Fixed — 2026-11-20 — Tasks of a replaced project TAM are unassigned
+
+- Changing a project's TAM (`PATCH /projects/:id`) now unassigns the previous TAM's tasks in that project when the change leaves them without access. They keep their tasks if they still have access another way: as a project member, as owner of a linked customer, as a customer team member, or with view-all access. The unassignment is recorded in the project's activity feed, worded as a TAM change (for example "unassigned 2 of X's tasks after the TAM change").
+
+### Fixed — 2026-11-20 — A slow admin status save no longer fails task saves with a 500
+
+- A task save that sets a status now waits at most 2.5 s for the status-list lock (`backend/src/lib/taskStatuses.ts`) while an admin status save holds it. After that it answers the retryable 409 `concurrent_update` instead of a 500. Bulk edit and section duplicate, which run longer, wait up to 10 s. Prisma's "transaction expired" and "could not start in time" errors (P2028) are also mapped to 409 `concurrent_update` in `backend/src/http/errors.ts`; other P2028 errors stay a 500, because the write may already have been saved.
+
+### Fixed — 2026-11-20 — Backend hardening: CORS header, secret tags, iTop webhook and sync retries, `solvro config`
+
+- API responses now expose the `X-Total-Count` header to cross-origin callers (`backend/src/app.ts`).
+- Stored integration secrets are refused when their authentication tag is not exactly 16 bytes; secrets saved earlier still open (`backend/src/lib/secretBox.ts`).
+- The iTop webhook's pre-authentication rate limit is now counted per client address, so one noisy caller can no longer block genuine iTop notifications (`backend/src/routes/webhook.ts`).
+- Pressing Refresh repeatedly while an iTop sync is running no longer restarts the 30-minute retry window; a queued full sync now gives up at one fixed deadline, and an incremental iTop webhook nudge no longer cancels a pending full-sync retry (`backend/src/lib/itop/scheduler.ts`).
+- `solvro config` can now set and unset `ITOP_ALLOW_PRIVATE_HOSTS` and `ITOP_SYNC_DISABLED` (accepting `true` or `false`) without editing `.env` by hand (`setup.sh`, `INSTALL.md`).
+
+### Changed — 2026-11-20 — Demo seed covers story points, customer teams and workload
+
+- `backend/scripts/seed-demo.ts` now gives most top-level demo tasks a story points estimate (every fourth is left unestimated), adds two customer teams (rizky.pratama on Kopi Senja, budi.santoso on Klinik Sehat Bersama), and creates a `TEAM_LEAD` role (the TAM permissions plus `workload:team` and `customer:team-all`) held by maya.putri, so the demo workspace shows the Workload tab's team view and customer team access.
+
 ### Added — 2026-11-20 — Customer team
 
 - Each customer now has a team. A team member can open every project linked to the customer, including projects linked later, with the same access as a project member, and can edit the customer itself. They are not an owner: they cannot delete the customer or its projects, or change a customer's owner, a project's TAM or a project's customers. Assigning a task to a team member does not add them as a project member, and removing someone from the team ends their access on their next request. Team members are included in Daily Review and in notifications. A customer with no projects is visible to its team. Removing someone from a customer's team, unlinking a project from the customer, or deleting the customer also unassigns that person's tasks in projects they can no longer open (any other access they still have keeps them).

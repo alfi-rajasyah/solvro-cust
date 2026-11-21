@@ -4,8 +4,12 @@
 // `scroll-area` registryDependency 401s against the @reui registry and falls back to
 // an unwanted upstream dependency this repo's guardrails forbid reintroducing (see
 // CLAUDE.md; details in the Task 3 report). Content below is the registry item's file
-// content verbatim except for a handful of marked hand-edits (missing React import,
-// icon import swap, a DOM-prop-leak fix — search this file for the marker comment).
+// content verbatim except for marked hand-edits (missing React import, icon import
+// swap, a DOM-prop-leak fix, the focus-style swap, two icon call sites).
+// Marker count: grep -c 'SOLVRO PATCH' reports 7 (6 patch markers below plus this
+// line); gates.sh EXPECTED_AUTOCOMPLETE_PATCHES guards that number.
+// No upstream registry hash is recorded: the registry serves no content hash or
+// version for this item, and the Retrieved date above is the only provenance.
 "use client"
 
 // SOLVRO PATCH (2026-07-27): registry source omits this import; `React.ComponentProps<...>`

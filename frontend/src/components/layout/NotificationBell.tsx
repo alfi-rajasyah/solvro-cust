@@ -13,9 +13,9 @@ import {
 } from "@/lib/queries";
 
 const FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+  "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary";
 const FOCUS_RING_BORDERED =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
 
 /**
  * Top-bar bell (docs/archive/plans/collaboration-and-sharing.md, C5b): an unread
@@ -83,7 +83,7 @@ function NotificationList({
 
   return (
     <div className="flex max-h-[min(32rem,calc(100vh-5rem))] flex-col">
-      <header className="flex items-center justify-between gap-2 border-b border-outline-variant px-3 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-outline-variant px-3 py-2">
         <h2 className="text-label-caps uppercase text-on-surface-variant">Notifications</h2>
         <button
           type="button"
@@ -93,7 +93,7 @@ function NotificationList({
         >
           Mark all as read
         </button>
-      </header>
+      </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {isLoading ? (

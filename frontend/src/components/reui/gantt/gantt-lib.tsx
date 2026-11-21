@@ -551,7 +551,22 @@ function resolveOffDay(
   return resolved.isOffDay?.(day) ?? false
 }
 
+// SOLVRO PATCH (ISS-096/ISS-098): the name column follows the pane the engine
+// actually renders. `shrink` is how far the rendered pane sits below the width
+// the consumer sized `nameColumnWidth` for (container clamp, live splitter
+// drag); it reaches the cells through the --gantt-tree-shrink custom property
+// so a drag never re-renders rows.
+function treeShrinkPx(configuredWidth: number, renderedWidth: number): number {
+  return configuredWidth - renderedWidth
+}
+
+function nameColumnWidthCss(nameColumnWidth: number, minNameWidth: number): string {
+  return `max(${minNameWidth}px, calc(${nameColumnWidth}px - var(--gantt-tree-shrink, 0px)))`
+}
+
 export {
+  nameColumnWidthCss, // SOLVRO PATCH (ISS-096/098)
+  treeShrinkPx, // SOLVRO PATCH (ISS-096/098)
   buildEventIndex,
   defaultEventOrder,
   eventsOverlap,

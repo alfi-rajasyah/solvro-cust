@@ -260,7 +260,7 @@ function OverviewBody({ data, filters }: { data: OverviewResponse; filters: Over
         <div className={`min-w-0 rounded-sm border border-outline-variant bg-surface-container-lowest p-5 ${canReadNotes ? "lg:col-span-2" : "lg:col-span-3"}`}>
           <header className="mb-3 flex items-center justify-between">
             <div>
-              <h3 className="font-display text-sm font-bold text-on-surface">Projects needing attention</h3>
+              <h2 className="font-display text-sm font-bold text-on-surface">Projects needing attention</h2>
               {projectsHint && <p className="text-xs text-on-surface-variant">{projectsHint.replace(/^on /, "")}</p>}
             </div>
             <Link to="/projects" className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center text-meta font-semibold text-primary hover:underline [@media(pointer:coarse)]:min-h-11">
@@ -329,7 +329,7 @@ function OverviewBody({ data, filters }: { data: OverviewResponse; filters: Over
         {canReadNotes && (
           <div className="min-w-0 rounded-sm border border-outline-variant bg-surface-container-lowest p-5">
             <header className="mb-3 flex items-center justify-between">
-              <h3 className="font-display text-sm font-bold text-on-surface">Recent notes</h3>
+              <h2 className="font-display text-sm font-bold text-on-surface">Recent notes</h2>
               <Link to="/daily-review" className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center text-meta font-semibold text-primary hover:underline [@media(pointer:coarse)]:min-h-11">
                 Daily Review
               </Link>
@@ -342,7 +342,7 @@ function OverviewBody({ data, filters }: { data: OverviewResponse; filters: Over
       {/* Full-width portfolio timeline */}
       <section className="space-y-3">
         <header>
-          <h3 className="font-display text-sm font-bold text-on-surface">Portfolio timeline</h3>
+          <h2 className="font-display text-sm font-bold text-on-surface">Portfolio timeline</h2>
           <p className="text-xs text-on-surface-variant">
             {timelineHint ?? "Where each of your projects sits across the year"}
           </p>

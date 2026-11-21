@@ -2,16 +2,20 @@
 // four customers, six projects (one per status), sections, epics, labels,
 // tasks with subtasks and dependencies, risks, daily notes, operations
 // notes, weekly updates, project members, and an activity log with
-// notifications derived from the project data. Dates are relative to the day
+// notifications derived from the project data, story points on most top-level
+// tasks, two customer teams, and a TEAM_LEAD role (TAM plus workload:team and
+// customer:team-all, given to maya.putri). Dates are relative to the day
 // the script runs, so the Gantt, overdue flags, and Daily Review always look
 // current.
 //
 // DESTRUCTIVE — dev/demo databases only. Keeps roles, the auth_config and
 // itop_config singletons (settings preserved), and the migration history;
 // everything else, users included, is truncated. Refuses to run unless
-// DEMO_SEED_CONFIRM=wipe is set and NODE_ENV is not "production".
+// DEMO_SEED_CONFIRM=wipe is set and NODE_ENV is exactly "development" (only the
+// dev compose service sets it). No production image layer holds scripts/dev/
+// (backend/Dockerfile drops it in the build stage; gates.sh checks that).
 //
-//   docker compose exec -e DEMO_SEED_CONFIRM=wipe backend npx tsx scripts/seed-demo.ts
+//   docker compose exec -e DEMO_SEED_CONFIRM=wipe backend npx tsx scripts/dev/seed-demo.ts
 //
 // Every demo account uses the password "password123". iTop tickets and
 // time entries are not seeded — they only come from a real iTop sync.
@@ -50,6 +54,13 @@ function at(offset: number, hour: number): Date {
 /** The "yyyy-MM-dd" calendar day `offset` days from today — how the activity log stores dates. */
 function dayString(offset: number): string {
   return day(offset).toISOString().slice(0, 10);
+}
+
+/** Story points for the top-level task at `index`: a Fibonacci-ish size, with every fourth task left unestimated. */
+function storyPointsFor(title: string, index: number): number | null {
+  if (index % 4 === 3) return null;
+  const scale = [1, 2, 3, 5, 8];
+  return scale[(title.length + index) % scale.length];
 }
 
 /** Offset (in days) of the ISO Monday `weeksAgo` weeks before this week's. */
@@ -144,7 +155,7 @@ interface ProjectSpec {
 
 const USERS: Record<UserKey, { username: string; email: string; role: string }> = {
   admin: { username: "admin", email: "admin@solvro-cust.com", role: "ADMIN" },
-  maya: { username: "maya.putri", email: "maya.putri@solvro-cust.com", role: "TAM" },
+  maya: { username: "maya.putri", email: "maya.putri@solvro-cust.com", role: "TEAM_LEAD" },
   rizky: { username: "rizky.pratama", email: "rizky.pratama@solvro-cust.com", role: "TAM" },
   dewi: { username: "dewi.lestari", email: "dewi.lestari@solvro-cust.com", role: "TAM" },
   agus: { username: "agus.setiawan", email: "agus.setiawan@solvro-cust.com", role: "TAM" },
@@ -898,8 +909,10 @@ async function main() {
   if (process.env.DEMO_SEED_CONFIRM !== "wipe") {
     throw new Error("Refusing to wipe the database: set DEMO_SEED_CONFIRM=wipe to confirm.");
   }
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("Refusing to run with NODE_ENV=production.");
+  if (process.env.NODE_ENV !== "development") {
+    throw new Error(
+      `Refusing to wipe the database: NODE_ENV is "${process.env.NODE_ENV ?? ""}", not "development". This script is for the dev stack only.`,
+    );
   }
 
   const roles = new Map((await prisma.role.findMany()).map((r) => [r.roleName, r.id]));
@@ -928,6 +941,16 @@ async function main() {
 
   // Users. The e2e smoke pre-flight logs in as the QA fixture admin, so it
   // is recreated alongside the demo accounts.
+  // A custom role that shows the workload and customer-team permissions:
+  // TAM's permissions plus team workload and managing every customer team.
+  const tamPermissions = (await prisma.role.findUnique({ where: { roleName: "TAM" } }))!.permissions as string[];
+  const teamLead = await prisma.role.upsert({
+    where: { roleName: "TEAM_LEAD" },
+    update: {},
+    create: { roleName: "TEAM_LEAD", permissions: [...tamPermissions, "workload:team", "customer:team-all"] },
+  });
+  roles.set("TEAM_LEAD", teamLead.id);
+
   const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
   const users = {} as Record<UserKey, number>;
   for (const [key, u] of Object.entries(USERS) as Array<[UserKey, (typeof USERS)[UserKey]]>) {
@@ -965,6 +988,18 @@ async function main() {
       },
     });
     customers.set(c.name, row.id);
+  }
+
+  // Customer teams: access to every project of the customer without being a
+  // project member. rizky helps on Kopi Senja (owned by maya); budi, a
+  // stakeholder, follows Klinik Sehat Bersama (owned by dewi).
+  for (const [customer, member, addedBy] of [
+    ["Kopi Senja", "rizky", "maya"],
+    ["Klinik Sehat Bersama", "budi", "dewi"],
+  ] as Array<[string, UserKey, UserKey]>) {
+    await prisma.customerTeamMember.create({
+      data: { customerId: customers.get(customer)!, userId: users[member], addedById: users[addedBy], createdAt: at(-10, 9) },
+    });
   }
 
   // Projects with their sections, epics, labels, tasks, and dependencies.
@@ -1036,6 +1071,7 @@ async function main() {
           dueDate,
           isMilestone: t.milestone ?? false,
           isCriticalPath: t.critical ?? false,
+          storyPoints: storyPointsFor(t.title, i),
           baselineStartDate: hasBaseline && t.start !== undefined ? day(t.start - slip) : null,
           baselineDueDate: hasBaseline && t.due !== undefined ? day(t.due - slip) : null,
           assignedToId: t.assignee ? users[t.assignee] : null,

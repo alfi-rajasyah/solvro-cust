@@ -13,7 +13,7 @@ import { useUpdateOutlineAdminSettings, type OutlineAdminSettings } from "@/lib/
 export const DISCONNECT_WARNING = "Changing the address or client disconnects every user.";
 
 const INPUT =
-  "w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
+  "w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
 const LABEL = "mb-1 block font-display text-label-caps uppercase text-on-surface-variant";
 
 export function OutlineApiCard({ settings }: { settings: OutlineAdminSettings }) {
@@ -75,7 +75,7 @@ export function OutlineApiCard({ settings }: { settings: OutlineAdminSettings })
       className="space-y-4 rounded-sm border border-outline-variant bg-surface-container-lowest p-4"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="font-display text-sm font-semibold text-on-surface">API access (OAuth app)</h3>
+        <h2 className="font-display text-sm font-semibold text-on-surface">API access (OAuth app)</h2>
         <Chip tone={ready ? "emerald" : "amber"}>{ready ? "Ready" : "Setup incomplete"}</Chip>
       </div>
 

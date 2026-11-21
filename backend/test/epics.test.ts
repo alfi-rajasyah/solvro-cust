@@ -445,7 +445,13 @@ describe("epicId validation on task create/update", () => {
     const found = (projectTasksRes.body as TaskRow[]).find((t) => t.id === task.id)!;
     expect(found.epicId).toBe(epic.id);
 
-    const crossProjectRes = await request(app).get("/tasks").set("Authorization", `Bearer ${token}`);
+    // Scope to this project's TAM: the global list is capped at 200 rows and
+    // rows left behind by earlier test files can push this task out of it.
+    const { tamId } = await prisma.project.findUniqueOrThrow({ where: { id: projectId }, select: { tamId: true } });
+    const crossProjectRes = await request(app)
+      .get("/tasks")
+      .query({ tamId })
+      .set("Authorization", `Bearer ${token}`);
     expect(crossProjectRes.status).toBe(200);
     const foundGlobal = (crossProjectRes.body as TaskRow[]).find((t) => t.id === task.id)!;
     expect(foundGlobal.epicId).toBe(epic.id);

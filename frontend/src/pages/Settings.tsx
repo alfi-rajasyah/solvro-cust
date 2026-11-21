@@ -235,7 +235,7 @@ export function Settings() {
 type SettingsTab = "account" | "appearance" | "integrations" | "catalogue";
 
 const INPUT_CLASS =
-  "w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
+  "w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
 const PRIMARY_BUTTON_CLASS =
   "rounded-sm bg-primary px-4 py-1.5 font-display text-xs font-semibold text-on-primary hover:bg-primary/90 disabled:opacity-60 [@media(pointer:coarse)]:min-h-11";
 
@@ -476,7 +476,7 @@ function ThemeRow() {
               aria-checked={active}
               onClick={() => setChoice(opt.key)}
               className={[
-                "flex items-center gap-3 rounded-sm border p-2 text-left transition-colors focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+                "flex items-center gap-3 rounded-sm border p-2 text-left transition-colors focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
                 active
                   ? "border-primary bg-primary/5"
                   : "border-outline-variant bg-surface-container-lowest hover:border-primary/40",

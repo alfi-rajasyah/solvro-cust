@@ -51,8 +51,13 @@ if [ -n "${GATES_DIFF_OVERRIDE:-}" ]; then
 else
   DIFF_FILES="$( { git diff --name-only "$BASE"...HEAD 2>/dev/null; \
                    git diff --name-only HEAD 2>/dev/null; \
-                   git status --porcelain | awk '{print $NF}'; } | sort -u | sed '/^$/d')"
+                   git ls-files --others --exclude-standard; } | sort -u | sed '/^$/d')"
 fi
+# e2e specs added or modified in the diff (still on disk), as e2e/-relative paths.
+CHANGED_SPECS=()
+while IFS= read -r f; do
+  [ -n "$f" ] && [ -f "$f" ] && [ "$f" != "e2e/tests/smoke.spec.ts" ] && CHANGED_SPECS+=("${f#e2e/}")
+done < <(echo "$DIFF_FILES" | grep -E '^e2e/tests/[^/]+\.spec\.ts$')
 
 FAILS=0
 pass() { echo "PASS $1"; }
@@ -60,7 +65,11 @@ fail() { echo "FAIL $1 — $2"; FAILS=$((FAILS+1)); }
 run_gate() { # run_gate <name> <cmd...>: PASS/FAIL by exit code, show output on failure
   local name="$1"; shift
   local out
-  if out="$("$@" 2>&1)"; then pass "$name"; else
+  if out="$("$@" 2>&1)"; then
+    pass "$name"
+    # smoke_gate prints its spec list; show it on PASS too so a green run says what ran
+    echo "$out" | grep '^playwright specs:' | sed 's/^/    | /'
+  else
     fail "$name" "command failed"
     echo "$out" | tail -n 25 | sed 's/^/    | /'
   fi
@@ -95,7 +104,19 @@ smoke_gate() {
     echo "  docker compose exec -e ADMIN_EMAIL=qa@solvro.test -e ADMIN_PASSWORD='QaTest1234!' backend npx tsx scripts/create-admin.ts"
     return 1
   fi
-  (cd e2e && BASE_URL="${BASE_URL:-http://localhost:5173}" npx playwright test tests/smoke.spec.ts)
+  # Smoke plus any e2e spec added or modified in the diff (CHANGED_SPECS, derived at the top).
+  local specs=("tests/smoke.spec.ts" "${CHANGED_SPECS[@]}")
+  echo "playwright specs: ${specs[*]}"
+  local rc=0
+  (cd e2e && BASE_URL="${BASE_URL:-http://localhost:5173}" npx playwright test "${specs[@]}") || rc=$?
+  # The specs write fixture rows into the dev database behind :5173; remove
+  # them so the demo data stays usable for manual QA (backend/scripts/dev/cleanup-e2e-data.ts).
+  # Only for the default dev stack: another BASE_URL means another database.
+  if [ -z "${BASE_URL:-}" ] || [ "${BASE_URL}" = "http://localhost:5173" ]; then
+    docker compose exec -T -e E2E_CLEANUP_CONFIRM=delete -e E2E_ADMIN_EMAIL="${ADMIN_EMAIL:-qa@solvro.test}" backend npx tsx scripts/dev/cleanup-e2e-data.ts \
+      || echo "e2e data cleanup failed (the gate result is unchanged)"
+  fi
+  return "$rc"
 }
 
 if [ "$F_BACK" -eq 1 ]; then
@@ -112,8 +133,14 @@ if [ "$F_FRONT" -eq 1 ]; then
   # to prove; typecheck and both vitest runs above still cover it.
   FRONT_NON_TEST="$(echo "$DIFF_FILES" | grep -E '^frontend/' | grep -vE '\.test\.tsx?$' | sed '/^$/d')"
   if [ "$SKIP_SMOKE" -eq 1 ]; then echo "SKIP playwright-smoke (--skip-smoke)"
-  elif touches '^frontend/' && [ -z "$FRONT_NON_TEST" ]; then echo "SKIP playwright-smoke (test-only frontend diff)"
+  elif touches '^frontend/' && [ -z "$FRONT_NON_TEST" ] && [ "${#CHANGED_SPECS[@]}" -eq 0 ]; then echo "SKIP playwright-smoke (test-only frontend diff)"
   else run_gate playwright-smoke smoke_gate; fi
+fi
+# Changed e2e specs run whatever the area flags say (e2e-only or backend+e2e diffs).
+if [ "$F_FRONT" -eq 0 ] && [ "$SKIP_SMOKE" -eq 0 ] && [ "${#CHANGED_SPECS[@]}" -gt 0 ]; then
+  run_gate "playwright-specs(${#CHANGED_SPECS[@]} changed)" smoke_gate
+elif [ "$F_FRONT" -eq 0 ] && [ "$SKIP_SMOKE" -eq 1 ] && [ "${#CHANGED_SPECS[@]}" -gt 0 ]; then
+  echo "SKIP playwright-specs (--skip-smoke; ${#CHANGED_SPECS[@]} changed spec(s) not run)"
 fi
 
 # ---------- changelog presence (always) ----------
@@ -227,12 +254,32 @@ if [ -d frontend/src/components/reui/data-grid ]; then
   else fail guardrail-datagrid-vendor "SOLVRO PATCH count $N != recorded $EXPECTED_DATAGRID_PATCHES"; fi
 else fail guardrail-datagrid-vendor "frontend/src/components/reui/data-grid/ missing"; fi
 
-EXPECTED_BADGE_PATCHES=5
+# backend/scripts/dev/ holds dev-stack-only tools (e2e data cleanup). The build
+# stage deletes it and the runtime stage copies scripts/ from the build stage
+# only, so no runtime layer ever holds it.
+DEV_SCRIPTS_CHECK="$(awk '
+  /^FROM /{stage=$NF}
+  stage=="build" && $0=="RUN rm -rf scripts/dev"{rm=1}
+  stage=="runtime" && $0=="COPY --from=build /app/scripts ./scripts"{fromb=1}
+  stage=="runtime" && /^COPY[[:space:]]+scripts/{direct=1}
+  END{print (rm && fromb && !direct) ? "ok" : "bad"}' backend/Dockerfile)"
+if [ "$DEV_SCRIPTS_CHECK" = ok ]; then pass guardrail-dev-scripts-excluded
+else fail guardrail-dev-scripts-excluded "backend/Dockerfile must delete scripts/dev in the build stage and copy scripts/ into runtime only from build"; fi
+
+EXPECTED_BADGE_PATCHES=6
 if [ -f frontend/src/components/reui/badge.tsx ]; then
   N="$(grep -c 'SOLVRO PATCH' frontend/src/components/reui/badge.tsx)"
   if [ "$N" -eq "$EXPECTED_BADGE_PATCHES" ]; then pass guardrail-badge-vendor
   else fail guardrail-badge-vendor "SOLVRO PATCH count $N != recorded $EXPECTED_BADGE_PATCHES"; fi
 else fail guardrail-badge-vendor "frontend/src/components/reui/badge.tsx missing"; fi
+
+# Counts every match incl. the header line that states the count.
+EXPECTED_AUTOCOMPLETE_PATCHES=7
+if [ -f frontend/src/components/reui/autocomplete.tsx ]; then
+  N="$(grep -c 'SOLVRO PATCH' frontend/src/components/reui/autocomplete.tsx)"
+  if [ "$N" -eq "$EXPECTED_AUTOCOMPLETE_PATCHES" ]; then pass guardrail-autocomplete-vendor
+  else fail guardrail-autocomplete-vendor "SOLVRO PATCH count $N != recorded $EXPECTED_AUTOCOMPLETE_PATCHES"; fi
+else fail guardrail-autocomplete-vendor "frontend/src/components/reui/autocomplete.tsx missing"; fi
 
 # ---------- design guard checks (always) ----------
 # antislop guards (2026-11-12, docs/archive/plans/antislop-port.md). App code
@@ -257,6 +304,14 @@ design_check() { # design_check <gate> <reason> <hits>
 #    green is 2.86:1.
 design_check design-on-primary "text-white on bg-primary (use text-on-primary)" \
   "$(design_grep "bg-primary([^/-]|\$)[^\"'\`]*text-white|text-white[^\"'\`]*bg-primary([^/-]|\$)")"
+# 1b. The old focus form (border on :focus, not :focus-visible) is gone; the one
+#     treatment is in docs/DESIGN.md. Vendored ui/ and reui/ are excluded.
+design_check design-focus-border "focus:border-primary (use focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30)" \
+  "$(design_grep "focus:border-primary")"
+# 1c. A visible focus ring goes with outline-hidden, not outline-none: outline-none
+#     removes the outline that forced-colours mode would show in place of the ring.
+design_check design-outline-none "focus-visible:outline-none (use focus-visible:outline-hidden)" \
+  "$(design_grep "focus-visible:outline-none|(^|[\"' \`])outline-none[^\"'\`]*focus-visible:ring-")"
 # 2 and 3 read whole files (a tag or a comment can span lines), so they use
 # perl rather than the line grep above.
 design_perl() { # design_perl <perl -ne body run once per file, file in $_>

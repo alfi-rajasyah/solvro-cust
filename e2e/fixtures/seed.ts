@@ -74,12 +74,26 @@ export async function login(
   email = ADMIN_EMAIL,
   password = ADMIN_PASSWORD,
 ): Promise<{ token: string; userId: number }> {
-  const res = await fetch(`${base}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  const data = await json<{ token: string; user: { id: number } }>(res);
+  // A shared dev server can drop or 5xx a request under parallel load, so
+  // retry those with a short backoff. A 4xx (401 included) is a real answer
+  // and is never retried.
+  const attempts = 4;
+  let res: Response | undefined;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      res = await fetch(`${base}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      if (res.status < 500) break;
+      if (attempt === attempts) break;
+    } catch (err) {
+      if (attempt === attempts) throw err;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
+  }
+  const data = await json<{ token: string; user: { id: number } }>(res!);
   return { token: data.token, userId: data.user.id };
 }
 

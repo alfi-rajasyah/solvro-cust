@@ -38,6 +38,8 @@ import {
   toZoned,
   zonedStartOfDay,
   type GanttLaneMemo,
+  nameColumnWidthCss, // SOLVRO PATCH (ISS-096/098)
+  treeShrinkPx, // SOLVRO PATCH (ISS-096/098)
 } from "@/components/reui/gantt/gantt-lib"
 import type {
   GanttDateRange,
@@ -206,6 +208,7 @@ const DEFAULT_TREE_PANEL = {
   maxWidth: 640,
   resizable: true,
   nameColumnWidth: 208,
+  minNameColumnWidth: 0, // SOLVRO PATCH (ISS-096/098)
 }
 const DEFAULT_COLUMN_WIDTH = 96
 const DEFAULT_ZOOM_RANGE = { min: 0.5, max: 3 }
@@ -1066,6 +1069,11 @@ function GanttView({
       liveTreeWidthRef.current = liveWidth
       if (treePaneRef.current) {
         treePaneRef.current.style.width = `${liveWidth}px`
+        // SOLVRO PATCH (ISS-098): name column follows the pane live
+        treePaneRef.current.style.setProperty(
+          "--gantt-tree-shrink",
+          `${treeShrinkPx(configuredTreeWidth, liveWidth)}px`
+        )
       }
     }
     const finish = (ev?: PointerEvent) => {
@@ -1077,6 +1085,15 @@ function GanttView({
       document.body.style.cursor = ""
       document.body.style.userSelect = ""
       liveTreeWidthRef.current = null
+      // SOLVRO PATCH (ISS-098): React skips an unchanged style value, so put
+      // the committed shrink back by hand or a stale live value would stick
+      treePaneRef.current?.style.setProperty(
+        "--gantt-tree-shrink",
+        `${treeShrinkPx(
+          liveWidth !== startWidth ? clampTree(liveWidth) : configuredTreeWidth,
+          liveWidth
+        )}px`
+      )
       if (liveWidth !== startWidth) {
         setTreeWidth(liveWidth)
         viewConfigRef.current.treePanel?.onWidthChange?.(liveWidth)
@@ -1835,7 +1852,11 @@ function GanttView({
             <div
               className="flex h-full shrink-0 items-center"
               style={{
-                width: treeConfig.nameColumnWidth,
+                // SOLVRO PATCH (ISS-096/098): tracks the rendered pane width
+                width: nameColumnWidthCss(
+                  treeConfig.nameColumnWidth,
+                  treeConfig.minNameColumnWidth
+                ),
                 paddingInlineStart: namePaddingStart,
               }}
             >
@@ -1881,7 +1902,10 @@ function GanttView({
             heightRem={rowBars.get(row.resource.id)?.heightRem ?? minRowRem}
             bandRem={rowBars.get(row.resource.id)?.bandRem ?? minRowRem}
             columns={columns}
-            nameWidth={treeConfig.nameColumnWidth}
+            nameWidth={nameColumnWidthCss(
+              treeConfig.nameColumnWidth,
+              treeConfig.minNameColumnWidth
+            )}
             dimmed={reorder?.resourceId === row.resource.id}
             selected={selectedSet.has(row.resource.id)}
             onSelectedChange={row.isGroup ? undefined : toggleRowSelected}
@@ -2022,7 +2046,8 @@ function GanttView({
                 className={cn(
                   "flex min-w-0 items-center justify-center truncate px-1.5 text-center",
                   "text-muted-foreground",
-                  unit.isToday && "text-primary font-medium"
+                  // SOLVRO PATCH: text-primary-tint-text, not text-primary, for 4.5:1 on the bg-primary/10 today pill below
+                  unit.isToday && "text-primary-tint-text font-medium"
                 )}
                 style={{ flex: `${unit.weight} 0 0px` }}
               >
@@ -2190,7 +2215,16 @@ function GanttView({
           ref={treePaneRef}
           data-slot="gantt-tree-pane"
           className="relative h-full shrink-0"
-          style={{ width: liveTreeWidthRef.current ?? clampedTreeWidth }}
+          style={
+            {
+              width: liveTreeWidthRef.current ?? clampedTreeWidth,
+              // SOLVRO PATCH (ISS-096/098): see nameColumnWidthCss
+              "--gantt-tree-shrink": `${treeShrinkPx(
+                configuredTreeWidth,
+                liveTreeWidthRef.current ?? clampedTreeWidth
+              )}px`,
+            } as React.CSSProperties
+          }
         >
           {customScrollbars ? (
             // keyed by scale: Base UI measures overflow once per mount, and a
@@ -2587,7 +2621,7 @@ const GanttTreeRow = memo(function GanttTreeRow({
   heightRem: number
   bandRem: number
   columns: GanttColumn[]
-  nameWidth: number
+  nameWidth: string // SOLVRO PATCH: a CSS width, see nameColumnWidthCss
   dimmed: boolean
   selected: boolean
   onSelectedChange?: (id: string, checked: boolean) => void

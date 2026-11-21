@@ -238,10 +238,10 @@ const TREE_PANEL_MAX_WIDTH = 774;
 // wider in their trigger range since the fixed-column total grew from 156px
 // to 256px: below a (256 + 100 =) 356px pane the name column floors at its
 // min and the fixed columns clip again (a deliberate user narrowing, not
-// the default — was 256px pre-T2), and on narrow desktop viewports the
-// engine renders the pane narrower than `treeWidth` without reporting it
-// (clampContainer, gantt-view.tsx:977-987), so a wide persisted width can
-// still clip the columns there — docs/ISSUES.md ISS-096, ISS-097.
+// the default — was 256px pre-T2; docs/ISSUES.md ISS-097). Above that floor
+// the name column follows the pane the engine actually renders (container
+// clamp, live splitter drag) through the engine's --gantt-tree-shrink
+// variable, so the fixed columns stay in view.
 const TREE_DATES_COLUMN_WIDTH = 132;
 const TREE_COLOR_COLUMN_WIDTH = 24;
 // Height-style Status chip column. 100px comfortably fits the widest chip
@@ -470,10 +470,10 @@ export function SolvroGantt(props: SolvroGanttProps) {
   // (residuals in the constants block above), and every pixel of splitter
   // drag still goes to the name column 1:1, so dragging reveals more of a
   // truncated title without pushing the date range back out of view.
-  const nameColumnWidth = Math.max(
-    TREE_NAME_COLUMN_MIN_WIDTH,
-    treeWidth - TREE_FIXED_COLUMNS_WIDTH,
-  );
+  // Deliberately NOT floored here: the engine floors it with
+  // `minNameColumnWidth` against the rendered pane, so the effective width is
+  // always max(100, rendered pane - fixed columns), including mid-drag.
+  const nameColumnWidth = treeWidth - TREE_FIXED_COLUMNS_WIDTH;
   // Memoized: gantt.tsx:1623-1634 hands GanttViewConfigContext consumers the
   // PREVIOUS config object across renders unless a value actually changed
   // (shallowEqualRecord) — passing a fresh `treePanel` object literal every
@@ -485,6 +485,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
       minWidth: TREE_PANEL_MIN_WIDTH,
       maxWidth: TREE_PANEL_MAX_WIDTH,
       nameColumnWidth,
+      minNameColumnWidth: TREE_NAME_COLUMN_MIN_WIDTH,
       onWidthChange: handleTreeWidthChange,
     }),
     [initialTreeWidth, nameColumnWidth, handleTreeWidthChange],
@@ -1179,13 +1180,13 @@ export function SolvroGantt(props: SolvroGanttProps) {
             onClear={() => setFilters(clearPatch("epic"))}
             activeCount={filterCount}
             epics={epics}
-            layerClassName={{ backdrop: "z-40", panel: "z-50" }}
+            focusOffsetClass="focus-visible:ring-offset-surface-container-lowest"
             triggerClassName={(active) =>
               cn(
                 TOOLBAR_ITEM_HEIGHT,
-                "inline-flex items-center gap-1 rounded-md border px-2.5 font-display text-meta font-semibold transition-colors focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+                "inline-flex items-center gap-1 rounded-md border px-2.5 font-display text-meta font-semibold transition-colors",
                 active
-                  ? "border-primary bg-primary/10 text-primary"
+                  ? "border-primary bg-primary/10 text-primary-tint-text"
                   : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:text-on-surface",
               )
             }
@@ -1466,7 +1467,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
             onChange={(e) => setNewSectionName(e.target.value)}
             placeholder="Section name"
             maxLength={100}
-            className="w-64 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-xs focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="w-64 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-xs focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
           <button
             type="submit"

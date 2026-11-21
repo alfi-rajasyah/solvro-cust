@@ -45,6 +45,7 @@ import { TaskFormModal } from "@/components/TaskFormModal";
 import { RowTicketCell, type RowTicketContext } from "@/components/itop/RowTicketCell";
 import { useCanCreateItopTicket } from "@/components/itop/useCanCreateItopTicket";
 import { ApiError } from "@/lib/api";
+import { assignableUsers, assigneeOptionLabel } from "@/lib/assignableUsers";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { commitDraft, dayFromIso } from "@/lib/dateField";
 import { useDragActivityGuard } from "@/lib/dragActivity";
@@ -575,7 +576,7 @@ export function ProjectList() {
             [
               `${TOOLBAR_BOX} tap-target border font-semibold transition-colors`,
               active
-                ? "border-primary bg-primary/10 text-primary"
+                ? "border-primary bg-primary/10 text-primary-tint-text"
                 : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container",
             ].join(" ")
           }
@@ -729,7 +730,7 @@ export function ProjectList() {
               onChange={(e) => setNewSectionName(e.target.value)}
               placeholder="Section name"
               maxLength={100}
-              className="w-64 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-xs focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+              className="w-64 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-xs focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             />
             <button
               type="submit"
@@ -902,7 +903,7 @@ function SectionGroup({
               onChange={(e) => onRenameChange(e.target.value)}
               maxLength={100}
               placeholder={section ? section.name : "Name this section to promote it"}
-              className="w-64 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-0.5 text-sm font-semibold focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+              className="w-64 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-0.5 text-sm font-semibold focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             />
             <button
               type="submit"
@@ -915,14 +916,14 @@ function SectionGroup({
             </button>
           </form>
         ) : (
-          <h3
+          <h2
             className={[
               "font-display text-sm font-semibold",
               section ? "text-on-surface" : "italic text-on-surface-variant",
             ].join(" ")}
           >
             {section?.name ?? "No section"}
-          </h3>
+          </h2>
         )}
         <span className="rounded-full bg-surface-container-high px-1.5 py-0 font-mono text-meta text-on-surface-variant">
           {nodes.length}
@@ -940,7 +941,7 @@ function SectionGroup({
             <button
               type="button"
               onClick={() => onRename(section)}
-              className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
               title={section ? "Rename section" : "Promote into a real section"}
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[17px]">edit</span>
@@ -950,7 +951,7 @@ function SectionGroup({
                 type="button"
                 onClick={() => onDuplicate(section)}
                 disabled={duplicatingSectionId === section.id}
-                className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default disabled:opacity-50"
+                className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default disabled:opacity-50"
                 title="Duplicate section"
                 aria-label="Duplicate section"
               >
@@ -961,7 +962,7 @@ function SectionGroup({
               <button
                 type="button"
                 onClick={() => onDelete(section)}
-                className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-error-container hover:text-on-error-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="tap-target rounded-sm p-1 text-on-surface-variant hover:bg-error-container hover:text-on-error-container focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                 title="Delete section"
               >
                 <span aria-hidden="true" className="material-symbols-outlined text-[17px]">delete</span>
@@ -1454,7 +1455,7 @@ function AssigneeOptions({
   value,
   onPick,
 }: {
-  users: { id: number; username: string }[];
+  users: { id: number; username: string; active?: boolean }[];
   projectId: number;
   value: number | null;
   onPick: (id: number | null) => void;
@@ -1469,7 +1470,7 @@ function AssigneeOptions({
       >
         Unassigned
       </button>
-      {users.map((u) => (
+      {assignableUsers(users, value).map((u) => (
         <button
           key={u.id}
           type="button"
@@ -1479,7 +1480,7 @@ function AssigneeOptions({
             u.id === value ? "font-bold text-primary" : "text-on-surface",
           ].join(" ")}
         >
-          {u.username}
+          {assigneeOptionLabel(u)}
           {addsMember(u.id) && (
             <span className="text-meta font-normal text-on-surface-variant">
               {ASSIGN_ADDS_MEMBER_NOTICE}

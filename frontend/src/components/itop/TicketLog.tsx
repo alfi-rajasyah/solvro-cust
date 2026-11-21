@@ -12,7 +12,7 @@ type LogVisibility = "public" | "private";
 const LOG_MAX_LENGTH = 4000;
 
 const PILL_BASE =
-  "tap-target rounded-sm px-2.5 py-1 font-display text-meta font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2";
+  "tap-target rounded-sm px-2.5 py-1 font-display text-meta font-semibold transition-colors focus-visible:outline-hidden focus-visible:ring-2";
 
 function pillClass(active: boolean): string {
   return [
@@ -149,7 +149,7 @@ export function TicketLog({
             rows={2}
             maxLength={LOG_MAX_LENGTH}
             aria-label="New log entry"
-            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1.5 text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
           {remaining < 200 && (
             <p className="text-xs text-on-surface-variant">

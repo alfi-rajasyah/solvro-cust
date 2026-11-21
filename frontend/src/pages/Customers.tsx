@@ -224,8 +224,8 @@ function CustomersTable({
               {initialsOf(row.original.name)}
             </span>
             {/* Heading kept so the customer name stays a named landmark
-                (customer-visibility.spec.ts reads it as an h3). */}
-            <h3 className="min-w-0 truncate font-display text-sm font-semibold text-on-surface">
+                (customer-visibility.spec.ts reads it as an h2). */}
+            <h2 className="min-w-0 truncate font-display text-sm font-semibold text-on-surface">
               <Link
                 to={`/customers/${row.original.id}`}
                 onClick={(e) => e.stopPropagation()}
@@ -233,7 +233,7 @@ function CustomersTable({
               >
                 {row.original.name}
               </Link>
-            </h3>
+            </h2>
           </div>
         ),
         meta: { skeleton: <Skeleton className="h-3.5 w-32" /> },

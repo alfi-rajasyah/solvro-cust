@@ -612,7 +612,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
             [
               `${TOOLBAR_BOX} [@media(pointer:coarse)]:h-11 border font-semibold transition-colors`,
               active
-                ? "border-primary bg-primary/10 text-primary"
+                ? "border-primary bg-primary/10 text-primary-tint-text"
                 : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container",
             ].join(" ")
           }
@@ -627,7 +627,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
               onChange={(e) =>
                 setFilters({ assigneeId: e.target.value === "" ? null : Number(e.target.value) })
               }
-              className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <option value="">Everyone</option>
               {(users ?? []).map((u) => (
@@ -645,7 +645,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
               id={prioritySelectId}
               value={filters.priority ?? ""}
               onChange={(e) => setFilters({ priority: (e.target.value || null) as Priority | null })}
-              className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container px-2 py-1.5 text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <option value="">Any priority</option>
               {priorityOptions.map((o) => (
@@ -799,7 +799,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
                         aria-hidden="true"
                         className={`h-2 w-2 shrink-0 rounded-full ${STATUS_TONE_DOT_CLASS[def.color]}`}
                       />
-                      <h3 className="min-w-0 truncate text-sm font-bold text-on-surface">{def.name}</h3>
+                      <h2 className="min-w-0 truncate text-sm font-bold text-on-surface">{def.name}</h2>
                       <span
                         className={[
                           "rounded-full px-2 py-0.5 text-meta font-medium",

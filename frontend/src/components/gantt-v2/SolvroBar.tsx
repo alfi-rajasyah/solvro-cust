@@ -306,6 +306,7 @@ export function SolvroBar({ occurrence, segment, isSelected, canEdit }: SolvroBa
             Task 4 review finding). */}
         <span
           aria-hidden
+          data-milestone-diamond
           className={cn(
             "bg-primary inline-block size-2.5 shrink-0 rotate-45",
             // Critical Path mark (plan §3): an outline (not the wrapper's

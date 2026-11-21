@@ -51,6 +51,26 @@ describe("secretBox", () => {
     expect(() => open(tampered)).toThrow(SecretBoxError);
   });
 
+  it("throws SecretBoxError when the auth tag is truncated", () => {
+    const sealed = seal("do-not-touch");
+    const [version, iv, tag, ciphertext] = sealed.split(":");
+    const truncated = Buffer.from(tag, "base64").subarray(0, 8);
+    expect(() => open([version, iv, truncated.toString("base64"), ciphertext].join(":"))).toThrow(SecretBoxError);
+    expect(() => open([version, iv, "", ciphertext].join(":"))).toThrow(SecretBoxError);
+  });
+
+  it("throws SecretBoxError when the auth tag is longer than 16 bytes", () => {
+    const sealed = seal("do-not-touch");
+    const [version, iv, tag, ciphertext] = sealed.split(":");
+    const longer = Buffer.concat([Buffer.from(tag, "base64"), Buffer.from([0])]);
+    expect(() => open([version, iv, longer.toString("base64"), ciphertext].join(":"))).toThrow(SecretBoxError);
+  });
+
+  it("produces a 16-byte tag that opens", () => {
+    const [, , tag] = seal("tag-length").split(":");
+    expect(Buffer.from(tag, "base64")).toHaveLength(16);
+  });
+
   it("throws SecretBoxError when a different key is used", () => {
     // env.ts parses process.env once at import time into a static `env`
     // object, so seal()/open() always use the suite's fixed SECRETS_KEY —

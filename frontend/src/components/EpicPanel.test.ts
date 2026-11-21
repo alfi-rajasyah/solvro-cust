@@ -15,4 +15,16 @@ describe("splitEpicOwnerOptions", () => {
     expect(onProject.map((u) => u.id)).toEqual([1, 4]);
     expect(others.map((u) => u.id)).toEqual([2, 3]);
   });
+
+  it("hides inactive users, but keeps an inactive current owner", () => {
+    const people = [
+      { id: 1, active: true },
+      { id: 2, active: false },
+      { id: 3, active: false },
+    ];
+    const none = splitEpicOwnerOptions(people, new Set([1, 2]), null);
+    expect([...none.onProject, ...none.others].map((u) => u.id)).toEqual([1]);
+    const kept = splitEpicOwnerOptions(people, new Set([1]), 3);
+    expect(kept.onProject.map((u) => u.id)).toEqual([1, 3]);
+  });
 });

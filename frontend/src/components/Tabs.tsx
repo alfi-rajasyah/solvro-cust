@@ -9,9 +9,11 @@ interface TabsProps<K extends string> {
   items: ReadonlyArray<TabItem<K>>;
   active: K;
   onChange: (key: K) => void;
+  /** Names the landmark; a page with two navs needs distinct names. */
+  label?: string;
 }
 
-export function Tabs<K extends string>({ items, active, onChange }: TabsProps<K>) {
+export function Tabs<K extends string>({ items, active, onChange, label = "Sections" }: TabsProps<K>) {
   const navRef = useRef<HTMLElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
   // Centre the active tab inside the nav only; scrollIntoView would also
@@ -25,7 +27,7 @@ export function Tabs<K extends string>({ items, active, onChange }: TabsProps<K>
   return (
     // Scrolls sideways when the tabs outgrow the row (5 tabs at 375px); the
     // scrollbar is hidden, the active tab is brought into view below.
-    <nav ref={navRef} className="flex gap-1 overflow-x-auto whitespace-nowrap border-b border-outline-variant [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <nav ref={navRef} aria-label={label} className="flex gap-1 overflow-x-auto whitespace-nowrap border-b border-outline-variant [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {items.map((item) => {
         const isActive = item.key === active;
         return (
@@ -36,7 +38,7 @@ export function Tabs<K extends string>({ items, active, onChange }: TabsProps<K>
             aria-current={isActive ? "true" : undefined}
             onClick={() => onChange(item.key)}
             className={[
-              "[@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 -mb-px shrink-0 border-b-2 px-4 py-2 font-display text-sm font-semibold transition-colors",
+              "[@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 -mb-px shrink-0 rounded-t-sm border-b-2 px-4 py-2 font-display text-sm font-semibold transition-colors outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
               isActive
                 ? "border-primary text-primary"
                 : "border-transparent text-on-surface-variant hover:text-on-surface",

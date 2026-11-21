@@ -17,6 +17,14 @@ function PopoverTrigger({
   return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />
 }
 
+// SOLVRO PATCH: Close part. Base-UI only turns on the focus trap of a modal
+// popover (modal="trap-focus") when a Close is rendered inside the Popup.
+function PopoverClose({
+  ...props
+}: React.ComponentProps<typeof PopoverPrimitive.Close>) {
+  return <PopoverPrimitive.Close data-slot="popover-close" {...props} />
+}
+
 function PopoverContent({
   className,
   // SOLVRO PATCH: optional className passthrough for PopoverPrimitive.Positioner.
@@ -31,11 +39,13 @@ function PopoverContent({
   sideOffset = 4,
   side,
   alignOffset,
+  // SOLVRO PATCH: collisionPadding passthrough (TaskFilterPopover keeps a 16px gutter at 375px).
+  collisionPadding,
   ...props
 }: Omit<React.ComponentProps<typeof PopoverPrimitive.Popup>, "className"> &
   Pick<
     React.ComponentProps<typeof PopoverPrimitive.Positioner>,
-    "align" | "sideOffset" | "side" | "alignOffset"
+    "align" | "sideOffset" | "side" | "alignOffset" | "collisionPadding"
   > & { className?: string; positionerClassName?: string }) {
   return (
     <PopoverPrimitive.Portal>
@@ -44,6 +54,7 @@ function PopoverContent({
         sideOffset={sideOffset}
         side={side}
         alignOffset={alignOffset}
+        collisionPadding={collisionPadding}
         // SOLVRO PATCH: see positionerClassName comment above.
         className={cn(positionerClassName)}
       >
@@ -108,6 +119,7 @@ function PopoverDescription({
 export {
   Popover,
   PopoverTrigger,
+  PopoverClose,
   PopoverContent,
   PopoverHeader,
   PopoverTitle,

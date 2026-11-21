@@ -74,7 +74,7 @@ export function InstallBanner() {
 
   if (deferredPrompt) {
     return (
-      <div className="flex w-full items-center gap-1.5 bg-primary px-3 py-1.5 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:py-0 text-meta font-semibold text-on-primary md:hidden">
+      <div role="region" aria-label="Install app" className="flex w-full items-center gap-1.5 bg-primary px-3 py-1.5 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:py-0 text-meta font-semibold text-on-primary md:hidden">
         <button
           type="button"
           onClick={handleInstallTap}
@@ -97,7 +97,7 @@ export function InstallBanner() {
 
   if (showIosHint) {
     return (
-      <div className="flex w-full items-center gap-1.5 bg-primary px-3 py-1.5 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:py-0 text-meta font-semibold text-on-primary md:hidden">
+      <div role="region" aria-label="Install app" className="flex w-full items-center gap-1.5 bg-primary px-3 py-1.5 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:py-0 text-meta font-semibold text-on-primary md:hidden">
         <span aria-hidden="true" className="material-symbols-outlined text-[14px]">ios_share</span>
         <span className="flex-1">Add to Home Screen from the share menu</span>
         <button

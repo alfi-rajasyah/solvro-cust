@@ -44,12 +44,12 @@ interface DateFieldProps {
 }
 
 const triggerBaseClasses =
-  "[@media(pointer:coarse)]:min-h-11 cursor-pointer text-left focus:outline-hidden focus-visible:ring-2 disabled:cursor-default";
+  "[@media(pointer:coarse)]:min-h-11 cursor-pointer text-left disabled:cursor-default";
 
 const variantClasses = {
   boxed:
-    "rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 font-mono text-meta text-on-surface focus:border-primary focus-visible:ring-primary/30",
-  bare: "border-none bg-transparent text-xs font-semibold text-on-surface focus-visible:ring-primary",
+    "rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 font-mono text-meta text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+  bare: "border-none bg-transparent text-xs font-semibold text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary",
 } as const;
 
 /**

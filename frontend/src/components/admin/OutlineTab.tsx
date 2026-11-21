@@ -272,7 +272,7 @@ function OutlineSettingsModal({
             autoFocus
             aria-invalid={error ? true : undefined}
             aria-describedby={helperId}
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 font-mono text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
           <p id={helperId} className="mt-1 text-xs text-on-surface-variant">
             http:// or https:// only, without a login, query string or fragment. Empty hides the

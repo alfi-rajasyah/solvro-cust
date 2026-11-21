@@ -180,7 +180,7 @@ sectionsRouter.post(
 
     const result = await prisma.$transaction(async (tx) => {
       // Copies start in the TODO default status (lib/duplicate.ts).
-      await lockStatusListShared(tx);
+      await lockStatusListShared(tx, 10_000); // 30 s transaction: 10 s here leaves room for the copy
       const source = await tx.section.findUniqueOrThrow({
         where: { id },
         select: { name: true, color: true },

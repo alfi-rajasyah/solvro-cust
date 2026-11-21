@@ -35,7 +35,9 @@ import { hasPermission, useAuth } from "@/lib/auth";
 import { GanttExportProvider } from "@/lib/gantt/exportContext";
 import { canOwnProject, saveErrorMessage } from "@/lib/ownerAccess";
 import { safeOutlineHref } from "@/lib/outlineUrl";
+import { preloadProjectTab, projectTabFromPath } from "@/lib/projectTabPreload";
 import { carryFilterSearch } from "@/lib/taskFilters";
+import { toggleFocus } from "@/lib/utils";
 import {
   type ProjectDetail as ProjectDetailType,
   useDeleteProject,
@@ -89,6 +91,13 @@ export function ProjectDetail() {
   const { feedback: copyFeedback, copy: copyLink } = useCopyLinkFeedback();
 
   const { data: project, isLoading, isError, error, refetch } = useProject(projectId);
+
+  // The tab's chunk is requested here, beside the project fetch, rather than
+  // when the Outlet mounts after it (hooks stay above the early returns).
+  const activeTab = projectTabFromPath(location.pathname);
+  useEffect(() => {
+    preloadProjectTab(activeTab);
+  }, [activeTab]);
 
   // On a narrow phone the tab strip scrolls sideways; bring the active tab into
   // view after navigation. Sets scrollLeft only (scrollIntoView would also scroll
@@ -321,8 +330,9 @@ export function ProjectDetail() {
             title={contextOpen ? "Hide project context" : "Show project context"}
             className={[
               "tap-target hidden h-8 w-8 items-center justify-center rounded-sm border transition-colors md:inline-flex",
+              toggleFocus(contextOpen),
               contextOpen
-                ? "border-primary bg-primary/10 text-primary"
+                ? "border-primary bg-primary/10 text-primary-tint-text"
                 : "border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container hover:text-on-surface",
             ].join(" ")}
           >
@@ -347,9 +357,11 @@ export function ProjectDetail() {
             <NavLink
               key={tab.to}
               to={{ pathname: tab.to, search: filterSearch }}
+              onPointerEnter={() => preloadProjectTab(tab.to)}
+              onFocus={() => preloadProjectTab(tab.to)}
               className={({ isActive }) =>
                 [
-                  "-mb-px border-b-2 px-1 pb-3 font-display text-sm transition-colors [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:text-center [@media(pointer:coarse)]:pt-2.5",
+                  "-mb-px rounded-t-sm border-b-2 px-1 pb-3 font-display text-sm transition-colors outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:text-center [@media(pointer:coarse)]:pt-2.5",
                   isActive
                     ? "border-primary text-primary"
                     : "border-transparent text-on-surface-variant hover:text-on-surface",

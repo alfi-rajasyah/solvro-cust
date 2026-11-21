@@ -11,9 +11,9 @@ import { ACTIVITY_MAX_PAGES, type ActivityEvent, useProjectActivity, useProjectM
 const ALL_PEOPLE = "all";
 
 const FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+  "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary";
 const FOCUS_RING_BORDERED =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30";
 
 /**
  * "Recent activity" on the project Overview (docs/archive/plans/collaboration-and-sharing.md,
@@ -53,9 +53,9 @@ export function ProjectActivity({
       className="rounded-sm border border-outline-variant bg-surface-container-lowest p-4"
     >
       <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 id="project-activity-heading" className="text-label-caps uppercase text-on-surface-variant">
+        <h2 id="project-activity-heading" className="text-label-caps uppercase text-on-surface-variant">
           Recent activity
-        </h3>
+        </h2>
         <Select
           items={options}
           value={person}

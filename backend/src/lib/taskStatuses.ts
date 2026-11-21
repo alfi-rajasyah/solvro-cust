@@ -38,8 +38,22 @@ export const STATUS_TONES = ["gray", "primary", "emerald", "amber", "violet"] as
 // can never deadlock.
 const STATUS_LIST_LOCK = 7301;
 
-export async function lockStatusListShared(tx: Tx): Promise<void> {
+// Default wait of a task write for the admin status save, which holds the
+// exclusive lock while it waits on project order locks (up to ~18 s). Callers
+// run in 5 s interactive transactions, and the order lock that follows may
+// wait up to 3 s more, so the status wait cannot honour the whole budget; a
+// timeout in either wait answers 409 `concurrent_update` (55P03 or P2028,
+// http/errors.ts) instead of a 500. Callers with a 30 s budget pass a longer
+// `waitMs`.
+const STATUS_LOCK_WAIT_MS = 2_500;
+
+export async function lockStatusListShared(tx: Tx, waitMs: number = STATUS_LOCK_WAIT_MS): Promise<void> {
+  // Only this wait is bounded: the caller's lock_timeout comes back afterwards
+  // (same pattern as lib/orderLock.ts).
+  const [{ previous }] = await tx.$queryRaw<{ previous: string }[]>`SELECT current_setting('lock_timeout') AS previous`;
+  await tx.$executeRaw`SELECT set_config('lock_timeout', ${`${waitMs}ms`}, true)`;
   await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(${STATUS_LIST_LOCK}::int, 0)`;
+  await tx.$executeRaw`SELECT set_config('lock_timeout', ${previous}, true)`;
 }
 
 /** The default status of a category; throws if the list lost its invariant. */

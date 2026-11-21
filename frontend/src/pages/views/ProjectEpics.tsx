@@ -205,7 +205,7 @@ export function ProjectEpics() {
             placeholder="Epic title"
             maxLength={200}
             aria-label="New epic title"
-            className="flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
           <button
             type="submit"
@@ -489,7 +489,7 @@ function TitleCell({
             }}
             maxLength={200}
             aria-label="Epic title"
-            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 text-sm font-semibold text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-1.5 py-0.5 text-sm font-semibold text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
         </form>
       ) : (
@@ -510,7 +510,7 @@ function TitleCell({
             onStartRename();
           }}
           aria-label={`Rename ${epic.title}`}
-          className="tap-target material-symbols-outlined shrink-0 rounded-sm p-1 text-[15px] text-on-surface-variant/80 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="tap-target material-symbols-outlined shrink-0 rounded-sm p-1 text-[15px] text-on-surface-variant/80 hover:text-primary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
         >
           edit
         </button>

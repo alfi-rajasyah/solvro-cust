@@ -241,7 +241,7 @@ export function ServiceMappingList({
               onChange={(e) => setNewName(e.target.value)}
               maxLength={100}
               placeholder="e.g. Penetration Testing"
-              className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+              className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             />
           </label>
           <label className="w-full md:flex-2 md:min-w-[240px]">
@@ -254,7 +254,7 @@ export function ServiceMappingList({
               onChange={(e) => setNewDesc(e.target.value)}
               maxLength={1000}
               placeholder="Short blurb shown in the catalogue"
-              className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+              className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             />
           </label>
           <button
@@ -341,7 +341,7 @@ function ToolsEditor({
             onBlur={() => commit(draft)}
             disabled={saving}
             placeholder={tools.length === 0 ? "e.g. Acronis, Crowdstrike" : "Add tool…"}
-            className="min-w-[140px] flex-1 rounded-sm border border-outline-variant bg-surface px-2 py-0.5 text-meta focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
+            className="min-w-[140px] flex-1 rounded-sm border border-outline-variant bg-surface px-2 py-0.5 text-meta focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
           />
         )}
         {!canMutate && tools.length === 0 && (

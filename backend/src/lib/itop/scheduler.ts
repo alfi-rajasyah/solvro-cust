@@ -14,16 +14,18 @@ const FIRST_TICK_DELAY_MS = 15_000;
 const MIN_INTERVAL_MINUTES = 1;
 const DEBOUNCE_MS = 10_000;
 // A full request that finds the sync lock held is re-queued, not dropped. The
-// lock holder can work up to RUN_BUDGET_MS (25 min), so retry every 30 s for
-// 30 min at most.
+// lock holder can work up to RUN_BUDGET_MS (25 min), so retry every 30 s until
+// one shared 30 min deadline. The deadline lives in module state, so a repeated
+// Refresh while the lock is held cannot restart the window.
 const LOCK_RETRY_MS = 30_000;
-const LOCK_RETRY_MAX = 60;
+const LOCK_RETRY_WINDOW_MS = 30 * 60_000;
 
 let started = false;
 let tickTimer: ReturnType<typeof setTimeout> | undefined;
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 let debouncedFull = false;
 let retryTimer: ReturnType<typeof setTimeout> | undefined;
+let retryDeadline: number | undefined;
 let running = false;
 
 async function runTick(): Promise<void> {
@@ -80,6 +82,7 @@ export function stopItopScheduler(): void {
   debounceTimer = undefined;
   retryTimer = undefined;
   debouncedFull = false;
+  retryDeadline = undefined;
 }
 
 /**
@@ -101,20 +104,29 @@ export function requestSync(opts: { full?: boolean } = {}): void {
     const full = debouncedFull;
     debouncedFull = false;
     debounceTimer = undefined;
-    void runRequested(full, 0);
+    void runRequested(full);
   }, DEBOUNCE_MS);
   debounceTimer.unref?.();
 }
 
-async function runRequested(full: boolean, attempt: number): Promise<void> {
+async function runRequested(full: boolean): Promise<void> {
+  // A pending full retry will pull everything an incremental nudge would, so
+  // the nudge must not cancel it.
+  if (!full && retryTimer) return;
   if (retryTimer) {
     clearTimeout(retryTimer);
     retryTimer = undefined;
   }
   try {
     const summary = await syncTickets({ full });
-    if (!summary.busy || !full) return;
-    if (attempt >= LOCK_RETRY_MAX) {
+    if (!summary.busy || !full) {
+      if (full) retryDeadline = undefined;
+      return;
+    }
+    const now = Date.now();
+    retryDeadline ??= now + LOCK_RETRY_WINDOW_MS;
+    if (now + LOCK_RETRY_MS > retryDeadline) {
+      retryDeadline = undefined;
       logger.warn("iTop requestSync: a full sync was dropped, the sync lock stayed held");
       return;
     }
@@ -125,10 +137,11 @@ async function runRequested(full: boolean, attempt: number): Promise<void> {
     }
     retryTimer = setTimeout(() => {
       retryTimer = undefined;
-      void runRequested(true, attempt + 1);
+      void runRequested(true);
     }, LOCK_RETRY_MS);
     retryTimer.unref?.();
   } catch (err) {
+    if (full) retryDeadline = undefined;
     logger.warn({ err: err instanceof Error ? err.message : String(err) }, "iTop requestSync sync failed");
   }
 }

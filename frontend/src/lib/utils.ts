@@ -66,3 +66,15 @@ export const TOOLBAR_BOX = "inline-flex h-8 shrink-0 items-center gap-1.5 rounde
 export const TOOLBAR_BUTTON_PRIMARY = `${TOOLBAR_BOX} tap-target bg-primary font-bold text-on-primary transition-colors hover:bg-primary/90 disabled:opacity-60`;
 export const TOOLBAR_BUTTON_OUTLINE = `${TOOLBAR_BOX} tap-target border border-outline-variant bg-surface-container-lowest font-semibold text-on-surface-variant transition-colors hover:border-primary hover:text-primary disabled:opacity-60`;
 export const TOOLBAR_STAT = `${TOOLBAR_BOX} border border-outline-variant bg-surface-container-lowest font-semibold text-on-surface-variant`;
+/**
+ * Keyboard focus for a bordered toggle that shows `border-primary` while on. The
+ * usual bordered treatment turns the border primary, which an on toggle already
+ * is, leaving only the 30% ring (about 1.5:1). An on toggle gets the solid ring
+ * with an offset gap instead (about 5:1 against the page), so focus differs from
+ * the active border. `offsetClass` names the surface the toggle sits on. An off toggle gets the usual bordered treatment.
+ */
+export function toggleFocus(on: boolean, offsetClass = "focus-visible:ring-offset-background"): string {
+  return on
+    ? `focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${offsetClass}`
+    : "focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30";
+}

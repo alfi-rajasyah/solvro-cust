@@ -100,7 +100,7 @@ export function DailyReview() {
             type="button"
             onClick={() => goToWeek(shiftWeek(week, -1))}
             aria-label="Previous week"
-            className="tap-target flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
+            className="tap-target flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-hidden focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_left</span>
           </button>
@@ -114,7 +114,7 @@ export function DailyReview() {
             type="button"
             onClick={() => goToWeek(shiftWeek(week, 1))}
             aria-label="Next week"
-            className="tap-target flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
+            className="tap-target flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-hidden focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_right</span>
           </button>

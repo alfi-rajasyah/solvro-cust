@@ -150,7 +150,7 @@ export function ProjectRisks() {
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search description, mitigation, contingency…"
           aria-label="Search risks"
-          className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-sm text-on-surface placeholder:text-on-surface-variant focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 sm:w-72"
+          className="w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-1.5 text-sm text-on-surface placeholder:text-on-surface-variant focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 sm:w-72"
         />
         <Select
           label="Category"
@@ -441,18 +441,31 @@ function RisksDataGrid({
         cell: ({ row }) => {
           const risk = row.original;
           return canEdit ? (
-            <select
-              aria-label={`Status of risk: ${risk.description}`}
+            <UiSelect
+              items={(Object.keys(RISK_STATUS_LABEL) as RiskStatus[]).map((s) => ({
+                value: s,
+                label: RISK_STATUS_LABEL[s],
+              }))}
               value={risk.status}
-              onChange={(e) => onChange(risk.id, { status: e.target.value as RiskStatus })}
-              className={`[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 font-display text-meta font-semibold focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30 ${STATUS_TEXT[risk.status]}`}
+              onValueChange={(v) => {
+                if (v !== null && v !== risk.status) onChange(risk.id, { status: v as RiskStatus });
+              }}
             >
-              {(Object.keys(RISK_STATUS_LABEL) as RiskStatus[]).map((s) => (
-                <option key={s} value={s}>
-                  {RISK_STATUS_LABEL[s]}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                size="sm"
+                aria-label={`Status of risk: ${risk.description}`}
+                className={`w-full gap-1 px-2 font-display text-meta font-semibold [@media(pointer:coarse)]:min-h-11 ${STATUS_TEXT[risk.status]}`}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent side="bottom" align="start" alignItemWithTrigger={false} className="min-w-32 shadow-overlay!">
+                {(Object.keys(RISK_STATUS_LABEL) as RiskStatus[]).map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {RISK_STATUS_LABEL[s]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </UiSelect>
           ) : (
             <Chip tone={STATUS_TONE[risk.status]}>{RISK_STATUS_LABEL[risk.status]}</Chip>
           );
@@ -655,7 +668,7 @@ function Select({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-sm text-on-surface focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+        className="[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>

@@ -248,7 +248,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
           onClick={toggleWeek}
           aria-expanded={weekExpanded}
           aria-controls={rowsId}
-          className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-meta font-semibold text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
         >
           {weekExpanded
             ? "Hide week"
@@ -307,7 +307,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
                           <button
                             type="button"
                             onClick={() => startEdit(note)}
-                            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-meta font-semibold text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                           >
                             Edit
                           </button>
@@ -316,7 +316,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
                           <button
                             type="button"
                             onClick={() => handleDelete(note.id)}
-                            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-meta font-semibold text-error hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-meta font-semibold text-error hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                           >
                             Delete
                           </button>
@@ -332,7 +332,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
                     <button
                       type="button"
                       onClick={() => startAdd(day)}
-                      className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 shrink-0 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 shrink-0 text-meta font-semibold text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       Add
                     </button>
@@ -343,7 +343,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
                   <button
                     type="button"
                     onClick={() => startAdd(day)}
-                    className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-meta font-semibold text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     + Add another note
                   </button>
@@ -471,7 +471,7 @@ function NoteEditorForm({
               type="button"
               onClick={onDelete}
               disabled={deleting}
-              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-meta font-semibold text-error hover:underline disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 text-meta font-semibold text-error hover:underline disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
             >
               Delete
             </button>
@@ -480,7 +480,7 @@ function NoteEditorForm({
             <button
               type="button"
               onClick={onCancel}
-              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm border border-outline-variant px-3 py-1.5 font-display text-meta font-semibold text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center rounded-sm border border-outline-variant px-3 py-1.5 font-display text-meta font-semibold text-on-surface-variant hover:bg-surface-container focus-visible:outline-hidden focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
             >
               Cancel
             </button>
@@ -489,7 +489,7 @@ function NoteEditorForm({
             type="button"
             onClick={onSave}
             disabled={disabled}
-            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-3 py-1.5 font-display text-meta font-semibold text-on-primary hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-3 py-1.5 font-display text-meta font-semibold text-on-primary hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             {saving ? "Saving…" : "Save note"}
           </button>

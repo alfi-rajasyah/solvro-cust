@@ -152,7 +152,7 @@ export function Utilization() {
             type="button"
             onClick={() => goToWeek(shiftWeek(week, -1))}
             aria-label="Previous week"
-            className="tap-target flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
+            className="tap-target flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-hidden focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_left</span>
           </button>
@@ -166,7 +166,7 @@ export function Utilization() {
             type="button"
             onClick={() => goToWeek(shiftWeek(week, 1))}
             aria-label="Next week"
-            className="tap-target flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
+            className="tap-target flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant text-on-surface-variant hover:bg-surface-container focus-visible:outline-hidden focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-lg">chevron_right</span>
           </button>
@@ -207,7 +207,7 @@ export function Utilization() {
               disabled={refresh.isPending}
               title="Refresh from iTop"
               aria-label="Refresh from iTop"
-              className="tap-target inline-flex items-center justify-center rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="tap-target inline-flex items-center justify-center rounded-sm p-1 text-on-surface-variant hover:bg-surface-container hover:text-on-surface disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
             >
               <span aria-hidden="true" className="material-symbols-outlined text-[17px]">refresh</span>
             </button>

@@ -90,6 +90,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
       )}
       <aside
       ref={asideRef}
+      aria-label="Project context"
       aria-hidden={!open}
       className={[
         "fixed right-0 top-14 bottom-0 z-40 w-full transform border-l border-outline-variant bg-surface-container-low font-display transition-transform duration-200 ease-out md:z-30 md:w-context-panel",
@@ -173,7 +174,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
               type="button"
               onClick={() => setConfirmingBaseline(true)}
               disabled={lockBaseline.isPending}
-              className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 [@media(pointer:coarse)]:min-h-11 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-sm border border-outline-variant bg-surface-container-lowest px-2.5 py-2 [@media(pointer:coarse)]:min-h-11 font-display text-meta font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="material-symbols-outlined text-[17px]" aria-hidden="true">
                 {project.baselineLockedAt ? "bookmark" : "bookmark_add"}
@@ -339,7 +340,7 @@ export function RightSidebar({ project, open, onClose }: RightSidebarProps) {
               </span>
               <DateField
                 variant="boxed"
-                className="w-full px-2 py-1.5 text-xs font-body focus:ring-2 focus:ring-primary/30"
+                className="w-full px-2 py-1.5 text-xs font-body"
                 value={baselineAsOf || null}
                 onChange={(d) => setBaselineAsOf(d ?? "")}
                 aria-label={

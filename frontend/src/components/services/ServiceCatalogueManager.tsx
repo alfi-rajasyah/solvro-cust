@@ -85,7 +85,7 @@ export function ServiceCatalogueManager() {
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
             maxLength={100}
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1 text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
         ) : (
           <span className={["font-medium text-on-surface", s.active ? "" : "opacity-60"].join(" ")}>
@@ -111,7 +111,7 @@ export function ServiceCatalogueManager() {
             value={editDesc}
             onChange={(e) => setEditDesc(e.target.value)}
             maxLength={1000}
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1 text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
         ) : (
           <span className={["text-on-surface-variant", s.active ? "" : "opacity-60"].join(" ")}>
@@ -302,7 +302,7 @@ export function ServiceCatalogueManager() {
             onChange={(e) => setNewName(e.target.value)}
             maxLength={100}
             placeholder="e.g. Penetration Testing"
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
         </label>
         <label className="w-full md:flex-2 md:min-w-[240px]">
@@ -315,7 +315,7 @@ export function ServiceCatalogueManager() {
             onChange={(e) => setNewDesc(e.target.value)}
             maxLength={1000}
             placeholder="Short blurb shown in the catalogue"
-            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus:border-primary focus:outline-hidden focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-sm border border-outline-variant bg-surface px-2 py-1.5 text-sm focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
           />
         </label>
         <button

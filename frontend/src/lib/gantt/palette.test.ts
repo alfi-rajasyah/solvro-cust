@@ -6,6 +6,7 @@ import {
   HATCH_STRIPE_ALPHA,
   hatchCompositeHex,
   hexToRgba,
+  legendEntries,
   progressHatchBackground,
 } from "./palette";
 
@@ -94,5 +95,20 @@ describe("hatchCompositeHex", () => {
     const composite = hatchCompositeHex("#ffffff", HATCH_CANVAS_HEX_DARK);
     expect(composite).not.toBe("#ffffff");
     expect(composite).not.toBe(HATCH_CANVAS_HEX_DARK);
+  });
+});
+
+describe("legendEntries — section mode", () => {
+  it("lists sections in board order (position, then id) with resolved colors", () => {
+    const entries = legendEntries("section", [
+      { id: 3, name: "Late", position: 2, color: "#112233" },
+      { id: 2, name: "Tie B", position: 1, color: "#223344" },
+      { id: 1, name: "Tie A", position: 1, color: "#334455" },
+    ]);
+    expect(entries).toEqual([
+      ["Tie A", "#334455"],
+      ["Tie B", "#223344"],
+      ["Late", "#112233"],
+    ]);
   });
 });

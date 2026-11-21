@@ -141,7 +141,7 @@ export function ProjectCard({
           aria-expanded={bodyExpanded}
           aria-controls={bodyId}
           aria-label={bodyExpanded ? "Collapse project" : "Expand project"}
-          className="tap-target flex h-6 w-6 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="tap-target flex h-6 w-6 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
         >
           <span className="material-symbols-outlined text-lg" aria-hidden="true">
             {bodyExpanded ? "expand_less" : "expand_more"}
@@ -174,7 +174,7 @@ export function ProjectCard({
             <button
               type="button"
               onClick={() => setConfirmUnmark(true)}
-              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
             >
               <span className="flex items-center gap-1 rounded-full bg-chip-emerald-bg px-2 py-0.5 text-meta font-bold text-chip-emerald-text">
                 <span aria-hidden="true" className="material-symbols-outlined text-sm">check_circle</span>
@@ -186,7 +186,7 @@ export function ProjectCard({
               type="button"
               onClick={() => markReviewed.mutate({ reviewDate: today })}
               disabled={markReviewed.isPending}
-              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-2.5 py-1 text-meta font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
+              className="[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-2.5 py-1 text-meta font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
             >
               Mark reviewed
             </button>
@@ -227,7 +227,7 @@ export function ProjectCard({
                   onClick={() => setAttentionExpanded((v) => !v)}
                   aria-expanded={attentionExpanded}
                   aria-controls={attentionId}
-                  className="absolute right-4 top-3 [@media(pointer:coarse)]:top-0 [@media(pointer:coarse)]:right-1 [@media(pointer:coarse)]:px-3 [@media(pointer:coarse)]:py-[13px] [@media(pointer:coarse)]:leading-[18px] text-meta font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  className="absolute right-4 top-3 [@media(pointer:coarse)]:top-0 [@media(pointer:coarse)]:right-1 [@media(pointer:coarse)]:px-3 [@media(pointer:coarse)]:py-[13px] [@media(pointer:coarse)]:leading-[18px] text-meta font-semibold text-primary hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   {attentionExpanded ? "Hide lists" : "Show lists"}
                 </button>
@@ -288,7 +288,7 @@ export function ProjectCard({
                               >
                                 <SelectTrigger
                                   size="sm"
-                                  className="[@media(pointer:coarse)]:min-h-11 w-auto shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
+                                  className="[@media(pointer:coarse)]:min-h-11 w-auto shrink-0 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:border-primary focus-visible:ring-primary/30"
                                   aria-label="Risk status"
                                 >
                                   <SelectValue />
