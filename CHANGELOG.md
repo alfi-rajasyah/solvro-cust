@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-11-22
+
+### Changed — 2026-11-22 — Version 1.3.0
+
+- The release version is `1.3.0` in `VERSION`, `backend/package.json`, `frontend/package.json` and the image tag in `setup.sh` (`SOLVRO_IMAGE_TAG="v1.3.0"`), so the login page and new installs show and pull this release.
+
 ### Changed — 2026-11-22 — Mobile e2e in 9 shards
 
 - On a push to `main` or a manual run, mobile e2e in `.github/workflows/ci.yml` now runs in 9 shards instead of 8, to shorten the slowest mobile shard. The run now has 21 jobs, one more than GitHub starts at the same time, so one shard waits for the first job to finish. A test run took 4.2 minutes, against 4.9 minutes with 8 mobile shards.
