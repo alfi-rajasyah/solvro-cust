@@ -1,11 +1,11 @@
 name: CI
 
 # What runs where (kept lean to save GitHub Actions minutes):
-# - PR into develop: typecheck, backend tests, desktop e2e in 4 parallel shards.
+# - PR into develop: typecheck, backend tests, desktop e2e in 10 parallel shards.
 #   This is the merge gate.
 # - PR into main (a promotion of already-tested code from develop): typecheck
 #   and backend tests only.
-# - Push to main: the full suite, desktop and mobile e2e (4 shards each). A
+# - Push to main: the full suite, desktop e2e in 10 shards and mobile in 8. A
 #   green run here is what lets docker-publish.yml ship images.
 # - Push to develop does not run: every change reached it through a tested PR,
 #   and nothing publishes from develop.
@@ -222,12 +222,16 @@ jobs:
   # e2e runs on PRs into develop (desktop only) and on pushes to main or a
   # manual run (desktop and mobile). Mobile regressions on a feature PR
   # therefore surface at the main push, which blocks publishing.
-  # Each project is split into 4 shards (`--shard=N/4`), each on its own stack
-  # and database, so no check runs much past 10 minutes. Playwright splits the
-  # suite by spec file (fullyParallel is off). Only the first desktop shard
-  # writes the image layer cache; the others read it.
+  # Desktop is split into 10 shards and mobile into 8, each on its own stack
+  # and database. Mobile gets 8 because its specs run faster, and 10 + 8 + the
+  # two other jobs is 20, the number of jobs GitHub starts at the same time on
+  # this plan: a 22-job push to main left 2 shards waiting 82s for a slot. `--fully-parallel` makes Playwright split the shards by
+  # test instead of by spec file, so one long file (kanban-dnd, gantt-parity)
+  # no longer holds a whole shard back; each shard still runs one worker, in
+  # file order. Measured 2026-11-21: a PR run went from 9.6 to 4.8 minutes.
+  # Only the first desktop shard writes the image layer cache; the others read it.
   e2e:
-    name: e2e (${{ matrix.project }} ${{ matrix.shard }}/4)
+    name: e2e (${{ matrix.project }} ${{ matrix.shard }}/${{ matrix.project == 'mobile' && 8 || 10 }})
     if: github.event_name != 'pull_request' || (github.base_ref == 'develop' && !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     # The desktop half alone runs about 20 minutes (Outline specs added 2026-10-12).
@@ -236,7 +240,12 @@ jobs:
       fail-fast: false
       matrix:
         project: ${{ github.event_name == 'pull_request' && fromJSON('["desktop"]') || fromJSON('["desktop","mobile"]') }}
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        exclude:
+          - project: mobile
+            shard: 9
+          - project: mobile
+            shard: 10
     env:
       ADMIN_EMAIL: qa@solvro.test
     steps:
@@ -267,28 +276,24 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       # Both images are built here, not by `compose up --build`, so BuildKit
-      # can read and write the GitHub Actions layer cache. `load: true` puts
-      # the result in the local daemon under the `image:` name the compose
-      # file declares, and `compose up` below starts it without rebuilding.
-      - name: Build backend image (cached)
-        uses: docker/build-push-action@v6
+      # can read and write the GitHub Actions layer cache. Bake builds the two
+      # images at the same time from the compose file's build sections (paths
+      # resolve from `workdir`). `load: true` puts each result in the local
+      # daemon under the `image:` name the compose file declares, and
+      # `compose up` below starts it without rebuilding.
+      - name: Build backend and frontend images (cached, in parallel)
+        uses: docker/bake-action@v6
         with:
-          context: backend
-          target: runtime
-          tags: solvro-ci-backend:latest
+          source: .
+          workdir: ci
+          files: docker-compose.ci.yml
+          targets: backend,frontend
           load: true
-          cache-from: type=gha,scope=backend
-          cache-to: ${{ matrix.project == 'desktop' && matrix.shard == 1 && 'type=gha,mode=max,scope=backend' || '' }}
-
-      - name: Build frontend image (cached)
-        uses: docker/build-push-action@v6
-        with:
-          context: frontend
-          target: runtime
-          tags: solvro-ci-frontend:latest
-          load: true
-          cache-from: type=gha,scope=frontend
-          cache-to: ${{ matrix.project == 'desktop' && matrix.shard == 1 && 'type=gha,mode=max,scope=frontend' || '' }}
+          set: |
+            backend.cache-from=type=gha,scope=backend
+            frontend.cache-from=type=gha,scope=frontend
+            ${{ matrix.project == 'desktop' && matrix.shard == 1 && 'backend.cache-to=type=gha,mode=max,scope=backend' || '' }}
+            ${{ matrix.project == 'desktop' && matrix.shard == 1 && 'frontend.cache-to=type=gha,mode=max,scope=frontend' || '' }}
 
       # The widened /embed/ + /share/ framing header must collapse to 'self' for
       # any unsafe or missing EMBED_FRAME_ANCESTORS (header-injection guard).
@@ -355,12 +360,12 @@ jobs:
         working-directory: e2e
         run: npx playwright install-deps chromium
 
-      - name: Run Playwright tests (${{ matrix.project }} ${{ matrix.shard }}/4)
+      - name: Run Playwright tests (${{ matrix.project }} ${{ matrix.shard }}/${{ matrix.project == 'mobile' && 8 || 10 }})
         working-directory: e2e
         env:
           BASE_URL: http://localhost:8080
           CI: "true"
-        run: npx playwright test --project=${{ matrix.project }} --shard=${{ matrix.shard }}/4
+        run: npx playwright test --project=${{ matrix.project }} --shard=${{ matrix.shard }}/${{ matrix.project == 'mobile' && 8 || 10 }} --fully-parallel
 
       - name: Dump container logs on failure
         if: failure()
@@ -375,7 +380,3 @@ jobs:
             e2e/test-results/
             e2e/playwright-report/
           retention-days: 7
-
-      - name: Tear down stack
-        if: always()
-        run: docker compose -f ci/docker-compose.ci.yml down -v
