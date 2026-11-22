@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-22 — Mobile e2e in 9 shards
+
+- On a push to `main` or a manual run, mobile e2e in `.github/workflows/ci.yml` now runs in 9 shards instead of 8, to shorten the slowest mobile shard. The run now has 21 jobs, one more than GitHub starts at the same time, so one shard waits for the first job to finish. A test run took 4.2 minutes, against 4.9 minutes with 8 mobile shards.
+
 ### Changed — 2026-11-21 — Faster e2e checks in CI
 
 - The Playwright suite in `.github/workflows/ci.yml` now runs in 10 shards instead of 4, and `--fully-parallel` makes Playwright split the shards by test instead of by spec file, so one long spec file no longer holds a whole shard back. Each shard still runs one worker against its own stack and database.

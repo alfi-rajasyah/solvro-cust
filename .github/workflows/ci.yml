@@ -5,7 +5,7 @@ name: CI
 #   This is the merge gate.
 # - PR into main (a promotion of already-tested code from develop): typecheck
 #   and backend tests only.
-# - Push to main: the full suite, desktop e2e in 10 shards and mobile in 8. A
+# - Push to main: the full suite, desktop e2e in 10 shards and mobile in 9. A
 #   green run here is what lets docker-publish.yml ship images.
 # - Push to develop does not run: every change reached it through a tested PR,
 #   and nothing publishes from develop.
@@ -222,16 +222,16 @@ jobs:
   # e2e runs on PRs into develop (desktop only) and on pushes to main or a
   # manual run (desktop and mobile). Mobile regressions on a feature PR
   # therefore surface at the main push, which blocks publishing.
-  # Desktop is split into 10 shards and mobile into 8, each on its own stack
-  # and database. Mobile gets 8 because its specs run faster, and 10 + 8 + the
-  # two other jobs is 20, the number of jobs GitHub starts at the same time on
-  # this plan: a 22-job push to main left 2 shards waiting 82s for a slot. `--fully-parallel` makes Playwright split the shards by
+  # Desktop is split into 10 shards and mobile into 9, each on its own stack
+  # and database. Mobile gets fewer because its specs run faster. 10 + 9 + the
+  # two other jobs is 21, one more than the 20 jobs GitHub starts at the same
+  # time on this plan, so one shard waits for the first job to finish. `--fully-parallel` makes Playwright split the shards by
   # test instead of by spec file, so one long file (kanban-dnd, gantt-parity)
   # no longer holds a whole shard back; each shard still runs one worker, in
   # file order. Measured 2026-11-21: a PR run went from 9.6 to 4.8 minutes.
   # Only the first desktop shard writes the image layer cache; the others read it.
   e2e:
-    name: e2e (${{ matrix.project }} ${{ matrix.shard }}/${{ matrix.project == 'mobile' && 8 || 10 }})
+    name: e2e (${{ matrix.project }} ${{ matrix.shard }}/${{ matrix.project == 'mobile' && 9 || 10 }})
     if: github.event_name != 'pull_request' || (github.base_ref == 'develop' && !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     # The desktop half alone runs about 20 minutes (Outline specs added 2026-10-12).
@@ -242,8 +242,6 @@ jobs:
         project: ${{ github.event_name == 'pull_request' && fromJSON('["desktop"]') || fromJSON('["desktop","mobile"]') }}
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         exclude:
-          - project: mobile
-            shard: 9
           - project: mobile
             shard: 10
     env:
@@ -360,12 +358,12 @@ jobs:
         working-directory: e2e
         run: npx playwright install-deps chromium
 
-      - name: Run Playwright tests (${{ matrix.project }} ${{ matrix.shard }}/${{ matrix.project == 'mobile' && 8 || 10 }})
+      - name: Run Playwright tests (${{ matrix.project }} ${{ matrix.shard }}/${{ matrix.project == 'mobile' && 9 || 10 }})
         working-directory: e2e
         env:
           BASE_URL: http://localhost:8080
           CI: "true"
-        run: npx playwright test --project=${{ matrix.project }} --shard=${{ matrix.shard }}/${{ matrix.project == 'mobile' && 8 || 10 }} --fully-parallel
+        run: npx playwright test --project=${{ matrix.project }} --shard=${{ matrix.shard }}/${{ matrix.project == 'mobile' && 9 || 10 }} --fully-parallel
 
       - name: Dump container logs on failure
         if: failure()
