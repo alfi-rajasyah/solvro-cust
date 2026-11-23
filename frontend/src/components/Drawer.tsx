@@ -93,7 +93,11 @@ export function Drawer({
     if (!open) return;
     const opener = openerRef.current;
     return () => {
-      if (opener && opener !== document.body && opener.isConnected) {
+      // Only when focus has fallen to <body> (the drawer's own controls just
+      // unmounted). A cleanup that runs with focus still inside the open drawer
+      // (React StrictMode's simulated unmount in dev) must not pull it out.
+      const active = document.activeElement;
+      if (opener && opener !== document.body && opener.isConnected && (active === null || active === document.body)) {
         opener.focus();
       }
     };

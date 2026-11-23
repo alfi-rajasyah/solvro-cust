@@ -14,6 +14,8 @@ vi.mock("@/lib/theme", () => ({ useTheme: () => ({ resolved: "light", toggle: vi
 vi.mock("@/lib/queries", () => ({
   useProject: () => ({ data: undefined }),
   useCustomer: () => ({ data: undefined }),
+  useTask: () => ({ data: undefined }),
+  useProjectTasks: () => ({ data: undefined }),
 }));
 vi.mock("./SidebarContext", () => ({ useSidebar: () => ({ open: true, toggle: vi.fn() }) }));
 vi.mock("./NotificationBell", () => ({ NotificationBell: () => null }));

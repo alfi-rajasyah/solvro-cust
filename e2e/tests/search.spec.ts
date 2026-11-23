@@ -71,7 +71,7 @@ async function createLongUniqueTask(
 }
 
 test.describe("global search palette", () => {
-  test("⌘K opens the palette and a task hit deep-links into List with the panel param", async ({ page, seededProject }, testInfo) => {
+  test("⌘K opens the palette and a task hit opens the task's own page", async ({ page, seededProject }, testInfo) => {
     test.skip(testInfo.project.name === "mobile", "⌘K entry point is desktop-only");
     const target = await createUniqueTask(
       apiBase(testInfo),
@@ -91,10 +91,7 @@ test.describe("global search palette", () => {
     await expect(hit).toBeVisible();
     await hit.click();
 
-    await page.waitForURL(
-      new RegExp(`/projects/${seededProject.projectId}/list\\?task=${target.id}$`),
-      { timeout: 10_000 },
-    );
+    await page.waitForURL(new RegExp(`/tasks/${target.id}$`), { timeout: 10_000 });
   });
 
   test("a project hit navigates to the project and grouping headers render", async ({ page, seededProject }, testInfo) => {

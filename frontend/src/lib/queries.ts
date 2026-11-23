@@ -888,6 +888,11 @@ export const queryKeys = {
     [...queryKeys.customerNotesRoot(id), limit] as const,
   tasks: (filter?: TasksFilter) => ["tasks", filter ?? {}] as const,
   comments: (taskId: number) => ["tasks", taskId, "comments"] as const,
+  // One task by id (the /tasks/:id page). Sits under the ["tasks"] prefix on
+  // purpose: every task mutation already invalidates that prefix, so the page's
+  // copy refreshes with the list views. Nothing else may be keyed here.
+  task: (id: number) => ["tasks", "detail", id] as const,
+  taskDetailRoot: ["tasks", "detail"] as const,
   search: (q: string) => ["search", q] as const,
   // B7: ⌘K Outline group and "Mentioned in Outline" (task panel, project Overview).
   // Prefix keys: everything a disconnect / address change must drop.
@@ -1252,6 +1257,52 @@ export function useProjectTasks(id: number | null) {
     queryFn: ({ signal }) =>
       apiRequest<Task[]>(`/projects/${id}/tasks`, { signal }),
     enabled: id !== null,
+  });
+}
+
+/** A task from any cached project task list, shaped as `GET /tasks/:id` returns it. */
+function cachedTaskRow(qc: QueryClient, id: number): TaskWithProject | undefined {
+  const lists = qc.getQueriesData<Task[]>({
+    predicate: ({ queryKey: k }) =>
+      k.length === 3 && k[0] === "projects" && typeof k[1] === "number" && k[2] === "tasks",
+  });
+  for (const [, list] of lists) {
+    const task = list?.find((t) => t.id === id);
+    if (!task) continue;
+    const name = qc
+      .getQueriesData<ProjectDetail>({
+        predicate: ({ queryKey: k }) => isProjectDetailKey(k, task.projectId),
+      })
+      .map(([, p]) => p?.name)
+      .find((n) => !!n);
+    // The project's name may not be cached; the crumb waits for the real row.
+    return { ...task, project: { id: task.projectId, name: name ?? "", customer: null } };
+  }
+  return undefined;
+}
+
+/**
+ * One task by id, for the /tasks/:id page, which knows only the id (the
+ * project id comes back with the row). A task the user cannot see answers 404
+ * exactly like a missing one, and a 404 is never retried. The page's fields
+ * render from `useProjectTasks`, so this entry decides existence, the project
+ * and the breadcrumb; it is refreshed by every `["tasks"]` invalidation.
+ */
+export function useTask(id: number | null) {
+  const qc = useQueryClient();
+  return useQuery<TaskWithProject>({
+    queryKey: id !== null ? queryKeys.task(id) : ["tasks", "detail", "noop"],
+    // The placeholder's `project.customer` is unknown (null) and its name may be
+    // empty: only the breadcrumb and the page's project id read it, and the real
+    // row replaces it as soon as the fetch lands. Nothing may rely on its
+    // customer.
+    // A jump from a task already in a cached project list (a subtask row, the
+    // parent link) shows at once from that list while the row loads.
+    placeholderData: () => (id !== null ? cachedTaskRow(qc, id) : undefined),
+    queryFn: ({ signal }) => apiRequest<TaskWithProject>(`/tasks/${id}`, { signal }),
+    enabled: id !== null,
+    retry: (failures, error) =>
+      !(error instanceof ApiError && (error.status === 404 || error.status === 403)) && failures < 1,
   });
 }
 
@@ -1748,6 +1799,8 @@ export function useUpdateProject(id: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["projects"] });
       qc.invalidateQueries({ queryKey: queryKeys.project(id) });
+      // The task page's breadcrumb carries the project's name.
+      qc.invalidateQueries({ queryKey: queryKeys.taskDetailRoot });
       invalidateProjectActivity(qc, id);
       qc.invalidateQueries({ queryKey: queryKeys.overview });
       qc.invalidateQueries({ queryKey: queryKeys.customers });
@@ -2452,7 +2505,10 @@ export function useDeleteTask(projectId: number) {
       const prev = qc.getQueryData<Task[]>(queryKeys.projectTasks(projectId));
       return { epicId: prev?.find((t) => t.id === id)?.epicId ?? null };
     },
-    onSuccess: (_data, _id, ctx) => {
+    onSuccess: (_data, id, ctx) => {
+      // The task page for this id is being left: drop its entry first so the
+      // ["tasks"] invalidation below does not refetch it into a 404.
+      qc.removeQueries({ queryKey: queryKeys.task(id), exact: true });
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: queryKeys.overview });
@@ -2593,6 +2649,8 @@ export function useDeleteLabel(projectId: number) {
       qc.invalidateQueries({ queryKey: queryKeys.projectLabels(projectId) });
       qc.invalidateQueries({ queryKey: queryKeys.labelNames });
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
+      // List rows (the /tasks table) carry labels.
+      qc.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
 }
