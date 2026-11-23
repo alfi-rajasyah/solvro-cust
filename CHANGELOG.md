@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-23 — Description preview in the List view
+
+- In the project List view (`frontend/src/pages/views/ProjectList.tsx`), a task or subtask with a description shows one muted line of it under its name, cut with an ellipsis when it is too long. Line breaks show as spaces. Rows without a description keep their height. The preview uses the same text style as the Kanban card. (#134)
+
 ### Fixed — 2026-11-23 — Bulk label picker shows what to do
 
 - The "Add label" and "Remove label" panels of the List bulk action bar (`frontend/src/components/BulkActionBar.tsx`) now say "Pick one or more labels to add." (or "to remove."). A picked label shows a filled check box and a stronger outline instead of a thin ring, so the selected state does not depend on colour alone and it is clear why "Add to N tasks" stays disabled until a label is picked. (#135)
