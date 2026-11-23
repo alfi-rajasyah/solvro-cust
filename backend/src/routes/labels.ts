@@ -5,6 +5,7 @@ import { requireAuth, requirePermission, type JwtPayload } from "../http/auth.js
 import { HttpError } from "../http/errors.js";
 import { isLabelNameConflict, labelExistsError } from "../lib/labelConflict.js";
 import { validate } from "../http/validate.js";
+import { labelNameDisplay, labelNameKey } from "../lib/labelNames.js";
 import { ensureProjectVisible, projectVisibilityFilter } from "../lib/visibility.js";
 
 // Resolve the label's owning project and 404 if the caller can't see it.
@@ -34,7 +35,7 @@ export const labelsRouter = Router();
 labelsRouter.use(requireAuth);
 
 // Distinct label names across the projects the caller can see, for the
-// cross-project Tasks filter. Grouped by lower(name); the display casing is the
+// cross-project Tasks filter. Grouped by labelNameKey (trimmed, lower-cased); the display casing is the
 // one used by the most projects (tie: alphabetical first, by code unit).
 labelsRouter.get("/", requirePermission("project:read"), async (req, res) => {
   const rows = await prisma.label.findMany({
@@ -42,8 +43,9 @@ labelsRouter.get("/", requirePermission("project:read"), async (req, res) => {
     select: { name: true, projectId: true },
   });
   const groups = new Map<string, { projects: Set<number>; casings: Map<string, Set<number>> }>();
-  for (const { name, projectId } of rows) {
-    const key = name.toLowerCase();
+  for (const { name: stored, projectId } of rows) {
+    const name = labelNameDisplay(stored);
+    const key = labelNameKey(name);
     let g = groups.get(key);
     if (!g) groups.set(key, (g = { projects: new Set(), casings: new Map() }));
     g.projects.add(projectId);
@@ -58,8 +60,8 @@ labelsRouter.get("/", requirePermission("project:read"), async (req, res) => {
     return { name, projectCount: g.projects.size };
   });
   out.sort((a, b) => {
-    const la = a.name.toLowerCase();
-    const lb = b.name.toLowerCase();
+    const la = labelNameKey(a.name);
+    const lb = labelNameKey(b.name);
     return la < lb ? -1 : la > lb ? 1 : 0;
   });
   res.json(out);

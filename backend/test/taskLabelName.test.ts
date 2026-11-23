@@ -181,4 +181,23 @@ describe("GET /tasks?labelName=", () => {
     );
     expect(entry?.projectCount).toBe(1);
   });
+
+  it("groups and matches a stored name with surrounding spaces as its trimmed name", async () => {
+    const tag = uniq();
+    const me = await createUserWithRole("TAM");
+    const p1 = await project(me.userId);
+    const p2 = await project(me.userId);
+    // Saved before names were trimmed: the stored name carries the spaces.
+    const padded = await labelled(p1.id, `  Spaced-${tag} `);
+    const plain = await labelled(p2.id, `spaced-${tag}`);
+
+    const labels = await get(me.token, "/labels");
+    const mine = (labels.body as Array<{ name: string; projectCount: number }>).filter((l) =>
+      l.name.trim().toLowerCase() === `spaced-${tag}`,
+    );
+    expect(mine).toEqual([{ name: `Spaced-${tag}`, projectCount: 2 }]);
+
+    const res = await get(me.token, `/tasks?labelName=${encodeURIComponent(`Spaced-${tag}`)}`);
+    expect(res.body.map((t: { id: number }) => t.id).sort()).toEqual([padded.task.id, plain.task.id].sort());
+  });
 });

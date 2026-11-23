@@ -6,6 +6,7 @@ import { requireAuth, requirePermission, type JwtPayload } from "../http/auth.js
 import { HttpError } from "../http/errors.js";
 import { dateInput, dateString } from "../lib/dateInput.js";
 import { validate } from "../http/validate.js";
+import { labelNameKey } from "../lib/labelNames.js";
 import { ensureTaskVisible, projectVisibilityFilter } from "../lib/visibility.js";
 import {
   isValidDayString,
@@ -307,21 +308,15 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
     and.push({ dueDate: { lt: overdueBoundary(today) } }, { status: { not: "DONE" } });
   }
   if (labelName) {
-    // Exact lower(name) compare in SQL: Prisma's insensitive mode is ILIKE, so
-    // `_` and `%` in a name would act as wildcards. The visibility filter then
-    // keeps ids to labels of projects the caller can see; no id, no tasks.
-    const lowered = [...new Set(labelName.map((n) => n.toLowerCase()))];
-    const candidates = await prisma.$queryRaw<Array<{ id: number }>>`
-      SELECT id FROM labels
-      WHERE lower(name) IN (SELECT lower(x) FROM unnest(${lowered}::text[]) AS x)
-    `;
-    const visible = await prisma.label.findMany({
-      where: {
-        id: { in: candidates.map((c) => c.id) },
-        project: projectVisibilityFilter(req.user!),
-      },
-      select: { id: true },
+    // Names match by labelNameKey (trimmed, lower-cased, exact), never ILIKE:
+    // `_` and `%` in a name stay literal. Only labels of projects the caller
+    // can see are candidates; no matching id means no tasks, not all of them.
+    const wanted = new Set(labelName.map(labelNameKey));
+    const candidates = await prisma.label.findMany({
+      where: { project: projectVisibilityFilter(req.user!) },
+      select: { id: true, name: true },
     });
+    const visible = candidates.filter((l) => wanted.has(labelNameKey(l.name)));
     and.push({ labels: { some: { id: { in: visible.map((l) => l.id) } } } });
   }
   if (dueFrom) and.push({ dueDate: { gte: utcMidnightOfDayString(dueFrom) } });
