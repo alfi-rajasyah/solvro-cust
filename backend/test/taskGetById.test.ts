@@ -34,10 +34,22 @@ describe("GET /tasks/:id", () => {
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(task.id);
     expect(res.body.title).toBe("Parent");
-    expect(res.body.project).toEqual({ id: project.id, name: project.name });
+    expect(res.body.project).toEqual({ id: project.id, name: project.name, customer: null });
     expect(res.body._count).toEqual({ subtasks: 0, comments: 0 });
     expect(res.body.labels).toEqual([]);
     expect(res.body.statusDef).toBeTruthy();
+  });
+
+  it("flattens the project's primary customer like the list", async () => {
+    const { tam, project, task } = await fixture();
+    const customer = await prisma.customer.create({ data: { name: `Cust ${Date.now()}-${Math.random()}`, description: "", tamId: tam.userId } });
+    await prisma.projectCustomer.create({ data: { projectId: project.id, customerId: customer.id, isPrimary: true } });
+    const res = await request(app).get(`/tasks/${task.id}`).set(auth(tam.token));
+    expect(res.status).toBe(200);
+    expect(res.body.project.customer).toEqual({ id: customer.id, name: customer.name });
+    const list = await request(app).get("/tasks").set(auth(tam.token));
+    const row = list.body.find((r: { id: number }) => r.id === task.id);
+    expect(res.body.project).toEqual(row.project);
   });
 
   it("returns parentTaskId for a subtask", async () => {
@@ -59,10 +71,19 @@ describe("GET /tasks/:id", () => {
   });
 
   it("answers 404 for a missing task, the same as a hidden one", async () => {
-    const { tam } = await fixture();
+    const { tam, task } = await fixture();
+    const other = await createUserWithRole("TAM");
+    const hidden = await request(app).get(`/tasks/${task.id}`).set(auth(other.token));
     const res = await request(app).get("/tasks/2147483000").set(auth(tam.token));
     expect(res.status).toBe(404);
     expect(res.body.code).toBe("not_found");
+    expect(res.body).toEqual(hidden.body);
+  });
+
+  it("answers 400 for a non-numeric id", async () => {
+    const { tam } = await fixture();
+    const res = await request(app).get("/tasks/abc").set(auth(tam.token));
+    expect(res.status).toBe(400);
   });
 
   it("answers 403 without project:read", async () => {
