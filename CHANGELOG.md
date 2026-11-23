@@ -15,6 +15,21 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-23 — Task page
+
+- A task has its own page at `/tasks/:id` (`frontend/src/pages/TaskPage.tsx`). It shows the same fields as the side panel: two columns on a wide screen (title, description, subtasks and comments on the left; the task fields on the right) and one column on a phone. The top bar shows a breadcrumb through the task's project. A task that does not exist, or that you cannot see, shows a not-found page.
+- Ways to open it: the new "Open as page" link in the task side panel, a row on the Tasks page, or a task result in the Ctrl+K search. The side panel's Copy link button now copies the task page address, so a shared link opens the task on its own.
+- `GET /tasks/:id` (`backend/src/routes/tasks.ts`) returns one task in the same shape as a task list row, including its project's primary customer. It needs `project:read`, and a task you cannot see answers 404, the same as one that does not exist.
+- The side panel's content and its Task options menu are now shared components (`frontend/src/components/TaskDetail.tsx`, `TaskOptionsMenu.tsx`), used by both the panel and the page, so the two always show the same fields with the same save rules.
+
+### Changed — 2026-11-23 — Tasks page rows open the task page
+
+- A click on a row of the Tasks page now opens that task's page instead of a pop-up editor, and each task title is a link, so Enter and a middle click work too.
+
+### Fixed — 2026-11-23 — Escape in a dialog inside the task panel
+
+- Escape in a dialog opened from the task side panel (for example the save conflict dialog) now closes only that dialog. Before, the same key press could also close the panel.
+
 ### Added — 2026-11-23 — Tasks in the sidebar
 
 - The cross-project Tasks page (`/tasks`) is now listed in the sidebar's Workspace group, after Projects, and in the Ctrl+K page commands (`frontend/src/lib/navCommands.ts`). Before, it was reachable only by its address or from Overview links. Like its data (`GET /tasks`), the entry and the route need `project:read`: the route in `frontend/src/App.tsx` now has the same permission guard as the other gated pages. The Help page has a Tasks page section.
