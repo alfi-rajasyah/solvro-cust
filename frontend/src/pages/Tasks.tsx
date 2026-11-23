@@ -15,15 +15,16 @@ import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import { Tabs } from "@/components/Tabs";
 import { TaskFormModal } from "@/components/TaskFormModal";
 import { STATUS_TONE_DOT_CLASS, TaskStatusChip } from "@/components/StatusChip";
+import { useTasksChipFilters } from "@/hooks/useTasksChipFilters";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { dateToDay, dayFromIso } from "@/lib/dateField";
 import { EMPTY_VALUE } from "@/lib/emptyValue";
 import { fmtDay, fmtDue } from "@/lib/formatDate";
 import { parseWeekKey, weekKeyOf } from "@/lib/isoWeek";
 import { TASK_CATEGORY_GROUP_LABEL, priorityOptions } from "@/lib/labels";
+import { LABEL_FIELD } from "@/lib/tasksPageFilters";
 import { statusFilterOptions, statusFilterToQuery, statusSortKey } from "@/lib/taskStatuses";
 import {
-  type Filter,
   type FilterFieldConfig,
   Filters,
 } from "@/components/reui/filters";
@@ -38,10 +39,7 @@ import {
   type Task,
   type TaskWithProject,
   type TasksFilter,
-  useCustomers,
   useInfiniteTasks,
-  useTaskStatuses,
-  useUsers,
 } from "@/lib/queries";
 
 const PRIORITY_ORDER: Record<Priority, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
@@ -58,6 +56,9 @@ const EMPTY_TASKS: TaskWithProject[] = [];
 // actually being sent to useInfiniteTasks (e.g. a "Status is not DONE" chip would
 // still filter as "Status is DONE"). Same fix as Projects.tsx's customer field.
 const ONLY_IS_OPERATOR = [{ value: "is", label: "is" }];
+// Label is a multiselect that matches any picked name; "is not any of" and the
+// rest would render a chip the request does not honour, same reasoning as above.
+const ONLY_ANY_OF_OPERATOR = [{ value: "is_any_of", label: "is any of" }];
 
 // Saved views, synced to `?view=`. "open" is the default and is written to the
 // URL as the absence of the param, so `/tasks` and `/tasks?view=open` agree.
@@ -102,10 +103,19 @@ function viewFilter(view: ViewKey, todayDay: string, userId: number | undefined)
 }
 
 export function Tasks() {
-  // Filters chip state is UI-only (Filter[]); it is derived down into the
+  // The Filters chips (useTasksChipFilters) are derived down into the
   // TasksFilter shape useInfiniteTasks/queries.ts already expects — see `filter` below.
-  const [activeFilters, setActiveFilters] = useState<Filter<string>[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth();
+  // /users, /customers and /labels need project:read; without it the filters stay empty.
+  const canRead = hasPermission(user, "project:read");
+  // Every chip's picks live in the URL (lib/tasksPageFilters.ts) and the chip
+  // list is kept in step with it, so a reload or a shared link restores them.
+  const { values: chipValues, chips, onChange: onFiltersChange, clearChips, ...lists } = useTasksChipFilters({
+    canRead,
+    canReadCustomers: hasPermission(user, "customer:read"),
+  });
+  const { users, customers, statusDefs, labelNames } = lists;
   // Person filters carried in from the Overview (?tamId=&assigneeId=). With an
   // assignee the list includes subtasks by default, so it matches the Overview
   // tile that links here; the "Top-level only" box can still narrow it.
@@ -124,14 +134,8 @@ export function Tasks() {
   // click re-sorts the loaded rows client-side.
   const [sorting, setSorting] = useState<SortingState>([]);
   const view = parseView(searchParams.get("view"));
-  const { user } = useAuth();
   const [editTask, setEditTask] = useState<TaskWithProject | null>(null);
 
-  // /users and /customers need project:read; without it the filters stay empty.
-  const canRead = hasPermission(user, "project:read");
-  const { data: users } = useUsers(canRead);
-  const { data: customers } = useCustomers(canRead && hasPermission(user, "customer:read"));
-  const { data: statusDefs } = useTaskStatuses();
 
   const filterFields = useMemo<FilterFieldConfig<string>[]>(
     () => [
@@ -176,8 +180,22 @@ export function Tasks() {
             },
           ]
         : []),
+      // GET /labels needs project:read like the rest of the page's pickers.
+      ...(canRead
+        ? [
+            {
+              key: LABEL_FIELD,
+              label: "Label",
+              type: "multiselect" as const,
+              operators: ONLY_ANY_OF_OPERATOR,
+              defaultOperator: "is_any_of",
+              // Name only: one name is a different colour in each project.
+              options: (labelNames ?? []).map((l) => ({ value: l.name, label: l.name })),
+            },
+          ]
+        : []),
     ],
-    [users, customers, user, statusDefs],
+    [users, customers, user, statusDefs, canRead, labelNames],
   );
 
   // Derive the TasksFilter useInfiniteTasks/queries.ts expects from the active Filter
@@ -189,12 +207,10 @@ export function Tasks() {
 
   const userId = user?.id;
   const filter = useMemo<TasksFilter>(() => {
-    const valueFor = (key: string) =>
-      activeFilters.find((f) => f.field === key)?.values[0];
-    const status = valueFor("status");
-    const priority = valueFor("priority");
-    const assignedToId = valueFor("assignedToId");
-    const customerId = valueFor("customerId");
+    const status = chipValues.status[0];
+    const priority = chipValues.priority[0];
+    const assignedToId = chipValues.assignedToId[0];
+    const customerId = chipValues.customerId[0];
     const base = viewFilter(view, todayDay!, userId);
     return {
       ...base,
@@ -210,9 +226,10 @@ export function Tasks() {
           : (urlAssigneeId ?? base.assignedToId),
       tamId: urlTamId,
       customerId: customerId === undefined ? undefined : Number(customerId),
+      labelNames: chipValues.label.length > 0 ? chipValues.label : undefined,
       topLevel: topLevel || undefined,
     };
-  }, [activeFilters, topLevel, view, todayDay, userId, urlTamId, urlAssigneeId]);
+  }, [chipValues, topLevel, view, todayDay, userId, urlTamId, urlAssigneeId]);
 
   const { data, isLoading, isError, error, refetch, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useInfiniteTasks(filter);
@@ -402,9 +419,9 @@ export function Tasks() {
 
       <div className="mb-4 flex flex-wrap items-end gap-3 rounded-sm border border-outline-variant bg-surface-container-lowest p-3">
         <Filters
-          filters={activeFilters}
+          filters={chips}
           fields={filterFields}
-          onChange={setActiveFilters}
+          onChange={onFiltersChange}
           size="sm"
           allowMultiple={false}
         />
@@ -420,7 +437,7 @@ export function Tasks() {
         <button
           type="button"
           onClick={() => {
-            setActiveFilters([]);
+            clearChips();
             setTopLevel(true);
             setSearchParams({}, { replace: false });
           }}

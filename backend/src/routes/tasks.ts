@@ -6,6 +6,7 @@ import { requireAuth, requirePermission, type JwtPayload } from "../http/auth.js
 import { HttpError } from "../http/errors.js";
 import { dateInput, dateString } from "../lib/dateInput.js";
 import { validate } from "../http/validate.js";
+import { labelNameKey } from "../lib/labelNames.js";
 import { ensureTaskVisible, projectVisibilityFilter } from "../lib/visibility.js";
 import {
   isValidDayString,
@@ -128,6 +129,14 @@ const tasksListQuerySchema = z
     priority: z.nativeEnum(Priority).optional(),
     assignedToId: z.coerce.number().int().positive().optional(),
     labelId: z.coerce.number().int().positive().optional(),
+    // Label names, any-of, matched case-insensitively across the caller's
+    // visible projects (one name is a different label row per project).
+    // A single value arrives as a string, repeats as an array.
+    labelName: z
+      .union([z.string(), z.array(z.string())])
+      .transform((v) => (Array.isArray(v) ? v : [v]))
+      .pipe(z.array(z.string().trim().min(1).max(50)).min(1).max(20))
+      .optional(),
     customerId: z.coerce.number().int().positive().optional(),
     // Tasks on projects whose TAM is this user (Overview TAM filter).
     tamId: z.coerce.number().int().positive().optional(),
@@ -249,6 +258,7 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
     priority,
     assignedToId,
     labelId,
+    labelName,
     customerId,
     tamId,
     overdue,
@@ -296,6 +306,18 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
     // TODOs; status=DONE&overdue=true is a contradiction and returns
     // nothing, by construction.
     and.push({ dueDate: { lt: overdueBoundary(today) } }, { status: { not: "DONE" } });
+  }
+  if (labelName) {
+    // Names match by labelNameKey (trimmed, lower-cased, exact), never ILIKE:
+    // `_` and `%` in a name stay literal. Only labels of projects the caller
+    // can see are candidates; no matching id means no tasks, not all of them.
+    const wanted = new Set(labelName.map(labelNameKey));
+    const candidates = await prisma.label.findMany({
+      where: { project: projectVisibilityFilter(req.user!) },
+      select: { id: true, name: true },
+    });
+    const visible = candidates.filter((l) => wanted.has(labelNameKey(l.name)));
+    and.push({ labels: { some: { id: { in: visible.map((l) => l.id) } } } });
   }
   if (dueFrom) and.push({ dueDate: { gte: utcMidnightOfDayString(dueFrom) } });
   if (dueTo) {

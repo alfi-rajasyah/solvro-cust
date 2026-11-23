@@ -15,6 +15,15 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-23 — Label filter on the Tasks page
+
+- The Filter menu on the cross-project Tasks page (`frontend/src/pages/Tasks.tsx`) has a Label field. Pick one or more label names to see the tasks that carry any of them, across every project you can see. Labels belong to one project, so the picker lists each name once and matches it without regard to case or surrounding spaces. (#132)
+- `GET /labels` (`backend/src/routes/labels.ts`) lists the label names of the projects you can see, with the number of projects that use each. `GET /tasks` (`backend/src/routes/tasks.ts`) accepts a repeatable `labelName` filter (up to 20 names) that matches those names across visible projects; `_` and `%` in a name match only themselves.
+
+### Changed — 2026-11-23 — Tasks page filters are kept in the URL
+
+- Every Filter menu chip on the Tasks page is now kept in the URL (`?status=`, `?priority=`, `?assignee=`, `?customer=`, `?label=`), so a reload or a shared link restores it. Before, these chips were lost on a reload. A value that no longer exists, such as a deleted user, customer or label, is dropped from the URL once its list loads. The Overview's `?assigneeId=` link keeps working, and an Assignee chip still takes precedence over it. (#132)
+
 ### Added — 2026-11-23 — Description preview in the List view
 
 - In the project List view (`frontend/src/pages/views/ProjectList.tsx`), a task or subtask with a description shows one muted line of it under its name, cut with an ellipsis when it is too long. Line breaks show as spaces. Rows without a description keep their height. The preview uses the same text style as the Kanban card. (#134)
