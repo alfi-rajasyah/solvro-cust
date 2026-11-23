@@ -60,9 +60,8 @@ test.describe("deep links", () => {
     const panel = page.getByRole("dialog", { name: "Task details" });
     await panel.getByRole("button", { name: "Copy task link" }).click();
     await expect(panel.getByRole("status").filter({ hasText: "Link copied" })).toBeVisible();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      `${origin}/projects/${projectId}?task=${alpha.id}`,
-    );
+    // The panel's Copy link is the task's own page, not the project tab with ?task=.
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${origin}/tasks/${alpha.id}`);
 
     await page.goto(`/customers/${customerId}`, { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "Copy link", exact: true }).click();

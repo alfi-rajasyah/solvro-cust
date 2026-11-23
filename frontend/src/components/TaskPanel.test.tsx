@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { TaskPanel } from "./TaskPanel";
 
 const refetch = vi.fn();
@@ -72,7 +73,7 @@ Object.defineProperty(window, "matchMedia", {
 
 function render(ui: ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } });
-  return rtlRender(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return rtlRender(<QueryClientProvider client={client}><MemoryRouter>{ui}</MemoryRouter></QueryClientProvider>);
 }
 
 const props = { projectId: 1, taskId: 5, onOpenTask: () => {}, onClose: () => {} };
@@ -143,7 +144,9 @@ describe("TaskPanel hook order", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } });
     const ui = () => (
       <QueryClientProvider client={client}>
-        <TaskPanel {...props} />
+        <MemoryRouter>
+          <TaskPanel {...props} />
+        </MemoryRouter>
       </QueryClientProvider>
     );
     const { rerender } = rtlRender(ui());
@@ -315,7 +318,9 @@ describe("TaskPanel description", () => {
     fireEvent.change(box, { target: { value: "half typed" } });
     rerender(
       <QueryClientProvider client={new QueryClient()}>
-        <TaskPanel {...props} taskId={6} />
+        <MemoryRouter>
+          <TaskPanel {...props} taskId={6} />
+        </MemoryRouter>
       </QueryClientProvider>,
     );
     fireEvent.blur(box);
@@ -489,5 +494,36 @@ describe("TaskPanel assignee pickers hide inactive users", () => {
     expect(labels.some((l) => l?.startsWith("old (inactive)"))).toBe(true);
     expect(labels.some((l) => l?.startsWith("ann"))).toBe(true);
     expect(labels.some((l) => l?.includes("gone"))).toBe(false);
+  });
+});
+
+describe("TaskPanel page entry points", () => {
+  it("links to the task's own page and copies that page's absolute URL", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    tasksQuery.current = {
+      data: [
+        {
+          id: 5,
+          title: "Parent",
+          description: null,
+          status: "TODO",
+          priority: "MEDIUM",
+          position: 0,
+          parentTaskId: null,
+          labels: [],
+          section: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      isError: false,
+      error: null,
+      refetch,
+    };
+    render(<TaskPanel {...props} />);
+    expect(screen.getByRole("link", { name: "Open as page" }).getAttribute("href")).toBe("/tasks/5");
+    fireEvent.click(screen.getByRole("button", { name: "Copy task link" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/tasks/5`));
   });
 });

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   getCoreRowModel,
   getSortedRowModel,
@@ -13,7 +13,6 @@ import { CRITICAL_PATH_LABEL, CriticalPathMark } from "@/components/CriticalPath
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { QueryErrorAlert } from "@/components/QueryErrorAlert";
 import { Tabs } from "@/components/Tabs";
-import { TaskFormModal } from "@/components/TaskFormModal";
 import { STATUS_TONE_DOT_CLASS, TaskStatusChip } from "@/components/StatusChip";
 import { useTasksChipFilters } from "@/hooks/useTasksChipFilters";
 import { hasPermission, useAuth } from "@/lib/auth";
@@ -134,7 +133,7 @@ export function Tasks() {
   // click re-sorts the loaded rows client-side.
   const [sorting, setSorting] = useState<SortingState>([]);
   const view = parseView(searchParams.get("view"));
-  const [editTask, setEditTask] = useState<TaskWithProject | null>(null);
+  const navigate = useNavigate();
 
 
   const filterFields = useMemo<FilterFieldConfig<string>[]>(
@@ -280,8 +279,16 @@ export function Tasks() {
         accessorKey: "title",
         header: ({ column }) => <DataGridColumnHeader column={column} title="Title" />,
         enableSorting: false,
+        // A real link, so the row opens with Enter, a middle click or "open in a new
+        // tab"; the row's own click handler covers the rest of the row for the mouse.
         cell: ({ row }) => (
-          <span className="font-medium text-on-surface">{row.original.title}</span>
+          <Link
+            to={`/tasks/${row.original.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="[@media(pointer:coarse)]:inline-block font-medium text-on-surface hover:text-primary [@media(pointer:coarse)]:py-3"
+          >
+            {row.original.title}
+          </Link>
         ),
         meta: { skeleton: <Skeleton className="h-3.5 w-32" /> },
       },
@@ -471,7 +478,7 @@ export function Tasks() {
           recordCount={tasks?.length ?? 0}
           isLoading={isLoading}
           loadingMode="skeleton"
-          onRowClick={(task) => setEditTask(task)}
+          onRowClick={(task) => navigate(`/tasks/${task.id}`)}
           emptyMessage="No tasks match the current filters."
           tableLayout={{
             dense: true,
@@ -533,16 +540,6 @@ export function Tasks() {
             </Button>
           )}
         </div>
-      )}
-
-      {editTask && (
-        <TaskFormModal
-          mode="edit"
-          open={editTask !== null}
-          onClose={() => setEditTask(null)}
-          projectId={editTask.projectId}
-          task={editTask}
-        />
       )}
     </div>
   );

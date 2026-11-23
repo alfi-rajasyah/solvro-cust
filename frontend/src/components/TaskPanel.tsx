@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import { usePanelFocus } from "@/hooks/usePanelFocus";
 import { isDragActive } from "./Modal";
 import { CopyLinkButton } from "./CopyLinkButton";
@@ -130,9 +131,17 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
             className="px-2.5 py-1"
           />
           <span className="flex-1" />
+          <Link
+            to={`/tasks/${t.id}`}
+            aria-label="Open as page"
+            title="Open as page"
+            className="rounded-sm p-1 [@media(pointer:coarse)]:grid [@media(pointer:coarse)]:size-11 [@media(pointer:coarse)]:place-items-center [@media(pointer:coarse)]:p-0 text-on-surface-variant hover:bg-surface-container-high"
+          >
+            <span aria-hidden="true" className="material-symbols-outlined text-base">open_in_full</span>
+          </Link>
           <CopyLinkButton
             label="Copy task link"
-            getUrl={() => `${window.location.origin}/projects/${projectId}?task=${taskId}`}
+            getUrl={() => `${window.location.origin}/tasks/${t.id}`}
             className="rounded-sm p-1 hover:bg-surface-container-high"
           />
           <TaskOptionsMenu
