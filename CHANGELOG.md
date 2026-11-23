@@ -22,6 +22,11 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 - `GET /tasks/:id` (`backend/src/routes/tasks.ts`) returns one task in the same shape as a task list row, including its project's primary customer. It needs `project:read`, and a task you cannot see answers 404, the same as one that does not exist.
 - The side panel's content and its Task options menu are now shared components (`frontend/src/components/TaskDetail.tsx`, `TaskOptionsMenu.tsx`), used by both the panel and the page, so the two always show the same fields with the same save rules.
 
+### Fixed — 2026-11-23 — Keyboard focus in Gantt row-menu dialogs
+
+- In the Gantt row menu (`frontend/src/components/gantt-v2/SolvroGantt.tsx`), Edit, Add subtask and Delete now open their dialog after the menu has closed, so the dialog keeps keyboard focus (for example on the task title) and returns it to the row or to the "Task actions" button when it closes. Before, the closing menu could pull focus out of the dialog to the page.
+- The task edit form's drawer (`frontend/src/components/Drawer.tsx`) gives focus back to the control that opened it only when focus has fallen to the page on close, so it no longer takes focus from a control the user moved to.
+
 ### Changed — 2026-11-23 — Tasks page rows open the task page
 
 - A click on a row of the Tasks page now opens that task's page instead of a pop-up editor, and each task title is a link, so Enter and a middle click work too.
