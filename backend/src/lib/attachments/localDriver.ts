@@ -76,7 +76,14 @@ export function createLocalDriver(rootDir: string): AttachmentStorage {
       for await (const file of walk(path.join(root, "tasks"))) {
         // An in-flight upload's temp file is not a stored object yet.
         if (file.endsWith(TEMP_SUFFIX)) continue;
-        const info = await stat(file);
+        let info;
+        try {
+          info = await stat(file);
+        } catch (err) {
+          // Deleted between the directory read and the stat.
+          if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
+          throw err;
+        }
         yield {
           key: path.relative(root, file).split(path.sep).join("/"),
           lastModified: info.mtime,

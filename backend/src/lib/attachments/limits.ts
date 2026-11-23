@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-// Content-Type comes from the extension, never from the browser (plan D6).
+// Content-Type comes from the extension, never from the browser (docs/archive/plans/task-attachments.md, D6).
 // An allowlisted extension missing here falls back to octet-stream, which
 // downloads as an opaque file.
 const MIME_BY_EXTENSION: Record<string, string> = {
@@ -65,7 +65,7 @@ export function cleanFileName(raw: string): string {
   return name;
 }
 
-/** Storage key for a new attachment (plan D4): the user's file name never appears in it. */
+/** Storage key for a new attachment (docs/archive/plans/task-attachments.md, D4): the user's file name never appears in it. */
 export function storageKeyFor(taskId: number | string): string {
   return `tasks/${taskId}/${randomUUID()}`;
 }
