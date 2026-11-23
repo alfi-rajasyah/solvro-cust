@@ -186,10 +186,10 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         title: "The Tasks page",
         points: [
-          "Tasks in the sidebar lists the tasks of every project you can see.",
+          "The Tasks page lists the tasks of every project you can see. Open it from Tasks in the sidebar.",
           "Pick a view: \"All open\", \"My open\", \"Overdue\", \"This week\", or \"All\".",
-          "Use \"Filter\" to narrow by status, priority, assignee, customer, or label. A label filter matches that label name in every project. Filters stay in the address, so a reload or a shared link keeps them.",
-          "Untick \"Top-level only\" to include subtasks. \"Reset\" clears the view and every filter.",
+          "Use \"Filter\" to narrow by status, priority, assignee, customer (with Customers access), or label. A label filter matches that label name in every project. Filters stay in the address, so a reload or a shared link keeps them.",
+          "Untick \"Top-level only\" to include subtasks. \"Reset\" returns to \"All open\" and clears every filter.",
           "Click a row to edit the task.",
         ],
       },

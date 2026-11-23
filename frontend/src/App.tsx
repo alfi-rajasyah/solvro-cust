@@ -115,8 +115,8 @@ export function App() {
             <Route path="services" element={<ProjectServices />} />
             <Route path="docs" element={<ProjectDocs />} />
           </Route>
-          {/* Customers and Daily Review are gated on project:read, like their nav
-              entries and API routes (docs/archive/plans/internal-sync.md). */}
+          {/* Customers is gated on customer:read and Daily Review on project:read,
+              like their nav entries and API routes (docs/archive/plans/internal-sync.md). */}
           <Route
             path="customers"
             element={
