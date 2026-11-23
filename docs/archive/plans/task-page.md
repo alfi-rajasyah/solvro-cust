@@ -1,6 +1,6 @@
 # Task page
 
-Status: in progress (planned 2026-11-23 @ `11d821c`)
+Status: shipped 2026-11-23
 Archive path: `docs/archive/plans/task-page.md`
 
 A task gets its own page at `/tasks/:id`. Today a task opens only in the side panel (`?task=<id>` on a project tab, `frontend/src/components/TaskPanel.tsx`) or in the pop-up editor on `/tasks` (`TaskFormModal` in edit mode). Lane P: a new page, a new read route and spine touches (`backend/src/routes/tasks.ts`, `frontend/src/lib/queries.ts`).
@@ -53,3 +53,19 @@ Instant review on task 1 (`routes/tasks.ts`) and on task 3 (`lib/queries.ts`); o
 - A page for epics.
 - Editing several tasks from the page.
 - Changing what the side panel shows.
+
+## Result
+
+- Tasks 1 to 4 shipped as planned, with the Copy link change recorded in D2.
+- Reviews: instant reviews on tasks 1 and 3 and on two fix rounds, plus one phase review; no blockers. Fixed along the way:
+  - an Escape regression from the panel split (an inner dialog's Escape could close the panel);
+  - a failed background refetch that could unmount the page and lose a draft;
+  - the iTop pin and focus tests for the edit form, which only the Gantt row menu opens now.
+- Making that focus test pass exposed real focus loss in the Gantt row menu. Edit, Add subtask and Delete now open their dialog after the menu has closed. The task form drawer restores focus to its opener only when focus fell to the page.
+- Deferred: ISS-210 (Gantt menu wait uses a document-wide selector), ISS-211 (placeholder row's unknown customer). The kanban-dnd flakes were added to ISS-138.
+- `gates.sh`: all gates pass, including the spine review. The Playwright step ran smoke, `deep-link`, `gantt-row-menu-focus`, `itop-task-modal-panel`, `kanban-dnd`, `search`, `task-conflict` and `task-page`.
+- Delivery Gate PASS 2026-11-23, light and dark at 1280 and 375 px:
+  - `/tasks/:id` shows two columns on desktop (title, description, subtasks and comments; the fields in a divided side column) and one column on a phone (fields after the description).
+  - The breadcrumb reads Tasks / project / task.
+  - The side panel shows the new "Open as page" icon next to Copy link.
+  - `/tasks/99999999` shows "Task not found" with "Back to Tasks".

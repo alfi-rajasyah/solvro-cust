@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { apiBase, expect, loginViaUi, test } from "../fixtures/test";
 import { createTask } from "../fixtures/seed";
 
-// The task page, /tasks/:id (docs/plans/task-page.md): the same body as the side
+// The task page, /tasks/:id (docs/archive/plans/task-page.md): the same body as the side
 // panel in two columns from md. Covers the direct visit, a reload, the four ways
 // in (panel button, /tasks row, Ctrl+K, copy link), the not-found state, saving
 // from the page, the delete destinations and the phone layout.
