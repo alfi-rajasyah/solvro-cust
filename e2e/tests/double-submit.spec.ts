@@ -74,7 +74,7 @@ test.describe("Inline create inputs ignore a second Enter while pending", () => 
 
     const posts = await holdTaskCreates(page);
     const title = `Story ${stamp()}`;
-    const input = panel.getByLabel("Add story");
+    const input = panel.getByLabel("Story title");
     await input.fill(title);
     await input.press("Enter");
     await input.press("Enter");

@@ -52,6 +52,41 @@ interface EpicPanelProps {
   onClose: () => void;
 }
 
+export function AddStoryForm({
+  value,
+  onChange,
+  pending,
+  onSubmit,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  pending: boolean;
+  onSubmit: (e: FormEvent) => void;
+}) {
+  return (
+    <form onSubmit={onSubmit} className="mt-1.5 flex items-center gap-1.5">
+      <button
+        type="submit"
+        aria-label="Add story"
+        disabled={pending || value.trim() === ""}
+        className="tap-target inline-flex shrink-0 items-center justify-center rounded-sm p-0.5 text-primary outline-none hover:bg-surface-container-high focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-40"
+      >
+        <span aria-hidden="true" className="material-symbols-outlined text-base">add</span>
+      </button>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        readOnly={pending}
+        placeholder="Add story…"
+        maxLength={200}
+        aria-label="Story title"
+        className="[@media(pointer:coarse)]:min-h-11 flex-1 border-none bg-transparent text-xs text-on-surface rounded-sm outline-hidden placeholder:text-on-surface-variant/80 focus-visible:ring-2 focus-visible:ring-primary"
+      />
+    </form>
+  );
+}
+
 /**
  * Epic detail side panel (docs/archive/plans/epics-spec.md §6), deep-linked via
  * `?epic=<id>` from ProjectEpics.tsx — mirrors TaskPanel.tsx's shell,
@@ -419,19 +454,12 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
             </ul>
           )}
           {canEdit && (
-            <form onSubmit={(e) => void handleAddStory(e)} className="mt-1.5 flex items-center gap-1.5">
-              <span aria-hidden="true" className="material-symbols-outlined text-xs text-primary">add</span>
-              <input
-                type="text"
-                value={newStory}
-                onChange={(e) => setNewStory(e.target.value)}
-                readOnly={createTask.isPending}
-                placeholder="Add story…"
-                maxLength={200}
-                aria-label="Add story"
-                className="[@media(pointer:coarse)]:min-h-11 flex-1 border-none bg-transparent text-xs text-on-surface rounded-sm outline-hidden placeholder:text-on-surface-variant/80 focus-visible:ring-2 focus-visible:ring-primary"
-              />
-            </form>
+            <AddStoryForm
+              value={newStory}
+              onChange={setNewStory}
+              pending={createTask.isPending}
+              onSubmit={(e) => void handleAddStory(e)}
+            />
           )}
         </div>
       </div>
