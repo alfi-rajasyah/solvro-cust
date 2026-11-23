@@ -32,10 +32,6 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 - A click on a row of the Tasks page now opens that task's page instead of a pop-up editor, and each task title is a link, so Enter and a middle click work too.
 
 
-### Fixed — 2026-11-23 — Escape in a dialog inside the task panel
-
-- Escape in a dialog opened from the task side panel (for example the save conflict dialog) now closes only that dialog. Before, the same key press could also close the panel.
-
 ### Added — 2026-11-23 — Tasks in the sidebar
 
 - The cross-project Tasks page (`/tasks`) is now listed in the sidebar's Workspace group, after Projects, and in the Ctrl+K page commands (`frontend/src/lib/navCommands.ts`). Before, it was reachable only by its address or from Overview links. Like its data (`GET /tasks`), the entry and the route need `project:read`: the route in `frontend/src/App.tsx` now has the same permission guard as the other gated pages. The Help page has a Tasks page section.
