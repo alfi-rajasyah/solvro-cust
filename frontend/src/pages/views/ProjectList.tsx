@@ -92,6 +92,18 @@ const PRIORITY_ICON_CLASS: Record<Priority, string> = {
   URGENT: "text-error",
 };
 
+/** One muted line of a task's description under its name. Plain text, so it is
+ *  not a tab stop; `truncate` (nowrap) folds line breaks into spaces. Renders
+ *  nothing for an empty description, so the row keeps its height. */
+function DescriptionPreview({ text }: { text: string | null | undefined }) {
+  if (!text || !text.trim()) return null;
+  return (
+    <span data-testid="list-description-preview" className="block truncate text-xs leading-snug text-on-surface-variant">
+      {text}
+    </span>
+  );
+}
+
 function nextPriority(p: Priority): Priority {
   const idx = PRIORITY_ORDER.indexOf(p);
   if (idx === -1) return "LOW";
@@ -1111,15 +1123,18 @@ function TaskRow({
               handler of its own, so Enter/Space click it and the click
               bubbles to the row's onOpenTask. (The grip is the drag
               handle, where Enter starts a keyboard drag.) */}
-          <button
-            type="button"
-            className={[
-              "[@media(pointer:coarse)]:min-h-11 min-w-0 truncate text-sm rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary",
-              task.status === "DONE" ? "text-on-surface-variant line-through" : "text-on-surface",
-            ].join(" ")}
-          >
-            {task.title}
-          </button>
+          <span className="flex min-w-0 flex-col">
+            <button
+              type="button"
+              className={[
+                "[@media(pointer:coarse)]:min-h-11 min-w-0 truncate text-sm rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary",
+                task.status === "DONE" ? "text-on-surface-variant line-through" : "text-on-surface",
+              ].join(" ")}
+            >
+              {task.title}
+            </button>
+            <DescriptionPreview text={task.description} />
+          </span>
           {epic && <EpicChip epic={epic} compact className="shrink-0" />}
         </span>
 
@@ -1228,6 +1243,7 @@ function TaskRow({
           <span className="sr-only">Priority: {PRIORITY_LABEL[task.priority]}</span>
           {task.isCriticalPath && <CriticalPathMark variant="glyph" />}
         </div>
+        <DescriptionPreview text={task.description} />
         {epic && (
           <div className="flex items-center gap-1.5 pl-0">
             <EpicChip epic={epic} compact />
@@ -1371,15 +1387,18 @@ function SubtaskRow({
         </span>
       </button>
       <span className="flex min-w-0 items-center gap-1">
-        <button
-          type="button"
-          className={[
-            "[@media(pointer:coarse)]:min-h-11 min-w-0 truncate rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary",
-            done ? "text-on-surface-variant line-through" : "text-on-surface",
-          ].join(" ")}
-        >
-          {task.title}
-        </button>
+        <span className="flex min-w-0 flex-col">
+          <button
+            type="button"
+            className={[
+              "[@media(pointer:coarse)]:min-h-11 min-w-0 truncate rounded-sm text-left outline-hidden focus-visible:ring-2 focus-visible:ring-primary",
+              done ? "text-on-surface-variant line-through" : "text-on-surface",
+            ].join(" ")}
+          >
+            {task.title}
+          </button>
+          <DescriptionPreview text={task.description} />
+        </span>
         {task.isCriticalPath && <CriticalPathMark variant="glyph" className="shrink-0" />}
       </span>
       </span>

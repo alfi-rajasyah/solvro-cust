@@ -42,6 +42,26 @@ test.describe("list bulk edit", () => {
     await expect(page.getByText("1 selected")).toBeVisible();
   });
 
+  test("a task with a description shows one preview line under its name", async ({
+    page,
+    seededProject,
+  }, testInfo) => {
+    const alpha = (await getTasks(apiBase(testInfo), seededProject.token, seededProject.projectId)).find(
+      (t) => t.title === "Alpha",
+    );
+    if (!alpha) throw new Error("fixture task Alpha missing");
+    const res = await fetch(`${apiBase(testInfo)}/api/tasks/${alpha.id}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${seededProject.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ description: "First line of notes\nsecond line of notes" }),
+    });
+    if (!res.ok) throw new Error(`PATCH task failed: ${res.status}`);
+    await openList(page, seededProject.projectId);
+    await expect(page.getByTestId("list-description-preview").first()).toContainText(
+      "First line of notes second line of notes",
+    );
+  });
+
   test("adds a label to two tasks in one request and clears the selection", async ({
     page,
     seededProject,
