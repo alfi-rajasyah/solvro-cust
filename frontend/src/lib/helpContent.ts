@@ -4,8 +4,7 @@
 // here identical to the label in the code it describes — when a feature's
 // label changes, update its entry in the same change.
 //
-// Deliberately absent: the /tasks page (hidden from the sidebar by design),
-// note visibility (no UI control), backend-only operations, and the customer
+// Deliberately absent: note visibility (no UI control), backend-only operations, and the customer
 // page's placeholder tabs (Topology, Organization Structure, Documents).
 
 export interface HelpEntry {
@@ -179,9 +178,21 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
   {
     id: "tasks",
     title: "Tasks",
-    icon: "task_alt",
-    summary: "Open a task to edit it, split it into subtasks, and discuss it in comments.",
+    icon: "checklist",
+    route: "/tasks",
+    requires: "project:read",
+    summary: "Find tasks across every project, open a task to edit it, split it into subtasks, and discuss it in comments.",
     entries: [
+      {
+        title: "The Tasks page",
+        points: [
+          "The Tasks page lists the tasks of every project you can see. Open it from Tasks in the sidebar.",
+          "Pick a view: \"All open\", \"My open\", \"Overdue\", \"This week\", or \"All\".",
+          "Use \"Filter\" to narrow by status, priority, assignee, customer (with Customers access), or label. A label filter matches that label name in every project. Filters stay in the address, so a reload or a shared link keeps them.",
+          "Untick \"Top-level only\" to include subtasks. \"Reset\" returns to \"All open\" and clears every filter.",
+          "Click a row to edit the task.",
+        ],
+      },
       {
         title: "Create a task",
         points: [
