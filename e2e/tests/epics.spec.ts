@@ -82,7 +82,7 @@ test.describe("Epics tab", () => {
     await expect(panel).toBeVisible();
 
     const storyTitle = `Story ${stamp()}`;
-    const storyInput = panel.getByLabel("Add story");
+    const storyInput = panel.getByLabel("Story title");
     await storyInput.fill(storyTitle);
     await storyInput.press("Enter");
     await expect(panel.getByText(storyTitle, { exact: true })).toBeVisible();

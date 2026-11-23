@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-23 — Epic panel "Add story" button
+
+- The "+" next to "Add story…" in the epic panel (`frontend/src/components/EpicPanel.tsx`) is now a real submit button. A click adds the story, the same as Enter. The button is disabled while the title is empty or the story is being created, and has a touch-sized tap target on phones. The text box is now labelled "Story title", so the button and the box have different accessible names. (#133)
+
 ## [1.3.0] — 2026-11-22
 
 ### Changed — 2026-11-22 — Version 1.3.0
