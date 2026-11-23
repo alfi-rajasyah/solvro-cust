@@ -128,6 +128,14 @@ const tasksListQuerySchema = z
     priority: z.nativeEnum(Priority).optional(),
     assignedToId: z.coerce.number().int().positive().optional(),
     labelId: z.coerce.number().int().positive().optional(),
+    // Label names, any-of, matched case-insensitively across the caller's
+    // visible projects (one name is a different label row per project).
+    // A single value arrives as a string, repeats as an array.
+    labelName: z
+      .union([z.string(), z.array(z.string())])
+      .transform((v) => (Array.isArray(v) ? v : [v]))
+      .pipe(z.array(z.string().trim().min(1).max(50)).min(1).max(20))
+      .optional(),
     customerId: z.coerce.number().int().positive().optional(),
     // Tasks on projects whose TAM is this user (Overview TAM filter).
     tamId: z.coerce.number().int().positive().optional(),
@@ -249,6 +257,7 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
     priority,
     assignedToId,
     labelId,
+    labelName,
     customerId,
     tamId,
     overdue,
@@ -296,6 +305,24 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
     // TODOs; status=DONE&overdue=true is a contradiction and returns
     // nothing, by construction.
     and.push({ dueDate: { lt: overdueBoundary(today) } }, { status: { not: "DONE" } });
+  }
+  if (labelName) {
+    // Exact lower(name) compare in SQL: Prisma's insensitive mode is ILIKE, so
+    // `_` and `%` in a name would act as wildcards. The visibility filter then
+    // keeps ids to labels of projects the caller can see; no id, no tasks.
+    const lowered = [...new Set(labelName.map((n) => n.toLowerCase()))];
+    const candidates = await prisma.$queryRaw<Array<{ id: number }>>`
+      SELECT id FROM labels
+      WHERE lower(name) IN (SELECT lower(x) FROM unnest(${lowered}::text[]) AS x)
+    `;
+    const visible = await prisma.label.findMany({
+      where: {
+        id: { in: candidates.map((c) => c.id) },
+        project: projectVisibilityFilter(req.user!),
+      },
+      select: { id: true },
+    });
+    and.push({ labels: { some: { id: { in: visible.map((l) => l.id) } } } });
   }
   if (dueFrom) and.push({ dueDate: { gte: utcMidnightOfDayString(dueFrom) } });
   if (dueTo) {

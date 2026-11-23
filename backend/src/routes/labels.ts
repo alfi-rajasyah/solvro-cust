@@ -5,7 +5,7 @@ import { requireAuth, requirePermission, type JwtPayload } from "../http/auth.js
 import { HttpError } from "../http/errors.js";
 import { isLabelNameConflict, labelExistsError } from "../lib/labelConflict.js";
 import { validate } from "../http/validate.js";
-import { ensureProjectVisible } from "../lib/visibility.js";
+import { ensureProjectVisible, projectVisibilityFilter } from "../lib/visibility.js";
 
 // Resolve the label's owning project and 404 if the caller can't see it.
 // `task:write` alone doesn't scope the caller to a project, so without this any
@@ -32,6 +32,38 @@ const updateLabelSchema = z.object({
 export const labelsRouter = Router();
 
 labelsRouter.use(requireAuth);
+
+// Distinct label names across the projects the caller can see, for the
+// cross-project Tasks filter. Grouped by lower(name); the display casing is the
+// one used by the most projects (tie: alphabetical first, by code unit).
+labelsRouter.get("/", requirePermission("project:read"), async (req, res) => {
+  const rows = await prisma.label.findMany({
+    where: { project: projectVisibilityFilter(req.user!) },
+    select: { name: true, projectId: true },
+  });
+  const groups = new Map<string, { projects: Set<number>; casings: Map<string, Set<number>> }>();
+  for (const { name, projectId } of rows) {
+    const key = name.toLowerCase();
+    let g = groups.get(key);
+    if (!g) groups.set(key, (g = { projects: new Set(), casings: new Map() }));
+    g.projects.add(projectId);
+    const c = g.casings.get(name) ?? new Set<number>();
+    c.add(projectId);
+    g.casings.set(name, c);
+  }
+  const out = [...groups.values()].map((g) => {
+    const [name] = [...g.casings.entries()].sort(
+      (a, b) => b[1].size - a[1].size || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0),
+    )[0];
+    return { name, projectCount: g.projects.size };
+  });
+  out.sort((a, b) => {
+    const la = a.name.toLowerCase();
+    const lb = b.name.toLowerCase();
+    return la < lb ? -1 : la > lb ? 1 : 0;
+  });
+  res.json(out);
+});
 
 labelsRouter.patch(
   "/:id",
