@@ -15,6 +15,23 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-11-22
+
+### Changed — 2026-11-22 — Version 1.3.0
+
+- The release version is `1.3.0` in `VERSION`, `backend/package.json`, `frontend/package.json` and the image tag in `setup.sh` (`SOLVRO_IMAGE_TAG="v1.3.0"`), so the login page and new installs show and pull this release.
+
+### Changed — 2026-11-22 — Mobile e2e in 9 shards
+
+- On a push to `main` or a manual run, mobile e2e in `.github/workflows/ci.yml` now runs in 9 shards instead of 8, to shorten the slowest mobile shard. The run now has 21 jobs, one more than GitHub starts at the same time, so one shard waits for the first job to finish. A test run took 4.2 minutes, against 4.9 minutes with 8 mobile shards.
+
+### Changed — 2026-11-21 — Faster e2e checks in CI
+
+- The Playwright suite in `.github/workflows/ci.yml` now runs in 10 shards instead of 4, and `--fully-parallel` makes Playwright split the shards by test instead of by spec file, so one long spec file no longer holds a whole shard back. Each shard still runs one worker against its own stack and database.
+- The backend and frontend images build at the same time in one `docker/bake-action` step instead of two sequential build steps, and the job no longer tears its stack down, because the runner is discarded at the end of the job.
+- On a push to `main`, mobile e2e runs in 8 shards next to the 10 desktop shards, so the run stays within the 20 jobs GitHub starts at the same time. A test run took 4.5 minutes, against 9.2 to 11.1 minutes before.
+- A pull request run into `develop` took 4.8 minutes in a test run with changed backend and frontend source, against 9.6 minutes before. The repository is public, so the extra shards use no paid Actions minutes.
+
 ### Added — 2026-11-20 — Cleanup of e2e fixture rows in the dev database
 
 - `backend/scripts/dev/cleanup-e2e-data.ts` removes the rows local Playwright runs leave in a dev database: customers whose description starts with `e2e` and whose name carries a fixture stamp, projects linked to them or named with a fixture stamp, and `@solvro.test` users other than the e2e sign-in account (`ADMIN_EMAIL`). It is a dry run unless `E2E_CLEANUP_CONFIRM=delete` is set. It is a dev-stack tool only: it refuses to run unless `NODE_ENV` is `development`, and no production image layer contains `scripts/dev/`: `backend/Dockerfile` drops it in the build stage and copies `scripts/` into the runtime image from there, checked by a new `guardrail-dev-scripts-excluded` gate.
