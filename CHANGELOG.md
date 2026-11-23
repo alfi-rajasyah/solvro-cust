@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-23 — Tasks in the sidebar
+
+- The cross-project Tasks page (`/tasks`) is now listed in the sidebar's Workspace group, after Projects, and in the Ctrl+K page commands (`frontend/src/lib/navCommands.ts`). Before, it was reachable only by its address or from Overview links. Like its data (`GET /tasks`), the entry and the route need `project:read`: the route in `frontend/src/App.tsx` now has the same permission guard as the other gated pages. The Help page has a Tasks page section.
+
 ### Added — 2026-11-23 — Label filter on the Tasks page
 
 - The Filter menu on the cross-project Tasks page (`frontend/src/pages/Tasks.tsx`) has a Label field. Pick one or more label names to see the tasks that carry any of them, across every project you can see. Labels belong to one project, so the picker lists each name once and matches it without regard to case or surrounding spaces. (#132)

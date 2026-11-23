@@ -149,7 +149,15 @@ export function App() {
               </PermissionGuard>
             }
           />
-          <Route path="tasks" element={<Tasks />} />
+          {/* Gated on project:read like the nav entry and GET /tasks. */}
+          <Route
+            path="tasks"
+            element={
+              <PermissionGuard permission="project:read">
+                <Tasks />
+              </PermissionGuard>
+            }
+          />
           {/* Utilization is gated on project:read, like its nav entry — hours mean
               nothing without project access (docs/archive/plans/internal-sync.md). */}
           <Route

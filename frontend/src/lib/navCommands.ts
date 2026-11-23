@@ -24,6 +24,8 @@ export const NAV_COMMANDS: readonly NavCommand[] = [
   { to: "/overview", label: "Overview", icon: "dashboard", group: "Workspace" },
   // Projects is gated on project:read like GET /projects (routes/projects.ts).
   { to: "/projects", label: "Projects", icon: "folder_managed", group: "Workspace", requires: "project:read" },
+  // The cross-project task list (Tasks.tsx), gated like GET /tasks and its route in App.tsx.
+  { to: "/tasks", label: "Tasks", icon: "checklist", group: "Workspace", requires: "project:read" },
   // Customers is gated on customer:read and Daily Review on project:read, like
   // their API routes (GET /customers, /daily-review 403 without it); both carry the same rule
   // through PermissionGuard in App.tsx (docs/archive/plans/internal-sync.md).
