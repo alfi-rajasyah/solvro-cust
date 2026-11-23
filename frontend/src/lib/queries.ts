@@ -1292,6 +1292,10 @@ export function useTask(id: number | null) {
   const qc = useQueryClient();
   return useQuery<TaskWithProject>({
     queryKey: id !== null ? queryKeys.task(id) : ["tasks", "detail", "noop"],
+    // The placeholder's `project.customer` is unknown (null) and its name may be
+    // empty: only the breadcrumb and the page's project id read it, and the real
+    // row replaces it as soon as the fetch lands. Nothing may rely on its
+    // customer.
     // A jump from a task already in a cached project list (a subtask row, the
     // parent link) shows at once from that list while the row loads.
     placeholderData: () => (id !== null ? cachedTaskRow(qc, id) : undefined),

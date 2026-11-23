@@ -25,7 +25,12 @@ export function TaskPage() {
   const taskId = parseTaskId(rawId);
   const navigate = useNavigate();
   const { data: row, isPending, isError, error, refetch } = useTask(taskId);
-  const projectId = row?.projectId ?? null;
+  // The project of the task shown last. A first load seeded from the cache whose
+  // fetch then fails drops `row` (the placeholder goes with it); the project's
+  // task list, already loaded, can still show the page.
+  const knownProject = useRef<{ taskId: number; projectId: number } | null>(null);
+  if (row && taskId !== null) knownProject.current = { taskId, projectId: row.projectId };
+  const projectId = row?.projectId ?? (knownProject.current?.taskId === taskId ? knownProject.current.projectId : null);
   const tasksQuery = useProjectTasks(projectId);
   const task = (tasksQuery.data ?? []).find((t) => t.id === taskId) ?? null;
 
@@ -75,7 +80,7 @@ export function TaskPage() {
   // failure only replaces the page while there is no row to show: a background
   // refetch that fails must not unmount TaskDetail and lose a draft in it.
   if (isError && error instanceof ApiError && (error.status === 404 || error.status === 403)) return missing;
-  if (!row) {
+  if (!row && !task) {
     return (
       <QueryErrorAlert
         title="Could not load this task"

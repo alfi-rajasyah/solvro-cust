@@ -96,6 +96,8 @@ export async function submitLoginForm(
  * `docs/archive/plans/kanban-reui-swap/plan.md` T11. Single source of truth so specs
  * don't hardcode the segment.
  */
+export const KANBAN_ROUTE = "kanban";
+
 /** Opens TaskFormModal in edit mode for one task, from its Gantt row menu (Edit).
  * A /tasks row opens the task's page, which has no Parent field and no
  * TaskFormModal, so the Gantt is the one place left that mounts the form for
@@ -112,8 +114,6 @@ export async function openTaskEditModal(page: Page, projectId: number, taskId: n
   await expect(titleInput).toHaveValue(title);
   await expect(titleInput).toBeFocused();
 }
-
-export const KANBAN_ROUTE = "kanban";
 
 export async function openKanban(page: Page, projectId: number): Promise<void> {
   await page.goto(`/projects/${projectId}/${KANBAN_ROUTE}`, { waitUntil: "networkidle" });

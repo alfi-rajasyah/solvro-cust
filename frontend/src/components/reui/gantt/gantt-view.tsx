@@ -2824,11 +2824,7 @@ const GanttTreeRow = memo(function GanttTreeRow({
   return (
     <ContextMenu>
       <ContextMenuTrigger render={rowNode} />
-      {/* SOLVRO PATCH — finalFocus={false}: the row menu's items open a dialog
-          that takes focus itself (SolvroGantt waits for the menu to unmount
-          first); Base-UI's default would return focus to the row afterwards
-          and pull it out of the dialog. */}
-      <ContextMenuContent data-slot="gantt-resource-menu" className="min-w-44" finalFocus={false}>
+      <ContextMenuContent data-slot="gantt-resource-menu" className="min-w-44">
         {menu}
       </ContextMenuContent>
     </ContextMenu>

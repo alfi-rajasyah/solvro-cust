@@ -109,6 +109,21 @@ describe("TaskPage states", () => {
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   });
 
+  it("keeps the page up when a cache-seeded first load fails and the project's list has the task", () => {
+    // A placeholder row is dropped when its fetch errors; the loaded list still shows the task.
+    taskQuery.current = {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: new ApiError(500, "boom", null),
+      refetch: vi.fn(),
+    };
+    listQuery.current = { data: [listTask], isError: false, refetch: vi.fn() };
+    mount();
+    expect(screen.getByTestId("detail")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
+
   it("a 404 still wins over a cached row", () => {
     taskQuery.current = {
       data: row,
