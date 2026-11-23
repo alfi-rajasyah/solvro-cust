@@ -7,6 +7,7 @@ import { TaskPage } from "./TaskPage";
 
 const taskQuery = { current: {} as Record<string, unknown> };
 const listQuery = { current: {} as Record<string, unknown> };
+const listArgs = { current: [] as Array<number | null> };
 const detailProps = { current: null as null | Record<string, unknown> };
 
 vi.mock("@/lib/queries", async (importOriginal) => {
@@ -14,7 +15,11 @@ vi.mock("@/lib/queries", async (importOriginal) => {
   return {
     ...actual,
     useTask: () => taskQuery.current,
-    useProjectTasks: () => listQuery.current,
+    // The list exists only for the right project; anything else is not loaded yet.
+    useProjectTasks: (id: number | null) => {
+      listArgs.current.push(id);
+      return id === 2 ? listQuery.current : { data: undefined, isError: false, refetch: vi.fn() };
+    },
   };
 });
 vi.mock("@/components/TaskDetail", () => ({
@@ -29,19 +34,24 @@ vi.mock("@/components/TaskOptionsMenu", () => ({ TaskOptionsMenu: () => null }))
 const row = { id: 5, projectId: 2, title: "Ship it", project: { id: 2, name: "Atlas", customer: null } };
 const listTask = { id: 5, projectId: 2, title: "Ship it", parentTaskId: null };
 
-function mount(path = "/tasks/5") {
-  return render(
+function tree(path: string) {
+  return (
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/tasks/:taskId" element={<TaskPage />} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+}
+
+function mount(path = "/tasks/5") {
+  return render(tree(path));
 }
 
 afterEach(() => {
   cleanup();
   detailProps.current = null;
+  listArgs.current = [];
   document.title = "";
 });
 
@@ -110,7 +120,27 @@ describe("TaskPage states", () => {
   });
 
   it("keeps the page up when a cache-seeded first load fails and the project's list has the task", () => {
-    // A placeholder row is dropped when its fetch errors; the loaded list still shows the task.
+    // First render: the placeholder row names the project. Then the fetch fails and the
+    // row goes with it; only the remembered project id still reaches the loaded list.
+    taskQuery.current = { data: row, isPending: false, isError: false, error: null, refetch: vi.fn() };
+    listQuery.current = { data: [listTask], isError: false, refetch: vi.fn() };
+    const { rerender } = mount();
+    expect(screen.getByTestId("detail")).toBeTruthy();
+
+    taskQuery.current = {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: new ApiError(500, "boom", null),
+      refetch: vi.fn(),
+    };
+    rerender(tree("/tasks/5"));
+    expect(listArgs.current[listArgs.current.length - 1]).toBe(2);
+    expect(screen.getByTestId("detail")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
+
+  it("a 500 on a first load that was never seeded shows Retry", () => {
     taskQuery.current = {
       data: undefined,
       isPending: false,
@@ -120,8 +150,8 @@ describe("TaskPage states", () => {
     };
     listQuery.current = { data: [listTask], isError: false, refetch: vi.fn() };
     mount();
-    expect(screen.getByTestId("detail")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(screen.queryByTestId("detail")).toBeNull();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
   });
 
   it("a 404 still wins over a cached row", () => {

@@ -10,8 +10,10 @@ function stamp(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
-async function expectFocusOnAControl(page: Page) {
-  await expect.poll(() => page.evaluate(() => document.activeElement?.tagName ?? "none")).not.toMatch(/^(BODY|none)$/);
+// A right-click opens the menu from the row itself, so default focus return lands on
+// the row's first control: its Reorder grip (the row group does not contain it).
+async function expectFocusOnRowGrip(page: Page) {
+  await expect(page.locator('[data-slot="gantt-row-grip"]:focus')).toHaveCount(1);
 }
 
 test.describe("gantt row menu focus (desktop)", () => {
@@ -38,8 +40,8 @@ test.describe("gantt row menu focus (desktop)", () => {
     await expect(input).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(input).toHaveCount(0);
-    // Opened by right-click, so the menu's trigger is the row: focus goes back to a row control, not <body>.
-    await expectFocusOnAControl(page);
+    // Opened by right-click, so the menu's trigger is the row: focus goes back to the row's grip, not <body>.
+    await expectFocusOnRowGrip(page);
   });
 
   test("Delete: the confirm's Cancel holds focus; Cancel returns to the row", async ({ page, seededProject }, testInfo) => {
@@ -50,7 +52,7 @@ test.describe("gantt row menu focus (desktop)", () => {
     await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toHaveCount(0);
-    await expectFocusOnAControl(page);
+    await expectFocusOnRowGrip(page);
   });
 
   test("Delete opened from the Task actions button: Cancel returns to that button", async ({ page, seededProject }, testInfo) => {

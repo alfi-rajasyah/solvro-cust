@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { StrictMode } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import { Drawer } from "./Drawer";
 
@@ -87,5 +88,33 @@ describe("Drawer focus", () => {
     opener.remove();
     unmount();
     expect(document.activeElement).toBe(document.body);
+  });
+
+  it("keeps focus on its autofocused input under StrictMode's simulated unmount", () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    render(
+      <StrictMode>
+        <Drawer open onClose={vi.fn()} title="Edit task">
+          <input aria-label="Title" autoFocus />
+        </Drawer>
+      </StrictMode>,
+    );
+    expect(document.activeElement).toBe(screen.getByLabelText("Title"));
+    opener.remove();
+  });
+
+  it("leaves focus where the user moved it when it closes", () => {
+    const { rerender } = render(<Harness open={false} />);
+    const opener = screen.getByRole("button", { name: "Opener" });
+    opener.focus();
+    rerender(<Harness open />);
+    const elsewhere = document.createElement("button");
+    document.body.appendChild(elsewhere);
+    elsewhere.focus();
+    rerender(<Harness open={false} />);
+    expect(document.activeElement).toBe(elsewhere);
+    elsewhere.remove();
   });
 });
