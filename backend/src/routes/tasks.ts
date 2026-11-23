@@ -371,6 +371,19 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
   );
 });
 
+// One task by id, for the task page. Same row shape as the list plus the
+// project's id and name. A hidden task answers 404 exactly like a missing one.
+tasksRouter.get("/:id", validate("params", idParamSchema), async (req, res) => {
+  const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
+  await ensureTaskVisible(req.user!, id);
+  const task = await prisma.task.findUnique({
+    where: { id },
+    include: { ...taskResponseInclude, project: { select: { id: true, name: true } } },
+  });
+  if (!task) throw new HttpError(404, "not_found", "Task not found");
+  res.json(task);
+});
+
 // Registered before the "/:id" routes so a literal "bulk" is never read as an id.
 tasksRouter.post(
   "/bulk",
