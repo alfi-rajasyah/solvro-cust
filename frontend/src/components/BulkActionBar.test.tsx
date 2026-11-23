@@ -69,6 +69,30 @@ describe("BulkActionBar", () => {
     expect(onApply).toHaveBeenCalledWith({ addLabelIds: [1, 2] });
   });
 
+  it("tells the user to pick labels and marks the picked chip", () => {
+    renderBar();
+    fireEvent.click(screen.getByRole("button", { name: "Add label" }));
+    expect(screen.getByText("Pick one or more labels to add.")).toBeTruthy();
+    const apply = screen.getByRole("button", { name: /^Add to 3 tasks$/ }) as HTMLButtonElement;
+    const bug = screen.getByRole("button", { name: "Bug" });
+    expect(bug.getAttribute("aria-pressed")).toBe("false");
+    expect(bug.querySelector("[data-selected-marker]")).toBeNull();
+    expect(apply.disabled).toBe(true);
+    fireEvent.click(bug);
+    expect(bug.getAttribute("aria-pressed")).toBe("true");
+    expect(bug.querySelector("[data-selected-marker] svg")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "UX" }).getAttribute("aria-pressed")).toBe("false");
+    expect(apply.disabled).toBe(false);
+    fireEvent.click(bug);
+    expect(apply.disabled).toBe(true);
+  });
+
+  it("uses the remove wording for Remove label", () => {
+    renderBar();
+    fireEvent.click(screen.getByRole("button", { name: "Remove label" }));
+    expect(screen.getByText("Pick one or more labels to remove.")).toBeTruthy();
+  });
+
   it("sends removeLabelIds for Remove label", () => {
     const { onApply } = renderBar();
     fireEvent.click(screen.getByRole("button", { name: "Remove label" }));

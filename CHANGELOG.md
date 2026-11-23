@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-23 — Bulk label picker shows what to do
+
+- The "Add label" and "Remove label" panels of the List bulk action bar (`frontend/src/components/BulkActionBar.tsx`) now say "Pick one or more labels to add." (or "to remove."). A picked label shows a filled check box and a stronger outline instead of a thin ring, so the selected state does not depend on colour alone and it is clear why "Add to N tasks" stays disabled until a label is picked. (#135)
+
 ### Fixed — 2026-11-23 — Epic panel "Add story" button
 
 - The "+" next to "Add story…" in the epic panel (`frontend/src/components/EpicPanel.tsx`) is now a real submit button. A click adds the story, the same as Enter. The button is disabled while the title is empty or the story is being created, and has a touch-sized tap target on phones. The text box is now labelled "Story title", so the button and the box have different accessible names. (#133)
