@@ -170,6 +170,7 @@ export interface CreateTaskInput {
   isMilestone?: boolean;
   isCriticalPath?: boolean;
   labelIds?: number[];
+  priority?: string;
 }
 
 /**

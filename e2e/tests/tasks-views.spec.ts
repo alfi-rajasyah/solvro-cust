@@ -148,4 +148,42 @@ test.describe("Tasks label filter (desktop)", () => {
     }
     await expect(taskRow(page, projectIds[0], plain)).toHaveCount(0);
   });
+
+  test("Status and Priority chips live in the URL and survive a reload", async ({ page, seededProject }) => {
+    const base = apiBase(test.info());
+    const { token, projectId } = seededProject;
+    const stamp = Date.now().toString(36);
+    const match = `Chip match ${stamp}`;
+    const otherPriority = `Chip other priority ${stamp}`;
+    const done = `Chip done ${stamp}`;
+    await createTask(base, token, projectId, { title: match, status: "TODO", priority: "URGENT", dueDate: isoDateOffset(3) });
+    await createTask(base, token, projectId, { title: otherPriority, status: "TODO", priority: "LOW", dueDate: isoDateOffset(3) });
+    await createTask(base, token, projectId, { title: done, status: "DONE", priority: "URGENT", dueDate: isoDateOffset(3) });
+
+    await loginViaUi(page);
+    await page.goto("/tasks?view=all", { waitUntil: "networkidle" });
+    await scopeToCustomer(page, seededProject.customerName);
+
+    await page.getByRole("button", { name: "Filter", exact: true }).click();
+    await page.getByRole("option", { name: "Priority", exact: true }).hover();
+    await page.getByRole("option", { name: "Urgent", exact: true }).click();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Filter", exact: true }).click();
+    await page.getByRole("option", { name: "Status", exact: true }).hover();
+    await page.getByRole("option", { name: "To do", exact: true }).click();
+    await page.keyboard.press("Escape");
+
+    await expect(page).toHaveURL(/[?&]priority=URGENT\b/);
+    await expect(page).toHaveURL(/[?&]status=id(%3A|:)1\b/);
+    await expect(page).toHaveURL(/[?&]view=all\b/);
+    await expect(taskRow(page, projectId, match)).toHaveCount(1);
+    await expect(taskRow(page, projectId, otherPriority)).toHaveCount(0);
+    await expect(taskRow(page, projectId, done)).toHaveCount(0);
+
+    await page.reload({ waitUntil: "networkidle" });
+    await expect(page).toHaveURL(/[?&]priority=URGENT\b/);
+    await expect(taskRow(page, projectId, match)).toHaveCount(1);
+    await expect(taskRow(page, projectId, otherPriority)).toHaveCount(0);
+    await expect(taskRow(page, projectId, done)).toHaveCount(0);
+  });
 });
