@@ -1,6 +1,6 @@
 # Tasks page label filter (GitHub #132)
 
-Status: in progress (planned 2026-11-23 @ `2bbc3a5`)
+Status: shipped 2026-11-23
 Archive path: `docs/archive/plans/tasks-label-filter.md`
 
 The cross-project Tasks page (`/tasks`, `frontend/src/pages/Tasks.tsx`) gets a "Label" filter. Lane P: it needs a new read route (`GET /labels`) and touches the spine (`backend/src/routes/tasks.ts`, `frontend/src/lib/queries.ts`).
@@ -52,3 +52,10 @@ Spine touch: an instant review on task 1 (`routes/tasks.ts`), then one phase rev
 
 - Label filter on Gantt and Timeline.
 - A per-project label picker on `/tasks`.
+
+## Result
+
+- Tasks 1 to 3 shipped as planned. One change from the plan: names match in JS through one shared key (`backend/src/lib/labelNames.ts`: trimmed, lowercased) over the labels of visible projects, not in SQL, so `GET /labels` and the `labelName` filter always agree. This came from the instant review of task 1.
+- Phase review: no blockers. The one should-fix (a URL `?customer=` became a hidden filter for a user without `customer:read`) and 3 nits (cache-key comments, a status-id assumption in an e2e test, 2 missing hook tests) were fixed in one round.
+- `gates.sh`: all gates pass. e2e: `tasks-views`, `task-filters` and `tasks-load-more` pass against the dev stack.
+- Delivery Gate PASS 2026-11-23: `/tasks?view=all&label=…` in the light and dark themes at 1280 and 375 px. The Label chip reads "Label · is any of · <name>", the picker lists each name once with search and a check on the picked name, and the list shows only the labelled task. At 375 px the chip and picker fit the width; the table scrolls sideways as before.
