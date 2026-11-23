@@ -373,6 +373,13 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Product question. Fix if wanted: pass the filtered subtasks to the card.
 - **Source:** GitHub #89 (`docs/archive/plans/feature-wave-b.md`)
 
+### ISS-211 · P3 · Task page breadcrumb placeholder row has no customer
+
+- **Type:** watch · **Found:** 2026-11-23 · **Verified:** 2026-11-23 @ `21e0f75`
+- **Where:** placeholder task row in frontend/src/pages/TaskPage.tsx (line ~29)
+- **Problem:** While the full task loads, the placeholder row carries `project.customer` as null (unknown), not the real customer. The breadcrumb is the only reader and does not use it.
+- **Why deferred / fix direction:** Trigger: a new consumer reads `project.customer` from the row before the fetch lands. Then wait for the fetch or fill it from the project query.
+
 ## Open — Accessibility & tokens
 
 ### ISS-084 · P3 · Favicon reads weakly on dark browser tab strips
@@ -456,6 +463,13 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** On a partly filled bar the part of the label over the pale hatch may be hard to read. Seen in light mode, not verified in a browser.
 - **Why deferred / fix direction:** Trigger: confirm in a browser on a partly filled bar. Then pick the label colour per segment.
 - **Source:** snapshot line 2445, section "Design compliance fixes — deferred findings (2026-11-02)"
+
+### ISS-210 · P3 · Gantt row-menu dialogs find their menu through a document-wide selector
+
+- **Type:** debt · **Found:** 2026-11-23 · **Verified:** 2026-11-23 @ `21e0f75`
+- **Where:** afterMenuCloses in frontend/src/components/gantt-v2/SolvroGantt.tsx (line ~370)
+- **Problem:** It polls `[data-slot="gantt-resource-menu"]` across the whole document to learn that the menu has closed, rather than its own menu. A second matching menu on the page would hold the dialog back.
+- **Why deferred / fix direction:** Works today with one menu. Use Base UI `onOpenChangeComplete`, or pass a ref into the vendored view.
 
 ## Open — Boards & drag
 
@@ -604,7 +618,7 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 ### ISS-138 · P2 · Drag e2e specs flake on first attempt and pass on retry
 
 - **Type:** watch · **Found:** 2026-07-28 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** gantt-parity.spec.ts connector test, kanban-dnd.spec.ts cross-view and mobile touch, list-dnd.spec.ts cross-status reorder
+- **Where:** gantt-parity.spec.ts connector test, kanban-dnd.spec.ts "a refused drag shows an error" (desktop) and "touch reorder within TODO" (mobile; both seen repeatedly in local runs 2026-11-23, verify against CI history), kanban-dnd.spec.ts cross-view and mobile touch, list-dnd.spec.ts cross-status reorder
 - **Problem:** The same four to five drag cases fail their first attempt and pass on retry. The retry budget has one spare attempt.
 - **Why deferred / fix direction:** Trigger: a fifth case flakes or any case fails through its retry. Then run a flake-hunt pass.
 - **Source:** snapshot line 896, section "ReUI DateField swap — deferred findings (2026-07-28)"; merged duplicates at snapshot lines 2320
