@@ -87,3 +87,65 @@ test.describe("Tasks saved views (desktop)", () => {
     await expect(taskRow(page, seededProject.projectId, "Alpha")).toHaveCount(0);
   });
 });
+
+// Label filter on /tasks: one label name is a different label row in every
+// project, so a pick must show the tasks of all of them, and it lives in the URL.
+test.describe("Tasks label filter (desktop)", () => {
+  test.beforeEach(async () => {
+    test.skip(test.info().project.name !== "desktop", "Filter toolbar is exercised on desktop");
+  });
+
+  test("one label name matches tasks across projects and survives a reload", async ({ page, seededProject }) => {
+    const base = apiBase(test.info());
+    const { token, customerId } = seededProject;
+    const stamp = Date.now().toString(36);
+    const labelName = `Blocked ${stamp}`;
+    const H = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+    const post = async <T>(path: string, body: unknown): Promise<T> => {
+      const res = await fetch(`${base}/api${path}`, { method: "POST", headers: H, body: JSON.stringify(body) });
+      if (!res.ok) throw new Error(`POST ${path} failed: ${res.status} ${await res.text()}`);
+      return res.json() as Promise<T>;
+    };
+
+    // Two projects (stamped names, marker customer), the same label name in each;
+    // the second spells it in lower case. A third task has no label.
+    const titles: string[] = [];
+    const projectIds: number[] = [];
+    for (const [i, name] of [labelName, labelName.toLowerCase()].entries()) {
+      const project = await post<{ id: number }>("/projects", {
+        name: `Label filter ${i} ${stamp}`,
+        description: "e2e label filter",
+        customerId,
+      });
+      const label = await post<{ id: number }>(`/projects/${project.id}/labels`, { name });
+      const title = `Labelled ${i} ${stamp}`;
+      await createTask(base, token, project.id, { title, dueDate: isoDateOffset(3), labelIds: [label.id] });
+      titles.push(title);
+      projectIds.push(project.id);
+    }
+    const plain = `Unlabelled ${stamp}`;
+    await createTask(base, token, projectIds[0], { title: plain, dueDate: isoDateOffset(3) });
+
+    await loginViaUi(page);
+    await page.goto("/tasks", { waitUntil: "networkidle" });
+    await page.getByRole("button", { name: "Filter", exact: true }).click();
+    await page.getByRole("option", { name: "Label", exact: true }).hover();
+    // Listed once, whichever project spelled it.
+    await expect(page.getByRole("option", { name: new RegExp(`^${labelName}$`, "i") })).toHaveCount(1);
+    await page.getByRole("option", { name: new RegExp(`^${labelName}$`, "i") }).click();
+    await page.keyboard.press("Escape");
+
+    await expect(page).toHaveURL(/[?&]label=Blocked/);
+    for (const [i, title] of titles.entries()) {
+      await expect(taskRow(page, projectIds[i], title)).toHaveCount(1);
+    }
+    await expect(taskRow(page, projectIds[0], plain)).toHaveCount(0);
+
+    await page.reload({ waitUntil: "networkidle" });
+    await expect(page).toHaveURL(/[?&]label=Blocked/);
+    for (const [i, title] of titles.entries()) {
+      await expect(taskRow(page, projectIds[i], title)).toHaveCount(1);
+    }
+    await expect(taskRow(page, projectIds[0], plain)).toHaveCount(0);
+  });
+});

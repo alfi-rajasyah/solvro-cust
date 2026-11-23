@@ -28,6 +28,7 @@ import {
   type TaskExpected,
 } from "./taskConflict";
 import { parseWeekKey } from "./isoWeek";
+import { normalizeLabelNames } from "./tasksPageFilters";
 import type { OutlineMentionsData } from "./outlineMentions";
 import type { OutlineSnippetSegment } from "./outlineSnippet";
 
@@ -597,6 +598,12 @@ export interface TasksFilter {
   priority?: Priority;
   assignedToId?: number;
   labelId?: number;
+  /**
+   * Label names, any-of, matched case-insensitively across the caller's visible
+   * projects (sent as repeated `labelName`). Order and casing do not matter:
+   * `normalizeTasksFilter` sorts them before they reach a cache key.
+   */
+  labelNames?: string[];
   customerId?: number;
   /** Tasks on projects whose TAM is this user. */
   tamId?: number;
@@ -824,6 +831,8 @@ export const queryKeys = {
   project: (id: number) => ["projects", id] as const,
   projectTasks: (id: number) => ["projects", id, "tasks"] as const,
   projectLabels: (id: number) => ["projects", id, "labels"] as const,
+  // Distinct label names across every visible project (the /tasks Label filter).
+  labelNames: ["labels", "names"] as const,
   projectSections: (id: number) => ["projects", id, "sections"] as const,
   // Users with project access through a customer team (not project members).
   projectTeamAccess: (id: number) => ["projects", id, "team-access"] as const,
@@ -1526,6 +1535,22 @@ export function useRemoveProjectMember(projectId: number) {
   });
 }
 
+export interface LabelName {
+  name: string;
+  /** Visible projects that have a label of this name. */
+  projectCount: number;
+}
+
+// Distinct label names across the projects the caller can see. Needs project:read.
+export function useLabelNames(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.labelNames,
+    queryFn: ({ signal }) => apiRequest<LabelName[]>("/labels", { signal }),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
 export function useProjectLabels(id: number | null) {
   return useQuery({
     queryKey: id ? queryKeys.projectLabels(id) : ["projects", "noop", "labels"],
@@ -1589,13 +1614,24 @@ function invalidateProjectHealth(qc: QueryClient, projectId: number) {
   ]);
 }
 
-function tasksQueryString(filter: TasksFilter, offset = 0): string {
+/** One cache key per filter: label names sorted, de-duplicated, and absent when empty. */
+export function normalizeTasksFilter(filter: TasksFilter): TasksFilter {
+  const labelNames = normalizeLabelNames(filter.labelNames ?? []);
+  const next = { ...filter };
+  if (labelNames.length > 0) next.labelNames = labelNames;
+  else delete next.labelNames;
+  return next;
+}
+
+export function tasksQueryString(rawFilter: TasksFilter, offset = 0): string {
+  const filter = normalizeTasksFilter(rawFilter);
   const params = new URLSearchParams();
   if (filter.status) params.set("status", filter.status);
   if (filter.statusId) params.set("statusId", String(filter.statusId));
   if (filter.priority) params.set("priority", filter.priority);
   if (filter.assignedToId) params.set("assignedToId", String(filter.assignedToId));
   if (filter.labelId) params.set("labelId", String(filter.labelId));
+  for (const name of filter.labelNames ?? []) params.append("labelName", name);
   if (filter.customerId) params.set("customerId", String(filter.customerId));
   if (filter.tamId) params.set("tamId", String(filter.tamId));
   if (filter.overdue) {
@@ -1622,7 +1658,8 @@ export const TASKS_PAGE_SIZE = 200;
 // chained by `?offset`. Own key suffix so it never shares a cache entry with
 // the single-page shape above, yet stays under the ["tasks"] prefix that task
 // writes invalidate.
-export function useInfiniteTasks(filter: TasksFilter = {}) {
+export function useInfiniteTasks(rawFilter: TasksFilter = {}) {
+  const filter = normalizeTasksFilter(rawFilter);
   const qs = tasksQueryString(filter);
   return useInfiniteQuery({
     queryKey: [...queryKeys.tasks(filter), qs, "pages"],
@@ -2541,6 +2578,7 @@ export function useCreateLabel(projectId: number) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projectLabels(projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.labelNames });
     },
   });
 }
@@ -2552,6 +2590,7 @@ export function useDeleteLabel(projectId: number) {
       apiRequest<void>(`/labels/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projectLabels(projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.labelNames });
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
     },
   });
