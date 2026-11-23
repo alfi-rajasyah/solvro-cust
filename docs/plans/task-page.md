@@ -12,12 +12,12 @@ A task gets its own page at `/tasks/:id`. Today a task opens only in the side pa
   - An "Open as page" button in the side panel header.
   - A row click on `/tasks` opens the page, not the pop-up editor.
   - A task result in the Ctrl+K palette opens the page.
-  - A "Copy link" item in the panel's Task options menu copies the page URL.
+  - "Copy link" copies the page URL. The user picked a menu item; the panel already had a Copy link button in its header, so that button now copies the page URL instead, and the menu gets no second copy item (orchestrator decision, 2026-11-23).
 - **D3: two columns on desktop.** Main column: title, description, subtasks, Outline pages, comments. Side column: status, owner, dates, priority, points, epic, iTop ticket, labels. One column on phone (below `md:`).
 
 ## Decisions made in this plan
 
-- **D4: one task body, two shells.** The side panel's content moves into one component that both the panel and the page render, with a `layout` prop (`"panel"` or `"page"`). The panel keeps its shell (fixed position, focus, Escape to close). Reason: one place for every field and save rule, so the page and the panel cannot drift. The Task options menu (Duplicate, Delete, Copy link) is one shared component too.
+- **D4: one task body, two shells.** The side panel's content moves into one component that both the panel and the page render, with a `layout` prop (`"panel"` or `"page"`). The panel keeps its shell (fixed position, focus, Escape to close). Reason: one place for every field and save rule, so the page and the panel cannot drift. The Task options menu (Duplicate, Delete) is one shared component too.
 - **D5: navigation inside the page.** A subtask row and the parent breadcrumb go to that task's page. After a delete, a subtask goes to its parent's page, and a top-level task goes to its project's List tab.
 - **D6: missing or hidden task.** `GET /tasks/:id` answers 404 for a task the user cannot see (`ensureTaskVisible`), the same as for a task that does not exist. The page shows one "not found" state with a link to `/tasks`.
 - **D7: the page header.** A breadcrumb (project name, linked to the project, then the task) from `lib/routeMeta.ts`; the status chip and the Task options menu as in the panel. No close button: the browser Back button and the breadcrumb leave the page.
@@ -29,7 +29,7 @@ A task gets its own page at `/tasks/:id`. Today a task opens only in the side pa
 | 1 | `GET /tasks/:id`: the task with the same shape as the list rows (`taskResponseInclude`) plus `project: { id, name }`. `project:read` (router level) and `ensureTaskVisible` (404). Backend vitest: visible, hidden (404), missing (404), no `project:read` (403). | `backend/src/routes/tasks.ts`, backend test | `routes/tasks.ts` |
 | 2 | Split `TaskPanel.tsx`: the body moves to a new `TaskDetail` component with the `layout` prop (D4); the options menu moves to a shared `TaskOptionsMenu`. The panel looks and behaves exactly as before. Existing panel tests and e2e specs stay green with no change to what they assert. | `frontend/src/components/TaskPanel.tsx`, new `TaskDetail.tsx`, new `TaskOptionsMenu.tsx`, their tests | none |
 | 3 | The page: route `tasks/:taskId` in `App.tsx`; `pages/TaskPage.tsx` with `useTask(id)` (new hook and query key); breadcrumb in `routeMeta.ts`; the `"page"` layout of `TaskDetail` (D3); D5, D6, D7. Mutations that change a task also refresh the `useTask` entry. | `frontend/src/App.tsx`, new `pages/TaskPage.tsx`, `frontend/src/lib/queries.ts`, `frontend/src/lib/routeMeta.ts`, `TaskDetail.tsx` | `lib/queries.ts` |
-| 4 | Entry points (D2): "Open as page" in the panel header; "Copy link" in `TaskOptionsMenu` (copies the absolute `/tasks/:id` URL and confirms on screen); `/tasks` row click goes to the page and the edit-mode `TaskFormModal` on `/tasks` is removed; the Ctrl+K task result links to the page. | `TaskPanel.tsx`, `TaskOptionsMenu.tsx`, `frontend/src/pages/Tasks.tsx`, `frontend/src/components/CommandPalette.tsx`, e2e specs | none |
+| 4 | Entry points (D2): "Open as page" in the panel header; the existing header `CopyLinkButton` copies the absolute `/tasks/:id` URL; `/tasks` row click goes to the page and the edit-mode `TaskFormModal` on `/tasks` is removed; the Ctrl+K task result links to the page. | `TaskPanel.tsx`, `TaskOptionsMenu.tsx`, `frontend/src/pages/Tasks.tsx`, `frontend/src/components/CommandPalette.tsx`, e2e specs | none |
 
 Order: wave 1 runs tasks 1 and 2 in parallel (backend and frontend, no shared file). Then one implementor does task 3 and then task 4 (both need task 2; task 3 needs task 1).
 
