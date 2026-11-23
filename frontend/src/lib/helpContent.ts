@@ -190,7 +190,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           "Pick a view: \"All open\", \"My open\", \"Overdue\", \"This week\", or \"All\".",
           "Use \"Filter\" to narrow by status, priority, assignee, customer (with Customers access), or label. A label filter matches that label name in every project. Filters stay in the address, so a reload or a shared link keeps them.",
           "Untick \"Top-level only\" to include subtasks. \"Reset\" returns to \"All open\" and clears every filter.",
-          "Click a row to edit the task.",
+          "Click a row to open the task on its own page.",
         ],
       },
       {
@@ -208,6 +208,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           "Type switches between a normal task and a Milestone (a diamond on the Gantt).",
           "Critical Path is a manual flag for tasks whose slip moves the project end date.",
           "\"Task options\" can duplicate or delete the task. Deleting a task also deletes its subtasks.",
+          "\"Open as page\" opens the task on its own page at /tasks/ followed by its number. \"Copy link\" copies that page's address.",
         ],
       },
       {
