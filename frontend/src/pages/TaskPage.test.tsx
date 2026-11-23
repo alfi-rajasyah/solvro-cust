@@ -1,0 +1,106 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { ApiError } from "@/lib/api";
+import { TaskPage } from "./TaskPage";
+
+const taskQuery = { current: {} as Record<string, unknown> };
+const listQuery = { current: {} as Record<string, unknown> };
+const detailProps = { current: null as null | Record<string, unknown> };
+
+vi.mock("@/lib/queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/queries")>();
+  return {
+    ...actual,
+    useTask: () => taskQuery.current,
+    useProjectTasks: () => listQuery.current,
+  };
+});
+vi.mock("@/components/TaskDetail", () => ({
+  TaskDetail: (props: Record<string, unknown>) => {
+    detailProps.current = props;
+    return <div data-testid="detail" data-layout={String(props.layout)} />;
+  },
+}));
+vi.mock("@/components/StatusSelect", () => ({ StatusSelect: () => null }));
+vi.mock("@/components/TaskOptionsMenu", () => ({ TaskOptionsMenu: () => null }));
+
+const row = { id: 5, projectId: 2, title: "Ship it", project: { id: 2, name: "Atlas", customer: null } };
+const listTask = { id: 5, projectId: 2, title: "Ship it", parentTaskId: null };
+
+function mount(path = "/tasks/5") {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/tasks/:taskId" element={<TaskPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+afterEach(() => {
+  cleanup();
+  detailProps.current = null;
+  document.title = "";
+});
+
+describe("TaskPage states", () => {
+  it("shows a loading state while the task row loads", () => {
+    taskQuery.current = { data: undefined, isPending: true, isError: false, error: null, refetch: vi.fn() };
+    listQuery.current = { data: undefined, isError: false };
+    mount();
+    expect(screen.getByTestId("page-loading")).toBeTruthy();
+  });
+
+  it("shows one not-found state with a way back on a 404", () => {
+    taskQuery.current = {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: new ApiError(404, "Not found", null),
+      refetch: vi.fn(),
+    };
+    listQuery.current = { data: undefined, isError: false };
+    mount();
+    expect(screen.getByText("Task not found")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Back to Tasks" }).getAttribute("href")).toBe("/tasks");
+  });
+
+  it("treats a malformed id as not found without asking the server", () => {
+    taskQuery.current = { data: undefined, isPending: false, isError: false, error: null, refetch: vi.fn() };
+    listQuery.current = { data: undefined, isError: false };
+    mount("/tasks/12abc");
+    expect(screen.getByText("Task not found")).toBeTruthy();
+  });
+
+  it("does not hang on a task the server returned but the project list lacks", () => {
+    taskQuery.current = { data: row, isPending: false, isError: false, error: null, refetch: vi.fn() };
+    listQuery.current = { data: [], isError: false, refetch: vi.fn() };
+    mount();
+    expect(screen.getByText("Task not found")).toBeTruthy();
+  });
+
+  it("offers a retry, not not-found, on a server error", () => {
+    taskQuery.current = {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: new ApiError(500, "boom", null),
+      refetch: vi.fn(),
+    };
+    listQuery.current = { data: undefined, isError: false };
+    mount();
+    expect(screen.queryByText("Task not found")).toBeNull();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+  });
+
+  it("renders the page layout of TaskDetail for the task's project and sets the document title", () => {
+    taskQuery.current = { data: row, isPending: false, isError: false, error: null, refetch: vi.fn() };
+    listQuery.current = { data: [listTask], isError: false, refetch: vi.fn() };
+    mount();
+    expect(screen.getByTestId("detail").getAttribute("data-layout")).toBe("page");
+    expect(detailProps.current).toMatchObject({ projectId: 2, taskId: 5 });
+    expect(document.title).toBe("Ship it · Solvro");
+  });
+});

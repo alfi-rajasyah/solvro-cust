@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ProjectStatusChip } from "@/components/StatusChip";
 import { formatElapsed, useRunningItopTimer } from "@/components/itop/useTicketTimer";
 import { useAuth } from "@/lib/auth";
-import { useCustomer, useProject } from "@/lib/queries";
+import { useCustomer, useProject, useProjectTasks, useTask } from "@/lib/queries";
 import { buildCrumbs, matchRoute } from "@/lib/routeMeta";
 import { useTheme } from "@/lib/theme";
 import { NotificationBell } from "./NotificationBell";
@@ -85,10 +85,17 @@ export function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
   const route = matchRoute(location.pathname);
   const { data: project } = useProject(route.projectId);
   const { data: customer } = useCustomer(route.customerId);
+  // The /tasks/:id page knows only the task id: the row says which project it is in.
+  const { data: pageTask } = useTask(route.taskId);
+  // The page's own task list is optimistic, so a rename shows in the bar at once.
+  const { data: pageTasks } = useProjectTasks(pageTask?.projectId ?? null);
+  const pageTaskTitle = pageTasks?.find((t) => t.id === pageTask?.id)?.title ?? pageTask?.title;
   const crumbs = buildCrumbs(location.pathname, {
     projectName: project?.name,
     projectCustomer: project?.primaryCustomer,
     customerName: customer?.name,
+    taskTitle: pageTaskTitle,
+    taskProject: pageTask ? { id: pageTask.project.id, name: pageTask.project.name } : null,
   });
 
   const initials = user

@@ -1142,34 +1142,34 @@ export function TaskDetail({ projectId, taskId, layout, onOpenTask, renderHeader
   );
 
   if (layout === "page") {
-    // Title and description lead, the fields sit in a side column from md:, and
-    // subtasks, Outline pages and comments follow. DOM order is the desktop
-    // reading order (head, body, fields); below md the fields are moved up
-    // between the description and the subtasks with `order`, so a phone user
-    // sees them before a long comment thread.
+    // DOM order is the reading order at every width: title and description,
+    // the fields, then subtasks, Outline pages and comments. One column below
+    // md (so the fields come right after the description on a phone); from md
+    // the grid places the fields in a side column spanning both rows, so
+    // keyboard focus and screen readers meet the same order the eye does.
     return (
       <>
         {header}
         <div className="px-4 py-4 md:px-8 md:py-6">
           {errorAlert}
-          <div className="grid gap-x-10 gap-y-6 md:grid-cols-[minmax(0,1fr)_20rem] md:items-start">
-            <div className="max-md:order-1 md:col-start-1 md:row-start-1">
+          <div className="grid gap-x-10 gap-y-6 md:grid-cols-[minmax(0,1fr)_20rem] md:grid-rows-[auto_1fr] md:items-start">
+            <div className="md:col-start-1 md:row-start-1">
               {breadcrumb}
               {titleBlock}
               {descriptionBlock}
             </div>
-            <div className="max-md:order-3 md:col-start-1 md:row-start-2">
-              {subtasksBlock("")}
-              {outlineBlock}
-              {commentsBlock("mt-6 border-t border-outline-variant pt-4")}
-            </div>
             <aside
               aria-label="Task fields"
-              className="max-md:order-2 border-t border-outline-variant pt-4 md:col-start-2 md:row-span-2 md:row-start-1 md:border-t-0 md:border-l md:pl-6 md:pt-0"
+              className="border-t border-outline-variant pt-4 md:col-start-2 md:row-span-2 md:row-start-1 md:border-t-0 md:border-l md:pl-6 md:pt-0"
             >
               {metaGrid("")}
               {labelsBlock("mt-4")}
             </aside>
+            <div className="md:col-start-1 md:row-start-2">
+              {subtasksBlock("")}
+              {outlineBlock}
+              {commentsBlock("mt-6 border-t border-outline-variant pt-4")}
+            </div>
           </div>
         </div>
         {dialogs}

@@ -115,6 +115,20 @@ describe("TaskDetail page layout", () => {
     expect(side.contains(screen.getByRole("heading", { name: /Comments/ }))).toBe(false);
   });
 
+  it("keeps DOM order equal to reading order: title, description, fields, subtasks, comments", () => {
+    mountPage();
+    const side = screen.getByRole("complementary", { name: "Task fields" });
+    const title = screen.getByRole("button", { name: "Parent" });
+    const description = screen.getByRole("button", { name: "Edit description" });
+    const subtasks = screen.getByText("Subtasks");
+    const comments = screen.getByRole("heading", { name: /Comments/ });
+    const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(title, description)).toBe(true);
+    expect(follows(description, side)).toBe(true);
+    expect(follows(side, subtasks)).toBe(true);
+    expect(follows(subtasks, comments)).toBe(true);
+  });
+
   it("is one column below md and two from md up", () => {
     mountPage();
     const grid = screen.getByRole("complementary", { name: "Task fields" }).parentElement!;

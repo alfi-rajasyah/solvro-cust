@@ -888,6 +888,10 @@ export const queryKeys = {
     [...queryKeys.customerNotesRoot(id), limit] as const,
   tasks: (filter?: TasksFilter) => ["tasks", filter ?? {}] as const,
   comments: (taskId: number) => ["tasks", taskId, "comments"] as const,
+  // One task by id (the /tasks/:id page). Sits under the ["tasks"] prefix on
+  // purpose: every task mutation already invalidates that prefix, so the page's
+  // copy refreshes with the list views. Nothing else may be keyed here.
+  task: (id: number) => ["tasks", "detail", id] as const,
   search: (q: string) => ["search", q] as const,
   // B7: ⌘K Outline group and "Mentioned in Outline" (task panel, project Overview).
   // Prefix keys: everything a disconnect / address change must drop.
@@ -1252,6 +1256,23 @@ export function useProjectTasks(id: number | null) {
     queryFn: ({ signal }) =>
       apiRequest<Task[]>(`/projects/${id}/tasks`, { signal }),
     enabled: id !== null,
+  });
+}
+
+/**
+ * One task by id, for the /tasks/:id page, which knows only the id (the
+ * project id comes back with the row). A task the user cannot see answers 404
+ * exactly like a missing one, and a 404 is never retried. The page's fields
+ * render from `useProjectTasks`, so this entry decides existence, the project
+ * and the breadcrumb; it is refreshed by every `["tasks"]` invalidation.
+ */
+export function useTask(id: number | null) {
+  return useQuery({
+    queryKey: id !== null ? queryKeys.task(id) : ["tasks", "detail", "noop"],
+    queryFn: ({ signal }) => apiRequest<TaskWithProject>(`/tasks/${id}`, { signal }),
+    enabled: id !== null,
+    retry: (failures, error) =>
+      !(error instanceof ApiError && (error.status === 404 || error.status === 403)) && failures < 1,
   });
 }
 
@@ -2452,7 +2473,10 @@ export function useDeleteTask(projectId: number) {
       const prev = qc.getQueryData<Task[]>(queryKeys.projectTasks(projectId));
       return { epicId: prev?.find((t) => t.id === id)?.epicId ?? null };
     },
-    onSuccess: (_data, _id, ctx) => {
+    onSuccess: (_data, id, ctx) => {
+      // The task page for this id is being left: drop its entry first so the
+      // ["tasks"] invalidation below does not refetch it into a 404.
+      qc.removeQueries({ queryKey: queryKeys.task(id), exact: true });
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: queryKeys.overview });
@@ -2593,6 +2617,7 @@ export function useDeleteLabel(projectId: number) {
       qc.invalidateQueries({ queryKey: queryKeys.projectLabels(projectId) });
       qc.invalidateQueries({ queryKey: queryKeys.labelNames });
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
 }
@@ -2691,6 +2716,7 @@ export function useUpdateSection(projectId: number) {
       qc.invalidateQueries({ queryKey: queryKeys.projectSections(projectId) });
       // Tasks carry `section: { color }`; invalidate so the diagram repaints.
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
 }
@@ -2703,6 +2729,7 @@ export function useDeleteSection(projectId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projectSections(projectId) });
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
 }
@@ -3546,6 +3573,8 @@ export function useAddComment(taskId: number, projectId: number) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.comments(taskId) });
+      // The task row carries _count.comments.
+      qc.invalidateQueries({ queryKey: queryKeys.task(taskId), exact: true });
       invalidateProjectActivity(qc, projectId);
     },
   });

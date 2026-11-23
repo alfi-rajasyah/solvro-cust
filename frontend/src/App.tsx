@@ -35,6 +35,7 @@ const ProjectDetail = lazyPage(() => import("@/pages/ProjectDetail"), "ProjectDe
 const Projects = lazyPage(() => import("@/pages/Projects"), "Projects");
 const PublicShare = lazyPage(() => import("@/pages/PublicShare"), "PublicShare");
 const Settings = lazyPage(() => import("@/pages/Settings"), "Settings");
+const TaskPage = lazyPage(() => import("@/pages/TaskPage"), "TaskPage");
 const Tasks = lazyPage(() => import("@/pages/Tasks"), "Tasks");
 const Utilization = lazyPage(() => import("@/pages/Utilization"), "Utilization");
 const WeeklySync = lazyPage(() => import("@/pages/WeeklySync"), "WeeklySync");
@@ -155,6 +156,15 @@ export function App() {
             element={
               <PermissionGuard permission="project:read">
                 <Tasks />
+              </PermissionGuard>
+            }
+          />
+          {/* The task page reads GET /tasks/:id, which needs project:read too. */}
+          <Route
+            path="tasks/:taskId"
+            element={
+              <PermissionGuard permission="project:read">
+                <TaskPage />
               </PermissionGuard>
             }
           />

@@ -18,9 +18,12 @@ export interface CrumbContext {
   /** The project's customer (from `useProject`), if it has one. */
   projectCustomer?: { id: number; name: string } | null;
   customerName?: string | null;
+  /** The task on `/tasks/:id`, and the project it belongs to (from `useTask`). */
+  taskTitle?: string | null;
+  taskProject?: { id: number; name: string } | null;
 }
 
-export type RouteKind = "static" | "project" | "customer";
+export type RouteKind = "static" | "project" | "customer" | "task";
 
 export interface RouteMatch {
   kind: RouteKind;
@@ -29,6 +32,8 @@ export interface RouteMatch {
   projectId: number | null;
   /** Set when `kind === "customer"`. */
   customerId: number | null;
+  /** Set when `kind === "task"` (the `/tasks/:id` page). */
+  taskId: number | null;
 }
 
 /** Top-level path segment -> title. `work-logs` is a redirect to Utilization. */
@@ -61,16 +66,20 @@ export function matchRoute(pathname: string): RouteMatch {
   const [first, second] = segments;
 
   if (first === "projects" && second && NUMERIC.test(second)) {
-    return { kind: "project", title: "Project", projectId: Number(second), customerId: null };
+    return { kind: "project", title: "Project", projectId: Number(second), customerId: null, taskId: null };
   }
   if (first === "customers" && second && NUMERIC.test(second)) {
-    return { kind: "customer", title: "Customer", projectId: null, customerId: Number(second) };
+    return { kind: "customer", title: "Customer", projectId: null, customerId: Number(second), taskId: null };
+  }
+  if (first === "tasks" && second && NUMERIC.test(second)) {
+    return { kind: "task", title: "Task", projectId: null, customerId: null, taskId: Number(second) };
   }
   return {
     kind: "static",
     title: (first !== undefined && STATIC_TITLES[first]) || FALLBACK_TITLE,
     projectId: null,
     customerId: null,
+    taskId: null,
   };
 }
 
@@ -100,6 +109,16 @@ export function buildCrumbs(pathname: string, ctx: CrumbContext = {}): Crumb[] {
       { label: "Customers", to: "/customers" },
       { label: ctx.customerName || match.title },
     ];
+  }
+
+  if (match.kind === "task") {
+    // Tasks > project (link) > the task. The project crumb waits for the row.
+    const crumbs: Crumb[] = [{ label: "Tasks", to: "/tasks" }];
+    if (ctx.taskProject) {
+      crumbs.push({ label: ctx.taskProject.name, to: `/projects/${ctx.taskProject.id}` });
+    }
+    crumbs.push({ label: ctx.taskTitle || match.title });
+    return crumbs;
   }
 
   return [{ label: match.title }];
