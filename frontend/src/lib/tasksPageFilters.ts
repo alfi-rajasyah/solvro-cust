@@ -50,8 +50,10 @@ export function cleanLabelNames(raw: readonly string[]): string[] {
 }
 
 /**
- * The same set in any order or casing gives the same array, so it maps to one
- * react-query cache entry and one request URL.
+ * The same set in any order gives the same array, so it maps to one react-query
+ * cache entry and one request URL. Casing is kept as given (names that differ
+ * only in case are de-duplicated, the first spelling wins), so the same name
+ * spelled differently is a different key.
  */
 export function normalizeLabelNames(raw: readonly string[]): string[] {
   return cleanLabelNames(raw).sort((a, b) => {

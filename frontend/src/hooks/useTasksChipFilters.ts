@@ -31,7 +31,15 @@ import {
 export function useTasksChipFilters({ canRead, canReadCustomers }: { canRead: boolean; canReadCustomers: boolean }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const search = searchParams.toString();
-  const values = useMemo(() => parseChipValues(new URLSearchParams(search)), [search]);
+  const urlValues = useMemo(() => parseChipValues(new URLSearchParams(search)), [search]);
+  // Without customer:read the Customer field is not offered, so no chip shows
+  // `?customer=` and the customers list never loads to prune it. Treat it as
+  // absent (and drop it from the URL below) rather than filter invisibly.
+  const customerHidden = !canReadCustomers && urlValues.customerId.length > 0;
+  const values = useMemo(
+    () => (customerHidden ? { ...urlValues, customerId: [] } : urlValues),
+    [urlValues, customerHidden],
+  );
   const key = chipValuesKey(values);
 
   const [chips, setChips] = useState<Filter<string>[]>(() => chipsFromValues(values, []));
@@ -72,11 +80,11 @@ export function useTasksChipFilters({ canRead, canReadCustomers }: { canRead: bo
   const knownKey = JSON.stringify(known);
 
   useEffect(() => {
-    const kept = pruneChipValues(values, known);
+    const kept = pruneChipValues(values, known) ?? (customerHidden ? values : null);
     if (kept) setSearchParams((prev) => writeChipValues(prev, kept), { replace: true });
     // `known` is rebuilt each render; its key carries the content.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, knownKey, setSearchParams]);
+  }, [key, knownKey, customerHidden, setSearchParams]);
 
   return {
     values,

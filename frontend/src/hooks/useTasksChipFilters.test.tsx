@@ -2,7 +2,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { MemoryRouter, useLocation, useNavigationType } from "react-router-dom";
+import { MemoryRouter, useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import { useTasksChipFilters } from "./useTasksChipFilters";
 
 type Q<T> = { isSuccess: boolean; isFetching: boolean; data?: T[] };
@@ -29,9 +29,11 @@ vi.mock("@/lib/queries", () => ({
   useLabelNames: () => state.labels,
 }));
 
-function setup(search: string) {
+function setup(search: string, canReadCustomers = true) {
   const seen: { search: string; type: string }[] = [];
+  const nav: { go: (to: string) => void } = { go: () => {} };
   function Probe() {
+    nav.go = useNavigate();
     const loc = useLocation();
     const type = useNavigationType();
     seen.push({ search: loc.search, type });
@@ -43,8 +45,8 @@ function setup(search: string) {
       {children}
     </MemoryRouter>
   );
-  const hook = renderHook(() => useTasksChipFilters({ canRead: true, canReadCustomers: true }), { wrapper });
-  return { seen, hook };
+  const hook = renderHook(() => useTasksChipFilters({ canRead: true, canReadCustomers }), { wrapper });
+  return { seen, hook, nav };
 }
 
 const last = (seen: { search: string }[]) => new URLSearchParams(seen[seen.length - 1].search);
@@ -122,5 +124,43 @@ describe("useTasksChipFilters", () => {
       await new Promise((r) => setTimeout(r, 0));
       expect(seen[seen.length - 1].search).toBe("?status=id:99&assignee=4&customer=5&label=Gone");
     }
+  });
+
+  it("rebuilds the chips on an outside URL change, keeping each chip's id and place", async () => {
+    const { hook, nav } = setup("?priority=LOW&label=Bug");
+    const before = hook.result.current.chips;
+    const ids = before.map((c) => c.id);
+    expect(before.map((c) => c.field)).toEqual(["priority", "label"]);
+    act(() => nav.go("/tasks?priority=HIGH&label=Blocked&label=Bug"));
+    await waitFor(() => expect(hook.result.current.values.priority).toEqual(["HIGH"]));
+    const after = hook.result.current.chips;
+    expect(after.map((c) => [c.id, c.field, c.values])).toEqual([
+      [ids[0], "priority", ["HIGH"]],
+      [ids[1], "label", ["Blocked", "Bug"]],
+    ]);
+    act(() => nav.go("/tasks"));
+    await waitFor(() => expect(hook.result.current.chips).toEqual([]));
+  });
+
+  it("removing the Label chip clears ?label= and keeps the rest", async () => {
+    const { seen, hook } = setup("?priority=LOW&label=Bug&label=Blocked&view=all");
+    const rest = hook.result.current.chips.filter((c) => c.field !== "label");
+    act(() => hook.result.current.onChange(rest));
+    await waitFor(() => expect(hook.result.current.values.label).toEqual([]));
+    const p = last(seen);
+    expect(p.has("label")).toBe(false);
+    expect(p.get("priority")).toBe("LOW");
+    expect(p.get("view")).toBe("all");
+    expect(seen[seen.length - 1].type).toBe("REPLACE");
+  });
+
+  it("without customer:read, ?customer= is dropped from the URL and never reaches the values", async () => {
+    state = { ...lists, customers: { isSuccess: false, isFetching: false } };
+    const { seen, hook } = setup("?customer=12&priority=LOW", false);
+    await waitFor(() => expect(last(seen).has("customer")).toBe(false));
+    expect(hook.result.current.values.customerId).toEqual([]);
+    expect(hook.result.current.values.priority).toEqual(["LOW"]);
+    expect(hook.result.current.chips.map((c) => c.field)).toEqual(["priority"]);
+    expect(seen[seen.length - 1].type).toBe("REPLACE");
   });
 });

@@ -20,15 +20,16 @@ describe("tasksQueryString labelNames", () => {
   });
 
   it("gives the same query and the same normalized filter for the same set in another order", () => {
-    const a = { labelNames: ["Bug", "blocked", "A_b"] };
-    const b = { labelNames: ["A_b", "Blocked", "bug"] };
-    expect(tasksQueryString(a).toLowerCase()).toBe(tasksQueryString(b).toLowerCase());
-    expect(normalizeLabelNames(a.labelNames).map((n) => n.toLowerCase())).toEqual(
-      normalizeLabelNames(b.labelNames).map((n) => n.toLowerCase()),
-    );
-    const sameOrder = { labelNames: ["Bug", "Blocked"] };
-    const reordered = { labelNames: ["Blocked", "Bug"] };
-    expect(normalizeTasksFilter(sameOrder)).toEqual(normalizeTasksFilter(reordered));
+    const a = { labelNames: ["Bug", "Blocked", "A_b"] };
+    const b = { labelNames: ["A_b", "Blocked", "Bug"] };
+    expect(tasksQueryString(a)).toBe(tasksQueryString(b));
+    expect(normalizeLabelNames(a.labelNames)).toEqual(["A_b", "Blocked", "Bug"]);
+    expect(normalizeTasksFilter(a)).toEqual(normalizeTasksFilter(b));
+  });
+
+  it("keeps casing as given, so another spelling is another key; case-duplicates collapse", () => {
+    expect(tasksQueryString({ labelNames: ["bug"] })).not.toBe(tasksQueryString({ labelNames: ["Bug"] }));
+    expect(normalizeLabelNames(["Bug", "bug"])).toEqual(["Bug"]);
   });
 
   it("omits the param for an empty or missing list and encodes odd names", () => {

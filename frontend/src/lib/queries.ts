@@ -600,8 +600,9 @@ export interface TasksFilter {
   labelId?: number;
   /**
    * Label names, any-of, matched case-insensitively across the caller's visible
-   * projects (sent as repeated `labelName`). Order and casing do not matter:
-   * `normalizeTasksFilter` sorts them before they reach a cache key.
+   * projects (sent as repeated `labelName`). Order does not matter:
+   * `normalizeTasksFilter` sorts them before they reach a cache key. Casing
+   * is kept as given, so two spellings of one name are two cache entries.
    */
   labelNames?: string[];
   customerId?: number;

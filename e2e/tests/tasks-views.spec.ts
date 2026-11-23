@@ -148,6 +148,13 @@ test.describe("Tasks label filter (desktop)", () => {
     }
     await expect(taskRow(page, projectIds[0], plain)).toHaveCount(0);
   });
+});
+
+// The other chips are in the URL too (lib/tasksPageFilters.ts), not just Label.
+test.describe("Tasks chips in the URL (desktop)", () => {
+  test.beforeEach(async () => {
+    test.skip(test.info().project.name !== "desktop", "Filter toolbar is exercised on desktop");
+  });
 
   test("Status and Priority chips live in the URL and survive a reload", async ({ page, seededProject }) => {
     const base = apiBase(test.info());
@@ -174,7 +181,7 @@ test.describe("Tasks label filter (desktop)", () => {
     await page.keyboard.press("Escape");
 
     await expect(page).toHaveURL(/[?&]priority=URGENT\b/);
-    await expect(page).toHaveURL(/[?&]status=id(%3A|:)1\b/);
+    await expect(page).toHaveURL(/[?&]status=id(%3A|:)\d+\b/);
     await expect(page).toHaveURL(/[?&]view=all\b/);
     await expect(taskRow(page, projectId, match)).toHaveCount(1);
     await expect(taskRow(page, projectId, otherPriority)).toHaveCount(0);

@@ -11,20 +11,20 @@ The cross-project Tasks page (`/tasks`, `frontend/src/pages/Tasks.tsx`) gets a "
 - `GET /tasks` accepts one `labelId` (`tasksListQuerySchema`, `backend/src/routes/tasks.ts`). A label id is one project's label, so it cannot filter across projects.
 - The Filter menu chips on `/tasks` (Status, Priority, Assignee, Customer) are React state only (`activeFilters` in `Tasks.tsx`). Only `?view=`, `?tamId=` and `?assigneeId=` are in the URL. The issue says "kept in the URL like the other filters on this page", but the other chips are not in the URL. Task 3 fixes this (Q1).
 - The project List keeps its label filter in the URL as label ids (`hooks/useTaskFilters.ts`, `lib/taskFilters.ts`) and drops stale ids after the labels load. Task 2 follows this pattern.
-- Prisma `mode: "insensitive"` compiles to `ILIKE`, so `_` and `%` in a label name would act as wildcards (the comments in `backend/src/routes/auth.ts` and `backend/src/routes/admin.ts` record this trap). A name match must compare `lower(name)` exactly.
+- Prisma `mode: "insensitive"` compiles to `ILIKE`, so `_` and `%` in a label name would act as wildcards (the comments in `backend/src/routes/auth.ts` and `backend/src/routes/admin.ts` record this trap). A name match must be an exact compare, never `ILIKE`.
 
 ## Decisions (the issue leaves these to the PR; D1 confirmed by the user 2026-11-23)
 
 - **D1: group labels by name.** The picker lists each label name once, case-insensitively, across the projects the user can see. A pick filters every visible project's label with that name. Reason: a TAM filters "Blocked" across all projects, not "Blocked in project X". A per-project list would repeat the same name once per project.
 - **D2: "is any of".** The Label field is a multiselect with one operator, `is_any_of`: a task matches when it has one or more of the picked labels.
-- **D3: the API filters by name.** `GET /tasks` accepts `labelName` (repeated, 1 to 20 values). The server finds the matching label ids in visible projects with an exact `lower(name)` compare, then filters with `labels: { some: { id: { in: ids } } }`. No match gives an empty list, not an unfiltered one. `labelId` stays as it is.
+- **D3: the API filters by name.** `GET /tasks` accepts `labelName` (repeated, 1 to 20 values). The server loads the labels of visible projects and keeps those whose key (`labelNameKey` in `backend/src/lib/labelNames.ts`: trimmed, lowercased, compared in JS) equals a requested name's key, then filters with `labels: { some: { id: { in: ids } } }`. No match gives an empty list, not an unfiltered one. `labelId` stays as it is.
 - **D4: the picker label.** Each option shows the name. The display casing is the one used by the most projects (ties: alphabetical first). The option shows no colour, because one name can have a different colour in each project.
 
 ## Tasks
 
 | Task | What | Main files | Spine |
 |---|---|---|---|
-| 1 | `GET /labels` returns `[{ name, projectCount }]` for the labels of visible projects, grouped by `lower(name)`, sorted by name. Requires `project:read`, applies `projectVisibilityFilter`. `GET /tasks` accepts `labelName` per D3. | `backend/src/routes/labels.ts`, `backend/src/routes/tasks.ts`, backend vitest | `routes/tasks.ts` |
+| 1 | `GET /labels` returns `[{ name, projectCount }]` for the labels of visible projects, grouped by the same `labelNameKey`, sorted by name. Requires `project:read`, applies `projectVisibilityFilter`. `GET /tasks` accepts `labelName` per D3. | `backend/src/routes/labels.ts`, `backend/src/routes/tasks.ts`, backend vitest | `routes/tasks.ts` |
 | 2 | `useLabelNames()` hook and `TasksFilter.labelNames` (sent as repeated `labelName`). "Label" multiselect field in the `/tasks` Filter menu. The picked names live in the URL as repeated `?label=` and survive a reload; a name with no label left in any visible project is dropped after the list loads. | `frontend/src/lib/queries.ts`, `frontend/src/pages/Tasks.tsx`, frontend vitest, `e2e/tests/task-filters.spec.ts` or `tasks-views.spec.ts` | `lib/queries.ts` |
 | 3 | The other chips (Status, Priority, Assignee, Customer) move into the URL the same way. | `frontend/src/pages/Tasks.tsx`, frontend vitest, e2e | none |
 
