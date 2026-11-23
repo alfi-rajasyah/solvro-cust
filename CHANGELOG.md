@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-23 — Task attachments
+
+- An Attachments section in the task side panel and on the task page (`frontend/src/components/TaskAttachments.tsx`) lets you attach files to a task: pick several at once, see every limit and the allowed file types above the Attach files button, follow a progress bar for each file, and dismiss an error for a file that was refused. Each file shows its name (non-Latin names are kept intact), size, uploader and date, with a download button and a delete that asks first. People without permission to edit tasks can see and download the files but not add or remove them.
+- New API (`backend/src/routes/attachments.ts`): `GET` and `POST /tasks/:id/attachments`, `GET` and `DELETE /attachments/:id`, and `GET /attachments/config` for the limits and allowed file types. Uploads are checked for file type, size per file, file count and total size per task, and the limits hold when uploads arrive at the same time. A task you cannot see answers 404 on every route, before any file data is read. Downloads always come through the server as attachments, so the task's visibility is checked on every download.
+- Deleting a task (with its subtasks) or a project also deletes its files from storage, and a daily job removes stored files that no longer belong to a task.
+
 ### Added — 2026-11-23 — Task attachments: storage and deployment
 
 - A new `task_attachments` table (`backend/prisma/schema.prisma`, migration `20261123181600_task_attachments`) records each file attached to a task: name, type, size, storage key, uploader and date. Rows go with their task; the uploader reference is cleared when the user is deleted.
