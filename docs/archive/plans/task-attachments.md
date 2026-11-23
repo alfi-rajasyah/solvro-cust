@@ -1,6 +1,6 @@
 # Task attachments
 
-Status: planned
+Status: shipped 2026-11-23
 Archive path: `docs/archive/plans/task-attachments.md`
 
 A user can attach files to a task, see the list, download a file and delete a file (GitHub issue #137, `docs/ISSUES.md` ISS-031). Today Solvro has no attachment model, route or UI. Lane P: a new Prisma model and migration, new routes, a new Docker volume, two new dependencies, and spine touches (`schema.prisma`, `lib/queries.ts`, `routes/tasks.ts`, `routes/projects.ts`, `nginx.conf`, `setup.sh`).
@@ -100,4 +100,24 @@ Instant reviews on task 1 (schema), task 3 (`routes/tasks.ts`, `routes/projects.
 
 ## Result
 
-Not started.
+- Tasks 1 to 5 shipped as planned, in two waves: wave 1 ran tasks 1, 2 and 4; wave 2 ran tasks 3 and 5.
+- Changes along the way:
+  - `S3_ENDPOINT` became optional, because AWS S3 derives it from the region.
+  - New optional `S3_KEY_PREFIX`, so several installs can share one bucket. The orphan sweep lists only `tasks/` (under the prefix), so it never touches other objects in the bucket.
+  - The S3 client sends checksums only when a request needs them, for S3-compatible stores such as Garage and older MinIO builds.
+  - A fresh `setup.sh` install now stops when either the database volume or `solvro_uploads` exists, unless `FORCE_FRESH=1` is set; with it, both volumes are deleted.
+  - Upload and delete races: the upload locks the task row (`FOR NO KEY UPDATE`), and the task and project deletes lock the task rows before they collect keys.
+  - Post-commit storage deletes run in the background, so a delete answers without waiting for S3.
+- Reviews: spine instant reviews on wave 1 (one blocker: a blank `S3_FORCE_PATH_STYLE` stopped every `setup.sh` install from starting) and on task 3, a re-review of each fix round, and one phase review (one blocker: live plan-path citations). All findings were fixed, apart from those filed below.
+- Deferred to `docs/ISSUES.md`: ISS-212 (e2e read-only and 415 cases), ISS-213 (`solvro backup` skips the uploads volume), ISS-214 (nginx 26 MB limit is hardcoded), ISS-215 (e2e cleanup leaves stored objects until the sweep), ISS-216 (one flaky task-status test). ISS-031 is closed.
+- `gates.sh`: all gates passed on the final tree, Playwright smoke included.
+- Silo checks: the storage driver (put, get, list, delete, with and without a key prefix) and the full API (upload, list, download, delete) ran against the dev Silo bucket `solvro-dev`; the dev stack runs `ATTACHMENTS_DRIVER=s3`, so the e2e spec and the Delivery Gate also ran on Silo.
+
+### Delivery Gate (2026-11-23): PASS
+
+- Task page and side panel, light and dark, at 1280 px and 375 px, on the dev Silo bucket.
+- Three files in one pick: a 176 KB PDF with a Polish name (kept intact, truncated with the full name on hover in the panel), a text file, and an `.exe`. The `.exe` was refused with a dismissible error row that lists the allowed types; the other two uploaded.
+- The help line shows all four limits and the allowed types before an upload.
+- Download over Silo saved the file under its own name.
+- Keyboard focus on Attach files shows the bordered focus ring; no horizontal page scroll at 375 px.
+- Not checked by hand: a fresh `setup.sh` install with the local driver. The local driver is covered by the backend tests (the route tests run on it) and by the `setup.sh` syntax check, but no fresh server install was run.
