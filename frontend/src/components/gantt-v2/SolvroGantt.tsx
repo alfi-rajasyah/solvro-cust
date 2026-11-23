@@ -360,6 +360,21 @@ export function SolvroGantt(props: SolvroGanttProps) {
   const { projectId, projectName, baselineLockedAt, baselineLockedBy, onEditTask, onCreateTaskOpen } =
     props;
 
+  // The row menu keeps focus inside itself until it has unmounted; a dialog
+  // opened from its Edit item meanwhile autofocuses, then loses that focus to
+  // <body> when the menu goes. Wait for the menu to be gone, then open the
+  // dialog, so its title input keeps focus. Capped, so a menu that never
+  // unmounts cannot swallow the click.
+  function editAfterMenuCloses(task: Task) {
+    const started = performance.now();
+    const tick = () => {
+      const open = document.querySelector('[data-slot="gantt-resource-menu"]') !== null;
+      if (open && performance.now() - started < 1000) requestAnimationFrame(tick);
+      else onEditTask(task);
+    };
+    requestAnimationFrame(tick);
+  }
+
   const { user } = useAuth();
   // Ported verbatim from GanttFrame.tsx:86-87.
   const canEdit = hasPermission(user, "task:write");
@@ -1650,7 +1665,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                     if (!task) return null;
                     return (
                       <>
-                        <ContextMenuItem className="text-xs" onClick={() => onEditTask(task)}>
+                        <ContextMenuItem className="text-xs" onClick={() => editAfterMenuCloses(task)}>
                           <span
                             className="material-symbols-outlined text-sm text-on-surface-variant"
                             aria-hidden="true"

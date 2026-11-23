@@ -45,6 +45,7 @@ export function TaskOptionsMenu({
 
   useEffect(() => {
     onConfirmOpenChange?.(confirmDelete);
+    return () => onConfirmOpenChange?.(false);
   }, [confirmDelete, onConfirmOpenChange]);
 
   async function handleDuplicate() {

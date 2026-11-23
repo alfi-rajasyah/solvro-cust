@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, apiBase, loginViaUi, test } from "../fixtures/test";
+import { expect, apiBase, loginViaUi, openTaskEditModal, test } from "../fixtures/test";
 import { createTask } from "../fixtures/seed";
 
 // Starting iTop work from the task modal and panel
@@ -317,6 +317,72 @@ test.describe("iTop from the task modal and panel", () => {
     await again.press("Enter");
     // The refusal shows in the alert at the top of the page body, outside the side column.
     await expect(page.getByText("Ticket ref refused.")).toBeVisible();
+    await expect(drawer.getByLabel("iTop ticket", { exact: true })).toHaveValue("");
+  });
+
+  test("Edit task modal (opened from the Gantt row menu) keeps the pinned ref, clears it, and reverts a failed pin", async ({
+    page,
+    seededProject,
+  }, testInfo) => {
+    const base = apiBase(testInfo);
+    const { token, projectId } = seededProject;
+    const customerId = await projectCustomerId(base, token, projectId);
+    const title = `Edit pin ${stamp()}`;
+    test.skip(testInfo.project.name !== "desktop", "The Gantt is desktop-only");
+    const task = await createTask(base, token, projectId, {
+      title,
+      startDate: new Date().toISOString(),
+      dueDate: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+    });
+    await mockItop(page, { status: "new", minutes: 0 }, customerId);
+    // So "Create in iTop" would be offered whenever no ref is pinned.
+    await page.route(`**/api/itop/customers/${customerId}/tickets*`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          mapped: true,
+          orgName: "QA Fixture Org",
+          tickets: [],
+          counts: { ongoing: 0, resolvedWeek: 0, mine: 0, incidents: 0, requests: 0 },
+          syncedAt: new Date().toISOString(),
+        }),
+      }),
+    );
+
+    await loginViaUi(page);
+    await openTaskEditModal(page, projectId, task.id, title);
+    const drawer = page.getByRole("dialog", { name: "Edit task" });
+    await expect(drawer).toBeVisible();
+
+    const field = drawer.getByLabel("iTop ticket", { exact: true });
+    await expect(drawer.getByRole("button", { name: "Create in iTop" })).toBeVisible();
+
+    // Pin: the field shows the ref (not a fresh input) and no second create offer.
+    await field.fill(TICKET_REF);
+    await field.press("Enter");
+    await expect(drawer.getByText(TICKET_REF, { exact: true })).toBeVisible();
+    await expect(drawer.getByRole("button", { name: "Create in iTop" })).toHaveCount(0);
+    await expect(drawer.getByLabel("iTop ticket", { exact: true })).toHaveCount(0);
+
+    // Clear: back to an empty input.
+    await drawer.getByRole("button", { name: `Clear iTop ticket ${TICKET_REF}` }).click();
+    await expect(drawer.getByLabel("iTop ticket", { exact: true })).toHaveValue("");
+    await expect(drawer.getByText(TICKET_REF, { exact: true })).toHaveCount(0);
+
+    // A refused pin shows the error and reverts.
+    await page.route("**/api/tasks/*", (route) => {
+      if (route.request().method() !== "PATCH") return route.fallback();
+      return route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Ticket ref refused.", code: "bad_request" }),
+      });
+    });
+    const again = drawer.getByLabel("iTop ticket", { exact: true });
+    await again.fill(TICKET_REF);
+    await again.press("Enter");
+    await expect(drawer.getByText("Ticket ref refused.")).toBeVisible();
     await expect(drawer.getByLabel("iTop ticket", { exact: true })).toHaveValue("");
   });
 });

@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi, apiBase } from "../fixtures/test";
+import { test, expect, loginViaUi, apiBase, openTaskEditModal } from "../fixtures/test";
 import { createTask, getTasks } from "../fixtures/seed";
 import type { Locator, Page } from "@playwright/test";
 
@@ -323,19 +323,6 @@ test.describe("task panel title save ordering", () => {
   });
 });
 
-// Opens the edit form (TaskFormModal, edit mode) for one task from its Gantt row
-// menu. A /tasks row now opens the task's page, so the Gantt is the one place
-// left that mounts the form for any task.
-async function openEditForm(page: Page, projectId: number, taskId: number, title: string) {
-  await page.goto(`/projects/${projectId}/gantt`, { waitUntil: "networkidle" });
-  const row = page.locator(`[data-slot="gantt-row-group"][data-gantt-row-id="task-${taskId}"]`);
-  await expect(row).toBeVisible();
-  await row.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Edit" }).click();
-  const titleInput = page.getByPlaceholder("Task title");
-  await expect(titleInput).toHaveValue(title);
-}
-
 // The edit form (opened from a Gantt row) sends only the fields the user
 // changed, checked against the task as the form opened — not the live copy.
 test.describe("task edit form conflict warning (desktop)", () => {
@@ -352,7 +339,7 @@ test.describe("task edit form conflict warning (desktop)", () => {
     const id = stamp();
     const task = await createTask(base, token, projectId, { title: `Form ${id}` });
     await loginViaUi(page);
-    await openEditForm(page, projectId, task.id, `Form ${id}`);
+    await openTaskEditModal(page, projectId, task.id, `Form ${id}`);
 
     await patchBehindBack(base, token, task.id, { title: `Theirs ${id}` });
     await page.getByPlaceholder("Task title").fill(`Mine ${id}`);
@@ -379,7 +366,7 @@ test.describe("task edit form conflict warning (desktop)", () => {
     const id = stamp();
     const task = await createTask(base, token, projectId, { title: `Form ${id}` });
     await loginViaUi(page);
-    await openEditForm(page, projectId, task.id, `Form ${id}`);
+    await openTaskEditModal(page, projectId, task.id, `Form ${id}`);
 
     // Someone else retitles the task; I only write a description.
     await patchBehindBack(base, token, task.id, { title: `Theirs ${id}` });
@@ -410,7 +397,7 @@ test.describe("task edit form Use theirs (desktop)", () => {
     const id = stamp();
     const task = await createTask(base, token, projectId, { title: `Keep ${id}` });
     await loginViaUi(page);
-    await openEditForm(page, projectId, task.id, `Keep ${id}`);
+    await openTaskEditModal(page, projectId, task.id, `Keep ${id}`);
     const titleInput = page.getByPlaceholder("Task title");
 
     await patchBehindBack(base, token, task.id, { title: `Theirs ${id}` });

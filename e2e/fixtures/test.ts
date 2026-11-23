@@ -1,4 +1,4 @@
-import { test as base, type Page, type Request, type TestInfo } from "@playwright/test";
+import { expect, test as base, type Page, type Request, type TestInfo } from "@playwright/test";
 import { seedFixture, type SeededFixture } from "./seed";
 
 // Worker-scoped fixture: one seeded project per worker. playwright.config.ts
@@ -96,6 +96,23 @@ export async function submitLoginForm(
  * `docs/archive/plans/kanban-reui-swap/plan.md` T11. Single source of truth so specs
  * don't hardcode the segment.
  */
+/** Opens TaskFormModal in edit mode for one task, from its Gantt row menu (Edit).
+ * A /tasks row opens the task's page, which has no Parent field and no
+ * TaskFormModal, so the Gantt is the one place left that mounts the form for
+ * any task. Desktop only, like the Gantt itself. Waits for the title input to
+ * hold the task and focus. */
+export async function openTaskEditModal(page: Page, projectId: number, taskId: number, title: string): Promise<void> {
+  await page.goto(`/projects/${projectId}/gantt`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(800);
+  const row = page.locator(`[data-slot="gantt-row-group"][data-gantt-row-id="task-${taskId}"]`);
+  await expect(row, `expected a Gantt row for task ${taskId}`).toBeVisible();
+  await row.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Edit" }).click();
+  const titleInput = page.getByPlaceholder("Task title");
+  await expect(titleInput).toHaveValue(title);
+  await expect(titleInput).toBeFocused();
+}
+
 export const KANBAN_ROUTE = "kanban";
 
 export async function openKanban(page: Page, projectId: number): Promise<void> {

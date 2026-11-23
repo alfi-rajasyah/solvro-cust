@@ -132,6 +132,10 @@ describe("/tasks/:id", () => {
     expect(matchRoute("/tasks/42")).toMatchObject({ kind: "task", taskId: 42, projectId: null });
     expect(matchRoute("/tasks").kind).toBe("static");
     expect(matchRoute("/tasks/abc").kind).toBe("static");
+    // Ids the server could never hold are not task routes, here or on the page.
+    expect(matchRoute("/tasks/0").kind).toBe("static");
+    expect(matchRoute("/tasks/2147483648").kind).toBe("static");
+    expect(matchRoute("/tasks/2147483647")).toMatchObject({ kind: "task", taskId: 2147483647 });
   });
 
   it("builds Tasks > project (linked) > task once the row is known", () => {

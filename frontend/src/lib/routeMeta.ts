@@ -57,6 +57,17 @@ const FALLBACK_TITLE = "Overview";
 
 const NUMERIC = /^\d+$/;
 
+/**
+ * A task id from a URL segment: a positive whole number that fits the
+ * database's int32 id column, or null. The one parser behind both the top bar
+ * and the task page, so they never disagree about what is a task id.
+ */
+export function parseTaskId(raw: string | undefined | null): number | null {
+  if (raw === undefined || raw === null || !NUMERIC.test(raw)) return null;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) && n > 0 && n <= 2147483647 ? n : null;
+}
+
 function segmentsOf(pathname: string): string[] {
   return pathname.split("/").filter(Boolean);
 }
@@ -71,8 +82,9 @@ export function matchRoute(pathname: string): RouteMatch {
   if (first === "customers" && second && NUMERIC.test(second)) {
     return { kind: "customer", title: "Customer", projectId: null, customerId: Number(second), taskId: null };
   }
-  if (first === "tasks" && second && NUMERIC.test(second)) {
-    return { kind: "task", title: "Task", projectId: null, customerId: null, taskId: Number(second) };
+  const taskId = first === "tasks" ? parseTaskId(second) : null;
+  if (taskId !== null) {
+    return { kind: "task", title: "Task", projectId: null, customerId: null, taskId };
   }
   return {
     kind: "static",
@@ -114,7 +126,7 @@ export function buildCrumbs(pathname: string, ctx: CrumbContext = {}): Crumb[] {
   if (match.kind === "task") {
     // Tasks > project (link) > the task. The project crumb waits for the row.
     const crumbs: Crumb[] = [{ label: "Tasks", to: "/tasks" }];
-    if (ctx.taskProject) {
+    if (ctx.taskProject?.name) {
       crumbs.push({ label: ctx.taskProject.name, to: `/projects/${ctx.taskProject.id}` });
     }
     crumbs.push({ label: ctx.taskTitle || match.title });

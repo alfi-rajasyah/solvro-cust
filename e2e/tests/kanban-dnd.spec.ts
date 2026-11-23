@@ -3,6 +3,7 @@ import {
   expect,
   loginViaUi,
   openKanban,
+  openTaskEditModal,
   gripFor,
   center,
   mouseDrag,
@@ -80,19 +81,6 @@ async function apiPatchTask(
  * second user (CP0 decision log #2: G9 uses the priority filter, not assignee). */
 async function setPriority(base: string, token: string, id: number, priority: string): Promise<void> {
   await apiPatchTask(base, token, id, { priority });
-}
-
-/** Opens TaskFormModal in edit mode for one task. A /tasks row now opens the
- * task's page, and the page has no Parent field, so these modal-path tests
- * reach the modal through the Gantt row menu (Edit), the one place left that
- * mounts it for any task. Desktop only, like the Gantt itself. */
-async function openEditModal(page: Page, projectId: number, taskId: number): Promise<void> {
-  await page.goto(`/projects/${projectId}/gantt`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
-  const row = page.locator(`[data-slot="gantt-row-group"][data-gantt-row-id="task-${taskId}"]`);
-  await expect(row, `expected a Gantt row for task ${taskId}`).toBeVisible();
-  await row.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Edit" }).click();
 }
 
 /** Closes the Kanban toolbar's filter popover via its full-screen backdrop —
@@ -951,19 +939,18 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
   });
 
   // RG-2 rewrite (T10 follow-up): board-level subtask re-parent is retired;
-  // the modal-path replacement is TaskFormModal's Parent field. Originally
-  // reached via the Gantt tree, but that path never actually opened the
-  // dialog in practice (timeout waiting for the parent select) — rewritten
-  // onto the Gantt row menu's Edit item (a /tasks row now opens the task's
-  // page, which has no Parent field); it opens TaskFormModal mode="edit" for
-  // any task, top-level or not.
+  // the modal-path replacement is TaskFormModal's Parent field. It was first
+  // rewritten onto the /tasks page, whose rows opened the modal; a /tasks row
+  // now opens the task's own page (no Parent field), so the modal is reached
+  // through the Gantt row menu's Edit item (openTaskEditModal), which mounts it
+  // for any task, top-level or not.
   test("subtask re-parent (modal path via Gantt row menu): Sub one's Parent set to Delta", async ({
     page,
     seededProject,
   }) => {
     const base = apiBase(test.info());
     const subOne = byTitle(await getTasks(base, seededProject.token, seededProject.projectId), "Sub one")!;
-    await openEditModal(page, seededProject.projectId, subOne.id);
+    await openTaskEditModal(page, seededProject.projectId, subOne.id, "Sub one");
     const dialog = page.getByRole("dialog", { name: "Edit task" });
     await expect(dialog).toBeVisible();
 
@@ -1009,7 +996,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
       .map((t) => t.title);
 
     const subTwo = byTitle(before, "Sub two")!;
-    await openEditModal(page, seededProject.projectId, subTwo.id);
+    await openTaskEditModal(page, seededProject.projectId, subTwo.id, "Sub two");
     const dialog = page.getByRole("dialog", { name: "Edit task" });
     await expect(dialog).toBeVisible();
 
@@ -1077,7 +1064,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
       });
     });
 
-    await openEditModal(page, seededProject.projectId, target!.id);
+    await openTaskEditModal(page, seededProject.projectId, target!.id, target!.title);
     const dialog = page.getByRole("dialog", { name: "Edit task" });
     await expect(dialog).toBeVisible();
 

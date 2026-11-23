@@ -12,6 +12,7 @@ import {
   useDeleteSection,
   useDeleteTask,
   useDuplicateTask,
+  useUpdateProject,
   useUpdateSection,
   useUpdateTask,
 } from "./queries";
@@ -79,7 +80,7 @@ describe("the task page entry is refreshed by every task mutation", () => {
     expect(stale(qc)).toBe(true);
   });
 
-  it("useDeleteLabel (labels ride on the row)", async () => {
+  it("useDeleteLabel (list rows carry labels)", async () => {
     const { qc, wrapper } = setup();
     const { result } = renderHook(() => useDeleteLabel(5), { wrapper });
     await act(async () => {
@@ -88,31 +89,26 @@ describe("the task page entry is refreshed by every task mutation", () => {
     expect(stale(qc)).toBe(true);
   });
 
-  it("useUpdateSection (the section rides on the row)", async () => {
+  it("useUpdateProject (the breadcrumb carries the project's name)", async () => {
     const { qc, wrapper } = setup();
-    const { result } = renderHook(() => useUpdateSection(5), { wrapper });
+    const { result } = renderHook(() => useUpdateProject(5), { wrapper });
     await act(async () => {
-      await result.current.mutateAsync({ id: 1, patch: { name: "N" } });
+      await result.current.mutateAsync({ name: "Renamed" });
     });
     expect(stale(qc)).toBe(true);
   });
 
-  it("useDeleteSection", async () => {
+  it("section and comment writes leave the entry alone: nothing on the page reads it from there", async () => {
     const { qc, wrapper } = setup();
-    const { result } = renderHook(() => useDeleteSection(5), { wrapper });
+    const section = renderHook(() => useUpdateSection(5), { wrapper });
+    const del = renderHook(() => useDeleteSection(5), { wrapper });
+    const comment = renderHook(() => useAddComment(7, 5), { wrapper });
     await act(async () => {
-      await result.current.mutateAsync(1);
+      await section.result.current.mutateAsync({ id: 1, patch: { name: "N" } });
+      await del.result.current.mutateAsync(1);
+      await comment.result.current.mutateAsync({ body: "Hi" });
     });
-    expect(stale(qc)).toBe(true);
-  });
-
-  it("useAddComment (the row carries the comment count)", async () => {
-    const { qc, wrapper } = setup();
-    const { result } = renderHook(() => useAddComment(7, 5), { wrapper });
-    await act(async () => {
-      await result.current.mutateAsync({ body: "Hi" });
-    });
-    expect(stale(qc)).toBe(true);
+    expect(stale(qc)).toBe(false);
   });
 
   it("useDeleteTask drops the deleted task's entry instead of refetching it into a 404", async () => {

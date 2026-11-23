@@ -62,12 +62,12 @@ test.describe("task page", () => {
   test("a missing task shows one not-found state with a way back", async ({ page }) => {
     await loginViaUi(page);
     await page.goto("/tasks/999999999", { waitUntil: "networkidle" });
-    await expect(page.getByText("Task not found")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Task not found" })).toBeVisible();
     await page.getByRole("link", { name: "Back to Tasks" }).click();
     await expect(page).toHaveURL(/\/tasks$/);
 
     await page.goto("/tasks/not-a-number", { waitUntil: "networkidle" });
-    await expect(page.getByText("Task not found")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Task not found" })).toBeVisible();
   });
 
   test("a subtask row opens the subtask's page and the breadcrumb returns to the parent", async ({

@@ -251,6 +251,9 @@ export function TaskDetail({ projectId, taskId, layout, onOpenTask, renderHeader
   // overlay, so a keydown that follows the paint never sees a stale flag.
   useLayoutEffect(() => {
     onOverlayChange?.(overlayOpen);
+    // Closed on unmount (and between values, within the same commit), so a
+    // shell never keeps a stale "open" after the body is gone.
+    return () => onOverlayChange?.(false);
   }, [onOverlayChange, overlayOpen]);
 
   useEffect(() => {

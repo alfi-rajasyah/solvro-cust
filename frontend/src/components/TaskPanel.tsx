@@ -135,7 +135,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
             to={`/tasks/${t.id}`}
             aria-label="Open as page"
             title="Open as page"
-            className="rounded-sm p-1 [@media(pointer:coarse)]:grid [@media(pointer:coarse)]:size-11 [@media(pointer:coarse)]:place-items-center [@media(pointer:coarse)]:p-0 text-on-surface-variant hover:bg-surface-container-high"
+            className="rounded-sm p-1 [@media(pointer:coarse)]:grid [@media(pointer:coarse)]:size-11 [@media(pointer:coarse)]:place-items-center [@media(pointer:coarse)]:p-0 text-on-surface-variant outline-hidden hover:bg-surface-container-high focus-visible:ring-2 focus-visible:ring-primary"
           >
             <span aria-hidden="true" className="material-symbols-outlined text-base">open_in_full</span>
           </Link>

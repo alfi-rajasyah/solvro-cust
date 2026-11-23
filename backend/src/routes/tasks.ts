@@ -371,8 +371,9 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
   );
 });
 
-// One task by id, for the task page. Same row shape as the list plus the
-// project's id and name. A hidden task answers 404 exactly like a missing one.
+// One task by id, for the task page. The same row as a list item (the project
+// has the same { id, name, customer } shape) plus its `section`. A hidden task
+// answers 404 exactly like a missing one.
 tasksRouter.get("/:id", validate("params", idParamSchema), async (req, res) => {
   const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
   const task = await prisma.task.findFirst({

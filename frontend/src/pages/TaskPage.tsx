@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { EmptyState } from "@/components/EmptyState";
@@ -9,16 +9,10 @@ import { TaskDetail } from "@/components/TaskDetail";
 import { TaskOptionsMenu } from "@/components/TaskOptionsMenu";
 import { ApiError } from "@/lib/api";
 import { useProjectTasks, useTask } from "@/lib/queries";
+import { parseTaskId } from "@/lib/routeMeta";
 
 const NOT_FOUND_LINK =
-  "font-display text-sm font-semibold text-primary underline-offset-2 hover:underline [@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:items-center";
-
-function parseTaskId(raw: string | undefined): number | null {
-  const n = Number(raw);
-  return raw !== undefined && /^\d+$/.test(raw) && Number.isSafeInteger(n) && n > 0 && n <= 2147483647
-    ? n
-    : null;
-}
+  "rounded-sm font-display text-sm font-semibold text-primary underline-offset-2 outline-hidden hover:underline focus-visible:ring-2 focus-visible:ring-primary [@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:items-center";
 
 /**
  * `/tasks/:taskId`: one task on its own page, the same body and the same save
@@ -36,6 +30,18 @@ export function TaskPage() {
   const task = (tasksQuery.data ?? []).find((t) => t.id === taskId) ?? null;
 
   const title = task?.title ?? row?.title ?? null;
+  // A jump to another task (subtask row, parent link) keeps the keyboard in
+  // the page: focus moves to the new task's heading. Not on the first load.
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const shownId = useRef<number | null>(null);
+  const currentId = task?.id ?? null;
+  useEffect(() => {
+    if (currentId === null) return;
+    if (shownId.current !== null && shownId.current !== currentId) {
+      headingRef.current?.focus({ preventScroll: true });
+    }
+    shownId.current = currentId;
+  }, [currentId]);
   useEffect(() => {
     if (!title) return;
     const previous = document.title;
@@ -48,22 +54,28 @@ export function TaskPage() {
   // The server answers 404 for a task that does not exist and for one the
   // caller cannot see, so one state covers both (plan decision D6).
   const missing = (
-    <EmptyState
-      icon="search_off"
-      title="Task not found"
-      message="It may have been deleted, or it belongs to a project that is not shared with you."
-      action={
-        <Link to="/tasks" className={NOT_FOUND_LINK}>
-          Back to Tasks
-        </Link>
-      }
-    />
+    <>
+      <h1 className="sr-only">Task not found</h1>
+      <EmptyState
+        icon="search_off"
+        title="Task not found"
+        message="It may have been deleted, or it belongs to a project that is not shared with you."
+        action={
+          <Link to="/tasks" className={NOT_FOUND_LINK}>
+            Back to Tasks
+          </Link>
+        }
+      />
+    </>
   );
 
   if (taskId === null) return missing;
   if (isPending) return <PageLoading />;
-  if (isError || !row) {
-    if (error instanceof ApiError && (error.status === 404 || error.status === 403)) return missing;
+  // A 404 or 403 is final even when an older copy of the row is cached. Any other
+  // failure only replaces the page while there is no row to show: a background
+  // refetch that fails must not unmount TaskDetail and lose a draft in it.
+  if (isError && error instanceof ApiError && (error.status === 404 || error.status === 403)) return missing;
+  if (!row) {
     return (
       <QueryErrorAlert
         title="Could not load this task"
@@ -87,7 +99,9 @@ export function TaskPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl border border-outline-variant bg-surface-container">
-      <h1 className="sr-only">{task.title}</h1>
+      <h1 ref={headingRef} tabIndex={-1} className="sr-only outline-hidden">
+        {task.title}
+      </h1>
       <TaskDetail
         key={task.id}
         projectId={task.projectId}

@@ -63,7 +63,7 @@ describe("TaskPage states", () => {
     };
     listQuery.current = { data: undefined, isError: false };
     mount();
-    expect(screen.getByText("Task not found")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Task not found" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Back to Tasks" }).getAttribute("href")).toBe("/tasks");
   });
 
@@ -71,14 +71,14 @@ describe("TaskPage states", () => {
     taskQuery.current = { data: undefined, isPending: false, isError: false, error: null, refetch: vi.fn() };
     listQuery.current = { data: undefined, isError: false };
     mount("/tasks/12abc");
-    expect(screen.getByText("Task not found")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Task not found" })).toBeTruthy();
   });
 
   it("does not hang on a task the server returned but the project list lacks", () => {
     taskQuery.current = { data: row, isPending: false, isError: false, error: null, refetch: vi.fn() };
     listQuery.current = { data: [], isError: false, refetch: vi.fn() };
     mount();
-    expect(screen.getByText("Task not found")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Task not found" })).toBeTruthy();
   });
 
   it("offers a retry, not not-found, on a server error", () => {
@@ -93,6 +93,44 @@ describe("TaskPage states", () => {
     mount();
     expect(screen.queryByText("Task not found")).toBeNull();
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+  });
+
+  it("keeps the page up when a background refetch fails and an older row is cached", () => {
+    taskQuery.current = {
+      data: row,
+      isPending: false,
+      isError: true,
+      error: new ApiError(500, "boom", null),
+      refetch: vi.fn(),
+    };
+    listQuery.current = { data: [listTask], isError: false, refetch: vi.fn() };
+    mount();
+    expect(screen.getByTestId("detail")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
+
+  it("a 404 still wins over a cached row", () => {
+    taskQuery.current = {
+      data: row,
+      isPending: false,
+      isError: true,
+      error: new ApiError(404, "Not found", null),
+      refetch: vi.fn(),
+    };
+    listQuery.current = { data: [listTask], isError: false, refetch: vi.fn() };
+    mount();
+    expect(screen.getByRole("heading", { level: 1, name: "Task not found" })).toBeTruthy();
+    expect(screen.queryByTestId("detail")).toBeNull();
+  });
+
+  it("rejects ids the server could never hold", () => {
+    taskQuery.current = { data: undefined, isPending: false, isError: false, error: null, refetch: vi.fn() };
+    listQuery.current = { data: undefined, isError: false };
+    mount("/tasks/0");
+    expect(screen.getByRole("heading", { level: 1, name: "Task not found" })).toBeTruthy();
+    cleanup();
+    mount("/tasks/2147483648");
+    expect(screen.getByRole("heading", { level: 1, name: "Task not found" })).toBeTruthy();
   });
 
   it("renders the page layout of TaskDetail for the task's project and sets the document title", () => {
