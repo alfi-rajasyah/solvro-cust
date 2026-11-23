@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { resolveSectionColors } from "@/lib/gantt/palette";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import {
@@ -247,7 +247,9 @@ export function TaskDetail({ projectId, taskId, layout, onOpenTask, renderHeader
   // The conflict dialog and the iTop sheets are modals with their own Escape
   // handling; the shell (the panel) must not close under them.
   const overlayOpen = conflict !== null || nestedSheetOpen || rowOverlayCount > 0;
-  useEffect(() => {
+  // A layout effect, not a passive one: it runs inside the commit that shows the
+  // overlay, so a keydown that follows the paint never sees a stale flag.
+  useLayoutEffect(() => {
     onOverlayChange?.(overlayOpen);
   }, [onOverlayChange, overlayOpen]);
 

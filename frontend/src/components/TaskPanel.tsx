@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { usePanelFocus } from "@/hooks/usePanelFocus";
 import { isDragActive } from "./Modal";
 import { CopyLinkButton } from "./CopyLinkButton";
@@ -37,16 +37,33 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
 
   // Escape belongs to whatever modal is open on top of the panel: the body's
   // conflict dialog and iTop sheets, or the options menu's delete confirm.
-  const [bodyOverlay, setBodyOverlay] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const modalOpen = bodyOverlay || deleteConfirmOpen;
+  // Refs, not state: an overlay's own Escape handler (Modal.tsx, a document
+  // listener) can close it and flush a render before this panel's listener runs
+  // for the same keypress. So a capture listener snapshots "is an overlay open"
+  // before any bubble listener fires, and the close decision reads that snapshot.
+  const bodyOverlayRef = useRef(false);
+  const deleteConfirmRef = useRef(false);
+  const escapeBlockedRef = useRef(false);
+  const setBodyOverlay = useCallback((open: boolean) => {
+    bodyOverlayRef.current = open;
+  }, []);
+  const setDeleteConfirmOpen = useCallback((open: boolean) => {
+    deleteConfirmRef.current = open;
+  }, []);
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !modalOpen && !isDragActive()) onClose();
+    function snapshot(e: KeyboardEvent) {
+      if (e.key === "Escape") escapeBlockedRef.current = bodyOverlayRef.current || deleteConfirmRef.current;
     }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !escapeBlockedRef.current && !isDragActive()) onClose();
+    }
+    document.addEventListener("keydown", snapshot, true);
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, modalOpen]);
+    return () => {
+      document.removeEventListener("keydown", snapshot, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
 
   if (!task) {
     // `tasks` undefined = still loading; once it has loaded, a missing task was
