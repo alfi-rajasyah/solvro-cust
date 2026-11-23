@@ -159,7 +159,7 @@ Settings it reads from the environment (a fresh install saves them to `~/solvro/
 | `POSTGRES_PORT` | not published | Publish Postgres on `127.0.0.1` at this port. |
 | `TRUST_PROXY` | `loopback, uniquelocal` | Which proxies the API believes for the client address. |
 | `EMBED_FRAME_ANCESTORS` | empty (off) | Outline address(es) allowed to embed Solvro pages. On an update, passing it changes the saved value. |
-| `FORCE_FRESH` | unset | `1` lets a fresh install delete an existing database volume (`OPERATIONS.md` section 9). |
+| `FORCE_FRESH` | unset | `1` lets a fresh install delete the existing database and attachments volumes (`OPERATIONS.md` section 9). |
 
 ## Support
 

@@ -67,3 +67,6 @@ docs/archive/plans/ui-ux-qa-run/shots/
 
 # --- Publish-time copy of setup.sh baked into the backend image ---
 backend/release/setup.sh
+
+# Docker-created mount point for the dev attachments volume
+backend/uploads/

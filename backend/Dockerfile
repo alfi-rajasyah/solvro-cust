@@ -35,6 +35,9 @@ RUN npm ci --omit=dev \
     && npx prisma generate \
     && npm cache clean --force
 COPY --from=build /app/dist ./dist
+# Mount point of the attachments volume (ATTACHMENTS_DIR). Created here, owned
+# by the node user, so a fresh named volume inherits it.
+RUN mkdir -p /app/uploads && chown node:node /app/uploads
 # The release's installer (copied in by the publish workflow), run by
 # `solvro update` on servers. Only a README in local and CI builds.
 COPY release/ /opt/solvro/

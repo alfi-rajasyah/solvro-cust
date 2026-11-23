@@ -88,6 +88,16 @@ Defined and validated in [backend/src/env.ts](backend/src/env.ts) (Zod). All oth
 | `ITOP_SYNC_DISABLED` | no | `false` | enum: `true` \| `false` | Kill switch for the in-process iTop sync scheduler (`backend/src/lib/itop/scheduler.ts`) — set `true` to turn the background sync off (e.g. a dev stack with no iTop admin config yet, or a maintenance window). Default off means the sync runs whenever iTop is configured. |
 | `ITOP_ALLOW_PRIVATE_HOSTS` | no | `true` | enum: `true` \| `false` | The iTop address an admin saves or tests (Admin → iTop) must always be an `https://` URL without a user name or password. With the default `true` it may be a private or local host (`itop.local`, an RFC1918 address) — the normal case when Solvro and iTop share a LAN. Set `false` on an internet-facing deployment whose iTop is public: `localhost`, `*.local`, loopback, link-local, RFC1918 and ULA addresses, and public names that resolve to them, are then refused (`backend/src/lib/itop/validateBaseUrl.ts`) so an admin session cannot use the backend to probe the internal network. |
 | `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS` | no | `false` | enum: `true` \| `false` | A personal iTop token (Settings → iTop) is saved only when Solvro can confirm it is the user's own: used with that token, Solvro asks iTop `core/get Person WHERE id = :current_contact_id` with that token and accepts it when the Person it resolves to has the user's email (`backend/src/routes/itopUser.ts`); the `User` / `PersonalToken` reads then only supply the expiry and iTop user id, best-effort. Only when `:current_contact_id` is unavailable does Solvro fall back to requiring those reads (some iTop profiles, e.g. Support Agent, cannot read them); a token refused for that reason gets `400 itop_token_unverified`. Set `true` to accept such a token on the email match alone — the expiry then stays unknown. A token that the `PersonalToken` read shows to belong to someone else is refused either way (`itop_token_not_yours`). For `setup.sh` deploys, set it in `~/solvro/.env` — the generated compose file passes it through (see [2.13](#213--production-deployment-via-setupsh)). |
+| `ATTACHMENTS_DRIVER` | no | `local` | enum: `local` \| `s3` | Where task attachments are stored: `local` keeps them in the `solvro_uploads` volume, `s3` in an S3-compatible bucket. See [2.18](#218--task-attachments). |
+| `ATTACHMENTS_DIR` | no | `/app/uploads` | string (a path) | Root folder of the `local` driver: the mount point of the `solvro_uploads` volume. Leave it unless you change the mount. |
+| `ATTACHMENT_MAX_FILE_MB` | no | `25` | positive number | Largest single file, in MB. The bundled nginx lets an upload request carry up to 26 MB, so raising this above `25` also needs `client_max_body_size` raised in [frontend/nginx.conf](frontend/nginx.conf) (see [2.6](#26--the-api-reverse-proxy-pattern-critical-detail)). |
+| `ATTACHMENT_MAX_FILES_PER_TASK` | no | `20` | positive int | Most files one task can hold. |
+| `ATTACHMENT_MAX_TASK_MB` | no | `100` | positive number | Largest total size of one task's files, in MB. |
+| `ATTACHMENT_ALLOWED_EXTENSIONS` | no | `png,jpg,jpeg,gif,webp,pdf,docx,xlsx,pptx,txt,csv,log,md,json,yaml,yml,zip` | comma-separated list | File extensions that may be attached. Keep `html`, `htm`, `svg`, executables and scripts off the list: a browser can run code in them. |
+| `S3_ENDPOINT` | no | none | URL | Address of the S3-compatible store. Needed for MinIO, Silo, Garage and other S3-compatible stores; omit it for AWS S3, which derives it from `S3_REGION`. |
+| `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | only when `ATTACHMENTS_DRIVER=s3` | none | strings | Region, bucket and the bucket-only key. With the driver set to `s3`, the backend refuses to start when one of these is missing. An empty value counts as unset. See [2.18](#218--task-attachments). |
+| `S3_FORCE_PATH_STYLE` | no | `false` | `true` or `false` | Path-style addressing (`https://host/bucket/key`). Usually needed (`true`) for MinIO, Silo and Garage; leave `false` for AWS S3. |
+| `S3_KEY_PREFIX` | no | empty | string | Prepended to every object key, so a bucket can be shared by folders. Blank means no prefix. See [2.18](#218--task-attachments) before sharing a bucket. |
 
 > Looking for Google OAuth config (Client ID, allowed domains)? It's **not** an env var — it's admin-managed in the database. See [2.9](#29--auth--rbac-configuration).
 
@@ -166,6 +176,7 @@ Tags [.github/workflows/docker-publish.yml](.github/workflows/docker-publish.yml
 | Volume | Mounted at | Lifetime | Notes |
 |---|---|---|---|
 | `solvro_pgdata` | `/var/lib/postgresql/data` (postgres) | Survives `down`; lost on `down -v` | Postgres data directory. **Treat `down -v` as destructive.** |
+| `solvro_uploads` | `/app/uploads` (backend) | Survives `down`; lost on `down -v` | Task attachment files when `ATTACHMENTS_DRIVER=local` (the default). Production uses the same volume name. Back it up with the one-liner in [2.18](#218--task-attachments). |
 | `solvro_backend_node_modules` | `/app/node_modules` (backend) | Survives `down` | Keeps backend deps off the host filesystem so the bind mount of `./backend` doesn't shadow them. |
 | `solvro_frontend_node_modules` | `/app/node_modules` (frontend) | Survives `down` | Same pattern for frontend. |
 
@@ -217,6 +228,7 @@ Backend routers stay mounted at `/auth`, `/projects`, `/tasks`, etc. — **witho
 
 - `/api/public/share/` (`location ^~`) — the guest-link API, proxied to the backend's `/public/share/` exactly like `/api/`, with the same `X-Forwarded-For` / `X-Real-IP` / `X-Forwarded-Proto` headers (this is the hop that `TRUST_PROXY=1` counts).
 - `= /api/outline/oauth/callback` and `= /api/outline/oauth/callback/` — the Outline OAuth callback, whose query string carries the one-time `code` and `state`; proxied to the backend's `/outline/oauth/callback`.
+- `~ ^/api/tasks/[0-9]+/attachments/?\z` — the task attachment upload (and the list on the same path), proxied to `/tasks/<id>/attachments` with a **26 MB** body limit (`client_max_body_size 26m`: the 25 MB file limit plus the multipart envelope) and `proxy_request_buffering off`, so the body streams to the backend instead of being written to nginx's temporary files first. Every other path, including `GET`/`DELETE /api/attachments/<id>`, keeps the 1 MB limit. Access logging stays on: the URL carries no secret.
 - `= /api/webhook/outline` — the Outline webhook, proxied to `/webhook/outline` with a **2 MB** body limit (`client_max_body_size 2m`, matching the backend's raw-body limit; the generic `/api/` location caps at 1 MB). Access logging stays on here: the URL carries no secret.
 - `/share/<token>` — a regex location (`^/share/[A-Za-z0-9_-]+/?\z`, the backend's base64url token format) that serves the SPA shell (`index.html`, via `rewrite ^ /index.html break`) with `Cache-Control: no-store`, `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex` on the document itself, so no subresource request can carry the token in a `Referer`. It takes the *widened* framing snippet (see [2.2](#22--frontend-environment-variables)).
 - Any other `/share/…` path (bare `/share/`, extra segments, odd characters) — `location ~ ^/share/`, a regex too, with the same token-hygiene headers and `access_log off` but strict framing.
@@ -330,7 +342,7 @@ The committed `docker-compose.yml` is a **dev** file. Production is bootstrapped
 3. **`bash setup.sh --advanced`** replaces step 2's derivation with prompts for the website port (`80`), API port (`3000`), Postgres host port (blank = unpublished), bind address (`127.0.0.1`; `0.0.0.0` publishes to the network) and `EMBED_FRAME_ANCESTORS` (the Outline address allowed to embed Solvro; blank = embedding off), then asks for `APP_URL` with a default derived from the bind address and website port. `EMBED_FRAME_ANCESTORS` is validated as a list of bare `http(s)` origins. `bash setup.sh --help` prints the options.
 4. **Auto-generates** `POSTGRES_PASSWORD` (`openssl rand -hex 24`), `JWT_SECRET` (`openssl rand -hex 48`), and `SECRETS_KEY` (`openssl rand -base64 32`) — these are never prompted for. On a **re-run** against an install that predates `SECRETS_KEY` (older installs), the script generates one and appends it to `~/solvro/.env` once, without overwriting any value already there.
 5. Writes `~/solvro/.env` (`chmod 600`, including `IMAGE_TAG`, `APP_URL` and, when given, `EMBED_FRAME_ANCESTORS`, the latter two double-quoted) and `~/solvro/docker-compose.yml` — a prod-shaped compose file with the GHCR image references hardcoded (see [2.4](#24--ghcr-image-references-production-only)).
-6. Before anything is written or wiped (i.e. before step 5), pulls the backend image on its own; if the pull fails the script stops with a `docker login ghcr.io` hint, so a re-run is still a fresh install. Then drops any prior `solvro_pgdata` volume (`docker compose down` + `docker volume rm` — **destructive**, intentional on a fresh install to clear stale postgres state; refused unless `FORCE_FRESH=1` when the volume already exists without a `.env`, see `OPERATIONS.md`), then pulls images and starts the stack.
+6. Before anything is written or wiped (i.e. before step 5), pulls the backend image on its own; if the pull fails the script stops with a `docker login ghcr.io` hint, so a re-run is still a fresh install. Then drops any prior `solvro_pgdata` volume and the `solvro_uploads` attachments volume (`docker compose down` + `docker volume rm` — **destructive**, intentional on a fresh install to clear stale postgres state; the attachments go with the database they belonged to; refused unless `FORCE_FRESH=1` when the volume already exists without a `.env`, see `OPERATIONS.md`), then pulls images and starts the stack.
 7. Polls `GET /health` for up to ~2 minutes, then runs `scripts/create-admin.ts` inside the backend container with the collected admin credentials — a fresh install ends with a working login, no manual step required.
 8. Installs the `solvro` command (`~/solvro/bin/solvro`, linked into `/usr/local/bin` when writable, else `~/.local/bin`; rewritten on every install and update). It is the supported upgrade path — see below.
 
@@ -415,6 +427,49 @@ Solvro connects to the deployment's own, self-hosted Outline wiki in two directi
 **Rate limits.** Outline counts its rate limits per client IP as well as per token, and every Solvro user reaches it from the backend's address, so all users share each limit (notably the OAuth token/authorize/revoke endpoints at 100 per hour and search/list at 100 per minute). A limit hit surfaces as an `outline_rate_limited` answer carrying Outline's retry-after, not a retry loop.
 
 **Database.** The mentions index relies on `UNIQUE … NULLS NOT DISTINCT`, so **PostgreSQL 15 or newer is required** (the dev and prod stacks use `postgres:15-alpine`); the migration fails on older servers.
+
+### 2.18 — Task attachments
+
+Users can attach files to a task. The server enforces the limits in [2.1](#21--backend-environment-variables) (file size, files per task, total size per task, allowed extensions). Files are never served from the storage itself: every download goes through the backend, which checks that the user may see the task, so the bucket (or the volume) is never public.
+
+**Local storage (the default).** `setup.sh` writes `ATTACHMENTS_DRIVER=local` and the `ATTACHMENT_*` defaults to `~/solvro/.env`, and the generated compose file mounts the named volume `solvro_uploads` at `/app/uploads` in the backend container. Nothing else is needed on a fresh server. The volume survives `docker compose down`, `solvro update` and a re-run of `setup.sh`. It is deleted by `docker compose down -v`, and by a fresh install run with `FORCE_FRESH=1`, which also deletes `solvro_pgdata`: without the database the files have no rows and would be orphans.
+
+Back up the volume together with the database (`solvro backup` covers only the database):
+
+```bash
+docker run --rm -v solvro_uploads:/data:ro -v "$PWD":/backup alpine \
+  tar czf /backup/solvro_uploads-$(date +%F).tar.gz -C /data .
+```
+
+Restore into an empty volume:
+
+```bash
+docker run --rm -v solvro_uploads:/data -v "$PWD":/backup alpine \
+  tar xzf /backup/solvro_uploads-YYYY-MM-DD.tar.gz -C /data
+```
+
+**S3 or an S3-compatible store.** Any store that speaks the S3 API works: AWS S3, MinIO, Silo, Garage and similar. Set these in `~/solvro/.env`, then run `docker compose up -d` in `~/solvro`:
+
+```bash
+ATTACHMENTS_DRIVER=s3
+S3_ENDPOINT=https://s3.example.com   # MinIO, Silo, Garage and other S3-compatible stores; omit for AWS S3
+S3_REGION=us-east-1                   # required; many self-hosted stores accept any value
+S3_BUCKET=solvro-attachments
+S3_ACCESS_KEY_ID=...
+S3_SECRET_ACCESS_KEY='...'            # single-quote it when it holds $ or other shell characters
+S3_FORCE_PATH_STYLE=true              # usually true for MinIO, Silo and Garage; false for AWS S3
+S3_KEY_PREFIX=                        # optional, e.g. solvro/ ; blank = no prefix
+```
+
+- **One Solvro per bucket (or per bucket and `S3_KEY_PREFIX`).** The daily cleanup deletes every object under `tasks/` in the bucket (or under `<prefix>tasks/` when `S3_KEY_PREFIX` is set) that has no row in this Solvro's database. Another Solvro, application or person that writes under the same path will lose those files. Give each Solvro deployment (including a test copy restored from a backup) its own bucket or its own prefix.
+- Create the bucket first, and keep it **private** (no public read, no public listing, no static-website mode). Solvro never hands out a bucket URL.
+- Use a key that can reach **only that bucket**, with the rights to put, get, delete and list objects in it. Do not use an account-wide or admin key. The key lives only in `.env` (mode 600).
+- The backend checks the S3 values at start and does not start when one is missing.
+- Files are stored under `tasks/<task id>/<random id>`; the user's file name is kept only in the database.
+- Switching drivers does not move existing files: attachments uploaded under one driver are not visible under the other, and moving them is manual. Decide before the first upload.
+- Back up the bucket with the store's own tools (versioning, replication or a periodic sync); the `solvro_uploads` volume is then unused.
+
+**Cleanup.** Deleting a task, or a project, deletes its files. A daily job in the backend also removes stored files that have no database row and are older than 24 hours.
 
 ## Quick reference card
 
