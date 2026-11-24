@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { AssigneeAvatar } from "@/components/AssigneeAvatar";
 import {
   EMBED_BUTTON_SECONDARY,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { AccountHeader, sumProjectHealth } from "@/components/customer/AccountHeader";
 import { AccountOverview } from "@/components/customer/AccountOverview";
 import { CustomerTeam } from "@/components/customer/CustomerTeam";

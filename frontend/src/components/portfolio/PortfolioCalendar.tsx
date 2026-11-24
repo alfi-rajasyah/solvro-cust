@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { EmptyState } from "@/components/EmptyState";
 import { ProjectStatusChip } from "@/components/StatusChip";
 import { fmtRange, MONTH_ABBR } from "@/lib/formatDate";

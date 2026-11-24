@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { AssigneeAvatar } from "@/components/AssigneeAvatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { fmtAgo, fmtDateTime } from "@/lib/formatDate";

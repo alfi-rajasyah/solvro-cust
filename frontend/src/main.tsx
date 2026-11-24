@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter } from "react-router";
 import { registerSW } from "virtual:pwa-register";
 import { App } from "./App";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
@@ -32,7 +32,10 @@ createRoot(rootElement).render(
         and embed pages, the providers). Pages inside the shell have their own. */}
     <AppErrorBoundary variant="app">
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
+        {/* React Router 7 wraps each navigation in startTransition by default, which
+            keeps the old page on screen, without the PageLoading skeleton, until a lazy
+            page's chunk arrives. useTransitions={false} keeps the v6 behaviour. */}
+        <BrowserRouter useTransitions={false}>
           <ThemeProvider>
             <AuthProvider>
               <App />

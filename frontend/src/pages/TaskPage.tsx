@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { EmptyState } from "@/components/EmptyState";
 import { QueryErrorAlert } from "@/components/QueryErrorAlert";

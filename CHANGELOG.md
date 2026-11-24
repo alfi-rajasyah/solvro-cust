@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Security — 2026-11-24 — Frontend router upgraded to React Router 7
+
+- The frontend moves from React Router 6 (`react-router-dom`) to React Router 7 (`react-router`) in `frontend/package.json`, and every import under `frontend/src` now names `react-router`. Routes, redirects and links behave as before, and the router's 2 advisories no longer appear in the production dependency audit.
+
 ### Security — 2026-11-24 — Backend request validation upgraded to zod 4
 
 - The backend validation library (zod) moves from 3 to 4 (`backend/package.json`), which clears advisory GHSA-mrhx-c7xc-m3w5 (memory exhaustion on crafted input) from the production dependency audit. Every valid API request, response and the error body shape are unchanged; the wording of individual validation messages inside `details.fieldErrors` follows zod 4. A few malformed inputs that zod 3 let through are now refused: a date-time offset without a colon (`+0200` instead of `+02:00`), an Outline document id that is not a standard UUID, an integer above JavaScript's safe-integer limit, and `Infinity` as `ATTACHMENT_MAX_FILE_MB` or `ATTACHMENT_MAX_TASK_MB`. The one schema that needed a code change, `S3_FORCE_PATH_STYLE` in `backend/src/lib/attachments/config.ts`, still defaults to false.

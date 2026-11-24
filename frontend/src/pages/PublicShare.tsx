@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router";
 import { BrandMark } from "@/components/BrandMark";
 import { SkeletonRegion } from "@/components/skeletons/SkeletonRegion";
 import { Skeleton } from "@/components/ui/skeleton";

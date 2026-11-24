@@ -13,7 +13,7 @@
 // ticket untouched.
 import { useEffect, useRef, useState } from "react";
 import { usePanelFocus } from "@/hooks/usePanelFocus";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { Chip } from "@/components/StatusChip";
 import { ApiError } from "@/lib/api";

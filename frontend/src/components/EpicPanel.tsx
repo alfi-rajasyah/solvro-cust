@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { usePanelFocus } from "@/hooks/usePanelFocus";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { InlineDateRangeEditor } from "./InlineDateRangeEditor";
 import { isDragActive } from "./Modal";
 import { TaskStatusChip } from "./StatusChip";

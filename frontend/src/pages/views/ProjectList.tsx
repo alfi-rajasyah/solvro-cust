@@ -30,7 +30,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { useProjectContext } from "../ProjectDetail";
 import { AssigneeAvatar } from "@/components/AssigneeAvatar";
 import { ConfirmModal } from "@/components/ConfirmModal";

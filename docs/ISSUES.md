@@ -80,14 +80,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Accepted risk; trigger: Outline reports email changes, then re-check at low frequency.
 - **Source:** snapshot line 2382, section "Outline B+C — deferred findings (2026-10-09)"
 
-### ISS-014 · P3 · React Router 6 has two advisories fixed only in v7
-
-- **Type:** debt · **Found:** 2026-10-25 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** react-router-dom in frontend/package.json (line ~34)
-- **Problem:** Two advisories remain in audit output. The redirect one is blocked by safeRedirect.ts and the SSR one needs a data router the app does not use.
-- **Why deferred / fix direction:** The v7 upgrade is its own change.
-- **Source:** snapshot line 2422, section "Dependency advisories — remaining (2026-10-25)"
-
 ### ISS-015 · P3 · uuid advisory inside exceljs is not reachable
 
 - **Type:** watch · **Found:** 2026-10-25 · **Verified:** 2026-11-24 @ `670f206`
@@ -819,3 +811,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-170 · 2026-11-24 · docs/DESIGN.md frontmatter and §0 now name system as the default · DESIGN.md says theme_default dark but the code defaults to system
 - ISS-084 · 2026-11-24 · CHANGELOG "The favicon stays readable on dark browser tabs" · Favicon reads weakly on dark browser tab strips
 - ISS-004 · 2026-11-24 · CHANGELOG "Backend request validation upgraded to zod 4" · zod 3 has a memory-exhaustion advisory fixed only in zod 4
+- ISS-014 · 2026-11-24 · CHANGELOG "Frontend router upgraded to React Router 7" · React Router 6 has two advisories fixed only in v7

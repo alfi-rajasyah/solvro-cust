@@ -8,7 +8,7 @@ import {
   useParams,
   useSearchParams,
   useLocation,
-} from "react-router-dom";
+} from "react-router";
 import { DeleteProjectDialog } from "@/components/DeleteProjectDialog";
 import { CopyLinkStatus, useCopyLinkFeedback } from "@/components/CopyLinkButton";
 import { RightSidebar } from "@/components/layout/RightSidebar";

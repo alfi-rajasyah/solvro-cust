@@ -4,7 +4,7 @@
 // linking to the task panel. Below md each row reflows into a card and the
 // header row is hidden; each number carries its own short label.
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { StatStrip } from "@/components/StatStrip";
 import { TaskStatusChip } from "@/components/StatusChip";
 import { Alert, AlertDescription } from "@/components/reui/alert";

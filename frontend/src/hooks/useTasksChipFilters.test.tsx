@@ -2,7 +2,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { MemoryRouter, useLocation, useNavigate, useNavigationType } from "react-router-dom";
+import { MemoryRouter, useLocation, useNavigate, useNavigationType } from "react-router";
 import { useTasksChipFilters } from "./useTasksChipFilters";
 
 type Q<T> = { isSuccess: boolean; isFetching: boolean; data?: T[] };

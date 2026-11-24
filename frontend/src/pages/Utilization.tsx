@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router";
 import { EmptyState } from "@/components/EmptyState";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { TableSkeleton } from "@/components/skeletons";

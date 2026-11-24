@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { CustomerGroup } from "@/components/daily-review/CustomerGroup";
 import { StatsBar } from "@/components/daily-review/StatsBar";
 import { UnassignedGroup } from "@/components/daily-review/UnassignedGroup";
