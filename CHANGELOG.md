@@ -15,6 +15,9 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-24 — Dropdown submenus can rise above a modal
+
+- `DropdownMenuSubContent` (`frontend/src/components/ui/dropdown-menu.tsx`) takes an optional `positionerClassName`, the same prop `DropdownMenuContent` already has. A submenu opened from a menu inside a modal or drawer can now set its z-index above the host. Existing submenus do not change. A new test (`dropdown-menu.test.tsx`) covers the prop.
 ### Fixed — 2026-11-24 — Escape during a drag no longer closes the open panel after a re-render
 
 - The task panel, epic panel, iTop ticket panel, drawer and modal (`frontend/src/components/TaskPanel.tsx`, `EpicPanel.tsx`, `itop/TicketPanel.tsx`, `Drawer.tsx`, `Modal.tsx`) now add their Escape listener once, when they open, and read the latest close handler from a ref. Before, a page re-render during a keyboard drag re-added the listener behind the drag library's own, so the Escape that cancelled the drag also closed the panel.

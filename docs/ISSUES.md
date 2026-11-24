@@ -247,14 +247,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Trigger: users report the modal round-trip as friction.
 - **Source:** snapshot line 613, section "Kanban → ReUI swap — deferred findings (2026-07-27)"
 
-### ISS-048 · P3 · Dropdown submenu cannot outrank a modal host
-
-- **Type:** debt · **Found:** 2026-07-28 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** DropdownMenuSubContent in frontend/src/components/ui/dropdown-menu.tsx (line ~264, z-50 at ~276)
-- **Problem:** The submenu Popup carries z-50 on a Positioner with its own stacking context, so it cannot rise above a Modal or Drawer. Tooltip and the main menu content were fixed.
-- **Why deferred / fix direction:** Pass positionerClassName through when a submenu is needed inside a modal.
-- **Source:** snapshot line 815, section "ReUI DateField swap — deferred findings (2026-07-28)"
-
 ### ISS-050 · P3 · Filter submenu highlight follows the pointer
 
 - **Type:** watch · **Found:** 2026-07-31 · **Verified:** 2026-11-24 @ `670f206`
@@ -893,3 +885,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-215 · 2026-11-24 · CHANGELOG "E2E cleanup also deletes stored attachment files" · E2E cleanup leaves stored attachment objects until the daily sweep
 - ISS-193 · 2026-11-24 · CHANGELOG "Escape during a drag no longer closes the open panel after a re-render" · The Escape drag guard depends on listener order
 - ISS-020 · 2026-11-24 · gates.sh `section-default-color-parity` (the packages share no module, so a gate keeps the two values equal) · Section default color hex is duplicated between schema and frontend
+- ISS-048 · 2026-11-24 · CHANGELOG "Dropdown submenus can rise above a modal" · Dropdown submenu cannot outrank a modal host
