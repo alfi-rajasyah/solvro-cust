@@ -693,14 +693,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Rule: diff before any re-pull and re-apply every marker. Revisit only if a re-pull is planned.
 - **Source:** snapshot line 548, section "Plan B Task 9 deferred findings — ReUI Gantt swap (2026-07-25)"
 
-### ISS-170 · P3 · DESIGN.md says theme_default dark but the code defaults to system
-
-- **Type:** bug · **Found:** 2026-07-25 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** theme_default in docs/DESIGN.md (line 3) vs default in frontend/src/lib/theme.tsx (line ~27)
-- **Problem:** The design doc frontmatter names dark as the default theme; the app uses the system preference. The user chose to keep system.
-- **Why deferred / fix direction:** Correct the frontmatter to system in a docs-only change.
-- **Source:** snapshot line 563, section "Login/Sidebar always-dark-pin fix — deferred findings (2026-07-25)"
-
 ## Closed
 
 Entries closed during the 2026-11-18 restructure are in the ledger in `docs/archive/plans/issues-restructure.md`, not here.
@@ -839,3 +831,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-104 · 2026-11-24 · CHANGELOG "Gantt section and reorder code tidied, no behaviour change" · handleResourceReorder is one long three-branch callback
 - ISS-053 · 2026-11-24 · CHANGELOG "Sort risks by probability and impact" · Sortable data-grid headers cannot be centered
 - ISS-217 · 2026-11-24 · CHANGELOG "Attachment temp-file test no longer fails at random" · Attachment temp-file test counts the whole OS temp folder
+- ISS-170 · 2026-11-24 · docs/DESIGN.md frontmatter and §0 now name system as the default · DESIGN.md says theme_default dark but the code defaults to system
