@@ -281,6 +281,16 @@ if [ -f frontend/src/components/reui/autocomplete.tsx ]; then
   else fail guardrail-autocomplete-vendor "SOLVRO PATCH count $N != recorded $EXPECTED_AUTOCOMPLETE_PATCHES"; fi
 else fail guardrail-autocomplete-vendor "frontend/src/components/reui/autocomplete.tsx missing"; fi
 
+# The uncustomized section colour lives twice: Section.color's schema default and
+# DEFAULT_SECTION_COLOR, which resolveSectionColors compares against to spot a
+# section that never went through the picker. The two packages share no module,
+# so this check keeps them equal (ISS-020).
+SCHEMA_SECTION_COLOR="$(awk '/^model Section \{/{f=1} f&&/^}/{exit} f&&/^[[:space:]]+color[[:space:]]/' backend/prisma/schema.prisma | grep -o '#[0-9a-fA-F]\{6\}')"
+FRONT_SECTION_COLOR="$(grep -o 'DEFAULT_SECTION_COLOR = "#[0-9a-fA-F]\{6\}"' frontend/src/lib/gantt/palette.ts | grep -o '#[0-9a-fA-F]\{6\}')"
+if [ -n "$SCHEMA_SECTION_COLOR" ] && [ "$(printf %s "$SCHEMA_SECTION_COLOR" | tr A-F a-f)" = "$(printf %s "$FRONT_SECTION_COLOR" | tr A-F a-f)" ]; then
+  pass section-default-color-parity
+else fail section-default-color-parity "Section.color default '$SCHEMA_SECTION_COLOR' (schema.prisma) != DEFAULT_SECTION_COLOR '$FRONT_SECTION_COLOR' (frontend/src/lib/gantt/palette.ts)"; fi
+
 # ---------- design guard checks (always) ----------
 # antislop guards (2026-11-12, docs/archive/plans/antislop-port.md). App code
 # only: vendored shadcn/ReUI (components/ui, components/reui) and tests are
