@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi, apiBase, openTaskEditModal } from "../fixtures/test";
+import { test, expect, loginViaUi, apiBase, openTaskEditModal, settleQuiet } from "../fixtures/test";
 import { createTask, getTasks } from "../fixtures/seed";
 import type { Locator, Page } from "@playwright/test";
 
@@ -220,6 +220,8 @@ test.describe("task panel save ordering and dialog keys", () => {
     await renameInPanel(panel, `Mine ${id}`);
     const dialog = page.getByRole("dialog", { name: "Someone changed this task after you opened it" });
     await expect(dialog).toBeVisible();
+    // The dialog can render before its rows do; Escape on that empty frame leaves it open.
+    await expect(dialog.getByTestId("conflict-row")).toHaveCount(1);
 
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
@@ -317,7 +319,8 @@ test.describe("task panel title save ordering", () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByTestId("conflict-row")).toHaveCount(1);
     await expect(dialog.getByTestId("conflict-yours")).toHaveText(`First ${id}`);
-    await page.waitForTimeout(1200);
+    // The route above delays each PATCH 600ms; wait for those to land.
+    await settleQuiet(page);
     await expect(dialog.getByTestId("conflict-yours")).toHaveText(`First ${id}`);
     expect(patches.filter((p) => p.includes("First") || p.includes("Second"))).toHaveLength(1);
   });

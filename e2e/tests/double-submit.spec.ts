@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi, apiBase } from "../fixtures/test";
+import { test, expect, loginViaUi, apiBase, settleQuiet } from "../fixtures/test";
 import { createTask, createEpic } from "../fixtures/seed";
 import type { Page } from "@playwright/test";
 
@@ -57,7 +57,7 @@ test.describe("Inline create inputs ignore a second Enter while pending", () => 
     await input.press("Enter");
 
     await expect(panel.getByRole("button", { name: title, exact: true })).toHaveCount(1);
-    await page.waitForTimeout(500);
+    await settleQuiet(page);
     expect(posts.count()).toBe(1);
     await expect(panel.getByRole("button", { name: title, exact: true })).toHaveCount(1);
   });
@@ -80,7 +80,7 @@ test.describe("Inline create inputs ignore a second Enter while pending", () => 
     await input.press("Enter");
 
     await expect(panel.getByText(title, { exact: true })).toHaveCount(1);
-    await page.waitForTimeout(500);
+    await settleQuiet(page);
     expect(posts.count()).toBe(1);
     await expect(panel.getByText(title, { exact: true })).toHaveCount(1);
   });

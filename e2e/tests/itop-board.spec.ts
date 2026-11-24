@@ -1,5 +1,5 @@
 import type { Page, Request } from "@playwright/test";
-import { center, expect, gripFor, loginViaUi, mouseDrag, test, touchDrag, mockCustomerOrgMapping } from "../fixtures/test";
+import { center, expect, gripFor, loginViaUi, mouseDrag, test, touchDrag, mockCustomerOrgMapping, trackApiRequests } from "../fixtures/test";
 
 // Tickets tab Board view (Task 6.1, docs/archive/plans/itop-integration.md
 // — mockup "5 · The Tickets tab gets a Board" in
@@ -185,10 +185,12 @@ async function captureActionRequests(
     requests.push({ url: req.url(), body });
   };
   page.on("request", onRequest);
+  const tracker = trackApiRequests(page);
   try {
     await fn();
-    await page.waitForTimeout(800);
+    await tracker.settled();
   } finally {
+    tracker.dispose();
     page.off("request", onRequest);
   }
   return requests;
@@ -201,11 +203,8 @@ async function openBoard(page: Page, customerId: number): Promise<void> {
   // whose `itopOrgId` decides whether "Tickets" even appears in `TAB_ITEMS`
   // on first render (CustomerDetail.tsx).
   await page.goto(`/customers/${customerId}`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(500);
   await page.getByRole("button", { name: "Tickets" }).click();
-  await page.waitForTimeout(500);
   await page.getByRole("button", { name: "Board", exact: true }).click();
-  await page.waitForTimeout(500);
   await expect(page.getByRole("button", { name: "Board", exact: true })).toHaveAttribute(
     "aria-pressed",
     "true",
@@ -575,9 +574,7 @@ test.describe("New ticket sheet", () => {
 
     await loginViaUi(page);
     await page.goto(`/customers/${seededProject.customerId}`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     await page.getByRole("button", { name: "Tickets" }).click();
-    await page.waitForTimeout(500);
 
     await page.getByRole("button", { name: "New ticket" }).click();
     const dialog = page.getByRole("dialog", { name: "New ticket" });

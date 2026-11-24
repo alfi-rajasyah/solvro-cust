@@ -26,7 +26,6 @@ test.describe("gantt row menu focus (desktop)", () => {
     const task = await createTask(apiBase(testInfo), seededProject.token, seededProject.projectId, { title });
     await loginViaUi(page);
     await page.goto(`/projects/${seededProject.projectId}/gantt`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(800);
     const row = page.locator(`[data-slot="gantt-row-group"][data-gantt-row-id="task-${task.id}"]`);
     await expect(row).toBeVisible();
     return { title, task, row, actions: row.getByRole("button", { name: "Task actions" }) };

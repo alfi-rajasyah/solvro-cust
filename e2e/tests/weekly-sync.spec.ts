@@ -132,7 +132,6 @@ async function seedActiveCustomer(
  */
 async function currentWeekKey(page: Page): Promise<string> {
   await page.goto("/daily-review", { waitUntil: "networkidle" });
-  await page.waitForTimeout(500);
   await expect(page).toHaveURL(/[?&]week=\d{4}-W\d{2}/);
   return new URL(page.url()).searchParams.get("week")!;
 }
@@ -158,7 +157,6 @@ test.describe("Weekly Sync page", () => {
     //    count yet.
     // ------------------------------------------------------------------
     await page.goto(`/weekly-sync?week=${weekKey}&tab=reflection`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     await expect(page.getByRole("heading", { level: 1, name: "Weekly Sync" })).toBeVisible();
 
     const reflectionTab = page.getByTestId("weekly-sync-tab-reflection");
@@ -216,7 +214,6 @@ test.describe("Weekly Sync page", () => {
     //     an update, in which case the count line is gone after the save.
     // ------------------------------------------------------------------
     await page.goto(`/weekly-sync?week=${weekKey}&tab=reflection`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     await expect(row).toBeVisible();
     await expect.poll(() => groupContainingRow(page, customer.id)).toBe("decision");
 
@@ -249,7 +246,6 @@ test.describe("Weekly Sync page", () => {
     const weekKey = await currentWeekKey(page);
 
     await page.goto(`/weekly-sync?week=${weekKey}&tab=reflection`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     await expect(page.getByRole("heading", { level: 1, name: "Weekly Sync" })).toBeVisible();
 
     // Seed one saved Reflection row through the same modal the first test
@@ -270,13 +266,11 @@ test.describe("Weekly Sync page", () => {
     await dialog.getByRole("radio", { name: "Green" }).click();
     await dialog.getByRole("button", { name: "Save draft" }).click();
     await expect(dialog).toBeHidden();
-    await page.waitForTimeout(500);
     await expect(row.getByText(achievementText)).toBeVisible();
 
     // A fresh load (toggle off) — the copy below reads the rows on screen,
     // and this customer now has a Reflection update, so it stays listed.
     await page.goto(`/weekly-sync?week=${weekKey}&tab=reflection`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     await expect(row.getByText(achievementText)).toBeVisible();
 
     // ------------------------------------------------------------------
@@ -317,7 +311,6 @@ test.describe("Weekly Sync page", () => {
     //    is hidden until "Show them" lists it — one dash row, "Not filled".
     // ------------------------------------------------------------------
     await page.goto(`/weekly-sync?week=${weekKey}&tab=midweek`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     await expect(page.getByRole("heading", { level: 1, name: "Weekly Sync" })).toBeVisible();
 
     const row = page.getByTestId(`weekly-sync-row-${customer.id}`);
@@ -378,7 +371,6 @@ test.describe("Weekly Sync page", () => {
     //    carries a Mid-week update, so it stays listed without the toggle.
     // ------------------------------------------------------------------
     await page.goto(`/weekly-sync?week=${weekKey}&tab=midweek`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     await expect(row).toBeVisible();
     await expect(row.getByText(highlight1Title)).toBeVisible();
     await expect(row.getByText(highlight2Title)).toBeVisible();

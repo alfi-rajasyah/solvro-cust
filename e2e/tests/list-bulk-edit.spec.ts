@@ -7,7 +7,7 @@ import { getTasks } from "../fixtures/seed";
 
 async function openList(page: Page, projectId: number): Promise<void> {
   await page.goto(`/projects/${projectId}/list`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
+  await expect(page.getByRole("heading", { level: 2 }).first()).toBeVisible();
 }
 
 async function createLabel(base: string, token: string, projectId: number, name: string) {

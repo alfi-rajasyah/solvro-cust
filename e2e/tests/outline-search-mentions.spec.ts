@@ -227,7 +227,9 @@ test.describe("⌘K Outline group", () => {
     const dialog = await openPalette(page, testInfo);
     await dialog.getByPlaceholder(/search projects/i).fill(target.title);
     await expect(dialog.getByText(target.title, { exact: true })).toBeVisible();
-    await page.waitForTimeout(700); // past the Outline debounce
+    // Kept: asserts that no search request fires, so the only thing to outwait is
+    // the palette's 200ms debounce timer; no DOM or network event marks it.
+    await page.waitForTimeout(700);
     await expect(dialog.getByTestId("outline-palette-status")).toBeEmpty();
     await expect(dialog.getByTestId("outline-result")).toHaveCount(0);
     expect(searches).toEqual([]);

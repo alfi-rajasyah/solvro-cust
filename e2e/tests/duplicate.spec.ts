@@ -17,7 +17,6 @@ function stamp(): string {
 
 async function openTaskPanel(page: Page, projectId: number, taskId: number): Promise<Locator> {
   await page.goto(`/projects/${projectId}/list?task=${taskId}`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
   const panel = page.getByRole("dialog", { name: "Task details" });
   await expect(panel).toBeVisible();
   return panel;
@@ -58,7 +57,9 @@ test.describe("Duplicate — Task panel, subtask row, section header (desktop + 
     const panel = await openTaskPanel(page, projectId, task.id);
     await panel.getByRole("button", { name: "Task options" }).click();
     await panel.getByRole("button", { name: "Duplicate task", exact: true }).click();
-    await page.waitForTimeout(900);
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get("task"))
+      .not.toBe(String(task.id));
 
     const newTaskId = new URL(page.url()).searchParams.get("task");
     expect(newTaskId).not.toBeNull();
@@ -90,7 +91,6 @@ test.describe("Duplicate — Task panel, subtask row, section header (desktop + 
     // visible (same reasoning subtask-edit.spec.ts's rename tests document).
     await panel.getByRole("button", { name: child.title, exact: true }).hover();
     await panel.getByRole("button", { name: `Duplicate ${child.title}`, exact: true }).click();
-    await page.waitForTimeout(900);
 
     await expect(panel.getByRole("button", { name: child.title, exact: true })).toHaveCount(2);
   });
@@ -108,7 +108,9 @@ test.describe("Duplicate — Task panel, subtask row, section header (desktop + 
     await createTask(base, token, projectId, { title: `DupSecB ${s}`, sectionId: section.id });
 
     await page.goto(`/projects/${projectId}/list`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(800);
+    await expect(
+      page.getByRole("heading", { level: 2, name: sectionName, exact: true }),
+    ).toBeVisible();
 
     // The "No section" pseudo-group is not a real Section row — it must
     // never offer a Duplicate button (ProjectList.tsx gates the button on
@@ -127,7 +129,6 @@ test.describe("Duplicate — Task panel, subtask row, section header (desktop + 
     // header on the page carries a "Duplicate section" button.
     const sourceRow = headings.first().locator("xpath=..");
     await sourceRow.getByRole("button", { name: "Duplicate section", exact: true }).click();
-    await page.waitForTimeout(900);
 
     await expect(headings).toHaveCount(2);
 
@@ -169,7 +170,6 @@ test.describe("Duplicate — Gantt row context menu (desktop)", () => {
     });
 
     await page.goto(`/projects/${projectId}/gantt`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(800);
 
     const taskRow = page.locator(
       `[data-slot="gantt-row-group"][data-gantt-row-id="task-${task.id}"]`,
@@ -179,7 +179,6 @@ test.describe("Duplicate — Gantt row context menu (desktop)", () => {
     const duplicateItem = page.getByRole("menuitem", { name: "Duplicate", exact: true });
     await expect(duplicateItem).toBeVisible();
     await duplicateItem.click();
-    await page.waitForTimeout(900);
 
     const treePane = page.locator('[data-slot="gantt-tree-pane"]');
     await expect(treePane.getByText(title, { exact: true })).toHaveCount(2);

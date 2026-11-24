@@ -120,7 +120,6 @@ async function pinRef(base: string, token: string, taskId: number): Promise<void
 
 async function openTaskPanel(page: Page, projectId: number, taskId: number) {
   await page.goto(`/projects/${projectId}/list?task=${taskId}`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
   const panel = page.getByRole("dialog", { name: "Task details" });
   await expect(panel).toBeVisible();
   return panel;

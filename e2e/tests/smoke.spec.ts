@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi, openKanban } from "../fixtures/test";
+import { test, expect, loginViaUi, openKanban, settleAnimations } from "../fixtures/test";
 
 // Ported from the QA gate script qa-test-docker.mjs. That script's mobile
 // touch-drag test predates dnd-kit's TouchSensor 250ms activation delay and
@@ -34,7 +34,7 @@ test.describe("smoke", () => {
 
     for (const [name, path] of pages) {
       await page.goto(path, { waitUntil: "networkidle" });
-      await page.waitForTimeout(500);
+      await settleAnimations(page);
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );

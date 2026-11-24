@@ -10,6 +10,8 @@ import {
   touchDrag,
   apiBase,
   captureTaskRequests,
+  nextFrames,
+  settleAnimations,
 } from "../fixtures/test";
 import { getTasks, setWipLimits, type SeededTask, createEpic } from "../fixtures/seed";
 import type { Page } from "@playwright/test";
@@ -542,7 +544,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
       await page.mouse.move(grip!.x, grip!.y);
       await page.mouse.down();
       await page.mouse.move(grip!.x + 2, grip!.y + 1);
-      await page.waitForTimeout(150);
+      await nextFrames(page, 3);
       await page.mouse.up();
     });
 
@@ -607,10 +609,11 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
       await page.mouse.down();
       for (let i = 1; i <= 8; i++) {
         await page.mouse.move(from.x + ((to.x - from.x) * i) / 8, from.y + ((to.y - from.y) * i) / 8);
-        await page.waitForTimeout(35);
+        await nextFrames(page, 1);
       }
       await page.keyboard.press("Escape");
-      await page.waitForTimeout(300);
+      await nextFrames(page, 3);
+      await settleAnimations(page);
       await page.mouse.up();
     });
 
@@ -688,7 +691,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // otherwise-identical runs of this case, and looping the gesture with
     // an added settle pause here made every offset in a 0-82px sweep pass
     // consistently — a settle wait, not a geometry tweak, was the fix.
-    await page.waitForTimeout(400);
+    await settleAnimations(page);
 
     const grip = await gripFor(page, v2.title, "Move");
     // T10 stabilization: FULL card box (`cardBoxFor`) — v1 is picked
@@ -768,7 +771,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // T10 stabilization: same settle wait as G9a above — let the remaining
     // cards' post-filter reflow transition (`animateLayoutChanges`) finish
     // before measuring geometry, not just before the drag starts.
-    await page.waitForTimeout(400);
+    await settleAnimations(page);
 
     const grip = await gripFor(page, source.title, "Move");
     const lastVisibleBox = await page.getByText(visibleOther.title, { exact: true }).first().boundingBox();
@@ -848,7 +851,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
       await page.mouse.move(grip!.x, grip!.y);
       await page.mouse.down();
       await page.mouse.move(grip!.x + 2, grip!.y + 1);
-      await page.waitForTimeout(150);
+      await nextFrames(page, 3);
       await page.mouse.up();
     });
 
@@ -928,7 +931,6 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // param) and confirm the status committed by the filtered drag persisted
     // server-side and renders correctly once more, unfiltered.
     await page.reload({ waitUntil: "networkidle" });
-    await page.waitForTimeout(800);
     const afterReload = await getTasks(base, token, projectId);
     expect(byTitle(afterReload, tagged.title)?.status).toBe("IN_PROGRESS");
     const reloadedCard = page
@@ -971,7 +973,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     await parentSelect.selectOption(String(seededProject.delta.id));
 
     await dialog.getByRole("button", { name: "Save", exact: true }).click();
-    await page.waitForTimeout(600);
+    await expect(dialog).toBeHidden();
 
     const tasks = await getTasks(base, seededProject.token, seededProject.projectId);
     const s = byTitle(tasks, "Sub one");
@@ -1010,7 +1012,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     await page.getByRole("option", { name: "Done", exact: true }).click();
 
     await dialog.getByRole("button", { name: "Save", exact: true }).click();
-    await page.waitForTimeout(600);
+    await expect(dialog).toBeHidden();
 
     const tasks = await getTasks(base, seededProject.token, seededProject.projectId);
     const s = byTitle(tasks, "Sub two");
@@ -1102,7 +1104,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     expect(expectedOrder.length).toBeGreaterThan(0);
 
     await page.goto(`/projects/${seededProject.projectId}/list`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(800);
+    await expect(page.getByText(expectedOrder[0], { exact: true }).first()).toBeVisible();
 
     const positioned: Array<{ title: string; y: number }> = [];
     for (const title of expectedOrder) {
@@ -1203,13 +1205,14 @@ test.describe("kanban drag & drop — mobile (touch)", () => {
     await expect(sheet).toBeVisible({ timeout: 3000 });
 
     await page.getByText("Done", { exact: true }).last().click();
-    await page.waitForTimeout(1000);
 
-    const tasks = await getTasks(apiBase(test.info()), seededProject.token, seededProject.projectId);
-    const moved = tasks.some(
-      (x) => x.parentTaskId === null && x.status === "DONE" && ["Gamma", "Alpha"].includes(x.title),
-    );
-    expect(moved).toBe(true);
+    await expect
+      .poll(async () =>
+        (await getTasks(apiBase(test.info()), seededProject.token, seededProject.projectId)).some(
+          (x) => x.parentTaskId === null && x.status === "DONE" && ["Gamma", "Alpha"].includes(x.title),
+        ),
+      )
+      .toBe(true);
   });
 
   test("no page errors during mobile drag/action-sheet interactions", async ({ page, seededProject }) => {

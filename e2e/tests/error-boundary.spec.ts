@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, loginViaUi, test } from "../fixtures/test";
+import { expect, loginViaUi, settleQuiet, test } from "../fixtures/test";
 
 // The page error boundary (frontend/src/components/AppErrorBoundary.tsx, wired
 // in layout/Shell.tsx). A real API answer with one field set to null makes a
@@ -112,7 +112,7 @@ test.describe("page error boundary", () => {
     await page.getByRole("link", { name: "Kanban", exact: true }).click();
     await expect(page.getByTestId("page-error")).toBeVisible();
     await expect(page).toHaveURL(/\/kanban$/);
-    await page.waitForTimeout(1000);
+    await settleQuiet(page);
     const devServer = await page.evaluate(() => !!document.querySelector('script[src*="/@vite/client"]'));
     expect(documentLoads).toBe(devServer ? 0 : 1);
     // The shell is still usable around the fallback.

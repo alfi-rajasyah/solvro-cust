@@ -150,7 +150,6 @@ test.describe("kanban — one column per custom status", () => {
     expect(requests[0].body?.statusId).toBe(qa.id);
 
     await page.reload({ waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     const tasks = await getTasks(base, seededProject.token, seededProject.projectId);
     const gamma = tasks.find((t) => t.title === "Gamma");
     expect(gamma?.statusId).toBe(qa.id);
@@ -235,9 +234,13 @@ test.describe("kanban — one column per custom status", () => {
     await expect(page.getByText("Move to", { exact: false }).first()).toBeVisible();
     await expect(page.getByText("Active", { exact: true }).last()).toBeVisible();
     await page.getByRole("button", { name: QA_NAME, exact: true }).click();
-    await page.waitForTimeout(1000);
 
-    const tasks = await getTasks(base, seededProject.token, seededProject.projectId);
-    expect(tasks.some((t) => t.parentTaskId === null && t.statusId === qa.id)).toBe(true);
+    await expect
+      .poll(async () =>
+        (await getTasks(base, seededProject.token, seededProject.projectId)).some(
+          (t) => t.parentTaskId === null && t.statusId === qa.id,
+        ),
+      )
+      .toBe(true);
   });
 });

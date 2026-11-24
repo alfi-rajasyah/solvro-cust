@@ -176,12 +176,10 @@ test.describe("Customer Tickets tab", () => {
     await loginViaUi(page);
 
     await page.goto(`/customers/${customerId}`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
 
     const ticketsTabButton = page.getByRole("button", { name: "Tickets" });
     await expect(ticketsTabButton).toBeVisible();
     await ticketsTabButton.click();
-    await page.waitForTimeout(500);
 
     // 4 rows, in the layout the current viewport actually shows (desktop
     // table rows vs. mobile cards — both exist in the DOM, only one set is
@@ -220,7 +218,6 @@ test.describe("Customer Tickets tab", () => {
     await loginViaUi(page);
 
     await page.goto(`/customers/${customerId}`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
 
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(page.getByRole("button", { name: "Tickets" })).toHaveCount(0);
