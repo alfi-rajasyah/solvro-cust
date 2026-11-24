@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Security — 2026-11-24 — Backend request validation upgraded to zod 4
+
+- The backend validation library (zod) moves from 3 to 4 (`backend/package.json`), which clears advisory GHSA-mrhx-c7xc-m3w5 (memory exhaustion on crafted input) from the production dependency audit. API requests, responses and the error body shape are unchanged; the wording of individual validation messages inside `details.fieldErrors` follows zod 4. The one schema that needed a code change, `S3_FORCE_PATH_STYLE` in `backend/src/lib/attachments/config.ts`, still defaults to false.
+
 ### Fixed — 2026-11-24 — The favicon stays readable on dark browser tabs
 
 - A new `frontend/public/favicon.svg`, linked from `frontend/index.html` next to the PNG, holds both the on-light and the on-dark mark and shows the one for the browser's colour scheme. On a dark tab strip the grey half of the old mark had 2.38:1 contrast; the on-dark mark's light half has 10.78:1 on Chrome's dark tab. Browsers without SVG favicons keep `favicon.png`. The bundled nginx (`frontend/nginx.conf`) caches the new file for a day, like the PNG.
