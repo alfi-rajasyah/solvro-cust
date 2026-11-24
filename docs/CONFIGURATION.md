@@ -348,7 +348,7 @@ The committed `docker-compose.yml` is a **dev** file. Production is bootstrapped
 
 **Re-run / update** (`~/solvro/.env` already exists): skips all prompts, reuses the persisted ports/bind address, rewrites the compose file, pins `IMAGE_TAG` to the release this copy of the script belongs to, then `docker compose pull`, saves the new `IMAGE_TAG` to `.env` (only after the pull succeeded), and `docker compose up -d`. Does not touch the admin user or the database volume. `APP_URL` and `EMBED_FRAME_ANCESTORS` are read from `~/solvro/.env` without sourcing it (a hand-edited, unquoted list with spaces would otherwise be run as a command); a value passed in the environment of the re-run replaces the saved one. An older install with no `APP_URL` gets the default derived from the bind address and website port, saved to `.env` with a note; when no valid address can be derived, `APP_URL` stays unset (Outline disabled, boot-log warning), never a placeholder. Set the real public address by `solvro config set APP_URL=https://…` (or re-running with `APP_URL=https://… bash setup.sh`).
 
-**Upgrading**: `solvro update` is the normal path. It looks up the newest release (the `stable` image tag), shows the installed and new version, asks to confirm (`--yes` skips; with no terminal and no `--yes` it stops), backs up the database to `~/solvro/backups/` (`--no-backup` skips), checks that both images of the release are published, then runs the installer that release's backend image carries (`/opt/solvro/setup.sh`) — i.e. the re-run path above. It refuses to move to an older release. `solvro version` and `solvro backup` are also provided; all options are in the INSTALL.md [Command reference](INSTALL.md#command-reference). A server installed before the command existed upgrades once with `git pull` + `bash setup.sh` in its repository checkout, which installs the command. `docker compose pull` alone never changes the version (`IMAGE_TAG` is pinned).
+**Upgrading**: `solvro update` is the normal path. It looks up the newest release (the `stable` image tag), shows the installed and new version, asks to confirm (`--yes` skips; with no terminal and no `--yes` it stops), backs up the database and, with `ATTACHMENTS_DRIVER=local`, the attachments volume to `~/solvro/backups/` (`--no-backup` skips), checks that both images of the release are published, then runs the installer that release's backend image carries (`/opt/solvro/setup.sh`) — i.e. the re-run path above. It refuses to move to an older release. `solvro version` and `solvro backup` are also provided; all options are in the INSTALL.md [Command reference](INSTALL.md#command-reference). A server installed before the command existed upgrades once with `git pull` + `bash setup.sh` in its repository checkout, which installs the command. `docker compose pull` alone never changes the version (`IMAGE_TAG` is pinned).
 
 Backend container command in both cases: `prisma migrate deploy && prisma db seed && node dist/index.js` — see [2.7](#27--database-migrations).
 
@@ -434,7 +434,7 @@ Users can attach files to a task. The server enforces the limits in [2.1](#21--b
 
 **Local storage (the default).** `setup.sh` writes `ATTACHMENTS_DRIVER=local` and the `ATTACHMENT_*` defaults to `~/solvro/.env`, and the generated compose file mounts the named volume `solvro_uploads` at `/app/uploads` in the backend container. Nothing else is needed on a fresh server. The volume survives `docker compose down`, `solvro update` and a re-run of `setup.sh`. It is deleted by `docker compose down -v`, and by a fresh install run with `FORCE_FRESH=1`, which also deletes `solvro_pgdata`: without the database the files have no rows and would be orphans.
 
-Back up the volume together with the database (`solvro backup` covers only the database):
+`solvro backup` and `solvro update` archive the volume next to the database dump, as `~/solvro/backups/solvro_uploads-<release>-<date>-<time>.tar.gz`. To archive it by hand, for example from a scheduled job:
 
 ```bash
 docker run --rm -v solvro_uploads:/data:ro -v "$PWD":/backup alpine \
@@ -445,7 +445,7 @@ Restore into an empty volume:
 
 ```bash
 docker run --rm -v solvro_uploads:/data -v "$PWD":/backup alpine \
-  tar xzf /backup/solvro_uploads-YYYY-MM-DD.tar.gz -C /data
+  tar xzf /backup/<archive>.tar.gz -C /data
 ```
 
 **S3 or an S3-compatible store.** Any store that speaks the S3 API works: AWS S3, MinIO, Silo, Garage and similar. Set these in `~/solvro/.env`, then run `docker compose up -d` in `~/solvro`:

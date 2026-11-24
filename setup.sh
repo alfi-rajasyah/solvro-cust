@@ -412,8 +412,8 @@ usage() {
 Usage: solvro <command>
 
   update [--yes] [--no-backup]  Upgrade to the newest Solvro release. Backs up
-                                the database first and asks before changing
-                                anything (--yes: don't ask).
+                                the database and attachments first and asks
+                                before changing anything (--yes: don't ask).
   config                        Show the server settings.
   config get KEY                Print one setting.
   config set KEY=VALUE ...      Change settings and restart what they affect,
@@ -422,7 +422,8 @@ Usage: solvro <command>
                                 TRUST_PROXY, EMBED_FRAME_ANCESTORS,
                                 ITOP_ALLOW_PRIVATE_HOSTS, ITOP_SYNC_DISABLED).
   version                       Show the installed release.
-  backup                        Write a database dump to ~/solvro/backups/.
+  backup                        Write a database dump and an archive of the
+                                attachments to ~/solvro/backups/.
   help                          Show this help.
 
 Settings: APP_URL BIND_ADDR FRONTEND_PORT BACKEND_PORT POSTGRES_PORT
@@ -457,6 +458,23 @@ backup() {
   printf '%s' "$file"
 }
 
+# Prints the path of a new archive of the attachments volume in
+# ~/solvro/backups/, or nothing when ATTACHMENTS_DRIVER=s3: the bucket keeps
+# those files and the volume holds none. The backend streams the archive, so no
+# extra image is pulled.
+backup_uploads() {
+  local driver dir="$DEPLOY_DIR/backups" file
+  driver="$(env_file_get ATTACHMENTS_DRIVER)"
+  [[ "${driver:-local}" == "local" ]] || return 0
+  mkdir -p "$dir"
+  chmod 700 "$dir"
+  file="$dir/solvro_uploads-$(installed_tag)-$(date +%Y%m%d-%H%M%S).tar.gz"
+  ( umask 077; docker compose exec -T backend tar czf - -C /app/uploads . > "$file" ) \
+    || { rm -f "$file"; die "attachments backup failed (is the stack running? try: docker compose ps)."; }
+  [[ -s "$file" ]] || { rm -f "$file"; die "attachments backup is empty."; }
+  printf '%s' "$file"
+}
+
 # 0 when version $1 is strictly newer than $2 (vX.Y.Z).
 is_newer() {
   [[ "$1" != "$2" ]] && [[ "$(printf '%s\n%s\n' "${1#v}" "${2#v}" | sort -V | tail -n 1)" == "${1#v}" ]]
@@ -473,7 +491,7 @@ cmd_update() {
   done
   require_install
 
-  local current latest dump=""
+  local current latest dump="" uploads=""
   current="$(installed_tag)"
   [[ -n "$current" ]] || die "IMAGE_TAG is not set in $ENV_FILE."
 
@@ -505,7 +523,7 @@ cmd_update() {
   echo "Solvro $current -> $latest"
   echo "Release notes (read 'Action required' first): $RELEASES_URL/$latest"
   if [[ $do_backup -eq 1 ]]; then
-    echo "The database is backed up to $DEPLOY_DIR/backups/ first."
+    echo "The database and attachments are backed up to $DEPLOY_DIR/backups/ first."
   fi
   if [[ $assume_yes -eq 0 ]]; then
     local answer=""
@@ -523,6 +541,8 @@ cmd_update() {
     echo "Backing up the database..."
     dump="$(backup)"
     echo "Backup: $dump"
+    uploads="$(backup_uploads)"
+    [[ -z "$uploads" ]] || echo "Attachments backup: $uploads"
   fi
 
   # The release's own installer, as shipped in its backend image.
@@ -534,11 +554,14 @@ cmd_update() {
     || die "the installer in the stable image is not for $latest; the stack was not changed."
 
   bash "$INSTALLER" \
-    || die "the $latest installer failed (see above). Database backup from before: ${dump:-none}. INSTALL.md, Upgrade, has the manual steps."
+    || die "the $latest installer failed (see above). Database backup from before: ${dump:-none}. Attachments backup: ${uploads:-none}. INSTALL.md, Upgrade, has the manual steps."
   echo
   echo "Updated Solvro $current -> $latest."
   if [[ -n "$dump" ]]; then
     echo "Database backup from before the upgrade: $dump"
+  fi
+  if [[ -n "$uploads" ]]; then
+    echo "Attachments backup from before the upgrade: $uploads"
   fi
 }
 
@@ -721,7 +744,11 @@ main() {
     update)  shift; cmd_update "$@" ;;
     config)  shift; cmd_config "$@" ;;
     version) require_install; echo "Solvro $(installed_tag)" ;;
-    backup)  require_install; file="$(backup)"; echo "Backup: $file" ;;
+    backup)
+      require_install
+      file="$(backup)"; echo "Backup: $file"
+      file="$(backup_uploads)"; [[ -z "$file" ]] || echo "Attachments backup: $file"
+      ;;
     help|-h|--help) usage ;;
     *) usage >&2; exit 1 ;;
   esac

@@ -23,7 +23,7 @@ Data lives in one Docker volume, `solvro_pgdata`.
 | `~/solvro/.env` | The installer, on first install | Change ports, bind address and the other settings with `solvro config set` ([Command reference](INSTALL.md#command-reference)), not by hand. Edit it by hand only for the secrets and `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS`; keep the file at mode `600`. |
 | `~/solvro/docker-compose.yml` | The installer, on every run | No. It is regenerated from `.env` each time `setup.sh` runs. |
 | `~/solvro/bin/solvro` | The installer, on every run | No. The `solvro` command (`solvro update`, `version`, `backup`); linked into `/usr/local/bin` or `~/.local/bin`. |
-| `~/solvro/backups/` | `solvro update` and `solvro backup` | Delete old dumps yourself; nothing is pruned automatically. |
+| `~/solvro/backups/` | `solvro update` and `solvro backup` | Database dumps and attachments archives. Delete old ones yourself; nothing is pruned automatically. |
 
 `~/solvro/.env` holds:
 
@@ -112,7 +112,7 @@ docker compose exec -T postgres pg_restore -U solvro -d solvro --no-owner < solv
 docker compose up -d
 ```
 
-If attachments are stored in the `solvro_uploads` volume (the default), back it up too: `pg_dump` does not include the files. The one-liner and the S3 alternative are in `docs/CONFIGURATION.md` section 2.18. A database restored without its files shows attachments that fail to download, and files restored without their database are removed by the daily cleanup after 24 hours.
+If attachments are stored in the `solvro_uploads` volume (the default), back it up too: `pg_dump` does not include the files. `solvro backup` writes both; the one-liner for a scheduled job, the restore command and the S3 alternative are in `docs/CONFIGURATION.md` section 2.18. A database restored without its files shows attachments that fail to download, and files restored without their database are removed by the daily cleanup after 24 hours.
 
 Test a restore once after the first install, on a spare machine or a second database, so the first real restore is not the first attempt. Take a dump before every upgrade.
 
