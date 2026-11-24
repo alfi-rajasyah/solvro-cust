@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { usePanelFocus } from "@/hooks/usePanelFocus";
 import { isDragActive } from "./Modal";
 import { CopyLinkButton } from "./CopyLinkButton";

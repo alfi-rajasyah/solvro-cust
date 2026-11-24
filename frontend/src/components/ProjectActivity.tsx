@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { AssigneeAvatar } from "@/components/AssigneeAvatar";
 import { SkeletonRegion } from "@/components/skeletons/SkeletonRegion";
 import { Skeleton } from "@/components/ui/skeleton";

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { ProjectHeaderFacts } from "./ProjectHeaderFacts";
 import { dateToDay } from "@/lib/dateField";
 import type { ProjectDetail } from "@/lib/queries";

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import type { Filter } from "@/components/reui/filters";
 import { TASK_CATEGORY_GROUP_LABEL } from "@/lib/labels";
 import { useCustomers, useLabelNames, useTaskStatuses, useUsers } from "@/lib/queries";

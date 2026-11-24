@@ -20,7 +20,7 @@
 // `./boardAdapter.ts` and `./dropMapper.ts` are this task's pure ticket
 // equivalents.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import {
   Kanban,

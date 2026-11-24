@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useRef, useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { PageLoading } from "@/components/skeletons";

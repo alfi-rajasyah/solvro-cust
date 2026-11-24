@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router";
 import { useProjectEpics, useProjectLabels } from "@/lib/queries";
 import { parseTaskFilters, stalePrunePatch, writeTaskFilters, type TaskFilters } from "@/lib/taskFilters";
 

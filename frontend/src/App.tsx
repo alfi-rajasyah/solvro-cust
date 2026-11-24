@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ComponentType } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router";
 import { AdminGuard } from "@/components/AdminGuard";
 import { AuthGuard } from "@/components/AuthGuard";
 import { ExecutiveGuard } from "@/components/ExecutiveGuard";

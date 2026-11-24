@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { useLocation, useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router";
 import { TableSkeleton } from "@/components/skeletons";
 import { SkeletonRegion } from "@/components/skeletons/SkeletonRegion";
 import { Skeleton } from "@/components/ui/skeleton";

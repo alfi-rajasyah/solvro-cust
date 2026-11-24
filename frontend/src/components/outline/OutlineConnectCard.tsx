@@ -5,7 +5,7 @@
 // (`/settings?outline=connected|cancelled|error&reason=…`) and then strips
 // those parameters from the URL.
 import { useEffect, useId, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
