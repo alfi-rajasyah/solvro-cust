@@ -441,13 +441,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Trigger: confirm in a browser on a partly filled bar. Then pick the label colour per segment.
 - **Source:** snapshot line 2445, section "Design compliance fixes — deferred findings (2026-11-02)"
 
-### ISS-210 · P3 · Gantt row-menu dialogs find their menu through a document-wide selector
-
-- **Type:** debt · **Found:** 2026-11-23 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** afterMenuCloses in frontend/src/components/gantt-v2/SolvroGantt.tsx (line ~377)
-- **Problem:** It polls `[data-slot="gantt-resource-menu"]` across the whole document to learn that the menu has closed, rather than its own menu. A second matching menu on the page would hold the dialog back.
-- **Why deferred / fix direction:** Works today with one menu. Use Base UI `onOpenChangeComplete`, or pass a ref into the vendored view.
-
 ## Open — Boards & drag
 
 ### ISS-110 · P3 · Kanban drop on the preview-swapped card can cancel a one-slot move
@@ -879,3 +872,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-212 · 2026-11-24 · CHANGELOG "Attachment e2e tests for read-only members and the server type check" · Attachment e2e has no read-only case and never reaches the server's 415
 - ISS-213 · 2026-11-24 · CHANGELOG "solvro backup and solvro update also back up attachments" · solvro backup and solvro update do not back up the attachments volume
 - ISS-214 · 2026-11-24 · CHANGELOG "The nginx upload limit follows ATTACHMENT_MAX_FILE_MB" · ATTACHMENT_MAX_FILE_MB above 25 also needs the nginx body limit raised
+- ISS-210 · 2026-11-24 · CHANGELOG "Gantt row menu dialogs wait for their own menu only" · Gantt row-menu dialogs find their menu through a document-wide selector

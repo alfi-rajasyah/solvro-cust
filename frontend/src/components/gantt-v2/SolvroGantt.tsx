@@ -366,7 +366,9 @@ export function SolvroGantt(props: SolvroGanttProps) {
   // restore on close). So an item that opens a dialog runs it through here: wait
   // until the menu has unmounted and focus has landed on a real element (the
   // returned row control), then open. Capped, so a menu that never settles cannot
-  // swallow the click; the frame loop is cancelled on unmount.
+  // swallow the click; the frame loop is cancelled on unmount. `item` is the
+  // clicked menu item: the wait watches that item's own menu, never any other
+  // element with the same data-slot (ISS-210).
   const menuFrame = useRef<number | null>(null);
   useEffect(
     () => () => {
@@ -374,15 +376,16 @@ export function SolvroGantt(props: SolvroGanttProps) {
     },
     [],
   );
-  function afterMenuCloses(run: () => void) {
+  function afterMenuCloses(item: Element, run: () => void) {
+    const menu = item.closest('[data-slot="gantt-resource-menu"]');
     const started = performance.now();
     const tick = () => {
       // Focus can return to the row while the menu is still animating out, then
       // be taken again when its popup unmounts: wait for both, the popup gone
-      // (only one row menu is ever open) and focus on a real element.
+      // and focus on a real element.
       const active = document.activeElement;
       const settled =
-        document.querySelector('[data-slot="gantt-resource-menu"]') === null &&
+        (menu === null || !menu.isConnected) &&
         active !== null &&
         active !== document.body;
       if (!settled && performance.now() - started < 1000) {
@@ -1685,7 +1688,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                     if (!task) return null;
                     return (
                       <>
-                        <ContextMenuItem className="text-xs" onClick={() => afterMenuCloses(() => onEditTask(task))}>
+                        <ContextMenuItem className="text-xs" onClick={(e) => afterMenuCloses(e.currentTarget, () => onEditTask(task))}>
                           <span
                             className="material-symbols-outlined text-sm text-on-surface-variant"
                             aria-hidden="true"
@@ -1773,7 +1776,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                         {task.parentTaskId === null && (
                           <ContextMenuItem
                             className="text-xs"
-                            onClick={() => afterMenuCloses(() => onCreateTaskOpen(task.sectionId, task.id))}
+                            onClick={(e) => afterMenuCloses(e.currentTarget, () => onCreateTaskOpen(task.sectionId, task.id))}
                           >
                             <span
                               className="material-symbols-outlined text-sm text-on-surface-variant"
@@ -1788,7 +1791,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                         <ContextMenuItem
                           className="text-xs"
                           variant="destructive"
-                          onClick={() => afterMenuCloses(() => setDeleteTarget(task))}
+                          onClick={(e) => afterMenuCloses(e.currentTarget, () => setDeleteTarget(task))}
                         >
                           {/* No explicit color class — inherits
                             ContextMenuItem's `data-[variant=destructive]:

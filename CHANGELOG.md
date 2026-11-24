@@ -15,6 +15,9 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-24 — Gantt row menu dialogs wait for their own menu only
+
+- The Edit, Add subtask and Delete items of the Gantt row menu (`frontend/src/components/gantt-v2/SolvroGantt.tsx`) open their dialog once the menu has closed. They checked for that by searching the whole page for any row menu, so a second matching menu could hold the dialog back for up to a second. They now watch only the menu the item belongs to.
 ### Changed — 2026-11-24 — The nginx upload limit follows ATTACHMENT_MAX_FILE_MB
 
 - The bundled nginx (`frontend/nginx.conf`) now sets the body limit of the attachment upload path from `ATTACHMENT_MAX_FILE_MB`: the value rounded up plus 1 MB for the multipart envelope, 26 MB by default as before. A start script in the frontend image (`frontend/nginx-attachment-body-limit.envsh`) writes it; an unset or invalid value keeps 26 MB and logs why. `setup.sh` now passes `ATTACHMENT_MAX_FILE_MB` to the frontend container. Before, raising the setting past 25 made larger uploads fail at nginx until `nginx.conf` was edited by hand. A new CI step (`ci/check-attachment-body-limit.sh`) checks the rendered limit against the built image for valid and invalid values.
