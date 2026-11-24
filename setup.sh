@@ -349,6 +349,8 @@ COMPOSE_HEAD
     environment:
       # Outline origin(s) allowed to frame /embed/* and /share/*; empty = off.
       EMBED_FRAME_ANCESTORS: "${EMBED_FRAME_ANCESTORS:-}"
+      # nginx sets the attachment upload body limit from it (plus 1 MB).
+      ATTACHMENT_MAX_FILE_MB: "${ATTACHMENT_MAX_FILE_MB:-25}"
     ports:
       - "${BIND_ADDR:-127.0.0.1}:${FRONTEND_PORT:-80}:80"
     logging:

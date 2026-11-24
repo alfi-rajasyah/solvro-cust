@@ -1,0 +1,29 @@
+#!/bin/sh
+# Sourced (not executed) by the nginx image's /docker-entrypoint.sh at start.
+#
+# Writes the request body limit of the attachment upload location
+# (nginx.conf includes /etc/nginx/snippets/attachment-body-limit.conf there)
+# from ATTACHMENT_MAX_FILE_MB, the backend's per-file limit, so raising that
+# setting needs no nginx edit. The limit is the setting rounded up to whole MB
+# plus 1 MB for the multipart envelope: the default 25 gives 26m. Unset, empty
+# or invalid keeps that default and logs why; the backend refuses to start on
+# an invalid value anyway.
+#
+# Must never exit non-zero: the entrypoint runs under `set -e`.
+
+attachment_body_limit_write() {
+  _raw="${ATTACHMENT_MAX_FILE_MB:-}"
+  _mb=26
+  if [ -n "$_raw" ]; then
+    if printf '%s' "$_raw" | grep -Eq '^[0-9]{1,6}(\.[0-9]+)?$' \
+      && _calc="$(awk -v v="$_raw" 'BEGIN { if (v <= 0) exit 1; c = int(v); if (c < v) c++; print c + 1 }')"; then
+      _mb="$_calc"
+    else
+      echo "16-attachment-body-limit: ERROR: ATTACHMENT_MAX_FILE_MB '$_raw' is not a positive number of MB; upload limit stays 26m" >&2
+    fi
+  fi
+  printf 'client_max_body_size %sm;\n' "$_mb" > /etc/nginx/snippets/attachment-body-limit.conf
+  echo "16-attachment-body-limit: attachment uploads may carry up to ${_mb}m"
+}
+
+attachment_body_limit_write || true
