@@ -1,6 +1,6 @@
 # Upgrade the backend from zod 3 to zod 4 (ISS-004)
 
-Status: in progress (started 2026-11-24 @ `102ea27`)
+Status: shipped 2026-11-24
 Archive path: `docs/archive/plans/zod-4-upgrade.md`
 
 ## Goal
