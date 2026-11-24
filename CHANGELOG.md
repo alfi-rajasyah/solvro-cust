@@ -15,6 +15,9 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-24 — Escape during a drag no longer closes the open panel after a re-render
+
+- The task panel, epic panel, iTop ticket panel, drawer and modal (`frontend/src/components/TaskPanel.tsx`, `EpicPanel.tsx`, `itop/TicketPanel.tsx`, `Drawer.tsx`, `Modal.tsx`) now add their Escape listener once, when they open, and read the latest close handler from a ref. Before, a page re-render during a keyboard drag re-added the listener behind the drag library's own, so the Escape that cancelled the drag also closed the panel.
 ### Fixed — 2026-11-24 — E2E cleanup also deletes stored attachment files
 
 - `backend/scripts/dev/cleanup-e2e-data.ts` now deletes the stored files of the attachments on the e2e projects it removes, right after the rows. Before, those files stayed in the bucket or volume until the daily orphan sweep, at least 24 hours later.

@@ -490,14 +490,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Trigger: PATCH /sections/:id fails mid-session in practice. Then re-seed the modal on settle.
 - **Source:** snapshot line 1119, section "Sortable reorder (sections + subtasks) — deferred findings (2026-07-30)"
 
-### ISS-193 · P3 · The Escape drag guard depends on listener order
-
-- **Type:** debt · **Found:** 2026-11-19 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** isDragActive in frontend/src/components/Modal.tsx (line ~16); Escape listeners in TaskPanel.tsx (~59), itop/TicketPanel.tsx (~99), EpicPanel.tsx (~146), Drawer.tsx (~73); closeTaskPanel in pages/ProjectDetail.tsx (~133)
-- **Problem:** The guard works only while the panel's document listener runs before dnd-kit cancels the drag; a panel whose effect re-subscribes mid-drag (TaskPanel's onClose changes on a ProjectDetail re-render) runs after it and still closes on the same Escape. Moving the listeners to the capture phase fixes that but breaks inner widgets that consume Escape (mention picker, inline rename, status picker).
-- **Why deferred / fix direction:** Needs a mid-drag re-render; costs one reopen. Fix: make TaskPanel's onClose stable (useCallback in ProjectDetail), or track drag state from the DndContext monitor instead of the DOM.
-- **Source:** CI failure and review of `docs/archive/plans/panels-forms-board-a11y.md`
-
 ## Open — iTop
 
 ### ISS-114 · P2 · iTop TimeSpent duration unit is assumed to be seconds
@@ -907,3 +899,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-209 · 2026-11-20 · CHANGELOG "Keyboard focus ring on tab links" · Project tab links have no explicit keyboard focus treatment
 - ISS-031 · 2026-11-23 · CHANGELOG "Task attachments" · Task attachments are not built; storage and visibility are undecided
 - ISS-215 · 2026-11-24 · CHANGELOG "E2E cleanup also deletes stored attachment files" · E2E cleanup leaves stored attachment objects until the daily sweep
+- ISS-193 · 2026-11-24 · CHANGELOG "Escape during a drag no longer closes the open panel after a re-render" · The Escape drag guard depends on listener order
