@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-24 — The app serves its own fonts
+
+- Source Sans 3 (latin and latin-ext) and the Material Symbols Outlined icon font now ship in the frontend bundle (`frontend/src/assets/fonts/`, with their SIL OFL 1.1 and Apache 2.0 licences) instead of loading from Google Fonts, so no page, including shared guest pages under `/share/`, contacts Google. Text and icons render as before, and the service worker precaches the fonts for offline use. The Google preconnect and stylesheet links are gone from `frontend/index.html`, and the Google font cache rules from `frontend/vite.config.ts`. Text in Cyrillic, Greek or Vietnamese script now falls back to the system font.
+
 ### Security — 2026-11-24 — Frontend router upgraded to React Router 7
 
 - The frontend moves from React Router 6 (`react-router-dom`) to React Router 7 (`react-router`) in `frontend/package.json`, and every import under `frontend/src` now names `react-router`. Routes, redirects and links behave as before, and the router's 2 advisories no longer appear in the production dependency audit.
