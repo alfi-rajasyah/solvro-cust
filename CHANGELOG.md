@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-24 — E2E cleanup also deletes stored attachment files
+
+- `backend/scripts/dev/cleanup-e2e-data.ts` now deletes the stored files of the attachments on the e2e projects it removes, right after the rows. Before, those files stayed in the bucket or volume until the daily orphan sweep, at least 24 hours later.
+
 ### Added — 2026-11-23 — Task attachments
 
 - An Attachments section in the task side panel and on the task page (`frontend/src/components/TaskAttachments.tsx`) lets you attach files to a task: pick several at once, see every limit and the allowed file types above the Attach files button, follow a progress bar for each file, and dismiss an error for a file that was refused. Each file shows its name (non-Latin names are kept intact), size, uploader and date, with a download button and a delete that asks first. People without permission to edit tasks can see and download the files but not add or remove them.

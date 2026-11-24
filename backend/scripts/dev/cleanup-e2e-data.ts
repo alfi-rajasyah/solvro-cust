@@ -12,8 +12,10 @@
 // - users with an @solvro.test email, except the e2e sign-in account
 //   (E2E_ADMIN_EMAIL, default qa@solvro.test), which the suite needs.
 // Deleting a project cascades to its tasks, sections, labels, risks, notes and
-// activity log (schema.prisma). A user that other rows still reference is
-// deactivated instead of deleted.
+// activity log and attachment rows (schema.prisma). The stored files of those
+// attachments are deleted after the rows, so they do not wait for the daily
+// orphan sweep. A user that other rows still reference is deactivated instead
+// of deleted.
 //
 // Dry run by default (prints the counts). To delete:
 //   docker compose exec -T -e E2E_CLEANUP_CONFIRM=delete backend npx tsx scripts/dev/cleanup-e2e-data.ts
@@ -24,6 +26,7 @@
 // the dev compose service sets (the production image bakes NODE_ENV=production).
 
 import { PrismaClient } from "@prisma/client";
+import { deleteStoredObjects } from "../../src/lib/attachments/cleanup.js";
 
 const prisma = new PrismaClient();
 
@@ -65,7 +68,15 @@ async function main() {
   );
   if (!confirm) return;
 
+  // Collected before the delete: the cascade removes the rows that hold the keys.
+  const attachmentKeys = (
+    await prisma.taskAttachment.findMany({
+      where: { task: { projectId: { in: projectIds } } },
+      select: { storageKey: true },
+    })
+  ).map((a) => a.storageKey);
   await prisma.project.deleteMany({ where: { id: { in: projectIds } } });
+  await deleteStoredObjects(attachmentKeys);
   await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });
 
   let deleted = 0;
@@ -81,7 +92,7 @@ async function main() {
     }
   }
   console.log(
-    `removed ${projectIds.length} projects, ${customerIds.length} customers, ${deleted} users; deactivated ${deactivated} users`,
+    `removed ${projectIds.length} projects, ${customerIds.length} customers, ${attachmentKeys.length} stored attachments, ${deleted} users; deactivated ${deactivated} users`,
   );
 }
 

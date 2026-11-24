@@ -762,14 +762,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Template the nginx limit from env at container start, or keep it documented only.
 - **Source:** task-attachments phase review (GitHub #137)
 
-### ISS-215 · P3 · E2E cleanup leaves stored attachment objects until the daily sweep
-
-- **Type:** debt · **Found:** 2026-11-23 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** backend/scripts/dev/cleanup-e2e-data.ts
-- **Problem:** The script deletes database rows only; stored objects of deleted e2e tasks stay in the bucket until the daily sweep (24 h minimum age).
-- **Why deferred / fix direction:** Call the attachment-key collection and `deleteStoredObjects` from the cleanup.
-- **Source:** task-attachments phase review (GitHub #137)
-
 ## Open — Docs & process
 
 ### ISS-169 · P3 · Re-pulling vendored ReUI files overwrites SOLVRO PATCH edits
@@ -914,3 +906,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-208 · 2026-11-20 · CHANGELOG "Focus rings on toggles and forced-colours focus for borderless controls" · About 35 borderless controls drop their focus indicator in forced-colours mode
 - ISS-209 · 2026-11-20 · CHANGELOG "Keyboard focus ring on tab links" · Project tab links have no explicit keyboard focus treatment
 - ISS-031 · 2026-11-23 · CHANGELOG "Task attachments" · Task attachments are not built; storage and visibility are undecided
+- ISS-215 · 2026-11-24 · CHANGELOG "E2E cleanup also deletes stored attachment files" · E2E cleanup leaves stored attachment objects until the daily sweep
