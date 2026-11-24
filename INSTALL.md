@@ -126,7 +126,7 @@ Installed by `setup.sh` in `~/solvro/bin/solvro` and linked into `/usr/local/bin
 
 | Command | What it does |
 |---|---|
-| `solvro update` | Upgrade to the newest release. Shows the installed and the new version with a link to the release notes, asks before changing anything, backs up the database to `~/solvro/backups/`, then runs that release's installer. Does nothing when already up to date; never moves to an older release. |
+| `solvro update` | Upgrade to the newest release. Shows the installed and the new version with a link to the release notes, asks before changing anything, backs up the database and, with `ATTACHMENTS_DRIVER=local`, the attachments volume to `~/solvro/backups/`, then runs that release's installer. Does nothing when already up to date; never moves to an older release. |
 | `solvro update --yes` | The same without the question (`-y` also works). Needed when there is no terminal, e.g. in a scheduled job. |
 | `solvro update --no-backup` | Skip the database and attachments backup. Combines with `--yes`. |
 | `solvro config` | Show the server settings (never the secrets). |

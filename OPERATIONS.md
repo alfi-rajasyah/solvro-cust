@@ -14,7 +14,7 @@ Three containers on one Docker network, in `~/solvro/docker-compose.yml`:
 
 The browser talks to the website port only. The website forwards `/api/*` to the backend inside the Docker network. The API port is published for tools and scripts that call the API directly; you can leave it firewalled.
 
-Data lives in one Docker volume, `solvro_pgdata`.
+Data lives in Docker volumes: `solvro_pgdata` (the database) and, with `ATTACHMENTS_DRIVER=local` (the default), `solvro_uploads` (attachment files).
 
 ## 2. Files on the server
 

@@ -460,17 +460,24 @@ backup() {
 
 # Prints the path of a new archive of the attachments volume in
 # ~/solvro/backups/, or nothing when ATTACHMENTS_DRIVER=s3: the bucket keeps
-# those files and the volume holds none. The backend streams the archive, so no
-# extra image is pulled.
+# those files and the volume holds none. A one-off container of the installed
+# backend image writes the archive, so it works while the backend container is
+# stopped or restarting (the database dump needs only postgres), and no other
+# image is pulled.
 backup_uploads() {
-  local driver dir="$DEPLOY_DIR/backups" file
+  local driver dir="$DEPLOY_DIR/backups" file rc=0
   driver="$(env_file_get ATTACHMENTS_DRIVER)"
   [[ "${driver:-local}" == "local" ]] || return 0
   mkdir -p "$dir"
   chmod 700 "$dir"
   file="$dir/solvro_uploads-$(installed_tag)-$(date +%Y%m%d-%H%M%S).tar.gz"
-  ( umask 077; docker compose exec -T backend tar czf - -C /app/uploads . > "$file" ) \
-    || { rm -f "$file"; die "attachments backup failed (is the stack running? try: docker compose ps)."; }
+  ( umask 077
+    docker compose run --rm --no-deps -T --entrypoint tar backend \
+      --warning=no-file-changed -czf - -C /app/uploads . > "$file" ) || rc=$?
+  # GNU tar exits 1 when a file changed while it was read (an upload or a
+  # delete during the backup); every other file is in the archive.
+  [[ $rc -le 1 ]] \
+    || { rm -f "$file"; die "attachments backup failed (exit $rc; see above)."; }
   [[ -s "$file" ]] || { rm -f "$file"; die "attachments backup is empty."; }
   printf '%s' "$file"
 }
@@ -538,7 +545,7 @@ cmd_update() {
     || die "$latest is not fully published yet; try again in a few minutes. Nothing changed."
 
   if [[ $do_backup -eq 1 ]]; then
-    echo "Backing up the database..."
+    echo "Backing up the database and attachments..."
     dump="$(backup)"
     echo "Backup: $dump"
     uploads="$(backup_uploads)"
