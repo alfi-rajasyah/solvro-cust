@@ -73,8 +73,9 @@ test.describe("filters — duplicate-chip guard (desktop)", () => {
       if (!box) throw new Error(`${valueLabel} option not visible`);
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       await page.mouse.down();
-      // Kept: the guard under test arms only after a >=200ms press, and nothing
+      // Kept: Base UI arms its mouseup click after a >=200ms press, and nothing
       // in the DOM changes during the hold, so there is no condition to wait on.
+      // The guard under test is findMatchingFilter.
       await page.waitForTimeout(250);
       await page.mouse.up();
     };

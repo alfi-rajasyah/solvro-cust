@@ -66,9 +66,6 @@ export async function loginViaUi(
   await page.waitForFunction(() => !!localStorage.getItem("solvro.token"), undefined, {
     timeout: 15_000,
   });
-  // Let the post-login queries of the landing page finish before the caller
-  // navigates away from it.
-  await page.waitForLoadState("networkidle");
 }
 
 /** Resolves after `n` animation frames: lets handlers queued by the last input
@@ -81,23 +78,67 @@ export async function nextFrames(page: Page, n = 2): Promise<void> {
   }, n);
 }
 
-/** Resolves once every finite CSS/Web animation on the page has finished
- * (drawer slide, layout reflow); infinite ones, such as spinners, are ignored. */
+/** Resolves once no finite CSS/Web animation is running (drawer slide, layout
+ * reflow); infinite ones, such as spinners, are ignored. A transition can start
+ * a frame or more after the render that causes it, so this waits two frames
+ * first and only stops after a full frame in which nothing finite was running.
+ * Capped, so a page that animates forever cannot hang it. */
 export async function settleAnimations(page: Page): Promise<void> {
+  await nextFrames(page, 2);
   await page.evaluate(async () => {
-    const finite = document
-      .getAnimations()
-      .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity);
-    await Promise.all(finite.map((a) => a.finished.catch(() => undefined)));
+    const running = () =>
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity);
+    const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    for (let i = 0; i < 40; i++) {
+      const current = running();
+      if (current.length === 0) {
+        await frame();
+        if (running().length === 0) return;
+        continue;
+      }
+      await Promise.all(current.map((a) => a.finished.catch(() => undefined)));
+      await frame();
+    }
   });
 }
 
-/** For asserting that something did NOT happen (a second request, a redirect):
- * waits for the network to go quiet, then a few frames, so a handler that was
- * going to fire on the same tick has had its chance. */
-export async function settleQuiet(page: Page): Promise<void> {
-  await page.waitForLoadState("networkidle");
-  await nextFrames(page, 5);
+/** For asserting that something did NOT happen (a second request, a redirect).
+ * Playwright's `networkidle` fires once per document and never again after
+ * in-app requests, so this listens to requests itself: it returns once no
+ * `/api/` request has been in flight or started for `quietMs`, restarting that
+ * window on every new request, within an overall cap. The quiet window is
+ * deliberate: there is no event for "nothing else is coming", so the absence
+ * check is only as strong as this window. Pass a larger `quietMs` when the app
+ * delays the thing being ruled out. */
+export async function settleQuiet(page: Page, quietMs = 500, capMs = 15_000): Promise<void> {
+  const inflight = new Set<Request>();
+  let lastActivity = Date.now();
+  const onRequest = (req: Request) => {
+    if (req.url().includes("/api/")) {
+      inflight.add(req);
+      lastActivity = Date.now();
+    }
+  };
+  const onDone = (req: Request) => {
+    if (inflight.delete(req)) lastActivity = Date.now();
+  };
+  page.on("request", onRequest);
+  page.on("requestfinished", onDone);
+  page.on("requestfailed", onDone);
+  try {
+    await nextFrames(page, 5);
+    const start = Date.now();
+    while (Date.now() - start < capMs) {
+      if (inflight.size === 0 && Date.now() - lastActivity >= quietMs) return;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  } finally {
+    page.off("request", onRequest);
+    page.off("requestfinished", onDone);
+    page.off("requestfailed", onDone);
+  }
 }
 
 /** Counts in-flight `/api/` requests from the moment it is created. `settled()`
@@ -126,6 +167,8 @@ export function trackApiRequests(page: Page): { settled: () => Promise<void>; di
         await nextFrames(page, 2);
         if (inflight.size === 0) break;
       }
+      // Still busy after the re-checks: fail here instead of reading mid-flight.
+      await expect.poll(() => inflight.size, { timeout: 15_000 }).toBe(0);
       await settleAnimations(page);
     },
     dispose: () => {

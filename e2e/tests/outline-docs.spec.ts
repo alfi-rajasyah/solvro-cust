@@ -690,7 +690,7 @@ test.describe("Session robustness", () => {
     await page.goto("/overview", { waitUntil: "domcontentloaded" });
     await expect.poll(() => failed).toBe(1);
     // Still signed in: not bounced to /login, the app shell is there.
-    await settleQuiet(page);
+    await settleQuiet(page, 1500);
     await expect(page).not.toHaveURL(/\/login/);
     await expect(page.getByRole("heading", { name: /overview/i }).first()).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem("solvro.token"))).not.toBeNull();

@@ -112,7 +112,7 @@ test.describe("page error boundary", () => {
     await page.getByRole("link", { name: "Kanban", exact: true }).click();
     await expect(page.getByTestId("page-error")).toBeVisible();
     await expect(page).toHaveURL(/\/kanban$/);
-    await settleQuiet(page);
+    await settleQuiet(page, 1000);
     const devServer = await page.evaluate(() => !!document.querySelector('script[src*="/@vite/client"]'));
     expect(documentLoads).toBe(devServer ? 0 : 1);
     // The shell is still usable around the fallback.

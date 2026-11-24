@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi, apiBase, openTaskEditModal, settleQuiet } from "../fixtures/test";
+import { test, expect, loginViaUi, apiBase, openTaskEditModal, settleQuiet, trackApiRequests } from "../fixtures/test";
 import { createTask, getTasks } from "../fixtures/seed";
 import type { Locator, Page } from "@playwright/test";
 
@@ -277,8 +277,8 @@ test.describe("task panel title save ordering", () => {
       .poll(() => fieldOf(base, token, projectId, task.id, "title"), { timeout: 5_000 })
       .toBe(`Renamed ${id}`);
     // A duplicate save would be sent right after the first commits; wait for
-    // the network to drain, then assert exactly one PATCH and no dialog.
-    await page.waitForLoadState("networkidle");
+    // the network to go quiet, then assert exactly one PATCH and no dialog.
+    await settleQuiet(page);
     await expect.poll(() => patches.length, { timeout: 2_000 }).toBe(1);
     await expect(
       page.getByRole("dialog", { name: "Someone changed this task after you opened it" }),
@@ -309,6 +309,7 @@ test.describe("task panel title save ordering", () => {
       await route.continue();
     });
 
+    const tracker = trackApiRequests(page);
     await patchBehindBack(base, token, task.id, { title: `Theirs ${id}` });
     await renameInPanel(panel, `First ${id}`);
     // Second rename of the same field while the first is still in flight: its
@@ -319,7 +320,10 @@ test.describe("task panel title save ordering", () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByTestId("conflict-row")).toHaveCount(1);
     await expect(dialog.getByTestId("conflict-yours")).toHaveText(`First ${id}`);
-    // The route above delays each PATCH 600ms; wait for those to land.
+    // The route above delays each PATCH 600ms; wait for those to land, then
+    // for a quiet window in case a queued save fires after the first returns.
+    await tracker.settled();
+    tracker.dispose();
     await settleQuiet(page);
     await expect(dialog.getByTestId("conflict-yours")).toHaveText(`First ${id}`);
     expect(patches.filter((p) => p.includes("First") || p.includes("Second"))).toHaveLength(1);
