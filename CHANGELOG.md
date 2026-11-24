@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-24 — The favicon stays readable on dark browser tabs
+
+- A new `frontend/public/favicon.svg`, linked from `frontend/index.html` next to the PNG, holds both the on-light and the on-dark mark and shows the one for the browser's colour scheme. On a dark tab strip the grey half of the old mark had 2.38:1 contrast; the on-dark mark's light half has 10.78:1 on Chrome's dark tab. Browsers without SVG favicons keep `favicon.png`. The bundled nginx (`frontend/nginx.conf`) caches the new file for a day, like the PNG.
+
 ### Fixed — 2026-11-24 — Attachment temp-file test no longer fails at random
 
 - The backend test that checks a refused upload leaves no temp file (`backend/test/attachments.test.ts`) compared the total number of entries in the OS temp folder. The upload route removes an accepted upload's temp file just after it answers, so a file from the test before could disappear during this one and fail it. The test now looks only at entries it adds, and waits up to 2 seconds for them to go.

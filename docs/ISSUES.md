@@ -352,14 +352,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 
 ## Open — Accessibility & tokens
 
-### ISS-084 · P3 · Favicon reads weakly on dark browser tab strips
-
-- **Type:** debt · **Found:** 2026-07-25 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** favicon link in frontend/index.html (line 6); frontend/public/favicon.png
-- **Problem:** The favicon is the on-light mark; its arc ink is 2.38:1 against Chrome's dark tab background.
-- **Why deferred / fix direction:** Add an SVG favicon with a media query, or a second link with media prefers-color-scheme: dark pointing at the on-dark mark.
-- **Source:** snapshot line 366, section "Tech debt / follow-ups from recent work"
-
 ### ISS-087 · P3 · IconTile outline variant has no visible fill on the lowest dark surface
 
 - **Type:** watch · **Found:** 2026-07-31 · **Verified:** 2026-11-24 @ `670f206`
@@ -833,3 +825,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-053 · 2026-11-24 · CHANGELOG "Sort risks by probability and impact" · Sortable data-grid headers cannot be centered
 - ISS-217 · 2026-11-24 · CHANGELOG "Attachment temp-file test no longer fails at random" · Attachment temp-file test counts the whole OS temp folder
 - ISS-170 · 2026-11-24 · docs/DESIGN.md frontmatter and §0 now name system as the default · DESIGN.md says theme_default dark but the code defaults to system
+- ISS-084 · 2026-11-24 · CHANGELOG "The favicon stays readable on dark browser tabs" · Favicon reads weakly on dark browser tab strips
