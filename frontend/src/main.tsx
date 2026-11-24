@@ -32,7 +32,10 @@ createRoot(rootElement).render(
         and embed pages, the providers). Pages inside the shell have their own. */}
     <AppErrorBoundary variant="app">
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
+        {/* React Router 7 wraps each navigation in startTransition by default, which
+            keeps the old page on screen, without the PageLoading skeleton, until a lazy
+            page's chunk arrives. useTransitions={false} keeps the v6 behaviour. */}
+        <BrowserRouter useTransitions={false}>
           <ThemeProvider>
             <AuthProvider>
               <App />
