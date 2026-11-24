@@ -23,6 +23,17 @@ describe("sectionReorderPatches", () => {
     expect(sectionReorderPatches(all, all, sectionNodeId(2), 1, sections)).toEqual([]);
   });
 
+  it("anchors on the visible neighbour, not the full-list index", () => {
+    const visible = [sectionNodeId(1), sectionNodeId(3), sectionNodeId(null)];
+    // Section 1 dropped after section 3 on screen. A plain splice on the full
+    // list at index 1 would give 2, 1, 3; anchoring on section 3 gives 2, 3, 1.
+    expect(sectionReorderPatches(all, visible, sectionNodeId(1), 1, sections)).toEqual([
+      { id: 2, position: 0 },
+      { id: 3, position: 1 },
+      { id: 1, position: 2 },
+    ]);
+  });
+
   it("keeps a section hidden by a filter in its place", () => {
     const visible = [sectionNodeId(1), sectionNodeId(3), sectionNodeId(null)];
     // Section 3 dropped before section 1 on screen; hidden section 2 stays after 1.
