@@ -688,14 +688,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Re-test with realistic row counts when tables grow.
 - **Source:** snapshot line 2441, section "Data integrity, session and query performance — deferred findings (2026-10-26)"
 
-### ISS-212 · P3 · Attachment e2e has no read-only case and never reaches the server's 415
-
-- **Type:** test-gap · **Found:** 2026-11-23 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** e2e/tests/task-attachments.spec.ts; the e2e fixtures
-- **Problem:** The spec covers no read-only user, and the client pre-check refuses a disallowed type before the server's 415 can be reached. The fixtures have no `project:read`-only user.
-- **Why deferred / fix direction:** Add a fixture that creates an `@solvro.test` user with a project:read-only role and a project membership.
-- **Source:** task-attachments phase review (GitHub #137)
-
 ### ISS-216 · P3 · Task statuses concurrent_update test got 401 once in a full-suite run
 
 - **Type:** watch · **Found:** 2026-11-23 · **Verified:** 2026-11-24 @ `670f206`
@@ -886,3 +878,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-193 · 2026-11-24 · CHANGELOG "Escape during a drag no longer closes the open panel after a re-render" · The Escape drag guard depends on listener order
 - ISS-020 · 2026-11-24 · gates.sh `section-default-color-parity` (the packages share no module, so a gate keeps the two values equal) · Section default color hex is duplicated between schema and frontend
 - ISS-048 · 2026-11-24 · CHANGELOG "Dropdown submenus can rise above a modal" · Dropdown submenu cannot outrank a modal host
+- ISS-212 · 2026-11-24 · CHANGELOG "Attachment e2e tests for read-only members and the server type check" · Attachment e2e has no read-only case and never reaches the server's 415
