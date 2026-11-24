@@ -238,7 +238,7 @@ nginx keeps `merge_slashes` on, so a doubled slash (`/api//public/share/<token>`
 
 **Icon caching**: `location /icons/` and `location = /favicon.png` send `Cache-Control: public, max-age=86400` (these files are not fingerprinted), with `Referrer-Policy` and the framing snippet.
 
-The guest page still loads Google Fonts from Google; the no-referrer policy keeps the token out of those requests.
+The guest page loads its fonts from the app itself and contacts no third-party host.
 
 `access_log off` does **not** cover nginx's `error_log`: when the backend is down or times out, the error-log lines for `/api/public/share/…` and the OAuth callback can contain the token or one-time `code` in the request path. Treat nginx error logs as sensitive (restrict access, don't ship them to shared tooling).
 
