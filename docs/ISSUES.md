@@ -271,14 +271,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Trigger: a column pairs hasControls with a right-aligned header. Then apply the alignEnd treatment.
 - **Source:** snapshot line 1333, section "ReUI Data Grid phase — deferred findings (2026-08-01)"
 
-### ISS-053 · P3 · Sortable data-grid headers cannot be centered
-
-- **Type:** debt · **Found:** 2026-08-02 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** alignEnd in frontend/src/components/reui/data-grid/data-grid-column-header.tsx (line ~107); Risks columns in frontend/src/pages/views/ProjectRisks.tsx
-- **Problem:** The Probability and Impact columns stay unsortable so their headers can stay centered.
-- **Why deferred / fix direction:** Add alignCenter handling in the vendored header, then enable sorting.
-- **Source:** snapshot line 1425, section "Issues Sweep #1 — residuals (2026-08-02)"
-
 ### ISS-054 · P3 · Filter dedupe guard compares values with === (object values would not dedupe)
 
 - **Type:** watch · **Found:** 2026-08-02 · **Verified:** 2026-11-24 @ `670f206`
@@ -859,3 +851,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-210 · 2026-11-24 · CHANGELOG "Gantt row menu dialogs wait for their own menu only" · Gantt row-menu dialogs find their menu through a document-wide selector
 - ISS-103 · 2026-11-24 · CHANGELOG "Gantt section and reorder code tidied, no behaviour change" · Gantt section-id parsing lives outside the adapter
 - ISS-104 · 2026-11-24 · CHANGELOG "Gantt section and reorder code tidied, no behaviour change" · handleResourceReorder is one long three-branch callback
+- ISS-053 · 2026-11-24 · CHANGELOG "Sort risks by probability and impact" · Sortable data-grid headers cannot be centered

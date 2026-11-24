@@ -15,6 +15,9 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-24 — Sort risks by probability and impact
+
+- On a project's Risks tab (`frontend/src/pages/views/ProjectRisks.tsx`), the Probability and Impact columns can now be sorted from their headers, like Score and the other columns. They were left unsortable so their headers could stay centred, which the data grid's sortable header could not do. The vendored header (`frontend/src/components/reui/data-grid/data-grid-column-header.tsx`) now centres a sortable header when the column's header class is `text-center`, the same way it already right-aligns one for `text-right`.
 ### Changed — 2026-11-24 — Gantt section and reorder code tidied, no behaviour change
 
 - `frontend/src/components/gantt-v2/adapter.ts` has a new `parseSectionId`, the inverse of `sectionNodeId`. The Gantt (`SolvroGantt.tsx`) uses it in the collapse export, the reorder handler and the colour column, instead of cutting `"section-"` off ids in five places. A new unit test (`adapter.test.ts`) covers it.

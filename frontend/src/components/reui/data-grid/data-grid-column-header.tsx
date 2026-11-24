@@ -106,6 +106,10 @@ function DataGridColumnHeaderInner<TData, TValue>({
   const headerClassNameMeta = column.columnDef.meta?.headerClassName
   const alignEnd =
     typeof headerClassNameMeta === "string" && headerClassNameMeta.includes("text-right")
+  // SOLVRO PATCH — the same contract for centred columns: `meta.headerClassName:
+  // "text-center"` centres the sortable header row too (ISS-053).
+  const alignCenter =
+    typeof headerClassNameMeta === "string" && headerClassNameMeta.includes("text-center")
 
   const handleSort = () => {
     if (isSorted === "asc") {
@@ -489,7 +493,12 @@ function DataGridColumnHeaderInner<TData, TValue>({
     // margin to the trailing edge so it hugs the `<th>`'s right edge
     // instead of fighting it from the left.
     return (
-      <div className={cn("flex h-full items-center", alignEnd ? "-me-2 justify-end" : "-ms-2")}>
+      <div
+        className={cn(
+          "flex h-full items-center",
+          alignEnd ? "-me-2 justify-end" : alignCenter ? "justify-center" : "-ms-2",
+        )}
+      >
         <Button
           variant="ghost"
           className={headerButtonClassName}
