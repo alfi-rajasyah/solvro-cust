@@ -1,6 +1,6 @@
 # Replace fixed sleeps in the e2e suite with condition waits (ISS-146)
 
-Status: in progress (started 2026-11-24 @ `102ea27`)
+Status: shipped 2026-11-24
 Archive path: `docs/archive/plans/e2e-condition-waits.md`
 
 ## Goal
@@ -22,3 +22,10 @@ The Playwright specs call `page.waitForTimeout(...)` about 125 times. Each fixed
 - `waitForTimeout` count drops from about 125 to only the documented, load-bearing ones.
 - Each changed spec passes locally on its first attempt (no retry).
 - The e2e cleanup ran after every local run.
+
+## Outcome
+
+- 124 `waitForTimeout` calls drop to 3, each with a comment: the `touchDrag` hold for dnd-kit's 250ms TouchSensor delay, a press-hold that Base UI needs before it arms its mouseup click, and outwaiting the 350ms Outline search debounce to prove no request fires.
+- Playwright's `networkidle` fires once per document, so it cannot prove that nothing happened after an in-app action. `settleQuiet` in `e2e/fixtures/test.ts` watches `/api/` requests itself and returns after a quiet window; `settleAnimations` waits until a full frame passes with no finite animation running.
+- Local runs, desktop with `--retries=0`: every changed spec passed; task-conflict and kanban-dnd passed 3 runs out of 3. Mobile: kanban-dnd and smoke passed. embed-views has 1 failure that the original code shares (its share link expects `localhost:5173`, and the dev stack returns its public host).
+- Found on the way: ISS-218 (the conflict dialog can be open with no rows).

@@ -17,7 +17,7 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ### Changed — 2026-11-24 — End-to-end tests wait for conditions, not fixed sleeps
 
-- The Playwright specs under `e2e/tests/` now wait for the condition a step depends on (a pane rendering, a request finishing, an animation ending) instead of a fixed `waitForTimeout`; 129 sleeps drop to 3. The shared helpers in `e2e/fixtures/test.ts` (`loginViaUi`, `openKanban`, `mouseDrag`, `touchDrag`, `captureTaskRequests`) drive most of this. The 3 remaining sleeps each carry a comment: the touch-activation hold, a press-hold that a guard needs, and outwaiting a search debounce to prove no request fires.
+- The Playwright specs under `e2e/tests/` now wait for the condition a step depends on (a pane rendering, a request finishing, an animation ending) instead of a fixed `waitForTimeout`; 124 sleeps drop to 3. The shared helpers in `e2e/fixtures/test.ts` (`loginViaUi`, `openKanban`, `mouseDrag`, `touchDrag`, `captureTaskRequests`) drive most of this. The 3 remaining sleeps each carry a comment: the touch-activation hold, a press-hold that a guard needs, and outwaiting a search debounce to prove no request fires.
 
 ### Changed — 2026-11-24 — The app serves its own fonts
 
