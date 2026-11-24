@@ -334,6 +334,7 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Problem:** Two icons keep arbitrary sizes. (The uppercase "Needs role" chip was fixed 2026-11-20, CHANGELOG "Polish fixes: Portfolio Today marker, loaders, comment box, maskable icon".)
 - **Why deferred / fix direction:** Bound by ISS-056 (how Material Symbols sizes are set app-wide). Fix with the scale classes once ISS-056 is decided.
 - **Source:** phase review of `docs/archive/plans/design-cleanup.md`
+
 ### ISS-202 · P3 · Kanban cards list every subtask while a label filter is active
 
 - **Type:** decision · **Found:** 2026-11-20 · **Verified:** 2026-11-24 @ `670f206`

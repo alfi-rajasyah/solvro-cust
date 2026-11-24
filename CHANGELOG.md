@@ -22,18 +22,20 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 ### Changed — 2026-11-24 — Sort risks by probability and impact
 
 - On a project's Risks tab (`frontend/src/pages/views/ProjectRisks.tsx`), the Probability and Impact columns can now be sorted from their headers, like Score, Category and Status. They were left unsortable so their headers could stay centred, which the data grid's sortable header could not do. The vendored header (`frontend/src/components/reui/data-grid/data-grid-column-header.tsx`) now centres a sortable header when the column's header class is `text-center`, the same way it already right-aligns one for `text-right`.
-- On a project's Risks tab (`frontend/src/pages/views/ProjectRisks.tsx`), the Probability and Impact columns can now be sorted from their headers, like Score and the other columns. They were left unsortable so their headers could stay centred, which the data grid's sortable header could not do. The vendored header (`frontend/src/components/reui/data-grid/data-grid-column-header.tsx`) now centres a sortable header when the column's header class is `text-center`, the same way it already right-aligns one for `text-right`.
+
 ### Changed — 2026-11-24 — Gantt section and reorder code tidied, no behaviour change
 
 - `frontend/src/components/gantt-v2/adapter.ts` has a new `parseSectionId`, the inverse of `sectionNodeId`. The Gantt (`SolvroGantt.tsx`) uses it in the collapse export, the reorder handler and the colour column, instead of cutting `"section-"` off ids in five places. A new unit test (`adapter.test.ts`) covers it.
 - The Gantt row reorder handler (`handleResourceReorder` in `SolvroGantt.tsx`) was one long callback with three branches. Its two drop calculations, for a section and for a top-level task, now live in `frontend/src/components/gantt-v2/reorder.ts` as `sectionReorderPatches` and `topLevelTaskMove`, with unit tests (`reorder.test.ts`). The callback keeps the permission checks and the save calls.
+
 ### Fixed — 2026-11-24 — Gantt row menu dialogs wait for their own menu only
 
 - The Edit, Add subtask and Delete items of the Gantt row menu (`frontend/src/components/gantt-v2/SolvroGantt.tsx`) open their dialog once the menu has closed. They checked for that by searching the whole page for any row menu, so a second matching menu could hold the dialog back for up to a second. They now watch only the menu the item belongs to.
+
 ### Changed — 2026-11-24 — The nginx upload limit follows ATTACHMENT_MAX_FILE_MB
 
 - The bundled nginx (`frontend/nginx.conf`) now sets the body limit of the attachment upload path from `ATTACHMENT_MAX_FILE_MB`: the value rounded up plus 1 MB for the multipart envelope, 26 MB by default as before. A start script in the frontend image (`frontend/nginx-attachment-body-limit.envsh`) writes it; an unset or invalid value keeps 26 MB and logs why. `setup.sh` now passes `ATTACHMENT_MAX_FILE_MB` to the frontend container. Before, raising the setting past 25 made larger uploads fail at nginx until `nginx.conf` was edited by hand. A new CI step (`ci/check-attachment-body-limit.sh`) checks the rendered limit against the built image for valid and invalid values.
-- The bundled nginx (`frontend/nginx.conf`) now sets the body limit of the attachment upload path from `ATTACHMENT_MAX_FILE_MB`: the value rounded up plus 1 MB for the multipart envelope, 26 MB by default as before. A start script in the frontend image (`frontend/nginx-attachment-body-limit.envsh`) writes it; an unset or invalid value keeps 26 MB and logs why. `setup.sh` now passes `ATTACHMENT_MAX_FILE_MB` to the frontend container. Before, raising the setting past 25 made larger uploads fail at nginx until `nginx.conf` was edited by hand.
+
 ### Changed — 2026-11-24 — solvro backup and solvro update also back up attachments
 
 - `solvro backup` and the backup step of `solvro update` (`setup.sh`) now also write an archive of the `solvro_uploads` volume to `~/solvro/backups/solvro_uploads-<release>-<date>-<time>.tar.gz` (mode 600), next to the database dump. Before, they backed up only the database, so attachment files needed a manual step. With `ATTACHMENTS_DRIVER=s3` the bucket keeps the files and no archive is written. A one-off container of the installed backend image writes the archive, so the backup also works while the backend is stopped or restarting, and no other image is pulled. `INSTALL.md`, `OPERATIONS.md` and `docs/CONFIGURATION.md` describe the new behaviour.
@@ -41,12 +43,15 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 ### Added — 2026-11-24 — Attachment e2e tests for read-only members and the server type check
 
 - `e2e/tests/task-attachments.spec.ts` has two new tests. A project member with the built-in STAKEHOLDER role (`project:read`, no `task:write`) sees and downloads a file, sees no Attach or Delete control, and the server refuses that member's upload with 403. A direct upload of a disallowed file type gets the server's 415 `attachment_type_not_allowed`, which the browser's own type check otherwise hides.
+
 ### Changed — 2026-11-24 — Dropdown submenus can rise above a modal
 
 - `DropdownMenuSubContent` (`frontend/src/components/ui/dropdown-menu.tsx`) takes an optional `positionerClassName`, the same prop `DropdownMenuContent` already has. A submenu opened from a menu inside a modal or drawer can now set its z-index above the host. Existing submenus do not change. A new test (`dropdown-menu.test.tsx`) covers the prop.
+
 ### Fixed — 2026-11-24 — Escape during a drag no longer closes the open panel after a re-render
 
 - The task panel, epic panel, iTop ticket panel, drawer and modal (`frontend/src/components/TaskPanel.tsx`, `EpicPanel.tsx`, `itop/TicketPanel.tsx`, `Drawer.tsx`, `Modal.tsx`) now add their Escape listener once, when they open, and read the latest close handler from a ref. Before, a page re-render during a keyboard drag re-added the listener behind the drag library's own, so the Escape that cancelled the drag also closed the panel.
+
 ### Fixed — 2026-11-24 — E2E cleanup also deletes stored attachment files
 
 - `backend/scripts/dev/cleanup-e2e-data.ts` now deletes the stored files of the attachments on the e2e projects it removes, right after the rows. Before, those files stayed in the bucket or volume until the daily orphan sweep, at least 24 hours later.
