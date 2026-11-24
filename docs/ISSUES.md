@@ -32,14 +32,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Decide whether delete should use the same rule as the owner change (owner, view-all, or TAM of every project): drop the `tamId: null` arm under `ownership` and require TAM-of-all-projects, as `reassignableCustomerIds` does.
 - **Source:** snapshot line 2358, section "Internal sync — deferred findings (2026-10-09)"
 
-### ISS-004 · P2 · zod 3 has a memory-exhaustion advisory fixed only in zod 4
-
-- **Type:** debt · **Found:** 2026-10-25 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** zod dependency in backend/package.json (line ~41)
-- **Problem:** Oversized constrained collections can exhaust memory (GHSA-mrhx-c7xc-m3w5). Request bodies are capped at 1 MB, and the audit step fails on this finding.
-- **Why deferred / fix direction:** The zod 4 migration touches about 35 files and is its own change.
-- **Source:** snapshot line 2421, section "Dependency advisories — remaining (2026-10-25)"
-
 ### ISS-006 · P3 · Per-email sign-in lockout can be triggered against a colleague
 
 - **Type:** watch · **Found:** 2026-10-22 · **Verified:** 2026-11-24 @ `670f206`
@@ -826,3 +818,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-217 · 2026-11-24 · CHANGELOG "Attachment temp-file test no longer fails at random" · Attachment temp-file test counts the whole OS temp folder
 - ISS-170 · 2026-11-24 · docs/DESIGN.md frontmatter and §0 now name system as the default · DESIGN.md says theme_default dark but the code defaults to system
 - ISS-084 · 2026-11-24 · CHANGELOG "The favicon stays readable on dark browser tabs" · Favicon reads weakly on dark browser tab strips
+- ISS-004 · 2026-11-24 · CHANGELOG "Backend request validation upgraded to zod 4" · zod 3 has a memory-exhaustion advisory fixed only in zod 4

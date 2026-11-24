@@ -65,7 +65,7 @@ export const attachmentEnvShape = {
       const trimmed = (value ?? "").trim().replace(/^\/+/, "").replace(/\/+$/, "");
       return trimmed ? `${trimmed}/` : undefined;
     }),
-  S3_FORCE_PATH_STYLE: z.preprocess(blankToUndefined, boolish.default("false")),
+  S3_FORCE_PATH_STYLE: z.preprocess(blankToUndefined, boolish.prefault("false")),
 };
 
 const S3_REQUIRED = [
