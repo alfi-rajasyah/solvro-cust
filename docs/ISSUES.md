@@ -138,14 +138,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Trigger: profiling shows the sub-200ms NFR missed. Then try updateMany with a returned-row check.
 - **Source:** snapshot line 347, section "Tech debt / follow-ups from recent work"
 
-### ISS-020 · P3 · Section default color hex is duplicated between schema and frontend
-
-- **Type:** debt · **Found:** 2026-07-22 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** DEFAULT_SECTION_COLOR in frontend/src/lib/gantt/palette.ts (line 32); Section.color in backend/prisma/schema.prisma (line ~655)
-- **Problem:** The slate default exists in the schema and in the frontend constant, and resolveSectionColors compares against it. Changing one without the other stops uncustomized sections being recognised.
-- **Why deferred / fix direction:** Export one shared constant, or add an isCustom boolean on Section.
-- **Source:** snapshot line 419, section "Tech debt / follow-ups from recent work"
-
 ### ISS-021 · P3 · Task reorder repack issues one UPDATE per displaced sibling
 
 - **Type:** watch · **Found:** 2026-07-22 · **Verified:** 2026-11-24 @ `670f206`
@@ -900,3 +892,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-031 · 2026-11-23 · CHANGELOG "Task attachments" · Task attachments are not built; storage and visibility are undecided
 - ISS-215 · 2026-11-24 · CHANGELOG "E2E cleanup also deletes stored attachment files" · E2E cleanup leaves stored attachment objects until the daily sweep
 - ISS-193 · 2026-11-24 · CHANGELOG "Escape during a drag no longer closes the open panel after a re-render" · The Escape drag guard depends on listener order
+- ISS-020 · 2026-11-24 · gates.sh `section-default-color-parity` (the packages share no module, so a gate keeps the two values equal) · Section default color hex is duplicated between schema and frontend
