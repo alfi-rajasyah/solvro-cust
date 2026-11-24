@@ -17,7 +17,7 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ### Security — 2026-11-24 — Backend request validation upgraded to zod 4
 
-- The backend validation library (zod) moves from 3 to 4 (`backend/package.json`), which clears advisory GHSA-mrhx-c7xc-m3w5 (memory exhaustion on crafted input) from the production dependency audit. API requests, responses and the error body shape are unchanged; the wording of individual validation messages inside `details.fieldErrors` follows zod 4. The one schema that needed a code change, `S3_FORCE_PATH_STYLE` in `backend/src/lib/attachments/config.ts`, still defaults to false.
+- The backend validation library (zod) moves from 3 to 4 (`backend/package.json`), which clears advisory GHSA-mrhx-c7xc-m3w5 (memory exhaustion on crafted input) from the production dependency audit. Every valid API request, response and the error body shape are unchanged; the wording of individual validation messages inside `details.fieldErrors` follows zod 4. A few malformed inputs that zod 3 let through are now refused: a date-time offset without a colon (`+0200` instead of `+02:00`), an Outline document id that is not a standard UUID, an integer above JavaScript's safe-integer limit, and `Infinity` as `ATTACHMENT_MAX_FILE_MB` or `ATTACHMENT_MAX_TASK_MB`. The one schema that needed a code change, `S3_FORCE_PATH_STYLE` in `backend/src/lib/attachments/config.ts`, still defaults to false.
 
 ### Fixed — 2026-11-24 — The favicon stays readable on dark browser tabs
 
