@@ -204,14 +204,6 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Question: reject inactive users (with which error code) or keep accepting them?.
 - **Source:** snapshot line 53, section "Known bugs / inconsistencies"
 
-### ISS-031 · P3 · Task attachments are not built; storage and visibility are undecided
-
-- **Type:** decision · **Found:** 2026-07-01 · **Verified:** 2026-11-18 @ `6dd7592`
-- **Where:** Task model in backend/prisma/schema.prisma (no attachment model)
-- **Problem:** Solvro has no attachments on tasks or customers. Storage, size limits and export visibility have not been decided.
-- **Why deferred / fix direction:** Question: build attachments, and if so where do files live, what size limit applies, and are they exported?.
-- **Source:** snapshot line 289, section "Pending features (not yet built)"
-
 ### ISS-032 · P3 · Daily Review, search and portfolio task selects omit isCriticalPath
 
 - **Type:** watch · **Found:** 2026-09-02 · **Verified:** 2026-11-18 @ `6dd7592`
@@ -719,6 +711,22 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Why deferred / fix direction:** Re-test with realistic row counts when tables grow.
 - **Source:** snapshot line 2441, section "Data integrity, session and query performance — deferred findings (2026-10-26)"
 
+### ISS-212 · P3 · Attachment e2e has no read-only case and never reaches the server's 415
+
+- **Type:** test-gap · **Found:** 2026-11-23 · **Verified:** 2026-11-23 @ `bcdaf86`
+- **Where:** e2e/tests/task-attachments.spec.ts; the e2e fixtures
+- **Problem:** The spec covers no read-only user, and the client pre-check refuses a disallowed type before the server's 415 can be reached. The fixtures have no `project:read`-only user.
+- **Why deferred / fix direction:** Add a fixture that creates an `@solvro.test` user with a project:read-only role and a project membership.
+- **Source:** task-attachments phase review (GitHub #137)
+
+### ISS-216 · P3 · Task statuses concurrent_update test got 401 once in a full-suite run
+
+- **Type:** watch · **Found:** 2026-11-23 · **Verified:** 2026-11-23 @ `bcdaf86`
+- **Where:** "answers 409 concurrent_update within the bounded wait, then succeeds once the lock is released" in backend/test/taskStatuses.test.ts
+- **Problem:** It answered 401 instead of 200 once in a full backend suite run (2026-11-23) and passed 2 of 2 alone.
+- **Why deferred / fix direction:** Investigate token and session timing under suite load; trigger: recurrence.
+- **Source:** task-attachments phase review (GitHub #137)
+
 ## Open — Dev env & ops
 
 ### ISS-166 · P3 · Dev backend tsx watch sometimes misses file edits
@@ -736,6 +744,30 @@ Last full triage: 2026-11-18 @ `6dd7592`. The file before the restructure is kep
 - **Problem:** npm audit fix fails with 'Cannot read properties of null (reading edgesOut)'. Targeted npm update with --package-lock-only works.
 - **Why deferred / fix direction:** Trigger: npm upgrade. Use targeted npm update inside the container meanwhile.
 - **Source:** snapshot line 2425, section "Dependency advisories — remaining (2026-10-25)"
+
+### ISS-213 · P3 · solvro backup and solvro update do not back up the attachments volume
+
+- **Type:** debt · **Found:** 2026-11-23 · **Verified:** 2026-11-23 @ `bcdaf86`
+- **Where:** backup and update commands in setup.sh
+- **Problem:** Both back up only the database, not the `solvro_uploads` volume. The manual tar one-liner is in docs/CONFIGURATION.md 2.18.
+- **Why deferred / fix direction:** Optionally tar the volume into `~/solvro/backups/`.
+- **Source:** task-attachments phase review (GitHub #137)
+
+### ISS-214 · P3 · ATTACHMENT_MAX_FILE_MB above 25 also needs the nginx body limit raised
+
+- **Type:** debt · **Found:** 2026-11-23 · **Verified:** 2026-11-23 @ `bcdaf86`
+- **Where:** `client_max_body_size 26m` in the attachment upload location of frontend/nginx.conf
+- **Problem:** The nginx limit is hardcoded, so raising `ATTACHMENT_MAX_FILE_MB` past 25 fails at nginx until the file is edited. It is documented in CONFIGURATION.md 2.1.
+- **Why deferred / fix direction:** Template the nginx limit from env at container start, or keep it documented only.
+- **Source:** task-attachments phase review (GitHub #137)
+
+### ISS-215 · P3 · E2E cleanup leaves stored attachment objects until the daily sweep
+
+- **Type:** debt · **Found:** 2026-11-23 · **Verified:** 2026-11-23 @ `bcdaf86`
+- **Where:** backend/scripts/dev/cleanup-e2e-data.ts
+- **Problem:** The script deletes database rows only; stored objects of deleted e2e tasks stay in the bucket until the daily sweep (24 h minimum age).
+- **Why deferred / fix direction:** Call the attachment-key collection and `deleteStoredObjects` from the cleanup.
+- **Source:** task-attachments phase review (GitHub #137)
 
 ## Open — Docs & process
 
@@ -880,3 +912,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-207 · 2026-11-20 · CHANGELOG "Focus rings on toggles and forced-colours focus for borderless controls" (also the Kanban, List and Timeline Filter triggers, through the shared component) · Project context toggle and active bordered toggles have a weak keyboard focus cue
 - ISS-208 · 2026-11-20 · CHANGELOG "Focus rings on toggles and forced-colours focus for borderless controls" · About 35 borderless controls drop their focus indicator in forced-colours mode
 - ISS-209 · 2026-11-20 · CHANGELOG "Keyboard focus ring on tab links" · Project tab links have no explicit keyboard focus treatment
+- ISS-031 · 2026-11-23 · CHANGELOG "Task attachments" · Task attachments are not built; storage and visibility are undecided

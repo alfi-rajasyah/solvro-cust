@@ -105,6 +105,7 @@ model User {
   assignedTasks          Task[]
   epicsOwned             Epic[]
   comments               Comment[]
+  taskAttachments        TaskAttachment[]
   projectNotes           ProjectNote[]
   authConfigUpdates      AuthConfig[]            @relation("AuthConfigUpdatedBy")
   tamCustomers           Customer[]              @relation("CustomerTam")
@@ -578,6 +579,7 @@ model Task {
   position          Int              @default(0) @map("position")
   labels            Label[]
   comments          Comment[]
+  attachments       TaskAttachment[]
   // Dependency edges (Gantt connector arrows).
   predecessors      TaskDependency[] @relation("DependencySuccessor")
   successors        TaskDependency[] @relation("DependencyPredecessor")
@@ -716,6 +718,25 @@ model Comment {
   @@index([taskId])
   @@index([authorId])
   @@map("comments")
+}
+
+model TaskAttachment {
+  id           Int      @id @default(autoincrement())
+  taskId       Int      @map("task_id")
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  // The user's file name, cleaned; never used as a path. The stored object is
+  // addressed only by storageKey.
+  fileName     String   @map("file_name")
+  mimeType     String   @map("mime_type")
+  sizeBytes    Int      @map("size_bytes")
+  // Generated key (tasks/<taskId>/<uuid>) in whichever storage driver is active.
+  storageKey   String   @unique @map("storage_key")
+  uploadedById Int?     @map("uploaded_by_id")
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([taskId])
+  @@map("task_attachments")
 }
 
 model Risk {

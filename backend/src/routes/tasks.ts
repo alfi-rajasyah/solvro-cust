@@ -33,6 +33,7 @@ import { assertUserExists } from "../lib/userRefs.js";
 import { diffTaskChanges, recordActivity } from "../lib/activity.js";
 import { filterActiveUsersWhoCanSeeProject, notifyForEvent } from "../lib/notifications.js";
 import { storyPointsField } from "../lib/storyPoints.js";
+import { collectTaskAttachmentKeys, deleteStoredObjects } from "../lib/attachments/cleanup.js";
 import { bulkTasksSchema, bulkUpdateTasks, type BulkTasksBody } from "../lib/bulkTasks.js";
 
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
@@ -733,7 +734,7 @@ tasksRouter.delete(
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
     await ensureTaskVisible(req.user!, id);
-    await prisma.$transaction(async (tx) => {
+    const storedKeys = await prisma.$transaction(async (tx) => {
       const task = await tx.task.findUnique({
         where: { id },
         select: { projectId: true, title: true, parentTaskId: true },
@@ -741,6 +742,11 @@ tasksRouter.delete(
       if (!task) throw new HttpError(404, "not_found", "Task not found");
       // The delete re-packs the sibling list: take the order lock first.
       await lockProjectOrder(tx, "tasks", task.projectId);
+      // Attachment rows go with the task (cascade); their files are removed
+      // after the commit. Lock the task and its subtasks first: an upload
+      // commits before the keys are read, or finds the task gone.
+      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${id} OR parent_task_id = ${id} FOR UPDATE`;
+      const keys = await collectTaskAttachmentKeys(tx, id);
       await tx.task.delete({ where: { id } });
       await closeGap(tx, { projectId: task.projectId, parentTaskId: task.parentTaskId }, id);
       await recordActivity(tx, {
@@ -751,7 +757,9 @@ tasksRouter.delete(
         action: "deleted",
         entityLabel: task.title,
       });
+      return keys;
     });
+    void deleteStoredObjects(storedKeys);
     res.status(204).end();
   },
 );

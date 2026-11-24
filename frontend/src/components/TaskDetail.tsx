@@ -10,6 +10,7 @@ import { EpicChip } from "./EpicChip";
 import { InlineDateRangeEditor } from "./InlineDateRangeEditor";
 import { LabelPicker } from "./LabelPicker";
 import { OutlineMentions } from "./OutlineMentions";
+import { TaskAttachments } from "./TaskAttachments";
 import { TaskConflictDialog } from "./TaskConflictDialog";
 import { RowTicketCell, type RowTicketContext } from "@/components/itop/RowTicketCell";
 import { TaskTicketField } from "@/components/itop/TaskTicketField";
@@ -1106,6 +1107,12 @@ export function TaskDetail({ projectId, taskId, layout, onOpenTask, renderHeader
     </>
   );
 
+  const attachmentsBlock = (cls: string) => (
+    <div className={cls}>
+      <TaskAttachments taskId={task.id} canEdit={canEdit} />
+    </div>
+  );
+
   const commentsBlock = (cls: string) => (
     <>
       {/* Comments */}
@@ -1146,7 +1153,7 @@ export function TaskDetail({ projectId, taskId, layout, onOpenTask, renderHeader
 
   if (layout === "page") {
     // DOM order is the reading order at every width: title and description,
-    // the fields, then subtasks, Outline pages and comments. One column below
+    // the fields, then subtasks, Outline pages, attachments and comments. One column below
     // md (so the fields come right after the description on a phone); from md
     // the grid places the fields in a side column spanning both rows, so
     // keyboard focus and screen readers meet the same order the eye does.
@@ -1171,6 +1178,7 @@ export function TaskDetail({ projectId, taskId, layout, onOpenTask, renderHeader
             <div className="md:col-start-1 md:row-start-2">
               {subtasksBlock("")}
               {outlineBlock}
+              {attachmentsBlock("mt-6 border-t border-outline-variant pt-4")}
               {commentsBlock("mt-6 border-t border-outline-variant pt-4")}
             </div>
           </div>
@@ -1192,6 +1200,7 @@ export function TaskDetail({ projectId, taskId, layout, onOpenTask, renderHeader
         {labelsBlock("mt-4")}
         {subtasksBlock("mt-4")}
         {outlineBlock}
+        {attachmentsBlock("mt-5 border-t border-outline-variant pt-4")}
         {commentsBlock("mt-5 border-t border-outline-variant pt-4")}
       </div>
       {dialogs}

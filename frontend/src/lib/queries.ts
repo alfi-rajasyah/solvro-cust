@@ -14,6 +14,8 @@ import {
   LONG_TIMEOUT_MS,
   apiRequest,
   apiRequestWithHeaders,
+  apiUploadForm,
+  type UploadProgress,
   setToken,
   setTokenRotating,
 } from "./api";
@@ -888,6 +890,8 @@ export const queryKeys = {
     [...queryKeys.customerNotesRoot(id), limit] as const,
   tasks: (filter?: TasksFilter) => ["tasks", filter ?? {}] as const,
   comments: (taskId: number) => ["tasks", taskId, "comments"] as const,
+  taskAttachments: (taskId: number) => ["tasks", taskId, "attachments"] as const,
+  attachmentConfig: ["attachments", "config"] as const,
   // One task by id (the /tasks/:id page). Sits under the ["tasks"] prefix on
   // purpose: every task mutation already invalidates that prefix, so the page's
   // copy refreshes with the list views. Nothing else may be keyed here.
@@ -2661,6 +2665,74 @@ export function useComments(taskId: number | null) {
     queryFn: ({ signal }) =>
       apiRequest<Comment[]>(`/tasks/${taskId}/comments`, { signal }),
     enabled: taskId !== null,
+  });
+}
+
+// ---- Task attachments (docs/archive/plans/task-attachments.md) ----------------
+export interface AttachmentConfig {
+  maxFileBytes: number;
+  maxFilesPerTask: number;
+  maxTaskBytes: number;
+  allowedExtensions: string[];
+}
+
+export interface TaskAttachment {
+  id: number;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+  uploadedBy: { id: number; name: string } | null;
+}
+
+export function useAttachmentConfig() {
+  return useQuery({
+    queryKey: queryKeys.attachmentConfig,
+    queryFn: ({ signal }) => apiRequest<AttachmentConfig>("/attachments/config", { signal }),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useTaskAttachments(taskId: number | null) {
+  return useQuery({
+    queryKey: taskId ? queryKeys.taskAttachments(taskId) : ["tasks", "noop", "attachments"],
+    queryFn: ({ signal }) =>
+      apiRequest<TaskAttachment[]>(`/tasks/${taskId}/attachments`, { signal }),
+    enabled: taskId !== null,
+  });
+}
+
+/** One file per call (the server checks the limits per file); the caller queues several. */
+export function useUploadAttachment(taskId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      file,
+      onProgress,
+      signal,
+    }: {
+      file: File;
+      onProgress?: (p: UploadProgress) => void;
+      signal?: AbortSignal;
+    }) => {
+      const form = new FormData();
+      form.append("file", file);
+      return apiUploadForm<TaskAttachment>(`/tasks/${taskId}/attachments`, form, { onProgress, signal });
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.taskAttachments(taskId) });
+    },
+  });
+}
+
+export function useDeleteAttachment(taskId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (attachmentId: number) =>
+      apiRequest<void>(`/attachments/${attachmentId}`, { method: "DELETE" }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.taskAttachments(taskId) });
+    },
   });
 }
 

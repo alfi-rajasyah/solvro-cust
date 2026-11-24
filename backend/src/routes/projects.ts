@@ -10,6 +10,7 @@ import {
   TaskStatus,
 } from "@prisma/client";
 import { prisma } from "../prisma.js";
+import { collectProjectAttachmentKeys, deleteStoredObjects } from "../lib/attachments/cleanup.js";
 import { logger } from "../logger.js";
 import { hasPermission, requireAuth, requirePermission } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
@@ -614,9 +615,16 @@ projectsRouter.delete(
           projectName: project.name,
         })),
       });
+      // Attachment rows go with the project's tasks (cascade); their files
+      // are removed after the commit.
+      // Lock the project's tasks first (the lock an upload takes): an upload
+      // commits before the keys are read, or finds its task gone.
+      await tx.$queryRaw`SELECT id FROM tasks WHERE project_id = ${id} FOR UPDATE`;
+      const storedKeys = await collectProjectAttachmentKeys(tx, id);
       await tx.project.delete({ where: { id } });
-      return project;
+      return { ...project, storedKeys };
     });
+    void deleteStoredObjects(deleted.storedKeys);
     logger.info(
       {
         event: "project.deleted",

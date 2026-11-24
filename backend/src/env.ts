@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { z } from "zod";
 import { parseTrustProxy } from "./http/trustProxy.js";
+import { attachmentEnvShape, checkAttachmentConfig } from "./lib/attachments/config.js";
 import { resolveAppUrl } from "./lib/outline/appUrl.js";
 
 const schema = z.object({
@@ -99,7 +100,11 @@ const schema = z.object({
     .transform((value) => value.trim().toLowerCase())
     .pipe(z.enum(["true", "false", "1", "0", "yes", "no"]))
     .transform((value) => value === "true" || value === "1" || value === "yes"),
-});
+  // Task attachments: storage driver, limits, allowlist and the S3 settings
+  // (lib/attachments/config.ts). A driver of "s3" with an S3_* value missing
+  // fails start-up below.
+  ...attachmentEnvShape,
+}).superRefine((value, ctx) => checkAttachmentConfig(value, ctx));
 
 const parsed = schema.safeParse(process.env);
 if (!parsed.success) {

@@ -15,6 +15,22 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-23 — Task attachments
+
+- An Attachments section in the task side panel and on the task page (`frontend/src/components/TaskAttachments.tsx`) lets you attach files to a task: pick several at once, see every limit and the allowed file types above the Attach files button, follow a progress bar for each file, and dismiss an error for a file that was refused. Each file shows its name (non-Latin names are kept intact), size, uploader and date, with a download button and a delete that asks first. People without permission to edit tasks can see and download the files but not add or remove them.
+- New API (`backend/src/routes/attachments.ts`): `GET` and `POST /tasks/:id/attachments`, `GET` and `DELETE /attachments/:id`, and `GET /attachments/config` for the limits and allowed file types. Uploads are checked for file type, size per file, file count and total size per task, and the limits hold when uploads arrive at the same time. A task you cannot see answers 404 on every route, before any file data is read. Downloads always come through the server as attachments, so the task's visibility is checked on every download.
+- Deleting a task (with its subtasks) or a project also deletes its files from storage, and a daily job removes stored files that no longer belong to a task.
+
+### Added — 2026-11-23 — Task attachments: storage and deployment
+
+- A new `task_attachments` table (`backend/prisma/schema.prisma`, migration `20261123181600_task_attachments`) records each file attached to a task: name, type, size, storage key, uploader and date. Rows go with their task; the uploader reference is cleared when the user is deleted.
+- Attachment files can live in any S3-compatible bucket (AWS S3, MinIO, Silo, Garage) with `ATTACHMENTS_DRIVER=s3` and `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`, or on a local volume (`ATTACHMENTS_DRIVER=local`, the default, under `ATTACHMENTS_DIR`). `S3_ENDPOINT` and `S3_FORCE_PATH_STYLE` cover stores other than AWS S3, and `S3_KEY_PREFIX` lets several installs share one bucket. The storage layer is in `backend/src/lib/attachments/`. The backend refuses to start when the S3 driver is selected and a required `S3_*` value is missing, or when the allowed-extensions list is empty; a blank setting counts as unset.
+- New optional settings `ATTACHMENT_MAX_FILE_MB` (25), `ATTACHMENT_MAX_FILES_PER_TASK` (20), `ATTACHMENT_MAX_TASK_MB` (100) and `ATTACHMENT_ALLOWED_EXTENSIONS` set the limits and the allowed file types.
+- `setup.sh` creates a `solvro_uploads` Docker volume, mounts it in the backend at `/app/uploads`, and writes the attachment defaults to `.env`. Upgrades and re-runs keep the volume. A fresh install over a server that already has the database or attachments volume stops unless `FORCE_FRESH=1` is set, because it would delete both. The backend image creates `/app/uploads`.
+- The bundled nginx (`frontend/nginx.conf`) accepts uploads of up to 26 MB on `POST /api/tasks/<id>/attachments` only and streams them to the backend; every other API path keeps its 1 MB limit.
+- New backend dependencies: `multer`, `@aws-sdk/client-s3` and `@aws-sdk/lib-storage`.
+- `docs/CONFIGURATION.md`, `OPERATIONS.md` and `INSTALL.md` document the new settings, the volume, how to back it up, and how to switch a server to S3.
+
 ### Added — 2026-11-23 — Task page
 
 - A task has its own page at `/tasks/:id` (`frontend/src/pages/TaskPage.tsx`). It shows the same fields as the side panel: two columns on a wide screen (title, description, subtasks and comments on the left; the task fields on the right) and one column on a phone. The top bar shows a breadcrumb through the task's project. A task that does not exist, or that you cannot see, shows a not-found page.

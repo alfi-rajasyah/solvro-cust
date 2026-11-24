@@ -1,3 +1,5 @@
+import os from "node:os";
+import path from "node:path";
 // Must be imported before anything that touches src/env.ts (which parses
 // process.env at import time). The DEFAULT, sanctioned way to run this
 // suite is against the isolated `solvro_test` database inside the existing
@@ -21,3 +23,13 @@ process.env.CORS_ORIGIN = process.env.CORS_ORIGIN ?? "*";
 process.env.LOG_LEVEL = process.env.LOG_LEVEL ?? "error";
 // Pinned so URL expectations never depend on the host environment.
 process.env.APP_URL = "http://localhost:5173";
+// Attachments: always the local driver on a throwaway folder (never the dev
+// bucket, even when the container has S3 settings), with tiny limits so the
+// limit tests stay small: 1 KiB per file, 3 files and 2 KiB per task.
+process.env.ATTACHMENTS_DRIVER = "local";
+// The folder test/globalSetup.ts empties before the run and removes after it.
+process.env.ATTACHMENTS_DIR = path.join(os.tmpdir(), "solvro-test-uploads");
+process.env.ATTACHMENT_MAX_FILE_MB = String(1024 / (1024 * 1024));
+process.env.ATTACHMENT_MAX_FILES_PER_TASK = "3";
+process.env.ATTACHMENT_MAX_TASK_MB = String(2048 / (1024 * 1024));
+process.env.ATTACHMENT_ALLOWED_EXTENSIONS = "png,pdf,txt";
