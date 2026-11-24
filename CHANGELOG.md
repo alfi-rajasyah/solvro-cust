@@ -15,6 +15,9 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-24 — Attachment e2e tests for read-only members and the server type check
+
+- `e2e/tests/task-attachments.spec.ts` has two new tests. A project member with the built-in STAKEHOLDER role (`project:read`, no `task:write`) sees and downloads a file, sees no Attach or Delete control, and the server refuses that member's upload with 403. A direct upload of a disallowed file type gets the server's 415 `attachment_type_not_allowed`, which the browser's own type check otherwise hides.
 ### Changed — 2026-11-24 — Dropdown submenus can rise above a modal
 
 - `DropdownMenuSubContent` (`frontend/src/components/ui/dropdown-menu.tsx`) takes an optional `positionerClassName`, the same prop `DropdownMenuContent` already has. A submenu opened from a menu inside a modal or drawer can now set its z-index above the host. Existing submenus do not change. A new test (`dropdown-menu.test.tsx`) covers the prop.
