@@ -267,8 +267,8 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 
 - **Type:** watch · **Found:** 2026-08-01 · **Verified:** 2026-11-24 @ `670f206`
 - **Where:** hasControls branch in frontend/src/components/reui/data-grid/data-grid-column-header.tsx (lines ~436-440)
-- **Problem:** The move/pin/visibility branch skips the right-align treatment. No shipped grid reaches it.
-- **Why deferred / fix direction:** Trigger: a column pairs hasControls with a right-aligned header. Then apply the alignEnd treatment.
+- **Problem:** The move/pin/visibility branch skips the right-align and centre-align treatments (`alignEnd`, `alignCenter`). No shipped grid reaches it.
+- **Why deferred / fix direction:** Trigger: a column pairs hasControls with a `text-right` or `text-center` header. Then apply the same justify treatment.
 - **Source:** snapshot line 1333, section "ReUI Data Grid phase — deferred findings (2026-08-01)"
 
 ### ISS-054 · P3 · Filter dedupe guard compares values with === (object values would not dedupe)

@@ -438,11 +438,11 @@ function DataGridColumnHeaderInner<TData, TValue>({
   ])
 
   if (hasControls) {
-    // SOLVRO PATCH note — KNOWN GAP: this branch ignores the `alignEnd`
-    // right-align convention (see `alignEnd` above). Unreachable today
-    // (no page enables column filters/move/visibility/pin), but the first
-    // column that pairs `hasControls` with meta.headerClassName
-    // "text-right" needs this branch taught the same trick.
+    // SOLVRO PATCH note — KNOWN GAP: this branch ignores the `alignEnd` and
+    // `alignCenter` conventions (see above). Unreachable today (no page
+    // enables column filters/move/visibility/pin), but the first column that
+    // pairs `hasControls` with meta.headerClassName "text-right" or
+    // "text-center" needs this branch taught the same trick.
     return (
       <div className="-ms-2 flex h-full items-center justify-between gap-1.5">
         <DropdownMenu>
@@ -491,7 +491,9 @@ function DataGridColumnHeaderInner<TData, TValue>({
     // it at all. `justify-end` reproduces the intent explicitly; `-me-2`
     // (was unconditionally `-ms-2`) mirrors the Button's own negative
     // margin to the trailing edge so it hugs the `<th>`'s right edge
-    // instead of fighting it from the left.
+    // instead of fighting it from the left. The `alignCenter` arm takes no
+    // negative margin: the Button's padding is the same on both sides, so
+    // centring needs no correction.
     return (
       <div
         className={cn(
