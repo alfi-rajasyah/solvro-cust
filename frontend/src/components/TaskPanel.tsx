@@ -51,12 +51,21 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
   const setDeleteConfirmOpen = useCallback((open: boolean) => {
     deleteConfirmRef.current = open;
   }, []);
+  // The Escape listener subscribes once, on mount, so it always runs before the
+  // listener dnd-kit adds when a drag starts and isDragActive() still sees the
+  // drag. Re-subscribing on every new onClose (a parent re-render mid-drag)
+  // would put it after dnd-kit's, and the Escape that cancels the drag would
+  // also close the panel (ISS-193). The ref keeps the latest onClose.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
   useEffect(() => {
     function snapshot(e: KeyboardEvent) {
       if (e.key === "Escape") escapeBlockedRef.current = bodyOverlayRef.current || deleteConfirmRef.current;
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !escapeBlockedRef.current && !isDragActive()) onClose();
+      if (e.key === "Escape" && !escapeBlockedRef.current && !isDragActive()) onCloseRef.current();
     }
     document.addEventListener("keydown", snapshot, true);
     document.addEventListener("keydown", onKey);
@@ -64,7 +73,7 @@ export function TaskPanel({ projectId, taskId, onOpenTask, onClose }: TaskPanelP
       document.removeEventListener("keydown", snapshot, true);
       document.removeEventListener("keydown", onKey);
     };
-  }, [onClose]);
+  }, []);
 
   if (!task) {
     // `tasks` undefined = still loading; once it has loaded, a missing task was

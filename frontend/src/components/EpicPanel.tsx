@@ -136,6 +136,12 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
   // and returns to the opener on close.
   usePanelFocus(panelRef, epicId, isError ? "error" : isLoading || !epic ? "loading" : "ready");
 
+  // Latest onClose in a ref, so the Escape listener does not re-subscribe on a
+  // new onClose mid-drag and run after dnd-kit's (see isDragActive in Modal.tsx).
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
@@ -144,11 +150,11 @@ export function EpicPanel({ projectId, epicId, onClose }: EpicPanelProps) {
       // Escape key, so a single press closes only it, not both.
       if (searchParamsRef.current.get("task") !== null) return;
       if (isDragActive()) return;
-      onClose();
+      onCloseRef.current();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, []);
 
   // Reset transient UI whenever the panel targets a DIFFERENT epic — mirrors
   // TaskPanel's identical per-id reset effect.

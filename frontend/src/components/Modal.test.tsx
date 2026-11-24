@@ -28,6 +28,31 @@ describe("Modal Escape and drag guard", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("a new onClose mid-drag keeps the listener ahead of dnd-kit's cancel listener", () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(<Modal open onClose={first} title="T">body</Modal>);
+    const handle = document.createElement("button");
+    handle.setAttribute("aria-pressed", "true");
+    handle.setAttribute("aria-roledescription", "draggable");
+    document.body.appendChild(handle);
+    // Stands in for dnd-kit: added when the drag starts, it drops the lift on Escape.
+    const cancelDrag = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handle.setAttribute("aria-pressed", "false");
+    };
+    document.addEventListener("keydown", cancelDrag);
+    // A parent re-render mid-drag hands the modal a new onClose.
+    rerender(<Modal open onClose={second} title="T">body</Modal>);
+    fireEvent.keyDown(document, { key: "Escape" });
+    document.removeEventListener("keydown", cancelDrag);
+    expect(first).not.toHaveBeenCalled();
+    expect(second).not.toHaveBeenCalled();
+    // After the drag, Escape closes through the latest onClose.
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+  });
+
   it("a lifted sortable activator counts as a drag; an unrelated roledescription does not", () => {
     const h = document.createElement("button");
     h.setAttribute("aria-pressed", "true");

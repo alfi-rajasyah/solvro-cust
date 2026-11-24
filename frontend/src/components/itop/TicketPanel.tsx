@@ -94,13 +94,21 @@ export function TicketPanel({
   // While the Resolve/Team sheet is open its own Modal handles Escape; the
   // panel must not also close, or a mid-write unmount would lose the result.
   const sheetOpen = actionSheet !== null;
+  // Latest onClose and sheetOpen in refs, so the Escape listener does not re-subscribe on a
+  // new onClose mid-drag and run after dnd-kit's (see isDragActive in Modal.tsx).
+  const onCloseRef = useRef(onClose);
+  const sheetOpenRef = useRef(sheetOpen);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    sheetOpenRef.current = sheetOpen;
+  }, [onClose, sheetOpen]);
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !sheetOpen && !isDragActive()) onClose();
+      if (e.key === "Escape" && !sheetOpenRef.current && !isDragActive()) onCloseRef.current();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, sheetOpen]);
+  }, []);
 
   const actionsEnabled = status?.actionsEnabled ?? false;
   const tokenSet = myToken?.set ?? false;

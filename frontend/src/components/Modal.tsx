@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
@@ -46,14 +46,20 @@ export function Modal({
   useBodyScrollLock(open);
   const { ref: dialogRef, onKeyDown: onDialogKeyDown } = useDialogFocus(open);
 
+  // Latest onClose in a ref, so the Escape listener does not re-subscribe on a
+  // new onClose mid-drag and run after dnd-kit's (see isDragActive above).
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !isDragActive()) onClose();
+      if (e.key === "Escape" && !isDragActive()) onCloseRef.current();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
