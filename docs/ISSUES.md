@@ -48,14 +48,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Revisit if custom roles start splitting the two permissions.
 - **Source:** snapshot line 1863, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
 
-### ISS-010 · P3 · Guest link pages contact Google for fonts
-
-- **Type:** debt · **Found:** 2026-09-30 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** font links in frontend/index.html (lines ~13-20)
-- **Problem:** The SPA shell served at /share/<token> loads fonts from Google, so a guest's browser contacts a third party. Referrer-Policy no-referrer keeps the token out of those requests.
-- **Why deferred / fix direction:** Self-host the fonts; deferred because it changes the whole app shell.
-- **Source:** snapshot line 2350, section "Collaboration & sharing, Phase 6 ("Guest links") — deferred findings (2026-09-30)"
-
 ### ISS-011 · P3 · SECRETS_KEY rotation invalidates every stored token
 
 - **Type:** debt · **Found:** 2026-10-09 · **Verified:** 2026-11-24 @ `670f206`
@@ -812,3 +804,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-084 · 2026-11-24 · CHANGELOG "The favicon stays readable on dark browser tabs" · Favicon reads weakly on dark browser tab strips
 - ISS-004 · 2026-11-24 · CHANGELOG "Backend request validation upgraded to zod 4" · zod 3 has a memory-exhaustion advisory fixed only in zod 4
 - ISS-014 · 2026-11-24 · CHANGELOG "Frontend router upgraded to React Router 7" · React Router 6 has two advisories fixed only in v7
+- ISS-010 · 2026-11-24 · CHANGELOG "The app serves its own fonts" · Guest link pages contact Google for fonts

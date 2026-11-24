@@ -59,7 +59,7 @@ export default defineConfig({
       },
       workbox: {
         // App shell precache — index.html + built assets (JS/CSS/fonts/icons).
-        globPatterns: ["**/*.{js,css,html,png,svg,ico,webmanifest}"],
+        globPatterns: ["**/*.{js,css,html,png,svg,ico,webmanifest,woff2}"],
         navigateFallback: "/index.html",
         // Navigations under /api/ must reach the network, never the cached
         // app shell — the NavigationRoute is registered before the NetworkOnly
@@ -77,20 +77,6 @@ export default defineConfig({
             // never let the SW serve a cached response here.
             urlPattern: /\/api\/.*/,
             handler: "NetworkOnly",
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/,
-            handler: "CacheFirst",
-            options: { cacheName: "google-fonts-stylesheets" },
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "google-fonts-webfonts",
-              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
           },
         ],
       },
