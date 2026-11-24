@@ -634,6 +634,14 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Investigate token and session timing under suite load; trigger: recurrence.
 - **Source:** task-attachments phase review (GitHub #137)
 
+### ISS-219 · P3 · Mobile smoke overflow check fails on its first attempt in a full local run
+
+- **Type:** watch · **Found:** 2026-11-24 · **Verified:** 2026-11-24 @ `5eed44c`
+- **Where:** "no horizontal overflow on key pages" in e2e/tests/smoke.spec.ts (mobile project), on the project Kanban page
+- **Problem:** In 2 full local runs of both projects, the check found the Kanban page 453px wider than the viewport. The overflow stayed for the whole 5s poll, then the retry passed. Alone, or after list-bulk-edit, it passed 6 runs out of 6. The cause is unknown; another spec file's leftover workspace state (statuses or labels) is the first suspect.
+- **Why deferred / fix direction:** Trigger: it fails in the mobile CI shards after a release merge, or through its retry. Then log the widest element when the check fails, and find which earlier spec leaves the state.
+- **Source:** gates.sh runs on chore/e2e-condition-waits, 2026-11-24
+
 ## Open — Dev env & ops
 
 ### ISS-166 · P3 · Dev backend tsx watch sometimes misses file edits
