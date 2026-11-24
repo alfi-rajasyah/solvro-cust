@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-24 — solvro backup and solvro update also back up attachments
+
+- `solvro backup` and the backup step of `solvro update` (`setup.sh`) now also write an archive of the `solvro_uploads` volume to `~/solvro/backups/solvro_uploads-<release>-<date>-<time>.tar.gz` (mode 600), next to the database dump. Before, they backed up only the database, so attachment files needed a manual step. With `ATTACHMENTS_DRIVER=s3` the bucket keeps the files and no archive is written. A one-off container of the installed backend image writes the archive, so the backup also works while the backend is stopped or restarting, and no other image is pulled. `INSTALL.md`, `OPERATIONS.md` and `docs/CONFIGURATION.md` describe the new behaviour.
+
 ### Added — 2026-11-24 — Attachment e2e tests for read-only members and the server type check
 
 - `e2e/tests/task-attachments.spec.ts` has two new tests. A project member with the built-in STAKEHOLDER role (`project:read`, no `task:write`) sees and downloads a file, sees no Attach or Delete control, and the server refuses that member's upload with 403. A direct upload of a disallowed file type gets the server's 415 `attachment_type_not_allowed`, which the browser's own type check otherwise hides.

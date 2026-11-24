@@ -77,7 +77,7 @@ If Solvro listens on `0.0.0.0`, keep the server behind a trusted network, VPN, o
 solvro update
 ```
 
-The installer adds the `solvro` command to the server. `solvro update` looks up the newest release, shows the installed and the new version with a link to the release notes, and asks before it changes anything. On yes it backs up the database to `~/solvro/backups/`, then runs that release's installer, which keeps your ports and secrets, pins the new release (`IMAGE_TAG` in `~/solvro/.env`), pulls its images and restarts. The database and every user stay. It never moves a server to an older release.
+The installer adds the `solvro` command to the server. `solvro update` looks up the newest release, shows the installed and the new version with a link to the release notes, and asks before it changes anything. On yes it backs up the database and the attachments volume to `~/solvro/backups/`, then runs that release's installer, which keeps your ports and secrets, pins the new release (`IMAGE_TAG` in `~/solvro/.env`), pulls its images and restarts. The database and every user stay. It never moves a server to an older release.
 
 `solvro update --yes` skips the question (for scripts and scheduled jobs); without a terminal and without `--yes`, it stops. Backups are never deleted automatically; remove old ones from `~/solvro/backups/` yourself. All commands and options are in the [Command reference](#command-reference).
 
@@ -126,15 +126,15 @@ Installed by `setup.sh` in `~/solvro/bin/solvro` and linked into `/usr/local/bin
 
 | Command | What it does |
 |---|---|
-| `solvro update` | Upgrade to the newest release. Shows the installed and the new version with a link to the release notes, asks before changing anything, backs up the database to `~/solvro/backups/`, then runs that release's installer. Does nothing when already up to date; never moves to an older release. |
+| `solvro update` | Upgrade to the newest release. Shows the installed and the new version with a link to the release notes, asks before changing anything, backs up the database and, with `ATTACHMENTS_DRIVER=local`, the attachments volume to `~/solvro/backups/`, then runs that release's installer. Does nothing when already up to date; never moves to an older release. |
 | `solvro update --yes` | The same without the question (`-y` also works). Needed when there is no terminal, e.g. in a scheduled job. |
-| `solvro update --no-backup` | Skip the database backup. Combines with `--yes`. |
+| `solvro update --no-backup` | Skip the database and attachments backup. Combines with `--yes`. |
 | `solvro config` | Show the server settings (never the secrets). |
 | `solvro config get KEY` | Print one setting, or its default. |
 | `solvro config set KEY=VALUE [KEY=VALUE …]` | Change settings, e.g. `solvro config set APP_URL=https://solvro.acme.com`. Every value is checked first (the same checks as the installer) and nothing is saved unless all pass, including that the website, API and Postgres ports differ. Then it saves them to `~/solvro/.env`, regenerates the compose file and restarts only the services the change affects. If that restart fails (for example, the new port is already taken), it restores the previous settings, starts the stack on them again and exits with an error. Values must be on one line. Changing `FRONTEND_PORT` or `BIND_ADDR` does not change `APP_URL`; it reminds you to set it too if the address people open changed. Keys: `APP_URL`, `BIND_ADDR`, `FRONTEND_PORT`, `BACKEND_PORT`, `POSTGRES_PORT`, `TRUST_PROXY`, `EMBED_FRAME_ANCESTORS`, `ITOP_ALLOW_PRIVATE_HOSTS`, `ITOP_SYNC_DISABLED` (the two iTop ones take exactly `true` or `false`; meanings in the `setup.sh` table below). The secrets and `IMAGE_TAG` cannot be set here. |
 | `solvro config unset KEY` | Remove an optional setting: `POSTGRES_PORT` (stop publishing Postgres), `TRUST_PROXY` (back to the default), `EMBED_FRAME_ANCESTORS` (turn embedding off), `ITOP_ALLOW_PRIVATE_HOSTS` and `ITOP_SYNC_DISABLED` (back to the default `true` / `false`). |
 | `solvro version` | Print the installed release. |
-| `solvro backup` | Write a database dump to `~/solvro/backups/solvro-<release>-<date>-<time>.dump` (mode `600`). Restore is in `OPERATIONS.md` section 7. |
+| `solvro backup` | Write a database dump to `~/solvro/backups/solvro-<release>-<date>-<time>.dump` and, with `ATTACHMENTS_DRIVER=local` (the default), an archive of the attachments volume to `~/solvro/backups/solvro_uploads-<release>-<date>-<time>.tar.gz` (both mode `600`). With `ATTACHMENTS_DRIVER=s3` the bucket keeps the files, so there is no archive. Restore is in `OPERATIONS.md` section 7. |
 | `solvro help` | Print the command list (`-h` and `--help` also work). |
 
 It exits non-zero on any failure, so scripts can rely on the exit code.
