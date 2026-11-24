@@ -665,14 +665,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Investigate token and session timing under suite load; trigger: recurrence.
 - **Source:** task-attachments phase review (GitHub #137)
 
-### ISS-217 · P3 · Attachment temp-file test counts the whole OS temp folder
-
-- **Type:** bug · **Found:** 2026-11-24 · **Verified:** 2026-11-24 @ `ec25ed5`
-- **Where:** "leaves no temp file in the OS temp folder after a refused upload" in backend/test/attachments.test.ts (line ~201)
-- **Problem:** It compares the entry count of `os.tmpdir()` before and after its uploads. Other test files that run at the same time add or remove temp entries, so it failed once in CI with "expected 19 to be 20" on a frontend-only PR (GitHub #155) and passed on rerun.
-- **Why deferred / fix direction:** Point the upload temp folder at a per-test directory, or assert that no entry with the upload's own name prefix remains, instead of the total count.
-- **Source:** CI run on GitHub #155, 2026-11-24
-
 ## Open — Dev env & ops
 
 ### ISS-166 · P3 · Dev backend tsx watch sometimes misses file edits
@@ -846,3 +838,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-103 · 2026-11-24 · CHANGELOG "Gantt section and reorder code tidied, no behaviour change" · Gantt section-id parsing lives outside the adapter
 - ISS-104 · 2026-11-24 · CHANGELOG "Gantt section and reorder code tidied, no behaviour change" · handleResourceReorder is one long three-branch callback
 - ISS-053 · 2026-11-24 · CHANGELOG "Sort risks by probability and impact" · Sortable data-grid headers cannot be centered
+- ISS-217 · 2026-11-24 · CHANGELOG "Attachment temp-file test no longer fails at random" · Attachment temp-file test counts the whole OS temp folder

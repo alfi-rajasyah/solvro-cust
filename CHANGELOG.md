@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-24 — Attachment temp-file test no longer fails at random
+
+- The backend test that checks a refused upload leaves no temp file (`backend/test/attachments.test.ts`) compared the total number of entries in the OS temp folder. The upload route removes an accepted upload's temp file just after it answers, so a file from the test before could disappear during this one and fail it. The test now looks only at entries it adds, and waits up to 2 seconds for them to go.
+
 ### Changed — 2026-11-24 — Sort risks by probability and impact
 
 - On a project's Risks tab (`frontend/src/pages/views/ProjectRisks.tsx`), the Probability and Impact columns can now be sorted from their headers, like Score, Category and Status. They were left unsortable so their headers could stay centred, which the data grid's sortable header could not do. The vendored header (`frontend/src/components/reui/data-grid/data-grid-column-header.tsx`) now centres a sortable header when the column's header class is `text-center`, the same way it already right-aligns one for `text-right`.

@@ -201,12 +201,15 @@ describe("attachments", () => {
   it("leaves no temp file in the OS temp folder after a refused upload", async () => {
     const { owner, task } = await setup();
     const tmp = (await import("node:os")).tmpdir();
-    const count = () => readdirSync(tmp).length;
-    const before = count();
+    // Only entries this test adds count. The handler removes an accepted
+    // upload's temp file after the 201 is sent, so an earlier test's file can
+    // still vanish from the folder while this one runs.
+    const before = new Set(readdirSync(tmp));
+    const added = () => readdirSync(tmp).filter((name) => !before.has(name));
     await upload(owner.token, task.id, "big.txt", Buffer.alloc(1025, "x"));
     for (let i = 0; i < 3; i++) await upload(owner.token, task.id, `k${i}.txt`, "x");
     await upload(owner.token, task.id, "over.txt", "x");
-    expect(count()).toBe(before);
+    await expect.poll(added, { timeout: 2000 }).toEqual([]);
   });
 
   it("answers 404 on every route for a hidden task", async () => {
