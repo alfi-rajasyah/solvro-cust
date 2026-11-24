@@ -409,14 +409,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Trigger: a project rendering low hundreds of bars or a profiler flag. Then share one observer.
 - **Source:** snapshot line 546, section "Plan B Task 9 deferred findings — ReUI Gantt swap (2026-07-25)"
 
-### ISS-103 · P3 · Gantt section-id parsing lives outside the adapter
-
-- **Type:** debt · **Found:** 2026-07-25 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** sectionNodeId in gantt-v2/adapter.ts (line 13) vs inline section-id parsing in SolvroGantt.tsx (lines ~314, ~679-753, ~932)
-- **Problem:** The adapter formats section ids but SolvroGantt parses them with inline slice and startsWith checks. No defect.
-- **Why deferred / fix direction:** Add parseSectionId to the adapter when the signature lock lifts.
-- **Source:** snapshot line 556, section "Final whole-branch review additions (2026-07-25)"
-
 ### ISS-104 · P3 · handleResourceReorder is one long three-branch callback
 
 - **Type:** debt · **Found:** 2026-07-25 · **Verified:** 2026-11-24 @ `670f206`
@@ -873,3 +865,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-213 · 2026-11-24 · CHANGELOG "solvro backup and solvro update also back up attachments" · solvro backup and solvro update do not back up the attachments volume
 - ISS-214 · 2026-11-24 · CHANGELOG "The nginx upload limit follows ATTACHMENT_MAX_FILE_MB" · ATTACHMENT_MAX_FILE_MB above 25 also needs the nginx body limit raised
 - ISS-210 · 2026-11-24 · CHANGELOG "Gantt row menu dialogs wait for their own menu only" · Gantt row-menu dialogs find their menu through a document-wide selector
+- ISS-103 · 2026-11-24 · CHANGELOG "Gantt section and reorder code tidied, no behaviour change" · Gantt section-id parsing lives outside the adapter

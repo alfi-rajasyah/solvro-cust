@@ -15,6 +15,9 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-24 — Gantt section and reorder code tidied, no behaviour change
+
+- `frontend/src/components/gantt-v2/adapter.ts` has a new `parseSectionId`, the inverse of `sectionNodeId`. The Gantt (`SolvroGantt.tsx`) uses it in the collapse export, the reorder handler and the colour column, instead of cutting `"section-"` off ids in five places. A new unit test (`adapter.test.ts`) covers it.
 ### Fixed — 2026-11-24 — Gantt row menu dialogs wait for their own menu only
 
 - The Edit, Add subtask and Delete items of the Gantt row menu (`frontend/src/components/gantt-v2/SolvroGantt.tsx`) open their dialog once the menu has closed. They checked for that by searching the whole page for any row menu, so a second matching menu could hold the dialog back for up to a second. They now watch only the menu the item belongs to.

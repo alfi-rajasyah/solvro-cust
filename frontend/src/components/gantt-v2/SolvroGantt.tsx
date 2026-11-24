@@ -81,6 +81,7 @@ import {
   buildResources,
   buildRollupEvents,
   eventPatch,
+  parseSectionId,
   parseTaskId,
   sectionNodeId,
   taskNodeId,
@@ -308,13 +309,11 @@ function readStoredTreeWidth(): number {
 // ids onto geometry's shape; task ids pass through unchanged.
 function toGeometryCollapsedIds(resourceIds: string[]): Set<string> {
   return new Set(
-    resourceIds.map((id) =>
-      id === "section-none"
-        ? "sec-none"
-        : id.startsWith("section-")
-          ? `sec-${id.slice("section-".length)}`
-          : id,
-    ),
+    resourceIds.map((id) => {
+      const sectionId = parseSectionId(id);
+      if (sectionId === undefined) return id;
+      return sectionId === null ? "sec-none" : `sec-${sectionId}`;
+    }),
   );
 }
 
@@ -669,7 +668,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
   // there is no accept-with-adjustment form here).
   const canReorderResource = useCallback(
     (proposal: GanttResourceReorder) =>
-      !proposal.resourceId.startsWith("section-") || canManageSections,
+      parseSectionId(proposal.resourceId) === undefined || canManageSections,
     [canManageSections],
   );
 
@@ -679,12 +678,13 @@ export function SolvroGantt(props: SolvroGanttProps) {
       const { resourceId, parentId, index } = proposal;
 
       // ---- Section-group reorder (root level only) ----
-      if (resourceId.startsWith("section-")) {
+      const movedSectionId = parseSectionId(resourceId);
+      if (movedSectionId !== undefined) {
         if (!canManageSections) return false;
         // The "(No section)" pseudo-group has no backing Section row — old
         // engine only starts a section drag when `sectionId !== null`
         // (GanttFrame.tsx:539).
-        if (resourceId === sectionNodeId(null)) return false;
+        if (movedSectionId === null) return false;
         // Sections never nest under a task (GanttFrame.tsx:542: dropping a
         // section onto the pseudo group is rejected; dropping it under a
         // task isn't even representable in the old engine's flat section
@@ -712,7 +712,8 @@ export function SolvroGantt(props: SolvroGanttProps) {
 
         const patches = nextRootOrder
           .filter((id) => id !== sectionNodeId(null))
-          .map((id, i) => ({ id: Number(id.slice("section-".length)), position: i }))
+          .map((id, i) => ({ id: parseSectionId(id), position: i }))
+          .filter((p): p is { id: number; position: number } => typeof p.id === "number")
           .filter(({ id, position }) => sections.find((s) => s.id === id)?.position !== position);
 
         if (patches.length === 0) return false; // no-op — nothing actually moved
@@ -751,9 +752,9 @@ export function SolvroGantt(props: SolvroGanttProps) {
       // section)" pseudo group), never under a task node — promoting a
       // top-level task into a subtask (or vice versa) via drag isn't
       // supported by the old engine's row-drag affordance.
-      if (parentId === null || parseTaskId(parentId) !== null) return false;
-      const targetSectionId =
-        parentId === sectionNodeId(null) ? null : Number(parentId.slice("section-".length));
+      if (parentId === null) return false;
+      const targetSectionId = parseSectionId(parentId);
+      if (targetSectionId === undefined) return false;
 
       // `position` is one GLOBAL dense index across every top-level task in
       // the project (CLAUDE.md: "one canonical manual order"; backend's
@@ -932,11 +933,8 @@ export function SolvroGantt(props: SolvroGanttProps) {
         width: TREE_COLOR_COLUMN_WIDTH,
         align: "center",
         render: (ctx) => {
-          if (ctx.resource.id === sectionNodeId(null) || !ctx.resource.id.startsWith("section-")) {
-            return null;
-          }
-          const sectionId = Number(ctx.resource.id.slice("section-".length));
-          if (!sectionColors.has(sectionId)) return null;
+          const sectionId = parseSectionId(ctx.resource.id);
+          if (typeof sectionId !== "number" || !sectionColors.has(sectionId)) return null;
           return (
             <SectionColorCell
               sectionId={sectionId}
