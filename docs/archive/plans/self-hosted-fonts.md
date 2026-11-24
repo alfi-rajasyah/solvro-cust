@@ -1,6 +1,6 @@
 # Serve the app fonts from the app instead of Google (ISS-010)
 
-Status: in progress (started 2026-11-24 @ `102ea27`)
+Status: shipped 2026-11-24
 Archive path: `docs/archive/plans/self-hosted-fonts.md`
 
 ## Goal
@@ -24,3 +24,9 @@ The SPA shell, including the guest pages under `/share/<token>`, loads Source Sa
 - No `fonts.googleapis.com` or `fonts.gstatic.com` string remains in `frontend/` source or built output.
 - Frontend typecheck and unit tests pass; the Playwright smoke passes.
 - Delivery Gate: text and icons render the same in both themes and at 375px, and the browser network log shows no request to a Google host.
+
+## Outcome
+
+- The fonts live in `frontend/src/assets/fonts/`, so Vite hashes them into `/assets/`, which the bundled nginx already caches as immutable; `frontend/nginx.conf` needed no change.
+- The `.material-symbols-outlined` base rule that Google's stylesheet injected stays unlayered in `index.css`. Inside a Tailwind layer, utilities would win and about 260 icons would change size or display.
+- Delivery Gate PASS, 2026-11-24: 6 pages (`/`, `/projects`, a project's Overview and Kanban, `/tasks`, `/admin`) in light and dark at 1280px and 375px. Every icon's name, computed size, display and box matched `develop` on all 24 page views; Google requests dropped from 24 to 0.
