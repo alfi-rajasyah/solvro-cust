@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-24 — The nginx upload limit follows ATTACHMENT_MAX_FILE_MB
+
+- The bundled nginx (`frontend/nginx.conf`) now sets the body limit of the attachment upload path from `ATTACHMENT_MAX_FILE_MB`: the value rounded up plus 1 MB for the multipart envelope, 26 MB by default as before. A start script in the frontend image (`frontend/nginx-attachment-body-limit.envsh`) writes it; an unset or invalid value keeps 26 MB and logs why. `setup.sh` now passes `ATTACHMENT_MAX_FILE_MB` to the frontend container. Before, raising the setting past 25 made larger uploads fail at nginx until `nginx.conf` was edited by hand. A new CI step (`ci/check-attachment-body-limit.sh`) checks the rendered limit against the built image for valid and invalid values.
+- The bundled nginx (`frontend/nginx.conf`) now sets the body limit of the attachment upload path from `ATTACHMENT_MAX_FILE_MB`: the value rounded up plus 1 MB for the multipart envelope, 26 MB by default as before. A start script in the frontend image (`frontend/nginx-attachment-body-limit.envsh`) writes it; an unset or invalid value keeps 26 MB and logs why. `setup.sh` now passes `ATTACHMENT_MAX_FILE_MB` to the frontend container. Before, raising the setting past 25 made larger uploads fail at nginx until `nginx.conf` was edited by hand.
 ### Changed — 2026-11-24 — solvro backup and solvro update also back up attachments
 
 - `solvro backup` and the backup step of `solvro update` (`setup.sh`) now also write an archive of the `solvro_uploads` volume to `~/solvro/backups/solvro_uploads-<release>-<date>-<time>.tar.gz` (mode 600), next to the database dump. Before, they backed up only the database, so attachment files needed a manual step. With `ATTACHMENTS_DRIVER=s3` the bucket keeps the files and no archive is written. A one-off container of the installed backend image writes the archive, so the backup also works while the backend is stopped or restarting, and no other image is pulled. `INSTALL.md`, `OPERATIONS.md` and `docs/CONFIGURATION.md` describe the new behaviour.

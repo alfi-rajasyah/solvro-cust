@@ -720,6 +720,12 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Where:** frontend/nginx.conf (line 45)
 - **Problem:** The nginx limit is hardcoded, so raising `ATTACHMENT_MAX_FILE_MB` past 25 fails at nginx until the file is edited. It is documented in CONFIGURATION.md 2.1.
 - **Why deferred / fix direction:** Template the nginx limit from env at container start, or keep it documented only.
+### ISS-213 · P3 · solvro backup and solvro update do not back up the attachments volume
+
+- **Type:** debt · **Found:** 2026-11-23 · **Verified:** 2026-11-24 @ `670f206`
+- **Where:** backup() in setup.sh (line ~449), called from update (~line 524)
+- **Problem:** Both back up only the database, not the `solvro_uploads` volume. The manual tar one-liner is in docs/CONFIGURATION.md 2.18.
+- **Why deferred / fix direction:** Optionally tar the volume into `~/solvro/backups/`.
 - **Source:** task-attachments phase review (GitHub #137)
 
 ## Open — Docs & process
@@ -872,3 +878,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-048 · 2026-11-24 · CHANGELOG "Dropdown submenus can rise above a modal" · Dropdown submenu cannot outrank a modal host
 - ISS-212 · 2026-11-24 · CHANGELOG "Attachment e2e tests for read-only members and the server type check" · Attachment e2e has no read-only case and never reaches the server's 415
 - ISS-213 · 2026-11-24 · CHANGELOG "solvro backup and solvro update also back up attachments" · solvro backup and solvro update do not back up the attachments volume
+- ISS-214 · 2026-11-24 · CHANGELOG "The nginx upload limit follows ATTACHMENT_MAX_FILE_MB" · ATTACHMENT_MAX_FILE_MB above 25 also needs the nginx body limit raised
