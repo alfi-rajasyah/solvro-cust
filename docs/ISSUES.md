@@ -326,6 +326,14 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Problem:** While the full task loads, the placeholder row carries `project.customer` as null (unknown), not the real customer. The breadcrumb is the only reader and does not use it.
 - **Why deferred / fix direction:** Trigger: a new consumer reads `project.customer` from the row before the fetch lands. Then wait for the fetch or fill it from the project query.
 
+### ISS-218 · P3 · Task conflict dialog can be open with no rows, and Escape then leaves it open
+
+- **Type:** bug · **Found:** 2026-11-24 · **Verified:** 2026-11-24 @ `30cc220`
+- **Where:** frontend/src/components/TaskConflictDialog.tsx and its Modal
+- **Problem:** The conflict dialog can be visible for a frame before its conflict rows render. An Escape pressed in that frame does not close it. An e2e run without a wait for the rows failed about 1 in 10 for this reason.
+- **Why deferred / fix direction:** Found while removing e2e sleeps (ISS-146); the spec now waits for the rows. Render the dialog only with its rows, or let Escape close it in every state.
+- **Source:** e2e/tests/task-conflict.spec.ts "Escape in the conflict dialog closes only the dialog"
+
 ## Open — Accessibility & tokens
 
 ### ISS-087 · P3 · IconTile outline variant has no visible fill on the lowest dark surface
@@ -554,14 +562,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Trigger: it fails in CI more than occasionally. Then run a flake-hunt pass.
 - **Source:** snapshot line 545, section "Plan B Task 9 deferred findings — ReUI Gantt swap (2026-07-25)"
 
-### ISS-146 · P3 · E2E suite uses fixed waitForTimeout sleeps
-
-- **Type:** debt · **Found:** 2026-07-25 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** waitForTimeout calls across e2e/tests/*.spec.ts
-- **Problem:** Many specs sleep for a fixed time instead of waiting on a condition or response, which adds slowness and flake risk.
-- **Why deferred / fix direction:** Convert to waitForResponse or selector waits in one hardening pass.
-- **Source:** snapshot line 550, section "Plan B Task 9 deferred findings — ReUI Gantt swap (2026-07-25)"; merged duplicates at snapshot lines 547
-
 ### ISS-150 · P3 · Duplicate-chip e2e spec cannot reproduce the upstream race
 
 - **Type:** watch · **Found:** 2026-08-02 · **Verified:** 2026-11-24 @ `670f206`
@@ -633,6 +633,14 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Problem:** It answered 401 instead of 200 once in a full backend suite run (2026-11-23) and passed 2 of 2 alone.
 - **Why deferred / fix direction:** Investigate token and session timing under suite load; trigger: recurrence.
 - **Source:** task-attachments phase review (GitHub #137)
+
+### ISS-219 · P3 · Mobile smoke overflow check fails on its first attempt in a full local run
+
+- **Type:** watch · **Found:** 2026-11-24 · **Verified:** 2026-11-24 @ `5eed44c`
+- **Where:** "no horizontal overflow on key pages" in e2e/tests/smoke.spec.ts (mobile project), on the project Kanban page
+- **Problem:** In 2 full local runs of both projects, the check found the Kanban page 453px wider than the viewport. The overflow stayed for the whole 5s poll, then the retry passed. Alone, or after list-bulk-edit, it passed 6 runs out of 6. The cause is unknown; another spec file's leftover workspace state (statuses or labels) is the first suspect.
+- **Why deferred / fix direction:** Trigger: it fails in the mobile CI shards after a release merge, or through its retry. Then log the widest element when the check fails, and find which earlier spec leaves the state.
+- **Source:** gates.sh runs on chore/e2e-condition-waits, 2026-11-24
 
 ## Open — Dev env & ops
 
@@ -805,3 +813,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-004 · 2026-11-24 · CHANGELOG "Backend request validation upgraded to zod 4" · zod 3 has a memory-exhaustion advisory fixed only in zod 4
 - ISS-014 · 2026-11-24 · CHANGELOG "Frontend router upgraded to React Router 7" · React Router 6 has two advisories fixed only in v7
 - ISS-010 · 2026-11-24 · CHANGELOG "The app serves its own fonts" · Guest link pages contact Google for fonts
+- ISS-146 · 2026-11-24 · CHANGELOG "End-to-end tests wait for conditions, not fixed sleeps" · E2E suite uses fixed waitForTimeout sleeps

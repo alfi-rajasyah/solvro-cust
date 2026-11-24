@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { apiBase, expect, test } from "../fixtures/test";
+import { apiBase, expect, settleQuiet, test } from "../fixtures/test";
 import {
   createEpic,
   createSection,
@@ -285,7 +285,7 @@ test.describe("Outline embed views", () => {
         "This link has expired or is no longer available",
       );
       await expect(guest.getByTestId("embed-root")).toBeVisible();
-      await guest.waitForTimeout(500);
+      await settleQuiet(guest);
       expect(new URL(guest.url()).pathname).toBe(bad);
       await expect(guest.locator("aside, nav")).toHaveCount(0);
 
@@ -453,7 +453,7 @@ test.describe("Outline embed views", () => {
         await page.goto(path);
         await expect(page.getByTestId("embed-invalid-link")).toContainText(`This ${kind} isn't valid`);
         // Give a client-side redirect every chance to fire, then check it did not.
-        await page.waitForTimeout(500);
+        await settleQuiet(page);
         expect(new URL(page.url()).pathname).toBe(path);
         await expect(page.locator("aside, nav")).toHaveCount(0);
         const out = page.getByRole("link", { name: /Open Solvro/ });

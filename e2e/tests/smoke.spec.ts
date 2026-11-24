@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi, openKanban } from "../fixtures/test";
+import { test, expect, loginViaUi, openKanban, settleAnimations } from "../fixtures/test";
 
 // Ported from the QA gate script qa-test-docker.mjs. That script's mobile
 // touch-drag test predates dnd-kit's TouchSensor 250ms activation delay and
@@ -34,11 +34,14 @@ test.describe("smoke", () => {
 
     for (const [name, path] of pages) {
       await page.goto(path, { waitUntil: "networkidle" });
-      await page.waitForTimeout(500);
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      );
-      expect(overflow, `${name} (${path}) overflowed by ${overflow}px`).toBeLessThanOrEqual(1);
+      await settleAnimations(page);
+      // Under load the Kanban columns can overflow for a moment while the page
+      // lays out, so poll: an overflow that does not clear within 5s still fails.
+      const overflow = () =>
+        page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      await expect
+        .poll(overflow, { message: `${name} (${path}) overflows horizontally`, timeout: 5_000 })
+        .toBeLessThanOrEqual(1);
     }
   });
 

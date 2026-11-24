@@ -61,7 +61,128 @@ export async function loginViaUi(
   await page.goto("/", { waitUntil: "networkidle" });
   await submitLoginForm(page, email, password);
   await page.waitForURL(/overview|projects|\/$/i, { timeout: 10_000 }).catch(() => {});
-  await page.waitForTimeout(1000);
+  // The "/" in the URL pattern matches the login page itself, so the real
+  // sign-in signal is the stored token the next navigation reads.
+  await page.waitForFunction(() => !!localStorage.getItem("solvro.token"), undefined, {
+    timeout: 15_000,
+  });
+}
+
+/** Resolves after `n` animation frames: lets handlers queued by the last input
+ * event run and paint, replacing a fixed sleep after a click or pointer move. */
+export async function nextFrames(page: Page, n = 2): Promise<void> {
+  await page.evaluate(async (count) => {
+    for (let i = 0; i < count; i++) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+  }, n);
+}
+
+/** Resolves once no finite CSS/Web animation is running (drawer slide, layout
+ * reflow); infinite ones, such as spinners, are ignored. A transition can start
+ * a frame or more after the render that causes it, so this waits two frames
+ * first and only stops after a full frame in which nothing finite was running.
+ * Capped, so a page that animates forever cannot hang it. */
+export async function settleAnimations(page: Page): Promise<void> {
+  await nextFrames(page, 2);
+  await page.evaluate(async () => {
+    const running = () =>
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity);
+    const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    for (let i = 0; i < 40; i++) {
+      const current = running();
+      if (current.length === 0) {
+        await frame();
+        if (running().length === 0) return;
+        continue;
+      }
+      await Promise.all(current.map((a) => a.finished.catch(() => undefined)));
+      await frame();
+    }
+  });
+}
+
+/** For asserting that something did NOT happen (a second request, a redirect).
+ * Playwright's `networkidle` fires once per document and never again after
+ * in-app requests, so this listens to requests itself: it returns once no
+ * `/api/` request has been in flight or started for `quietMs`, restarting that
+ * window on every new request, within an overall cap. The quiet window is
+ * deliberate: there is no event for "nothing else is coming", so the absence
+ * check is only as strong as this window. Pass a larger `quietMs` when the app
+ * delays the thing being ruled out. */
+export async function settleQuiet(page: Page, quietMs = 500, capMs = 15_000): Promise<void> {
+  const inflight = new Set<Request>();
+  let lastActivity = Date.now();
+  const onRequest = (req: Request) => {
+    if (req.url().includes("/api/")) {
+      inflight.add(req);
+      lastActivity = Date.now();
+    }
+  };
+  const onDone = (req: Request) => {
+    if (inflight.delete(req)) lastActivity = Date.now();
+  };
+  page.on("request", onRequest);
+  page.on("requestfinished", onDone);
+  page.on("requestfailed", onDone);
+  try {
+    await nextFrames(page, 5);
+    const start = Date.now();
+    while (Date.now() - start < capMs) {
+      if (inflight.size === 0 && Date.now() - lastActivity >= quietMs) return;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  } finally {
+    page.off("request", onRequest);
+    page.off("requestfinished", onDone);
+    page.off("requestfailed", onDone);
+  }
+}
+
+/** Counts in-flight `/api/` requests from the moment it is created. `settled()`
+ * waits for the requests an input started (a drag's PATCH and the refetch after
+ * it) to finish, then for animations, so a spec can read the result without a
+ * fixed sleep. Call `dispose()` when done. */
+export function trackApiRequests(page: Page): { settled: () => Promise<void>; dispose: () => void } {
+  const inflight = new Set<Request>();
+  const isApi = (req: Request) => req.url().includes("/api/");
+  const onRequest = (req: Request) => {
+    if (isApi(req)) inflight.add(req);
+  };
+  const onDone = (req: Request) => {
+    inflight.delete(req);
+  };
+  page.on("request", onRequest);
+  page.on("requestfinished", onDone);
+  page.on("requestfailed", onDone);
+  return {
+    settled: async () => {
+      // Two frames let the pointerup handler start its mutation; a refetch can
+      // start right after a mutation ends, so re-check after one more frame.
+      await nextFrames(page, 2);
+      for (let round = 0; round < 3; round++) {
+        await expect.poll(() => inflight.size, { timeout: 15_000 }).toBe(0);
+        await nextFrames(page, 2);
+        if (inflight.size === 0) break;
+      }
+      // Still busy after the re-checks: fail here instead of reading mid-flight.
+      await expect.poll(() => inflight.size, { timeout: 15_000 }).toBe(0);
+      await settleAnimations(page);
+    },
+    dispose: () => {
+      page.off("request", onRequest);
+      page.off("requestfinished", onDone);
+      page.off("requestfailed", onDone);
+    },
+  };
+}
+
+/** Waits until the Gantt's tree and timeline panes are rendered. */
+export async function waitForGanttReady(page: Page): Promise<void> {
+  await expect(page.locator('[data-slot="gantt-tree-pane"]')).toBeVisible();
+  await expect(page.locator('[data-slot="gantt-timeline-pane"]')).toBeVisible();
 }
 
 /**
@@ -105,7 +226,7 @@ export const KANBAN_ROUTE = "kanban";
  * hold the task and focus. */
 export async function openTaskEditModal(page: Page, projectId: number, taskId: number, title: string): Promise<void> {
   await page.goto(`/projects/${projectId}/gantt`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
+  await waitForGanttReady(page);
   const row = page.locator(`[data-slot="gantt-row-group"][data-gantt-row-id="task-${taskId}"]`);
   await expect(row, `expected a Gantt row for task ${taskId}`).toBeVisible();
   await row.click({ button: "right" });
@@ -117,7 +238,7 @@ export async function openTaskEditModal(page: Page, projectId: number, taskId: n
 
 export async function openKanban(page: Page, projectId: number): Promise<void> {
   await page.goto(`/projects/${projectId}/${KANBAN_ROUTE}`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
+  await expect(page.locator('[data-slot="kanban-item"]').first()).toBeVisible();
 }
 
 export interface CapturedTaskRequest {
@@ -156,10 +277,12 @@ export async function captureTaskRequests(
     requests.push({ method, url, body });
   };
   page.on("request", onRequest);
+  const tracker = trackApiRequests(page);
   try {
     await fn();
-    await page.waitForTimeout(800);
+    await tracker.settled();
   } finally {
+    tracker.dispose();
     page.off("request", onRequest);
   }
   return requests;
@@ -200,15 +323,21 @@ export async function mouseDrag(
   from: { x: number; y: number },
   to: { x: number; y: number },
 ): Promise<void> {
-  await page.mouse.move(from.x, from.y);
-  await page.mouse.down();
-  for (let i = 1; i <= 14; i++) {
-    await page.mouse.move(from.x + ((to.x - from.x) * i) / 14, from.y + ((to.y - from.y) * i) / 14);
-    await page.waitForTimeout(35);
+  const tracker = trackApiRequests(page);
+  try {
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    for (let i = 1; i <= 14; i++) {
+      await page.mouse.move(from.x + ((to.x - from.x) * i) / 14, from.y + ((to.y - from.y) * i) / 14);
+      // One frame per step: dnd-kit measures and re-renders on each move.
+      await nextFrames(page, 1);
+    }
+    await nextFrames(page, 3);
+    await page.mouse.up();
+    await tracker.settled();
+  } finally {
+    tracker.dispose();
   }
-  await page.waitForTimeout(150);
-  await page.mouse.up();
-  await page.waitForTimeout(1400);
 }
 
 /** Touch-based drag via CDP, respecting dnd-kit's TouchSensor 250ms activation
@@ -226,14 +355,21 @@ export async function touchDrag(
       touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 1 }],
     });
 
-  await dispatch("touchStart", from.x, from.y);
-  await page.waitForTimeout(400); // TouchSensor activation delay is 250ms
-  for (let i = 1; i <= 12; i++) {
-    await dispatch("touchMove", from.x + ((to.x - from.x) * i) / 12, from.y + ((to.y - from.y) * i) / 12);
-    await page.waitForTimeout(50);
+  const tracker = trackApiRequests(page);
+  try {
+    await dispatch("touchStart", from.x, from.y);
+    // Kept: dnd-kit's TouchSensor activates only after a 250ms press, and no DOM
+    // state changes until it does, so there is nothing to wait on but the clock.
+    await page.waitForTimeout(400);
+    for (let i = 1; i <= 12; i++) {
+      await dispatch("touchMove", from.x + ((to.x - from.x) * i) / 12, from.y + ((to.y - from.y) * i) / 12);
+      await nextFrames(page, 2);
+    }
+    await dispatch("touchEnd", 0, 0);
+    await tracker.settled();
+  } finally {
+    tracker.dispose();
   }
-  await dispatch("touchEnd", 0, 0);
-  await page.waitForTimeout(1500);
 }
 
 /** The customer page shows the Tickets tab only for a customer mapped to an

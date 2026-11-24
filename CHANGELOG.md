@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-24 — End-to-end tests wait for conditions, not fixed sleeps
+
+- The Playwright specs under `e2e/tests/` now wait for the condition a step depends on (a pane rendering, a request finishing, an animation ending) instead of a fixed `waitForTimeout`; 124 sleeps drop to 3. The shared helpers in `e2e/fixtures/test.ts` (`loginViaUi`, `openKanban`, `mouseDrag`, `touchDrag`, `captureTaskRequests`) drive most of this. The 3 remaining sleeps each carry a comment: the touch-activation hold, a press-hold that a guard needs, and outwaiting a search debounce to prove no request fires.
+
 ### Changed — 2026-11-24 — The app serves its own fonts
 
 - Source Sans 3 (latin and latin-ext) and the Material Symbols Outlined icon font now ship in the frontend bundle (`frontend/src/assets/fonts/`, with their SIL OFL 1.1 and Apache 2.0 licences) instead of loading from Google Fonts, so no page, including shared guest pages under `/share/`, contacts Google. Text and icons render as before, and the service worker precaches the fonts for offline use. The Google preconnect and stylesheet links are gone from `frontend/index.html`, and the Google font cache rules from `frontend/vite.config.ts`. Text in Cyrillic, Greek or Vietnamese script now falls back to the system font.

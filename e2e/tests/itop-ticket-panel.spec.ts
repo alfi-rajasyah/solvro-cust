@@ -204,9 +204,7 @@ test.describe("Ticket panel", () => {
 
     await loginViaUi(page);
     await page.goto(`/customers/${customerId}`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     await page.getByRole("button", { name: "Tickets" }).click();
-    await page.waitForTimeout(500);
 
     const row = page.locator('[data-testid="itop-ticket-row"]:visible[data-ref="R-004530"]');
     await row.click();
@@ -268,9 +266,7 @@ test.describe("Ticket panel", () => {
 
     await loginViaUi(page);
     await page.goto(`/customers/${customerId}`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     await page.getByRole("button", { name: "Tickets" }).click();
-    await page.waitForTimeout(500);
 
     await page.locator('[data-testid="itop-ticket-row"]:visible[data-ref="R-004530"]').click();
     const panel = page.getByRole("dialog", { name: "Ticket details" });
@@ -316,9 +312,7 @@ test.describe("Ticket panel", () => {
 
     await loginViaUi(page);
     await page.goto(`/customers/${customerId}`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     await page.getByRole("button", { name: "Tickets" }).click();
-    await page.waitForTimeout(500);
 
     await page.locator('[data-testid="itop-ticket-row"]:visible[data-ref="R-004530"]').click();
     const panel = page.getByRole("dialog", { name: "Ticket details" });
@@ -359,9 +353,7 @@ test.describe("Ticket panel", () => {
 
     await loginViaUi(page);
     await page.goto(`/customers/${customerId}`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     await page.getByRole("button", { name: "Tickets" }).click();
-    await page.waitForTimeout(500);
 
     await page.locator('[data-testid="itop-ticket-row"]:visible[data-ref="R-004530"]').click();
     const panel = page.getByRole("dialog", { name: "Ticket details" });

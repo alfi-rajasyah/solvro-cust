@@ -1,5 +1,5 @@
 import type { Page, Route } from "@playwright/test";
-import { test, expect, loginViaUi } from "../fixtures/test";
+import { test, expect, loginViaUi, settleQuiet } from "../fixtures/test";
 
 // Outline inside Solvro (docs/archive/plans/outline-integration.md, B6): the
 // Settings connect card and its OAuth return messages, the Admin › Outline API
@@ -690,7 +690,7 @@ test.describe("Session robustness", () => {
     await page.goto("/overview", { waitUntil: "domcontentloaded" });
     await expect.poll(() => failed).toBe(1);
     // Still signed in: not bounced to /login, the app shell is there.
-    await page.waitForTimeout(1500);
+    await settleQuiet(page, 1500);
     await expect(page).not.toHaveURL(/\/login/);
     await expect(page.getByRole("heading", { name: /overview/i }).first()).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem("solvro.token"))).not.toBeNull();

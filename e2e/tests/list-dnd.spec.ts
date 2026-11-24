@@ -6,6 +6,7 @@ import {
   center,
   mouseDrag,
   apiBase,
+  waitForGanttReady,
 } from "../fixtures/test";
 import { getTasks, type SeededTask, createEpic } from "../fixtures/seed";
 import type { Page } from "@playwright/test";
@@ -32,12 +33,12 @@ function topLevelSorted(tasks: SeededTask[]): SeededTask[] {
 
 async function openList(page: Page, projectId: number): Promise<void> {
   await page.goto(`/projects/${projectId}/list`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
+  await expect(page.getByRole("heading", { level: 2 }).first()).toBeVisible();
 }
 
 async function openGanttView(page: Page, projectId: number): Promise<void> {
   await page.goto(`/projects/${projectId}/gantt`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
+  await waitForGanttReady(page);
 }
 
 /**
