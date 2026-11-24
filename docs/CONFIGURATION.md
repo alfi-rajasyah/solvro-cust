@@ -54,7 +54,7 @@ A missing or invalid env var **crashes the process at startup** with a printed Z
 
 The compiled bundle has **no runtime env vars**. It uses the literal string `/api` as its API base and inherits the origin from `window.location`. The only build-time / dev-time variable is `VITE_API_PROXY_TARGET` — which only matters if you run Vite *inside* a container and need to point its dev proxy at `http://backend:3000` instead of `http://localhost:3000`.
 
-The one runtime variable on the frontend side belongs to the **nginx container**, not the bundle: `EMBED_FRAME_ANCESTORS` (the Outline address allowed to frame a few Solvro pages — see [2.2](#22--frontend-environment-variables)). It only changes response headers; it is empty (embedding off) by default.
+The two runtime variables on the frontend side belong to the **nginx container**, not the bundle: `EMBED_FRAME_ANCESTORS` (the Outline address allowed to frame a few Solvro pages; it only changes response headers and is empty, embedding off, by default) and `ATTACHMENT_MAX_FILE_MB` (sets the upload body limit). See [2.2](#22--frontend-environment-variables).
 
 ### Secrets discipline
 
@@ -120,11 +120,12 @@ The `?schema=public` query param is required by Prisma — if you drop it, migra
 
 The runtime bundle has no `VITE_*` vars baked in. **If you find yourself adding one, reconsider — the `/api` reverse-proxy pattern is what keeps the bundle environment-agnostic.**
 
-One variable is read by the **production frontend container** (the nginx image) rather than the bundle:
+Two variables are read by the **production frontend container** (the nginx image) rather than the bundle:
 
 | Variable | Where it's read | Default | Purpose |
 |---|---|---|---|
 | `EMBED_FRAME_ANCESTORS` | `/docker-entrypoint.d/15-embed-frame-ancestors.envsh` ([frontend/nginx-embed-frame-ancestors.envsh](frontend/nginx-embed-frame-ancestors.envsh)) at container start | empty (embedding off) | Space- or comma-separated `http(s)` origins (`scheme://host[:port]`, no path, wildcard or other characters; one trailing `/` tolerated), e.g. `https://docs.acme.com`: the Outline address(es) allowed to put Solvro pages in an iframe. See below. |
+| `ATTACHMENT_MAX_FILE_MB` | `/docker-entrypoint.d/16-attachment-body-limit.envsh` ([frontend/nginx-attachment-body-limit.envsh](frontend/nginx-attachment-body-limit.envsh)) at container start | `25`, which gives `26m` | The same setting as the backend's ([2.1](#21--backend-environment-variables)). The hook writes `client_max_body_size` for the attachment upload location: the value rounded up plus 1 MB. It accepts a plain decimal number with at most 6 digits before the point; anything else (also forms the backend accepts, such as `1e2`) keeps `26m` and logs `16-attachment-body-limit: ERROR: …`. [ci/check-attachment-body-limit.sh](ci/check-attachment-body-limit.sh) asserts this against the built image. |
 
 **What it widens.** With it set, `Content-Security-Policy: frame-ancestors 'self' <origins>` replaces the strict `frame-ancestors 'self'` on exactly these pages and no others: `/embed/projects/<numeric id>/tasks`, `/embed/projects/<numeric id>/status`, `/embed/projects/<numeric id>/timeline` (the signed-in embeds) and `/share/<token>` (the guest link, also used by the guest embed, `?embed=1`). A trailing `/` and a query string are allowed. Every other page, asset and `/sw.js` keeps `'self'`. While at least one origin is set, `X-Frame-Options` is dropped on those pages (it cannot express an allow-list, and current browsers ignore it when `frame-ancestors` is present); with embedding off it stays (`SAMEORIGIN`).
 
@@ -136,7 +137,7 @@ One variable is read by the **production frontend container** (the nginx image) 
 
 **Signed-in embeds need a shared parent domain (D6).** The embed pages run in a third-party iframe, so the browser partitions their storage unless Solvro and Outline share a registrable parent domain (e.g. `solvro.acme.com` and `docs.acme.com`). On a shared parent domain the Outline page can embed the task table already signed in; otherwise the embed shows its sign-in prompt, and the supported alternative is a guest link embedded with `/share/<token>?embed=1`, which needs no sign-in.
 
-For `setup.sh` deploys it is saved to `~/solvro/.env` and passed to the frontend container — see [2.13](#213--production-deployment-via-setupsh). The Vite dev server (`:5173`) does not read it.
+For `setup.sh` deploys both are saved to `~/solvro/.env` and passed to the frontend container — see [2.13](#213--production-deployment-via-setupsh). The Vite dev server (`:5173`) does not read it.
 
 ### 2.3 — Postgres / database environment variables
 
@@ -222,13 +223,13 @@ location /api/ {
 
 Backend routers stay mounted at `/auth`, `/projects`, `/tasks`, etc. — **without** an `/api` prefix. If you add a router, do **not** prefix it with `/api`; the proxy handles that.
 
-**Nginx files**: [frontend/nginx.conf](frontend/nginx.conf) (locations), [frontend/nginx-frame-protection.conf](frontend/nginx-frame-protection.conf) (strict framing headers), [frontend/nginx-frame-protection-embed.conf](frontend/nginx-frame-protection-embed.conf) (static snippet that sends the mapped framing headers), [frontend/nginx-frame-protection-embed-map.conf.template](frontend/nginx-frame-protection-embed-map.conf.template) (the `map` blocks, rendered at start) and [frontend/nginx-embed-frame-ancestors.envsh](frontend/nginx-embed-frame-ancestors.envsh) (validates `EMBED_FRAME_ANCESTORS`, see [2.2](#22--frontend-environment-variables)). [frontend/Dockerfile](frontend/Dockerfile) copies them into the image.
+**Nginx files**: [frontend/nginx.conf](frontend/nginx.conf) (locations), [frontend/nginx-frame-protection.conf](frontend/nginx-frame-protection.conf) (strict framing headers), [frontend/nginx-frame-protection-embed.conf](frontend/nginx-frame-protection-embed.conf) (static snippet that sends the mapped framing headers), [frontend/nginx-frame-protection-embed-map.conf.template](frontend/nginx-frame-protection-embed-map.conf.template) (the `map` blocks, rendered at start) [frontend/nginx-embed-frame-ancestors.envsh](frontend/nginx-embed-frame-ancestors.envsh) (validates `EMBED_FRAME_ANCESTORS`, see [2.2](#22--frontend-environment-variables)), and [frontend/nginx-attachment-body-limit.conf](frontend/nginx-attachment-body-limit.conf) with [frontend/nginx-attachment-body-limit.envsh](frontend/nginx-attachment-body-limit.envsh) (the upload body limit: the baked default and the start hook that rewrites it). [frontend/Dockerfile](frontend/Dockerfile) copies them into the image.
 
 **Secret-bearing URLs (no access logging)**: `access_log off` is set wherever a secret is part of the URL, so the access log never holds one:
 
 - `/api/public/share/` (`location ^~`) — the guest-link API, proxied to the backend's `/public/share/` exactly like `/api/`, with the same `X-Forwarded-For` / `X-Real-IP` / `X-Forwarded-Proto` headers (this is the hop that `TRUST_PROXY=1` counts).
 - `= /api/outline/oauth/callback` and `= /api/outline/oauth/callback/` — the Outline OAuth callback, whose query string carries the one-time `code` and `state`; proxied to the backend's `/outline/oauth/callback`.
-- `~ ^/api/tasks/[0-9]+/attachments/?\z` — the task attachment upload (and the list on the same path), proxied to `/tasks/<id>/attachments` with a body limit of `ATTACHMENT_MAX_FILE_MB` rounded up plus 1 MB for the multipart envelope (**26 MB** by default). `frontend/nginx-attachment-body-limit.envsh` writes it to `/etc/nginx/snippets/attachment-body-limit.conf` at container start; an unset or invalid value keeps 26 MB and logs why and `proxy_request_buffering off`, so the body streams to the backend instead of being written to nginx's temporary files first. Every other path, including `GET`/`DELETE /api/attachments/<id>`, keeps the 1 MB limit. Access logging stays on: the URL carries no secret.
+- `~ ^/api/tasks/[0-9]+/attachments/?\z` — the task attachment upload (and the list on the same path), proxied to `/tasks/<id>/attachments` with a body limit of `ATTACHMENT_MAX_FILE_MB` rounded up plus 1 MB for the multipart envelope (**26 MB** by default). `frontend/nginx-attachment-body-limit.envsh` writes it to `/etc/nginx/snippets/attachment-body-limit.conf` at container start; an unset or invalid value keeps 26 MB and logs why. The location also sets `proxy_request_buffering off`, so the body streams to the backend instead of being written to nginx's temporary files first. Every other path, including `GET`/`DELETE /api/attachments/<id>`, keeps the 1 MB limit. Access logging stays on: the URL carries no secret.
 - `= /api/webhook/outline` — the Outline webhook, proxied to `/webhook/outline` with a **2 MB** body limit (`client_max_body_size 2m`, matching the backend's raw-body limit; the generic `/api/` location caps at 1 MB). Access logging stays on here: the URL carries no secret.
 - `/share/<token>` — a regex location (`^/share/[A-Za-z0-9_-]+/?\z`, the backend's base64url token format) that serves the SPA shell (`index.html`, via `rewrite ^ /index.html break`) with `Cache-Control: no-store`, `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex` on the document itself, so no subresource request can carry the token in a `Referer`. It takes the *widened* framing snippet (see [2.2](#22--frontend-environment-variables)).
 - Any other `/share/…` path (bare `/share/`, extra segments, odd characters) — `location ~ ^/share/`, a regex too, with the same token-hygiene headers and `access_log off` but strict framing.

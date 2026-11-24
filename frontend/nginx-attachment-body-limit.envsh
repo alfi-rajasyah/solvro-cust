@@ -6,8 +6,11 @@
 # from ATTACHMENT_MAX_FILE_MB, the backend's per-file limit, so raising that
 # setting needs no nginx edit. The limit is the setting rounded up to whole MB
 # plus 1 MB for the multipart envelope: the default 25 gives 26m. Unset, empty
-# or invalid keeps that default and logs why; the backend refuses to start on
-# an invalid value anyway.
+# or invalid keeps that default and logs why. This accepts a stricter format
+# than the backend (a plain decimal with at most 6 digits before the point), so
+# a value such as 1e2 raises the backend's limit but leaves nginx at 26m, with
+# an ERROR in the log. If the snippet cannot be written, the baked 26m stays.
+# ci/check-attachment-body-limit.sh checks this against the built image.
 #
 # Must never exit non-zero: the entrypoint runs under `set -e`.
 
@@ -22,8 +25,11 @@ attachment_body_limit_write() {
       echo "16-attachment-body-limit: ERROR: ATTACHMENT_MAX_FILE_MB '$_raw' is not a positive number of MB; upload limit stays 26m" >&2
     fi
   fi
-  printf 'client_max_body_size %sm;\n' "$_mb" > /etc/nginx/snippets/attachment-body-limit.conf
-  echo "16-attachment-body-limit: attachment uploads may carry up to ${_mb}m"
+  if printf 'client_max_body_size %sm;\n' "$_mb" > /etc/nginx/snippets/attachment-body-limit.conf; then
+    echo "16-attachment-body-limit: attachment uploads may carry up to ${_mb}m"
+  else
+    echo "16-attachment-body-limit: ERROR: could not write /etc/nginx/snippets/attachment-body-limit.conf; upload limit stays 26m" >&2
+  fi
 }
 
 attachment_body_limit_write || true
