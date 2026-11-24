@@ -263,13 +263,20 @@ function DropdownMenuSubTrigger({
 
 function DropdownMenuSubContent({
   className,
+  // SOLVRO PATCH: same Positioner className passthrough as DropdownMenuContent.
+  // The submenu's Positioner is its own stacking context too, so a submenu
+  // opened from a menu inside a Modal or Drawer needs its z-index set here to
+  // rise above the host. Default unset keeps every existing submenu unchanged.
+  positionerClassName,
   ...props
 }: Omit<React.ComponentProps<typeof DropdownMenuPrimitive.Popup>, "className"> & {
   className?: string
+  positionerClassName?: string
 }) {
   return (
     <DropdownMenuPrimitive.Portal>
-      <DropdownMenuPrimitive.Positioner>
+      {/* SOLVRO PATCH: see positionerClassName comment above. */}
+      <DropdownMenuPrimitive.Positioner className={cn(positionerClassName)}>
         <DropdownMenuPrimitive.Popup
           data-slot="dropdown-menu-sub-content"
           className={cn(
