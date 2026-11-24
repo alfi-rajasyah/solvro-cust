@@ -247,7 +247,7 @@ else fail guardrail-filters-vendor "frontend/src/components/reui/filters.tsx mis
 
 # Same drift guards for the vendored Data Grid family (dir-total) and Badge
 # (vendored 2026-08-01; counts include comment-only markers).
-EXPECTED_DATAGRID_PATCHES=41
+EXPECTED_DATAGRID_PATCHES=42
 if [ -d frontend/src/components/reui/data-grid ]; then
   N="$(grep -rc 'SOLVRO PATCH' frontend/src/components/reui/data-grid/ | awk -F: '{s+=$2} END {print s}')"
   if [ "$N" -eq "$EXPECTED_DATAGRID_PATCHES" ]; then pass guardrail-datagrid-vendor
