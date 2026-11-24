@@ -17,12 +17,11 @@ import {
   buildFilterContext,
   clearPatch,
   countActiveFilters,
-  reorderAmongVisible,
   scopeFilters,
   taskVisible,
-  visibleOrderUnchanged,
 } from "@/lib/taskFilters";
 import { useGanttExport } from "@/lib/gantt/exportContext";
+import { sectionReorderPatches, topLevelTaskMove } from "@/components/gantt-v2/reorder";
 import { addDays, buildRows, rowsDateRange, startOfDay, type Row } from "@/lib/gantt/geometry";
 import {
   DEFAULT_SECTION_COLOR,
@@ -690,32 +689,13 @@ export function SolvroGantt(props: SolvroGanttProps) {
         // task isn't even representable in the old engine's flat section
         // list at all).
         if (parentId !== null) return false;
-
-        // Re-derive the desired root order from the CURRENT (pre-drag) root
-        // list — same shape `resources` already is (sections, then the
-        // pseudo group last if present) — splice the move in at `index`,
-        // then patch every REAL section whose position actually changed.
-        // Mirrors GanttFrame.tsx:544-559's ordered/filtered/splice + diffed
-        // Promise.all of useUpdateSection calls.
-        // `index` counts the rows the user sees (`resources`); the new order is
-        // computed on the full list (`allResources`), anchored on the visible
-        // neighbour the section was dropped next to, so sections hidden by the
-        // epic filter keep their place.
-        const nextRootOrder = reorderAmongVisible(
+        const patches = sectionReorderPatches(
           allResources.map((r) => r.id),
           resources.map((r) => r.id),
           resourceId,
           index,
+          sections,
         );
-        // Nothing moved on screen (or no other visible section): save nothing.
-        if (!nextRootOrder) return false;
-
-        const patches = nextRootOrder
-          .filter((id) => id !== sectionNodeId(null))
-          .map((id, i) => ({ id: parseSectionId(id), position: i }))
-          .filter((p): p is { id: number; position: number } => typeof p.id === "number")
-          .filter(({ id, position }) => sections.find((s) => s.id === id)?.position !== position);
-
         if (patches.length === 0) return false; // no-op — nothing actually moved
         setActionError(null);
         patches.forEach(({ id, position }) => {
@@ -755,53 +735,14 @@ export function SolvroGantt(props: SolvroGanttProps) {
       if (parentId === null) return false;
       const targetSectionId = parseSectionId(parentId);
       if (targetSectionId === undefined) return false;
-
-      // `position` is one GLOBAL dense index across every top-level task in
-      // the project (CLAUDE.md: "one canonical manual order"; backend's
-      // sibling key for parentTaskId===null is project-wide, not
-      // per-section — taskOrdering.ts:17-19). Unifies GanttFrame's two old
-      // drop paths — the row-target case (:431-471, arbitrary same/cross
-      // -section position via a specific target row) and the
-      // section-target case (:500-536, always append at the target
-      // section's block end) — into one index-based computation, since
-      // ReUI's `index` gives the precise slot in EITHER case.
-      const topLevelOrdered = tasks
-        .filter((t) => t.parentTaskId === null)
-        .sort((a, b) => a.position - b.position || a.id - b.id);
-      const others = topLevelOrdered.filter((t) => t.id !== taskId);
-      // `index` counts the siblings the user sees; `others` stays the full order.
-      const visibleIds = new Set(visibleTasks.map((t) => t.id));
-      const targetSiblings = others.filter((t) => t.sectionId === targetSectionId && visibleIds.has(t.id));
-      const crossSection = targetSectionId !== moved.sectionId;
-
-      let position: number | undefined;
-      if (targetSiblings.length === 0) {
-        // No other task in the target section — GanttFrame.tsx:529's `last`
-        // undefined branch: omit position entirely (appends at the global
-        // end; harmless, since display groups by section anyway).
-        position = undefined;
-      } else if (index >= targetSiblings.length) {
-        const last = targetSiblings[targetSiblings.length - 1];
-        position = others.findIndex((t) => t.id === last.id) + 1;
-      } else {
-        const before = targetSiblings[index];
-        position = others.findIndex((t) => t.id === before.id);
-      }
-
-      if (!crossSection) {
-        // Dropped back where it was on screen: hidden siblings must not shift.
-        const visibleInSection = topLevelOrdered
-          .filter((t) => t.sectionId === targetSectionId && visibleIds.has(t.id))
-          .map((t) => t.id);
-        if (visibleOrderUnchanged(visibleInSection, taskId, index)) return false;
-      }
-      if (!crossSection && (position === undefined || position === moved.position)) {
-        return false; // no-op — same section, same slot (or nothing to reorder against)
-      }
-
-      const patch: { sectionId?: number | null; position?: number } = {};
-      if (crossSection) patch.sectionId = targetSectionId;
-      if (position !== undefined) patch.position = position;
+      const patch = topLevelTaskMove(
+        tasks,
+        new Set(visibleTasks.map((t) => t.id)),
+        moved,
+        targetSectionId,
+        index,
+      );
+      if (!patch) return false;
       setActionError(null);
       updateTask.mutateAsync({ id: taskId, patch }).catch((err: unknown) => {
         setActionError(err instanceof ApiError ? err.message : "Could not move task.");

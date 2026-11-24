@@ -409,14 +409,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Trigger: a project rendering low hundreds of bars or a profiler flag. Then share one observer.
 - **Source:** snapshot line 546, section "Plan B Task 9 deferred findings — ReUI Gantt swap (2026-07-25)"
 
-### ISS-104 · P3 · handleResourceReorder is one long three-branch callback
-
-- **Type:** debt · **Found:** 2026-07-25 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** handleResourceReorder in frontend/src/components/gantt-v2/SolvroGantt.tsx (line ~673)
-- **Problem:** The reorder handler spans about 130 lines and three branches, kept to mirror the old engine for diffing.
-- **Why deferred / fix direction:** Split into named helpers in a readability pass.
-- **Source:** snapshot line 557, section "Final whole-branch review additions (2026-07-25)"
-
 ### ISS-107 · P3 · Dark-mode Critical Path ring on Gantt bars resembles the selection ring
 
 - **Type:** decision · **Found:** 2026-09-02 · **Verified:** 2026-11-24 @ `670f206`
@@ -866,3 +858,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-214 · 2026-11-24 · CHANGELOG "The nginx upload limit follows ATTACHMENT_MAX_FILE_MB" · ATTACHMENT_MAX_FILE_MB above 25 also needs the nginx body limit raised
 - ISS-210 · 2026-11-24 · CHANGELOG "Gantt row menu dialogs wait for their own menu only" · Gantt row-menu dialogs find their menu through a document-wide selector
 - ISS-103 · 2026-11-24 · CHANGELOG "Gantt section and reorder code tidied, no behaviour change" · Gantt section-id parsing lives outside the adapter
+- ISS-104 · 2026-11-24 · CHANGELOG "Gantt section and reorder code tidied, no behaviour change" · handleResourceReorder is one long three-branch callback
