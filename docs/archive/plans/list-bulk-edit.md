@@ -3,7 +3,7 @@
 Status: shipped 2026-11-20 (started @ `dde18a4`)
 Archive path: `docs/archive/plans/list-bulk-edit.md`
 
-Lane: P (new route, spine). Wave C of `docs/plans/github-feature-waves.md`: GitHub #90, plus the List part of #91.
+Lane: P (new route, spine). Wave C of `docs/archive/plans/github-feature-waves.md`: GitHub #90, plus the List part of #91.
 
 ## Streams
 

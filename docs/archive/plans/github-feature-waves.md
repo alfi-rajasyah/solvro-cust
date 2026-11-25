@@ -1,6 +1,6 @@
 # GitHub feature issues #88–#95: wave plan
 
-Status: in progress (triage 2026-11-19 @ `7d101ef`; wave A started 2026-11-19)
+Status: shipped 2026-11-20
 Archive path: `docs/archive/plans/github-feature-waves.md`
 
 Triage of the eight open GitHub feature issues into waves after the design-cleanup wave. Each wave has 2–3 streams whose files do not overlap. `frontend/src/lib/queries.ts` (spine) has at most one writer per wave; `frontend/src/pages/views/ProjectList.tsx` has one writer per wave.
@@ -70,3 +70,12 @@ Decisions (user, 2026-11-20):
 - #93 7f: managing a customer's own team stays on `customer:write` plus the owner rule.
 
 No questions open.
+
+## Outcome
+
+All eight issues shipped and are closed on GitHub:
+
+- Wave A: #88 (PR #106), #95 (PR #107), #91 backend (PR #108).
+- Wave B: #94 and #89 (PR #109), #91 frontend (PR #110), #92 (PR #111).
+- Wave C: #90 and the #91 List column (PR #112).
+- Wave D: #93 (PR #113).

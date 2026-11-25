@@ -3,7 +3,7 @@
 Status: shipped 2026-11-20
 Archive path: `docs/archive/plans/workload-tab.md`
 
-Lane: P (new route and view). Stream B3 of `docs/plans/github-feature-waves.md`.
+Lane: P (new route and view). Stream B3 of `docs/archive/plans/github-feature-waves.md`.
 
 ## Scope
 
