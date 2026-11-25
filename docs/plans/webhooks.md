@@ -1,18 +1,18 @@
-# Webhooks: outgoing events and GitLab incoming links (GitHub #166)
+# Webhooks: outgoing events and a general incoming URL (GitHub #166)
 
 Status: in progress (written 2026-11-25 @ `259fd0a`; Phase 1 started 2026-11-25)
 Archive path: `docs/archive/plans/webhooks.md`
 
-Lane: P (new models and migrations, new routes, a new signed unauthenticated route, a new Settings section). Two phases, each its own branch and PR: **Phase 1** outgoing webhooks, **Phase 2** GitLab incoming links. Phase 2 starts after Phase 1 merges; the two never carry a migration at the same time.
+Lane: P (new models and migrations, new routes, a new signed unauthenticated route, a new Settings section). Two phases, each its own branch and PR: **Phase 1** outgoing webhooks, **Phase 2** a general incoming URL. Phase 2 starts after Phase 1 merges; the two never carry a migration at the same time.
 
 ## Decisions (user, 2026-11-25)
 
-- Both directions: Solvro sends events to other tools, and Solvro receives GitLab events.
+- Both directions: Solvro sends events to other tools, and Solvro receives events from any tool through one general incoming URL (Phase 2 rewritten from GitLab-only to general by the user, 2026-11-25).
 - Outgoing format: [Standard Webhooks](https://www.standardwebhooks.com/) (JSON body `{ type, timestamp, data }`, headers `webhook-id`, `webhook-timestamp`, `webhook-signature`, HMAC-SHA256). It is the only format. A Google Chat format was planned and then dropped by the user (2026-11-25): a webhook needs a receiver that reads Standard Webhooks.
 - Outgoing events in the first version: `task.created`, `task.status_changed`, `task.assigned`, `task.due_date_changed`, `task.completed`, `comment.created`, `project.created`, `risk.created`.
 - No note events. INTERNAL notes never leave Solvro (root Guardrails); customer-facing notes wait for a later version.
 - A webhook sends only events about projects its owner can see at delivery time. When the owner loses access, deliveries for that project stop.
-- Incoming: one URL per project with a secret token. A GitLab commit or merge request that contains a Solvro task URL adds a comment with the link to that task. Tasks are named by their URL (`${APP_URL}/tasks/<id>`), not by a new short reference (option (b)): no task-reference schema change.
+- Incoming: one URL per project with a secret token in its path. Any JSON that contains a Solvro task URL, for example a commit message, adds a comment with the link to that task; a fixed Solvro JSON lets scripts write a comment directly. Tasks are named by their URL (`${APP_URL}/tasks/<id>`), not by a new short reference (option (b)): no task-reference schema change.
 
 Defaults accepted by the user, 2026-11-25:
 
@@ -20,7 +20,7 @@ Defaults accepted by the user, 2026-11-25:
 - Targets must be https; `WEBHOOK_ALLOW_HTTP=true` allows plain http.
 - `comment.created` carries the first 500 characters of the comment. The create dialog says that a shared chat space can hold people without project access.
 - The new permission `webhook:manage` gates the Settings section. The migration adds it to the built-in TAM and STAKEHOLDER roles; custom roles get it only when an admin adds it; admins have it through `*`.
-- A GitLab comment's author is the user who created the incoming URL, with a "via GitLab" marker. If that user is deactivated or loses access to the project, the URL stops accepting events.
+- An incoming comment's author is the user who created the incoming URL, with a "via <URL name>" marker. If that user is deactivated or loses access to the project, the URL stops accepting events.
 
 ## Phase 1: outgoing webhooks
 
@@ -102,57 +102,83 @@ An allow-list. Any activity row that matches no line is marked dispatched and se
 
 Wave: 1.1 first, then 1.2 ∥ 1.3 (separate files; the orchestrator mounts the router in `app.ts`), then 1.4, then 1.5.
 
-## Phase 2: GitLab incoming links
+## Phase 2: general incoming URL
+
+Decision (user, 2026-11-25): incoming events are general, not written for one tool at a time. One URL accepts the JSON of any tool that can send a webhook (GitLab, GitHub, Gitea, Bitbucket, CI jobs, n8n, Zapier, your own scripts). There is no per-tool parser and no per-tool signature check.
+
+### How a tool proves who it is
+
+- The URL holds the secret: `POST ${APP_URL}/api/webhook/in/<token>`. Every tool accepts a URL, so this works everywhere. The token is 32 random bytes in base64url, stored only as its SHA-256 hash and looked up by that hash.
+- An unknown token, an inactive URL and a deleted URL all get the same 404.
+- The token never reaches a log: `http/requestLogger.ts` masks the path segment after `/webhook/in/`, and `frontend/nginx.conf` turns off the access log for that location (the setup.sh deployment uses the same file).
+- Rotate makes a new token; the old URL stops at once.
+
+### Two modes, chosen by the body
+
+1. **Solvro JSON.** A body with a top-level `solvro` key: `{ "solvro": { "task": 345, "text": "Deployed to prod", "url": "https://ci.example.com/run/88" } }`. `task` is a task id or a task URL; `text` is required (max 2,000 characters); `url` is optional and is added as the source link. One request writes one comment. A bad body gets 400 with a reason, so a script author can fix it.
+2. **Link scanner.** Any other body. Solvro reads every string in the JSON (depth up to 20, up to 5,000 strings) and finds the task URLs `${APP_URL}/tasks/<id>`. For each task found:
+   - The comment text is the first line of the string that held the URL (max 200 characters), for example a commit message or a merge request title.
+   - The source link is a `url`, `html_url` or `web_url` field in the same JSON object, when there is one.
+   - The comment reads `<first line> · <source link>`, with the marker "via <URL name>".
+   - The answer is 200 with `{ "linked": <n> }`, also when `n` is 0, so a tool never retries a body that has no task URL.
+
+Both modes:
+
+- Only tasks inside the URL's project count. Any other id is ignored, so one project's URL can never write to another project. At most 20 tasks per request.
+- Body types: `application/json`; `application/x-www-form-urlencoded` with a `payload` field that holds JSON (GitHub's form option); `text/plain`, scanned as one string. Max 1 MB.
+- Rate limit: 60 requests a minute per URL and per address.
+- The same (task, source) pair writes one comment only (`InboundHookLink`). The source is the source link, or the SHA-256 of the first line when there is no link. A re-pushed commit or a retried delivery comments once.
+- The author of each comment is the user who created the URL. If that user is deactivated or cannot see the project any more, the request gets 200, writes nothing, and the URL turns inactive with a reason the project owner sees.
+- A comment records `comment` `created` activity, so notifications follow the normal path.
+- Without `APP_URL`, the scanner finds nothing; Solvro JSON with a numeric `task` still works.
+
+### No loop between outgoing and incoming
+
+An outgoing webhook pointed at an incoming URL would make each comment send a new comment. Two rules stop this:
+
+- Outgoing `validateTarget` refuses a URL whose path starts with `/api/webhook/in/` on the `APP_URL` host.
+- Outgoing webhooks do not send `comment.created` for a comment written by an incoming URL (`Comment.source` set). A relay in between cannot restart the loop.
 
 ### Data model (one migration)
 
-- `InboundHook`: `id`, `projectId` (cascade), `createdById` → User, `provider` (`gitlab`), `tokenHash` (SHA-256 of the secret; GitLab sends it in plain in `X-Gitlab-Token`, compared in constant time), `active`, `lastReceivedAt?`, `createdAt`.
-- `InboundHookLink`: (`taskId`, `externalUrl`) unique, so a re-pushed commit or a re-opened merge request comments once.
-- `Comment.source String?` (`gitlab`), shown as a "via GitLab" marker.
-
-### Route: `POST /webhook/gitlab/:hookId` (`routes/webhook.ts`)
-
-- A signed webhook like the iTop and Outline ones: mounted before `express.json()`, its own raw body limit (1 MB), rate-limited per address and per hook, refused without a valid token. Unknown hook, inactive hook and wrong token all get the same answer.
-- `X-Gitlab-Token` is added to the header masking in `http/requestLogger.ts`.
-- `backend/CLAUDE.md` "Public (unauthenticated) surface" lists this route as the third signed-webhook exception.
-- Handles `Push Hook` (each `commits[].message` and `url`) and `Merge Request Hook` (`object_attributes.title`, `description`, `url`, actions `open`, `reopen`, `merge`). Every other event type answers 200 and does nothing.
-- Finds task URLs that start with `${APP_URL}/tasks/`. Only tasks inside the hook's project count; any other id is ignored, so one project's URL can never write to another project. At most 20 tasks per delivery.
-- For each new (task, URL) pair: a comment by the hook's creator with `source: "gitlab"`, for example `Commit a1b2c3d by Maya Putri: Fix cut-over script · <url>` or `Merge request !42 merged: <title> · <url>`. It records `comment` `created` activity, so notifications and outgoing webhooks follow the normal path.
-- If the creator is inactive or cannot see the project, the hook answers 200, writes nothing, and turns inactive with a reason the project owner sees.
-- Without `APP_URL` the route answers 404 (task URLs cannot be recognised).
+- `InboundHook`: `id`, `projectId` (cascade), `createdById` → User, `name`, `tokenHash` (unique), `tokenPreview` (first 4 characters, for the list), `active`, `disabledReason?`, `lastReceivedAt?`, `createdAt`. Limit: 5 per project.
+- `InboundHookLink`: `hookId` (cascade), `taskId` (cascade), `sourceKey`, `createdAt`; unique on (`taskId`, `sourceKey`).
+- `Comment.source String?` (`incoming`) and `Comment.inboundHookId Int?` (set null on delete), so the marker shows the URL's name.
 
 ### Routes for managing incoming URLs (`routes/inboundHooks.ts`)
 
-- `GET /projects/:id/inbound-hooks`, `POST`, `DELETE /projects/:id/inbound-hooks/:hookId`, `POST …/rotate-token`.
-- Gate: `project:write` plus `ensureProjectOwnerAccess` (the project's TAM or the owner of a linked customer). `POST` and rotate return the URL and the token once.
+- `GET /projects/:id/inbound-hooks`, `POST`, `PATCH …/:hookId` (name, active), `DELETE …/:hookId`, `POST …/:hookId/rotate-token`.
+- Gate: `project:write` plus `ensureProjectOwnerAccess` (the project's TAM or the owner of a linked customer). `POST` and rotate return the full URL once. The list shows the name, `tokenPreview`, the last received time and the disabled reason, never the URL.
 
 ### Frontend
 
-- Project page: an "Integrations" entry in the project's actions menu, for owners. It opens a dialog with the GitLab URL, a token shown once, setup steps (GitLab → Settings → Webhooks, events "Push" and "Merge request"), the last received time, and Rotate / Delete.
-- Task comments show "via GitLab" on comments with that source.
+- Project page: an "Integrations" entry in the project's actions menu, for owners. It opens a dialog: the list of incoming URLs, Add (name only), the full URL shown once with a copy button, Rotate, Disable/Enable, Delete.
+- The dialog's help text is general: paste the URL into the tool's webhook settings, choose JSON, and put task links in commit messages or titles. Tool-by-tool steps (GitLab, GitHub, n8n, curl) live in the guide, not in the UI.
+- Task comments from an incoming URL show "via <URL name>".
 
 ### Phase 2 tasks
 
 | Task | Content | Depends on |
 |---|---|---|
-| 2.1 | Migration, `Comment.source` in the comment DTOs | Phase 1 merged |
-| 2.2 | Incoming route, parser, comment writer, logger masking, tests | 2.1 |
+| 2.1 | Migration, `Comment.source` and `inboundHookId` in the comment DTOs, the outgoing loop rules | Phase 1 merged |
+| 2.2 | Incoming route: token lookup, body types, Solvro JSON mode, scanner, comment writer, dedup, logger and nginx masking, tests with GitLab, GitHub and plain fixtures | 2.1 |
 | 2.3 | Management routes, tests | 2.1 |
 | 2.4 | Project dialog, comment marker, tests | 2.3 |
-| 2.5 | e2e spec (create URL, post a GitLab push fixture, see the comment), guide section, `backend/CLAUDE.md` public-surface line | 2.2, 2.4 |
+| 2.5 | e2e spec (create a URL, post a push fixture and a Solvro JSON body, see both comments), guide section, `backend/CLAUDE.md` public-surface line | 2.2, 2.4 |
 
 Wave: 2.1 first, then 2.2 ∥ 2.3, then 2.4, then 2.5.
 
 ## Spine and review
 
-- Spine touches: `schema.prisma` + migrations (both phases), env (`src/env.ts`, Phase 1), `lib/queries.ts` (frontend hooks, both phases). Each needs the instant review; the phase review covers the rest.
+- Spine touches: `schema.prisma` + migrations (both phases), env (`src/env.ts`, Phase 1), `nginx.conf` (Phase 2 log masking), `lib/queries.ts` (frontend hooks, both phases). Each needs the instant review; the phase review covers the rest.
 - `lib/visibility.ts` does not change. The dispatcher reuses `filterActiveUsersWhoCanSeeProject`, which the parity test in `test/notifications.test.ts` already covers.
 - Guardrail check: no export of INTERNAL notes (no note events, no note data in any payload).
 
 ## Out of scope for this version
 
 - Note events, customer-facing or not.
-- GitHub, Jira or other incoming providers (the `provider` column leaves room).
+- Per-tool parsers and per-tool signature checks for incoming events (a comment such as "Commit a1b2c3d by Maya" needs one; the scanner writes the first line and the link instead).
+- Incoming actions other than a comment (status change, new task).
 - Short task references (`SOL-123`).
 - An admin view of all users' webhooks.
 - Slack or Microsoft Teams formats.
