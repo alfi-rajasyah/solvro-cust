@@ -10,8 +10,9 @@ import type {
   TaskStatus,
   WeeklyHealth,
   WeeklyStatus,
+  WebhookDeliveryStatus,
+  WebhookFormat,
 } from "@/lib/queries";
-import type { WebhookDeliveryStatus, WebhookFormat } from "@/lib/queries";
 import type { ShareLinkStatus } from "@/lib/shareLinks";
 
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
@@ -161,7 +162,7 @@ export const DELIVERY_STATUS_LABEL: Record<WebhookDeliveryStatus, string> = {
 };
 
 const DELIVERY_ERROR_LABEL: Record<string, string> = {
-  owner_no_access: "The webhook owner can no longer see this project.",
+  owner_no_access: "The webhook owner can no longer see this project, or lost the permission to receive its events.",
   timeout: "The receiver did not answer in time.",
   connection_failed: "Could not connect to the receiver.",
   target_private: "The address points to a private network, which is not allowed.",
@@ -170,6 +171,7 @@ const DELIVERY_ERROR_LABEL: Record<string, string> = {
   target_invalid: "The address is not valid.",
   target_unresolvable: "The address could not be resolved.",
   internal_error: "Solvro could not send this delivery.",
+  secret_unreadable: "Solvro could not read this webhook's signing secret. Rotate the secret, then try again.",
   webhook_disabled: "The webhook was disabled before this was sent.",
 };
 
@@ -177,5 +179,5 @@ const DELIVERY_ERROR_LABEL: Record<string, string> = {
 export function deliveryErrorLabel(code: string): string {
   const http = /^http_(\d{3})$/.exec(code);
   if (http) return `The receiver answered ${http[1]}.`;
-  return DELIVERY_ERROR_LABEL[code] ?? "The delivery failed.";
+  return DELIVERY_ERROR_LABEL[code] ?? "The request failed.";
 }

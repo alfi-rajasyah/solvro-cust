@@ -121,7 +121,7 @@ describe("WebhooksPanel", () => {
     renderPanel();
     const row = await screen.findByTestId("webhook-1");
     fireEvent.click(within(row).getByRole("button", { name: "Send test" }));
-    expect(await within(row).findByText("Test failed (503): The receiver answered 503.")).toBeTruthy();
+    expect(await within(row).findByText("Test failed: The receiver answered 503.")).toBeTruthy();
   });
 
   it("creates a webhook, sends the events in contract order, and shows the secret once", async () => {
@@ -219,7 +219,8 @@ describe("WebhooksPanel edit", () => {
     expect(within(dialog).getByTestId("webhook-current-target").textContent).toBe(
       "https://hooks.example.com/path/with-a-token?…",
     );
-    expect(within(dialog).getByText("Leave blank to keep the current URL.")).toBeTruthy();
+    const hint = within(dialog).getByText("Leave blank to keep the current URL.");
+    expect(within(dialog).getByPlaceholderText("https://example.com/hooks/solvro").getAttribute("aria-describedby")).toBe(hint.id);
     fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(sentBody("PATCH /api/webhooks/1")).toBeDefined());
     expect(sentBody("PATCH /api/webhooks/1")).not.toHaveProperty("url");
@@ -241,7 +242,8 @@ describe("webhookPresentation", () => {
     expect(deliveryErrorLabel("http_500")).toBe("The receiver answered 500.");
     expect(deliveryErrorLabel("timeout")).toBe("The receiver did not answer in time.");
     expect(deliveryErrorLabel("target_private")).toMatch(/private network/);
-    expect(deliveryErrorLabel("something_new")).toBe("The delivery failed.");
+    expect(deliveryErrorLabel("secret_unreadable")).toMatch(/Rotate the secret/);
+    expect(deliveryErrorLabel("something_new")).toBe("The request failed.");
   });
 
   it("summarises events compactly", () => {

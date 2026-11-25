@@ -37,6 +37,7 @@ export function WebhookFormModal({
   const update = useUpdateWebhook();
   const { data: projects, isLoading: projectsLoading } = useProjects();
   const formId = useId();
+  const urlHintId = `${formId}-url-hint`;
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -196,6 +197,7 @@ export function WebhookFormModal({
             type="url"
             inputMode="url"
             autoComplete="off"
+            aria-describedby={isEdit ? urlHintId : undefined}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder={
@@ -203,8 +205,12 @@ export function WebhookFormModal({
             }
             className={`${INPUT_CLASS} font-mono`}
           />
-          {isEdit && <span className="mt-1 block text-meta text-on-surface-variant">Leave blank to keep the current URL.</span>}
         </Field>
+        {isEdit && (
+          <p id={urlHintId} className="-mt-3 text-meta text-on-surface-variant">
+            Leave blank to keep the current URL.
+          </p>
+        )}
 
         <fieldset className="min-w-0">
           <legend className="mb-1.5 text-label-caps uppercase text-on-surface-variant">Events</legend>

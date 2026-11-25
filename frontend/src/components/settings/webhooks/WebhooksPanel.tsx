@@ -279,8 +279,9 @@ function TestResultLine({ result }: { result: WebhookTestResult | string }) {
   }
   return (
     <p className="text-meta text-error">
-      Test failed{result.statusCode != null ? ` (${result.statusCode})` : ""}
-      {result.error ? `: ${deliveryErrorLabel(result.error)}` : "."}
+      {result.error
+        ? `Test failed: ${deliveryErrorLabel(result.error)}`
+        : `Test failed${result.statusCode != null ? ` (${result.statusCode})` : ""}.`}
     </p>
   );
 }
