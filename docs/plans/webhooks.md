@@ -8,7 +8,7 @@ Lane: P (new models and migrations, new routes, a new signed unauthenticated rou
 ## Decisions (user, 2026-11-25)
 
 - Both directions: Solvro sends events to other tools, and Solvro receives GitLab events.
-- Outgoing format: [Standard Webhooks](https://www.standardwebhooks.com/) (JSON body `{ type, timestamp, data }`, headers `webhook-id`, `webhook-timestamp`, `webhook-signature`, HMAC-SHA256). A second format, **Google Chat**, sends `{ "text": "..." }` with no signature, because Google Chat cannot read the standard body.
+- Outgoing format: [Standard Webhooks](https://www.standardwebhooks.com/) (JSON body `{ type, timestamp, data }`, headers `webhook-id`, `webhook-timestamp`, `webhook-signature`, HMAC-SHA256). It is the only format. A Google Chat format was planned and then dropped by the user (2026-11-25): a webhook needs a receiver that reads Standard Webhooks.
 - Outgoing events in the first version: `task.created`, `task.status_changed`, `task.assigned`, `task.due_date_changed`, `task.completed`, `comment.created`, `project.created`, `risk.created`.
 - No note events. INTERNAL notes never leave Solvro (root Guardrails); customer-facing notes wait for a later version.
 - A webhook sends only events about projects its owner can see at delivery time. When the owner loses access, deliveries for that project stop.
@@ -26,7 +26,7 @@ Defaults accepted by the user, 2026-11-25:
 
 ### Data model (one migration)
 
-- `WebhookSubscription`: `id`, `ownerId` → User, `name`, `url`, `format` (`standard` | `google_chat`), `secretEnc` (sealed with `lib/secretBox.ts`, `null` for Google Chat), `eventTypes String[]`, `projectIds Int[]` (empty = every project the owner can see), `active`, `consecutiveFailures`, `disabledReason?`, `createdAt`, `updatedAt`. Limit: 10 per user.
+- `WebhookSubscription`: `id`, `ownerId` → User, `name`, `url`, `secretEnc` (sealed with `lib/secretBox.ts`), `eventTypes String[]`, `projectIds Int[]` (empty = every project the owner can see), `active`, `consecutiveFailures`, `disabledReason?`, `createdAt`, `updatedAt`. Limit: 10 per user.
 - `WebhookDelivery`: `id`, `subscriptionId` (cascade), `activityEventId` (cascade), `eventType`, `status` (`pending` | `succeeded` | `failed`), `attempts`, `nextAttemptAt`, `lastStatusCode?`, `lastError?` (short, never the response body), `createdAt`. Unique on (`subscriptionId`, `activityEventId`, `eventType`), so one change that maps to two events a webhook follows sends both. Indexes on (`subscriptionId`, `id`) and `createdAt`. Index on (`status`, `nextAttemptAt`).
 - `ActivityEvent.webhookDispatchedAt DateTime?` with a partial index where it is null. The migration sets it to `now()` on every existing row, so past events are never sent.
 - No change to any write path: the dispatcher reads the activity log, which every write already records in the same transaction (`lib/activity.ts`). Bulk edits, duplicates and imports send events exactly when they record activity.
@@ -62,7 +62,6 @@ An allow-list. Any activity row that matches no line is marked dispatched and se
 }
 ```
 
-Google Chat gets one line built from the same data, for example `rizky.pratama moved "Cut-over rehearsal" to In review · Core banking migration · <url>`.
 
 ### Dispatcher (`lib/webhooks/dispatcher.ts`, started in `src/index.ts` like the iTop scheduler)
 
@@ -99,7 +98,7 @@ Google Chat gets one line built from the same data, for example `rizky.pratama m
 | 1.2 | Event mapping, payload builders, signing, address policy, dispatcher, retries, auto-disable, tests | 1.1 |
 | 1.3 | Routes, validation, tests | 1.1 |
 | 1.4 | Settings section, dialogs, deliveries panel, `queries.ts` hooks, tests | 1.3 (API shape) |
-| 1.5 | e2e spec (create, one-time secret, disable, delete, Google Chat row, 403 without the permission; the test-send is covered by backend tests against a local receiver), `docs/guides/webhooks.md`, `docs/CONFIGURATION.md` env rows | 1.2, 1.4 |
+| 1.5 | e2e spec (create, one-time secret, disable, delete, a URL with a query string shows only its host, 403 without the permission; the test-send is covered by backend tests against a local receiver), `docs/guides/webhooks.md`, `docs/CONFIGURATION.md` env rows | 1.2, 1.4 |
 
 Wave: 1.1 first, then 1.2 ∥ 1.3 (separate files; the orchestrator mounts the router in `app.ts`), then 1.4, then 1.5.
 

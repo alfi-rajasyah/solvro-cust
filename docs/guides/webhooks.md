@@ -1,10 +1,10 @@
 # Send Solvro events to other tools with webhooks
 
-A webhook sends a message to another tool when something happens in Solvro, for example when a task changes status or someone comments. Use it to post updates in a Google Chat space, or to feed your own app.
+A webhook sends a message to another tool when something happens in Solvro, for example when a task changes status or someone comments. Use it to feed your own app.
 
 Each user manages their own webhooks. A webhook sends events only about projects its owner can open. If the owner loses access to a project, loses the `webhook:manage` or `project:read` permission, or their account is deactivated, the webhook stops sending events.
 
-**Steps:** [1. Check the permission](#1-check-the-permission) → [2. Add a webhook](#2-add-a-webhook) → [3. Check the signature](#3-check-the-signature-standard-webhooks-only) → [Events and payload](#events-and-payload) → [Deliveries and retries](#deliveries-and-retries) → [Troubleshooting](#troubleshooting)
+**Steps:** [1. Check the permission](#1-check-the-permission) → [2. Add a webhook](#2-add-a-webhook) → [3. Check the signature](#3-check-the-signature) → [Events and payload](#events-and-payload) → [Deliveries and retries](#deliveries-and-retries) → [Troubleshooting](#troubleshooting)
 
 For the server settings, see the [configuration reference](../CONFIGURATION.md#21--backend-environment-variables) (`WEBHOOK_ALLOW_PRIVATE_HOSTS`, `WEBHOOK_ALLOW_HTTP`).
 
@@ -16,25 +16,21 @@ Webhooks need the `webhook:manage` permission. The built-in TAM and Stakeholder 
 
 1. Open **Settings > Integrations > Webhooks** and select **Add webhook**.
 2. Give it a name, and paste the URL that receives the events.
-3. Pick the format:
-   - **Standard Webhooks:** a signed JSON message, for your own app or any tool that reads the [Standard Webhooks](https://www.standardwebhooks.com/) format.
-   - **Google Chat:** a one-line text message. In Google Chat, open the space, then **Apps & integrations > Webhooks > Add webhook**, and copy its URL.
-4. Pick the events, and either every project you can open or only some of them.
-5. Save. For Standard Webhooks, Solvro shows the signing secret (`whsec_…`) **once**. Copy it into the receiving app now. You can make a new one later with **Rotate secret**, which stops the old one from working.
-6. Select **Send test** to send a `webhook.test` event and see the answer the receiver gave.
-7. To change the URL later, select **Edit** and type a new one. Solvro never shows the stored URL again, only its host and a shortened path; leave the field blank to keep it.
+   Solvro sends a signed JSON message in the [Standard Webhooks](https://www.standardwebhooks.com/) format, so the receiver must read that format: your own app, or a tool that accepts it.
+3. Pick the events, and either every project you can open or only some of them.
+4. Save. Solvro shows the signing secret (`whsec_…`) **once**. Copy it into the receiving app now. You can make a new one later with **Rotate secret**, which stops the old one from working.
+5. Select **Send test** to send a `webhook.test` event and see the answer the receiver gave.
+6. To change the URL later, select **Edit** and type a new one. Solvro never shows the stored URL again, only its host and a shortened path; leave the field blank to keep it.
 
 Each user can have up to 10 webhooks. The URL must be `https://` and reach a public address, unless the server allows otherwise (see [Troubleshooting](#troubleshooting)).
 
-A "Comment added" event carries the first 500 characters of the comment. A Google Chat space can hold people who cannot open the project in Solvro, so pick the space with care.
+A "Comment added" event carries the first 500 characters of the comment. The receiving tool may show it to people who cannot open the project in Solvro, so pick the receiver with care.
 
-## 3. Check the signature (Standard Webhooks only)
+## 3. Check the signature
 
 Every Standard Webhooks message has three headers: `webhook-id`, `webhook-timestamp` and `webhook-signature`. The signature is an HMAC-SHA256 of `<webhook-id>.<webhook-timestamp>.<body>`, keyed with the secret's base64 part after `whsec_`, and written as `v1,<base64>`.
 
 Do not write this check by hand. The Standard Webhooks project publishes a verification library for most languages; pass it the secret, the headers and the raw body. Refuse a message whose timestamp is more than 5 minutes old, and use `webhook-id` to ignore a message you already handled.
-
-Google Chat messages carry no signature.
 
 ## Events and payload
 
