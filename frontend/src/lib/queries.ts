@@ -819,6 +819,10 @@ export interface ProjectNotesWindow {
 
 export const queryKeys = {
   taskStatuses: ["task-statuses"] as const,
+  // Outgoing webhooks (the caller's own): the list, and one webhook's last 50
+  // deliveries (docs/archive/plans/webhooks.md).
+  webhooks: ["webhooks"] as const,
+  webhookDeliveries: (id: number) => ["webhooks", id, "deliveries"] as const,
   // Outline base URL for every signed-in user (sidebar link); the admin
   // settings live under adminQueryKeys.outlineSettings.
   outlineConfig: ["outline", "config"] as const,
@@ -5531,3 +5535,129 @@ export function useExecutiveReport() {
   });
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────
+// Outgoing webhooks (Settings › Integrations; docs/archive/plans/webhooks.md).
+// Own webhooks only, behind webhook:manage. The signing secret is never part
+// of a Webhook; it comes back once from create and rotate-secret.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const WEBHOOK_EVENT_TYPES = [
+  "task.created",
+  "task.status_changed",
+  "task.assigned",
+  "task.due_date_changed",
+  "task.completed",
+  "comment.created",
+  "project.created",
+  "risk.created",
+] as const;
+export type WebhookEventType = (typeof WEBHOOK_EVENT_TYPES)[number];
+export type WebhookFormat = "STANDARD" | "GOOGLE_CHAT";
+export type WebhookDeliveryStatus = "PENDING" | "SUCCEEDED" | "FAILED";
+
+export interface Webhook {
+  id: number;
+  name: string;
+  url: string;
+  format: WebhookFormat;
+  eventTypes: string[];
+  /** Empty means every project the owner can see. */
+  projectIds: number[];
+  active: boolean;
+  disabledReason: string | null;
+  consecutiveFailures: number;
+  createdAt: string;
+  updatedAt: string;
+  lastDelivery: { status: WebhookDeliveryStatus; statusCode: number | null; at: string } | null;
+}
+
+export interface WebhookDelivery {
+  id: number;
+  eventType: string;
+  status: WebhookDeliveryStatus;
+  attempts: number;
+  lastStatusCode: number | null;
+  lastError: string | null;
+  createdAt: string;
+  nextAttemptAt: string | null;
+}
+
+export interface WebhookCreateInput {
+  name: string;
+  url: string;
+  format: WebhookFormat;
+  eventTypes: string[];
+  projectIds: number[];
+}
+
+/** The format is fixed at creation (`format_immutable`). */
+export type WebhookUpdateInput = Partial<Omit<WebhookCreateInput, "format">> & { active?: boolean };
+
+export interface WebhookTestResult {
+  ok: boolean;
+  statusCode: number | null;
+  error: string | null;
+}
+
+export function useWebhooks(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.webhooks,
+    queryFn: ({ signal }) => apiRequest<{ webhooks: Webhook[] }>("/webhooks", { signal }).then((r) => r.webhooks),
+    enabled,
+  });
+}
+
+export function useCreateWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: WebhookCreateInput) =>
+      apiRequest<{ webhook: Webhook; secret: string | null }>("/webhooks", { method: "POST", body: input }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.webhooks, exact: true }),
+  });
+}
+
+export function useUpdateWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...patch }: WebhookUpdateInput & { id: number }) =>
+      apiRequest<{ webhook: Webhook }>(`/webhooks/${id}`, { method: "PATCH", body: patch }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.webhooks, exact: true }),
+  });
+}
+
+export function useDeleteWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiRequest<void>(`/webhooks/${id}`, { method: "DELETE" }),
+    onSuccess: (_data, id) => {
+      qc.removeQueries({ queryKey: queryKeys.webhookDeliveries(id) });
+      return qc.invalidateQueries({ queryKey: queryKeys.webhooks, exact: true });
+    },
+  });
+}
+
+export function useRotateWebhookSecret() {
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiRequest<{ secret: string }>(`/webhooks/${id}/rotate-secret`, { method: "POST" }),
+  });
+}
+
+/** Sends one `webhook.test` event now; writes no delivery row, so nothing to invalidate. */
+export function useTestWebhook() {
+  return useMutation({
+    mutationFn: (id: number) => apiRequest<WebhookTestResult>(`/webhooks/${id}/test`, { method: "POST" }),
+  });
+}
+
+export function useWebhookDeliveries(id: number | null) {
+  return useQuery({
+    queryKey: queryKeys.webhookDeliveries(id ?? 0),
+    queryFn: ({ signal }) =>
+      apiRequest<{ deliveries: WebhookDelivery[] }>(`/webhooks/${id}/deliveries`, { signal }).then(
+        (r) => r.deliveries,
+      ),
+    enabled: id != null,
+  });
+}
