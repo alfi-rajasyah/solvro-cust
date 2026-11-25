@@ -4,6 +4,7 @@ import { Tabs } from "@/components/Tabs";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { CardGridSkeleton } from "@/components/skeletons";
 import { OutlineConnectCard } from "@/components/outline/OutlineConnectCard";
+import { WebhooksPanel } from "@/components/settings/webhooks/WebhooksPanel";
 import { ServiceCatalogueManager } from "@/components/services/ServiceCatalogueManager";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
@@ -76,18 +77,18 @@ export function Settings() {
   const showItopRow =
     itopToken.isLoading ||
     (!!itopToken.data?.configured && (canSaveItop || !!itopToken.data.set));
-  const showIntegrations =
-    outlineReturn ||
-    outlineConfig.isLoading ||
-    !!outlineConfig.data?.baseUrl ||
-    showItopRow;
+  // Outgoing webhooks need no external connection, only the permission.
+  const canManageWebhooks = hasPermission(user, "webhook:manage");
+  const showOutlineRow =
+    outlineReturn || outlineConfig.isLoading || !!outlineConfig.data?.baseUrl;
+  const showIntegrations = canManageWebhooks || showOutlineRow || showItopRow;
   const canManageCatalogue = hasPermission(user, "project:write");
 
   if (!user) return null;
 
   // One section group per tab. The tab lives in the URL (`?tab=`), so a link
   // can land on it and a reload stays put. A tab the viewer cannot use is not
-  // offered: Integrations needs a configured iTop connection or an Outline address, the catalogue
+  // offered: Integrations needs a configured iTop connection, an Outline address or webhook:manage, the catalogue
   // needs project:write.
   const tabs: { key: SettingsTab; label: string }[] = [
     { key: "account", label: "Account" },
@@ -213,6 +214,17 @@ export function Settings() {
           <div className={showItopRow ? undefined : "[&>section]:border-t-0"}>
             <OutlineConnectCard />
           </div>
+          {canManageWebhooks && (
+            <SettingsRow
+              id="settings-webhooks"
+              title="Webhooks"
+              description="Send events from the projects you can see to another tool."
+              wide
+              flush={!showItopRow && !showOutlineRow}
+            >
+              <WebhooksPanel />
+            </SettingsRow>
+          )}
         </>
       )}
 

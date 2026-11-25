@@ -89,6 +89,23 @@ const schema = z.object({
     .transform((value) => value.trim().toLowerCase())
     .pipe(z.enum(["true", "false", "1", "0", "yes", "no"]))
     .transform((value) => value === "true" || value === "1" || value === "yes"),
+  // Outgoing webhooks (lib/webhooks): a target that resolves to a private,
+  // loopback or local address is refused unless this is "true" (one
+  // deployment's choice). Default false.
+  WEBHOOK_ALLOW_PRIVATE_HOSTS: z
+    .string()
+    .default("false")
+    .transform((value) => value.trim().toLowerCase())
+    .pipe(z.enum(["true", "false", "1", "0", "yes", "no"]))
+    .transform((value) => value === "true" || value === "1" || value === "yes"),
+  // Webhook targets must be https unless this is "true" (plain http allowed).
+  // Default false.
+  WEBHOOK_ALLOW_HTTP: z
+    .string()
+    .default("false")
+    .transform((value) => value.trim().toLowerCase())
+    .pipe(z.enum(["true", "false", "1", "0", "yes", "no"]))
+    .transform((value) => value === "true" || value === "1" || value === "yes"),
   // A personal iTop token is saved only when Solvro can confirm it is the
   // user's own (routes/itopUser.ts): the token must read the iTop User of the
   // Person with the user's email and that user's own PersonalToken. Some iTop

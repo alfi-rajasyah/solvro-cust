@@ -22,8 +22,19 @@ const CUSTOMER_MIGRATION = new URL(
   import.meta.url,
 );
 
-async function runMigration(url: URL): Promise<void> {
-  const statements = readFileSync(url, "utf8")
+const WEBHOOKS_MIGRATION = new URL(
+  "../prisma/migrations/20261125120000_webhooks/migration.sql",
+  import.meta.url,
+);
+
+const WEBHOOKS_ROLE_MARKER = "-- Built-in TAM and STAKEHOLDER roles gain";
+
+async function runMigration(url: URL, fromMarker?: string): Promise<void> {
+  let sql = readFileSync(url, "utf8");
+  // The webhooks migration also creates tables, so a test replays only its
+  // role backfill, which starts at the marker comment.
+  if (fromMarker) sql = sql.slice(sql.indexOf(fromMarker));
+  const statements = sql
     .split("\n")
     .filter((line) => !line.startsWith("--"))
     .join("\n")
@@ -95,9 +106,11 @@ describe("builtin_roles_last_reset migration", () => {
       data: { roleName: `Custom ${Date.now()}`, permissions: ["project:view-all"] },
     });
 
-    // Migrations run in order: the reset, then the customer-permissions backfill.
+    // Migrations run in order: the reset, the customer-permissions backfill,
+    // then the webhook permission backfill.
     await runMigration(MIGRATION);
     await runMigration(CUSTOMER_MIGRATION);
+    await runMigration(WEBHOOKS_MIGRATION, WEBHOOKS_ROLE_MARKER);
 
     // Same set of permissions; the backfill appends, so order may differ.
     for (const [roleName, permissions] of Object.entries(ROLE_PERMISSIONS)) {
@@ -129,6 +142,67 @@ describe("customer_permissions migration", () => {
     expect(await permissionsOf(none.roleName)).toEqual(["task:read"]);
     expect(await permissionsOf(done.roleName)).toEqual(["project:read", "customer:read"]);
     await prisma.role.deleteMany({ where: { id: { in: [rw.id, ro.id, star.id, none.id, done.id] } } });
+  });
+});
+
+describe("webhooks migration", () => {
+  it("gives the built-in TAM and STAKEHOLDER roles webhook:manage, idempotently, leaving ADMIN and custom roles alone", async () => {
+    await prisma.role.update({ where: { roleName: "TAM" }, data: { permissions: ["project:read"] } });
+    await prisma.role.update({ where: { roleName: "STAKEHOLDER" }, data: { permissions: ["project:read", "webhook:manage"] } });
+    const custom = await prisma.role.create({
+      data: { roleName: `Custom wh ${Date.now()}`, permissions: ["project:read"] },
+    });
+
+    await runMigration(WEBHOOKS_MIGRATION, WEBHOOKS_ROLE_MARKER);
+    await runMigration(WEBHOOKS_MIGRATION, WEBHOOKS_ROLE_MARKER);
+
+    expect(await permissionsOf("TAM")).toEqual(["project:read", "webhook:manage"]);
+    expect(await permissionsOf("STAKEHOLDER")).toEqual(["project:read", "webhook:manage"]);
+    expect(await permissionsOf("ADMIN")).toEqual(["*"]);
+    expect(await permissionsOf(custom.roleName)).toEqual(["project:read"]);
+    await prisma.role.delete({ where: { id: custom.id } });
+  });
+
+  it("ships webhook:manage in the built-in TAM and STAKEHOLDER defaults but not ADMIN or PENDING", () => {
+    expect(ROLE_PERMISSIONS.TAM).toContain("webhook:manage");
+    expect(ROLE_PERMISSIONS.STAKEHOLDER).toContain("webhook:manage");
+    expect(ROLE_PERMISSIONS.ADMIN).toEqual(["*"]);
+    expect(ROLE_PERMISSIONS.PENDING).toEqual([]);
+  });
+
+  it("stamps rows that existed before the column as dispatched, leaves no default, and keeps the partial queue index", async () => {
+    // Replays the migration's own ALTER TABLE statements for activity_events on a
+    // scratch table that already holds rows.
+    const sql = readFileSync(WEBHOOKS_MIGRATION, "utf8");
+    const alters = sql.split(";").map((statement) =>
+      statement
+        .split("\n")
+        .filter((line) => !line.startsWith("--"))
+        .join("\n")
+        .trim(),
+    ).filter((statement) => statement.startsWith('ALTER TABLE "activity_events"') && statement.includes("webhook_dispatched_at"));
+    expect(alters).toHaveLength(2);
+
+    await prisma.$executeRawUnsafe('DROP TABLE IF EXISTS "wh_probe"');
+    await prisma.$executeRawUnsafe('CREATE TABLE "wh_probe" ("id" SERIAL PRIMARY KEY)');
+    await prisma.$executeRawUnsafe('INSERT INTO "wh_probe" DEFAULT VALUES');
+    try {
+      for (const alter of alters) await prisma.$executeRawUnsafe(alter.replace('"activity_events"', '"wh_probe"'));
+      await prisma.$executeRawUnsafe('INSERT INTO "wh_probe" DEFAULT VALUES');
+      const rows = await prisma.$queryRawUnsafe<{ id: number; webhook_dispatched_at: Date | null }[]>(
+        'SELECT "id", "webhook_dispatched_at" FROM "wh_probe" ORDER BY "id"',
+      );
+      expect(rows[0].webhook_dispatched_at).not.toBeNull(); // existed before the column
+      expect(rows[1].webhook_dispatched_at).toBeNull(); // new rows start undispatched: no default left
+    } finally {
+      await prisma.$executeRawUnsafe('DROP TABLE "wh_probe"');
+    }
+
+    const idx = await prisma.$queryRawUnsafe<{ indexdef: string }[]>(
+      "SELECT indexdef FROM pg_indexes WHERE indexname = 'activity_events_webhook_pending_idx'",
+    );
+    expect(idx).toHaveLength(1);
+    expect(idx[0].indexdef).toMatch(/WHERE \(?"?webhook_dispatched_at"? IS NULL\)?/);
   });
 });
 

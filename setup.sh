@@ -297,6 +297,12 @@ COMPOSE_HEAD
       # either in ~/solvro/.env.
       ITOP_ALLOW_PRIVATE_HOSTS: "${ITOP_ALLOW_PRIVATE_HOSTS:-true}"
       ITOP_SYNC_DISABLED: "${ITOP_SYNC_DISABLED:-false}"
+      # Outgoing webhooks (Settings > Integrations > Webhooks).
+      # WEBHOOK_ALLOW_PRIVATE_HOSTS="true" lets a webhook target a private or
+      # local address; WEBHOOK_ALLOW_HTTP="true" allows plain http targets.
+      # Both default to false; set either with solvro config set.
+      WEBHOOK_ALLOW_PRIVATE_HOSTS: "${WEBHOOK_ALLOW_PRIVATE_HOSTS:-false}"
+      WEBHOOK_ALLOW_HTTP: "${WEBHOOK_ALLOW_HTTP:-false}"
       # Task attachments. "local" keeps files in the solvro_uploads volume
       # (mounted below); "s3" stores them in an S3-compatible bucket instead
       # (AWS S3, MinIO, Silo, Garage). To switch, set ATTACHMENTS_DRIVER=s3
@@ -422,7 +428,8 @@ Usage: solvro <command>
                                 e.g. solvro config set APP_URL=https://solvro.acme.com
   config unset KEY              Remove an optional setting (POSTGRES_PORT,
                                 TRUST_PROXY, EMBED_FRAME_ANCESTORS,
-                                ITOP_ALLOW_PRIVATE_HOSTS, ITOP_SYNC_DISABLED).
+                                ITOP_ALLOW_PRIVATE_HOSTS, ITOP_SYNC_DISABLED,
+                                WEBHOOK_ALLOW_PRIVATE_HOSTS, WEBHOOK_ALLOW_HTTP).
   version                       Show the installed release.
   backup                        Write a database dump and an archive of the
                                 attachments to ~/solvro/backups/.
@@ -430,7 +437,7 @@ Usage: solvro <command>
 
 Settings: APP_URL BIND_ADDR FRONTEND_PORT BACKEND_PORT POSTGRES_PORT
           TRUST_PROXY EMBED_FRAME_ANCESTORS ITOP_ALLOW_PRIVATE_HOSTS
-          ITOP_SYNC_DISABLED
+          ITOP_SYNC_DISABLED WEBHOOK_ALLOW_PRIVATE_HOSTS WEBHOOK_ALLOW_HTTP
 USAGE
 }
 
@@ -576,8 +583,8 @@ cmd_update() {
 
 # Settings `solvro config` may change. Secrets (POSTGRES_PASSWORD, JWT_SECRET,
 # SECRETS_KEY) and IMAGE_TAG are never shown or set here.
-CONFIG_KEYS=(APP_URL BIND_ADDR FRONTEND_PORT BACKEND_PORT POSTGRES_PORT TRUST_PROXY EMBED_FRAME_ANCESTORS ITOP_ALLOW_PRIVATE_HOSTS ITOP_SYNC_DISABLED)
-CONFIG_OPTIONAL=(POSTGRES_PORT TRUST_PROXY EMBED_FRAME_ANCESTORS ITOP_ALLOW_PRIVATE_HOSTS ITOP_SYNC_DISABLED)
+CONFIG_KEYS=(APP_URL BIND_ADDR FRONTEND_PORT BACKEND_PORT POSTGRES_PORT TRUST_PROXY EMBED_FRAME_ANCESTORS ITOP_ALLOW_PRIVATE_HOSTS ITOP_SYNC_DISABLED WEBHOOK_ALLOW_PRIVATE_HOSTS WEBHOOK_ALLOW_HTTP)
+CONFIG_OPTIONAL=(POSTGRES_PORT TRUST_PROXY EMBED_FRAME_ANCESTORS ITOP_ALLOW_PRIVATE_HOSTS ITOP_SYNC_DISABLED WEBHOOK_ALLOW_PRIVATE_HOSTS WEBHOOK_ALLOW_HTTP)
 
 config_default() {
   case "$1" in
@@ -586,7 +593,7 @@ config_default() {
     BACKEND_PORT) echo "3000" ;;
     TRUST_PROXY) echo "loopback, uniquelocal" ;;
     ITOP_ALLOW_PRIVATE_HOSTS) echo "true" ;;
-    ITOP_SYNC_DISABLED) echo "false" ;;
+    ITOP_SYNC_DISABLED|WEBHOOK_ALLOW_PRIVATE_HOSTS|WEBHOOK_ALLOW_HTTP) echo "false" ;;
     *) echo "" ;;
   esac
 }
@@ -617,7 +624,7 @@ config_value() {
     TRUST_PROXY)
       is_trust_proxy "$value" || die "TRUST_PROXY must be a hop count 0-10 or a comma list of loopback, linklocal, uniquelocal, IPs or CIDRs."
       out="$value" ;;
-    ITOP_ALLOW_PRIVATE_HOSTS|ITOP_SYNC_DISABLED)
+    ITOP_ALLOW_PRIVATE_HOSTS|ITOP_SYNC_DISABLED|WEBHOOK_ALLOW_PRIVATE_HOSTS|WEBHOOK_ALLOW_HTTP)
       [[ "$value" == true || "$value" == false ]] || die "$key must be true or false."
       out="$value" ;;
     EMBED_FRAME_ANCESTORS)

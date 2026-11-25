@@ -89,6 +89,8 @@ compose_has   "proxy trust default"         'TRUST_PROXY: "${TRUST_PROXY:-loopba
 compose_has   "CORS from APP_URL"           'CORS_ORIGIN: "${APP_URL:-*}"'
 compose_has   "iTop private hosts passed"   'ITOP_ALLOW_PRIVATE_HOSTS: "${ITOP_ALLOW_PRIVATE_HOSTS:-true}"'
 compose_has   "iTop sync switch passed"     'ITOP_SYNC_DISABLED: "${ITOP_SYNC_DISABLED:-false}"'
+compose_has   "webhook private hosts passed" 'WEBHOOK_ALLOW_PRIVATE_HOSTS: "${WEBHOOK_ALLOW_PRIVATE_HOSTS:-false}"'
+compose_has   "webhook http switch passed"  'WEBHOOK_ALLOW_HTTP: "${WEBHOOK_ALLOW_HTTP:-false}"'
 compose_has   "backend health check"        "fetch('http://127.0.0.1:3000/health')"
 compose_has   "frontend waits for health"   "condition: service_healthy"
 compose_has   "log rotation"                'max-size: "10m"'

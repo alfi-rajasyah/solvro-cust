@@ -43,7 +43,7 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 
 - **Type:** debt · **Found:** 2026-10-09 · **Verified:** 2026-11-24 @ `670f206`
 - **Where:** seal()/open() in backend/src/lib/secretBox.ts
-- **Problem:** The sealed format has no key id, so rotating SECRETS_KEY makes every stored iTop and Outline token unreadable. The tag-length and iTop webhook limiter parts of this entry were fixed 2026-11-20 (CHANGELOG "Backend hardening: CORS header, secret tags, iTop webhook and sync retries, `solvro config`").
+- **Problem:** The sealed format has no key id, so rotating SECRETS_KEY makes every stored iTop and Outline token and every webhook signing secret unreadable; webhook sends then fail with `internal_error` and count toward the 20-failure auto-disable. The tag-length and iTop webhook limiter parts of this entry were fixed 2026-11-20 (CHANGELOG "Backend hardening: CORS header, secret tags, iTop webhook and sync retries, `solvro config`").
 - **Why deferred / fix direction:** Only matters if a key rotation is ever needed. Fix: add a key id to the sealed format and accept the old key during a transition.
 - **Source:** snapshot line 2361, section "Internal sync — deferred findings (2026-10-09)"
 
@@ -86,6 +86,22 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Problem:** A TAM can learn that a customer name exists by getting 409 instead of 201, even for customers they cannot see.
 - **Why deferred / fix direction:** Deferred. Accept as a product trade-off or scope uniqueness by visibility.
 - **Source:** snapshot line 2434, section "iTop and Outline hardening — deferred findings (2026-10-26)"
+
+### ISS-220 · P3 · Webhook address check misses NAT64 and 6to4 forms
+
+- **Type:** debt · **Found:** 2026-11-25 · **Verified:** 2026-11-25 @ `78862e9`
+- **Where:** isPrivateAddress in backend/src/lib/itop/validateBaseUrl.ts (line ~27), used by backend/src/lib/webhooks/validateTarget.ts
+- **Problem:** `64:ff9b::/96` (NAT64), `2002::/16` (6to4) and `::ffff:0:a.b.c.d` are not decoded to their embedded IPv4, so on a NAT64-routed host `https://[64:ff9b::a00:1]/` could reach 10.0.0.1.
+- **Why deferred / fix direction:** Only matters on a NAT64 or 6to4 network with the default policy. Decode the embedded IPv4 for those prefixes, run isPrivateIPv4 on it, add unit cases.
+- **Source:** webhooks Phase 1 review, 2026-11-25
+
+### ISS-221 · P3 · Webhook Send test has no rate limit
+
+- **Type:** debt · **Found:** 2026-11-25 · **Verified:** 2026-11-25 @ `78862e9`
+- **Where:** POST /webhooks/:id/test in backend/src/routes/webhooks.ts
+- **Problem:** Each click sends one outbound POST of up to 10 seconds to the saved URL, with no per-user limit.
+- **Why deferred / fix direction:** Needs `webhook:manage`, and the target passes the address policy. Add a per-user limiter from http/rateLimit.ts (for example 10 per minute).
+- **Source:** webhooks Phase 1 review, 2026-11-25
 
 ## Open — Data & performance
 

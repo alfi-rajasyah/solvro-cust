@@ -10,6 +10,7 @@ import type {
   TaskStatus,
   WeeklyHealth,
   WeeklyStatus,
+  WebhookDeliveryStatus,
 } from "@/lib/queries";
 import type { ShareLinkStatus } from "@/lib/shareLinks";
 
@@ -134,4 +135,43 @@ export function riskLevelFromScore(score: number): RiskLevel {
 
 export function riskLevel(probability: number, impact: number): RiskLevel {
   return riskLevelFromScore(probability * impact);
+}
+
+// Outgoing webhooks (Settings > Integrations > Webhooks).
+export const WEBHOOK_EVENT_LABEL: Record<string, string> = {
+  "task.created": "Task created",
+  "task.status_changed": "Task status changed",
+  "task.assigned": "Task assigned",
+  "task.due_date_changed": "Task due date changed",
+  "task.completed": "Task completed",
+  "comment.created": "Comment added",
+  "project.created": "Project created",
+  "risk.created": "Risk added",
+};
+
+export const DELIVERY_STATUS_LABEL: Record<WebhookDeliveryStatus, string> = {
+  PENDING: "Pending",
+  SUCCEEDED: "Delivered",
+  FAILED: "Failed",
+};
+
+const DELIVERY_ERROR_LABEL: Record<string, string> = {
+  owner_no_access: "The webhook owner can no longer see this project, or lost the permission to receive its events.",
+  timeout: "The receiver did not answer in time.",
+  connection_failed: "Could not connect to the receiver.",
+  target_private: "The address points to a private network, which is not allowed.",
+  target_scheme: "The address must use https.",
+  target_userinfo: "The address must not contain a username or password.",
+  target_invalid: "The address is not valid.",
+  target_unresolvable: "The address could not be resolved.",
+  internal_error: "Solvro could not send this delivery.",
+  secret_unreadable: "Solvro could not read this webhook's signing secret. Rotate the secret, then try again.",
+  webhook_disabled: "The webhook was disabled before this was sent.",
+};
+
+/** Plain sentence for a delivery or test error code (`http_<code>` included); unknown codes get a generic line. */
+export function deliveryErrorLabel(code: string): string {
+  const http = /^http_(\d{3})$/.exec(code);
+  if (http) return `The receiver answered ${http[1]}.`;
+  return DELIVERY_ERROR_LABEL[code] ?? "The request failed.";
 }
