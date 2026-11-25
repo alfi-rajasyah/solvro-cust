@@ -22,6 +22,7 @@ Webhooks need the `webhook:manage` permission. The built-in TAM and Stakeholder 
 4. Pick the events, and either every project you can open or only some of them.
 5. Save. For Standard Webhooks, Solvro shows the signing secret (`whsec_…`) **once**. Copy it into the receiving app now. You can make a new one later with **Rotate secret**, which stops the old one from working.
 6. Select **Send test** to send a `webhook.test` event and see the answer the receiver gave.
+7. To change the URL later, select **Edit** and type a new one. Solvro never shows the stored URL again, only its host and path; leave the field blank to keep it.
 
 Each user can have up to 10 webhooks. The URL must be `https://` and reach a public address, unless the server allows otherwise (see [Troubleshooting](#troubleshooting)).
 
@@ -83,7 +84,7 @@ A Standard Webhooks body looks like this:
 | Symptom | Cause and fix |
 |---|---|
 | An error such as "The URL must start with https://" or "The URL points at a private, loopback or local address" when you save | The URL is not `https://`, holds a user name or password, points to a private or local address, or its host name does not resolve. A server admin can allow private addresses with `WEBHOOK_ALLOW_PRIVATE_HOSTS=true` and plain http with `WEBHOOK_ALLOW_HTTP=true` (`solvro config set …`). |
-| Send test shows `timeout` or `connection_failed` | The receiver did not answer within 10 seconds, or the Solvro server cannot reach it. Check the URL and the receiver's firewall. |
-| Send test shows `http_301` or `http_302` | The URL redirects. Use the final URL. |
+| Send test shows "The receiver did not answer in time" or "Could not connect to the receiver" | The receiver did not answer within 10 seconds, or the Solvro server cannot reach it. Check the URL and the receiver's firewall. |
+| Send test shows "The receiver answered 301" or "302" | The URL redirects. Use the final URL. |
 | The webhook shows "Disabled" | It failed 20 times in a row. Fix the receiver, then select **Enable**. |
-| No events for one project | The webhook owner cannot open that project any more, or the webhook is limited to other projects. |
+| No events for one project | The webhook owner cannot open that project any more, or the webhook is limited to other projects. Deliveries show "The webhook owner can no longer see this project" when access was lost after an event. |
