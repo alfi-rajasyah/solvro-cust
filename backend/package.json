@@ -1,6 +1,6 @@
 {
   "name": "solvro-backend",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Solvro backend — Solution-to-Project Lifecycle Engine API.",
   "type": "module",

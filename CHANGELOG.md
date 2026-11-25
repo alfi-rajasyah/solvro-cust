@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-11-25
+
+### Changed — 2026-11-25 — Version 1.4.0
+
+- The release version is `1.4.0` in `VERSION`, `backend/package.json`, `frontend/package.json` and the image tag in `setup.sh` (`SOLVRO_IMAGE_TAG="v1.4.0"`), so the login page and new installs show and pull this release.
+
 ### Fixed — 2026-11-25 — Deleting a customer follows the owner rule
 
 - `DELETE /customers/:id` now uses the same rule as changing a customer's owner: an admin, the customer's owner, or, for a customer with no owner, the TAM of every project under it. Before, any user with `customer:write` who could see a customer with no owner could delete it, which unlinked it from other TAMs' projects. The Delete action in the customer list and on the customer page now appears only for people who may delete.
