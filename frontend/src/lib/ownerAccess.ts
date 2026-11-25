@@ -31,27 +31,12 @@ export function canOwnProject(
 }
 
 /**
- * Owner access to a customer: view-all, the customer's owner, an unowned
- * customer, or being TAM of one of its projects. `projectTamIds` are the TAM
- * ids of the customer's projects the caller can see.
- */
-export function canOwnCustomer(
-  user: AuthUser | null | undefined,
-  customer: { tamId: number | null },
-  projectTamIds: readonly number[],
-): boolean {
-  if (!user) return false;
-  if (hasViewAll(user)) return true;
-  if (customer.tamId === null || customer.tamId === user.id) return true;
-  return projectTamIds.includes(user.id);
-}
-
-/**
- * Whether the caller may reassign a customer's owner. The server decides
- * (`canChangeOwner` on GET /customers and /customers/:id, the same rule as
- * PATCH): view-all, the owner, or — on an unowned customer — the TAM of every
- * project under it, hidden ones included, which the client cannot see. Absent
- * means unknown (a row from a stale cache), treated as not allowed.
+ * Whether the caller may reassign a customer's owner or delete the customer.
+ * The server decides (`canChangeOwner` on GET /customers and /customers/:id,
+ * the same rule as PATCH and DELETE): view-all, the owner, or — on an
+ * unowned customer — the TAM of every project under it, hidden ones included,
+ * which the client cannot see. Absent means unknown (a row from a stale
+ * cache), treated as not allowed.
  */
 export function canChangeCustomerOwner(customer: { canChangeOwner?: boolean }): boolean {
   return customer.canChangeOwner === true;

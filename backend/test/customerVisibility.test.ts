@@ -507,3 +507,103 @@ describe("customer data is left out without customer:read", () => {
     expect(cust.weeklyUpdate).toBeNull();
   });
 });
+
+// DELETE /customers/:id takes the same rule as changing the owner
+// (`reassignableCustomerIds`): view-all, the current owner, or — on an unowned
+// customer — the TAM of every project under it. Seeing an unowned customer, or
+// being TAM of one project under it, is not enough.
+describe("DELETE /customers/:id — owner rule", () => {
+  const del = (id: number, token: string) =>
+    request(app).delete(`/customers/${id}`).set("Authorization", `Bearer ${token}`);
+
+  it("unowned customer: TAM of only one of its two projects gets 403 owner_only and nothing is deleted", async () => {
+    const tam = await createUserWithRole("TAM");
+    const other = await createUserWithRole("TAM");
+    const customer = await createCustomer({ tamId: null });
+    await createProject({ tamId: tam.userId, customerId: customer.id });
+    await createProject({ tamId: other.userId, customerId: customer.id });
+    const res = await del(customer.id, tam.token);
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("owner_only");
+    expect(await prisma.customer.count({ where: { id: customer.id } })).toBe(1);
+  });
+
+  it("unowned customer: TAM of every project under it may delete it", async () => {
+    const tam = await createUserWithRole("TAM");
+    const customer = await createCustomer({ tamId: null });
+    await createProject({ tamId: tam.userId, customerId: customer.id });
+    await createProject({ tamId: tam.userId, customerId: customer.id });
+    expect((await del(customer.id, tam.token)).status).toBe(204);
+    expect(await prisma.customer.count({ where: { id: customer.id } })).toBe(0);
+  });
+
+  it("unowned customer with no projects: any caller who sees it may delete it", async () => {
+    const tam = await createUserWithRole("TAM");
+    const customer = await createCustomer({ tamId: null });
+    expect((await del(customer.id, tam.token)).status).toBe(204);
+  });
+
+  it("customer owned by another TAM: a TAM of one of its projects gets 403 owner_only", async () => {
+    const tam = await createUserWithRole("TAM");
+    const owner = await createUserWithRole("TAM");
+    const customer = await createCustomer({ tamId: owner.userId });
+    await createProject({ tamId: tam.userId, customerId: customer.id });
+    const res = await del(customer.id, tam.token);
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("owner_only");
+    expect(await prisma.customer.count({ where: { id: customer.id } })).toBe(1);
+  });
+
+  it("project:view-all may delete an unowned customer with other TAMs' projects, and an owned one", async () => {
+    const admin = await createUserWithRole("ADMIN");
+    const other = await createUserWithRole("TAM");
+    const unowned = await createCustomer({ tamId: null });
+    await createProject({ tamId: other.userId, customerId: unowned.id });
+    const owned = await createCustomer({ tamId: other.userId });
+    expect((await del(unowned.id, admin.token)).status).toBe(204);
+    expect((await del(owned.id, admin.token)).status).toBe(204);
+  });
+
+  /** An unowned customer with another TAM's project under it. */
+  async function unownedWithForeignProject() {
+    const other = await createUserWithRole("TAM");
+    const customer = await createCustomer({ tamId: null });
+    const project = await createProject({ tamId: other.userId, customerId: customer.id });
+    return { customer, project };
+  }
+
+  async function expectOwnerOnly(customerId: number, token: string) {
+    const res = await del(customerId, token);
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("owner_only");
+    expect(await prisma.customer.count({ where: { id: customerId } })).toBe(1);
+  }
+
+  it("unowned customer with another TAM's project: a customer:view-all holder without project:view-all gets 403 owner_only", async () => {
+    const { customer } = await unownedWithForeignProject();
+    await prisma.role.upsert({
+      where: { roleName: "TEST_DEL_CUSTOMER_VIEW_ALL" },
+      update: { permissions: ["project:read", "customer:read", "customer:write", "customer:view-all"] },
+      create: {
+        roleName: "TEST_DEL_CUSTOMER_VIEW_ALL",
+        permissions: ["project:read", "customer:read", "customer:write", "customer:view-all"],
+      },
+    });
+    const holder = await createUserWithRole("TEST_DEL_CUSTOMER_VIEW_ALL");
+    await expectOwnerOnly(customer.id, holder.token);
+  });
+
+  it("unowned customer with another TAM's project: a project member (not the TAM) gets 403 owner_only", async () => {
+    const { customer, project } = await unownedWithForeignProject();
+    const member = await createUserWithRole("TAM");
+    await prisma.projectMember.create({ data: { projectId: project.id, userId: member.userId } });
+    await expectOwnerOnly(customer.id, member.token);
+  });
+
+  it("unowned customer with another TAM's project: a customer-team member gets 403 owner_only", async () => {
+    const { customer } = await unownedWithForeignProject();
+    const member = await createUserWithRole("TAM");
+    await prisma.customerTeamMember.create({ data: { customerId: customer.id, userId: member.userId } });
+    await expectOwnerOnly(customer.id, member.token);
+  });
+});

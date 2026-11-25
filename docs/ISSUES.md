@@ -23,15 +23,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Grant PersonalToken read narrowly or add an iTop-side whoami extension; verify on the real install. User decision 2026-11-18: stays open as `watch`, not accepted.
 - **Source:** snapshot line 2138, section "iTop integration Phase 5 — deferred findings (2026-09-23)"
 
-### ISS-002 · P2 · DELETE /customers/:id lets the TAM of one project delete an unowned customer
-
-- **Type:** decision · **Found:** 2026-10-09 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** DELETE /customers/:id in backend/src/routes/customers.ts (line ~633); ensureCustomerOwnerAccess in backend/src/lib/visibility.ts (line ~243)
-- **Problem:** On an unowned customer, being TAM of one project passes the delete gate, though deleting affects every project under it. PATCH already uses a stricter rule.
-- **Update 2026-11-20 (customer team review):** broader than described. In ownership mode `customerVisibilityFilter` keeps its `{ tamId: null }` arm, so any `customer:write` caller who can see an unowned customer passes `ensureCustomerOwnerAccess` and can delete it, not only the TAM of one project. Customer team membership does not widen this (the team arm is dropped in ownership mode).
-- **Why deferred / fix direction:** Decide whether delete should use the same rule as the owner change (owner, view-all, or TAM of every project): drop the `tamId: null` arm under `ownership` and require TAM-of-all-projects, as `reassignableCustomerIds` does.
-- **Source:** snapshot line 2358, section "Internal sync — deferred findings (2026-10-09)"
-
 ### ISS-006 · P3 · Per-email sign-in lockout can be triggered against a colleague
 
 - **Type:** watch · **Found:** 2026-10-22 · **Verified:** 2026-11-24 @ `670f206`
@@ -814,3 +805,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-014 · 2026-11-24 · CHANGELOG "Frontend router upgraded to React Router 7" · React Router 6 has two advisories fixed only in v7
 - ISS-010 · 2026-11-24 · CHANGELOG "The app serves its own fonts" · Guest link pages contact Google for fonts
 - ISS-146 · 2026-11-24 · CHANGELOG "End-to-end tests wait for conditions, not fixed sleeps" · E2E suite uses fixed waitForTimeout sleeps
+- ISS-002 · 2026-11-25 · CHANGELOG "Deleting a customer follows the owner rule" · DELETE /customers/:id lets the TAM of one project delete an unowned customer

@@ -5,7 +5,6 @@ import {
   OWNER_ONLY_MESSAGE,
   canChangeCustomerOwner,
   customerSaveErrorMessage,
-  canOwnCustomer,
   canOwnProject,
   isOwnerOnlyError,
   saveErrorMessage,
@@ -43,24 +42,6 @@ describe("canOwnProject", () => {
   });
   it("is false when signed out", () => {
     expect(canOwnProject(null, { tamId: 1 }, [1])).toBe(false);
-  });
-});
-
-describe("canOwnCustomer", () => {
-  it("is true for the owner", () => {
-    expect(canOwnCustomer(user(1), { tamId: 1 }, [])).toBe(true);
-  });
-  it("is true for an unowned customer", () => {
-    expect(canOwnCustomer(user(1), { tamId: null }, [])).toBe(true);
-  });
-  it("is true when the user is TAM of one of its projects", () => {
-    expect(canOwnCustomer(user(5), { tamId: 1 }, [2, 5])).toBe(true);
-  });
-  it("is true for view-all", () => {
-    expect(canOwnCustomer(user(6, ["project:view-all"]), { tamId: 1 }, [])).toBe(true);
-  });
-  it("is false for someone who only reaches it through a project membership", () => {
-    expect(canOwnCustomer(user(7), { tamId: 1 }, [2])).toBe(false);
   });
 });
 

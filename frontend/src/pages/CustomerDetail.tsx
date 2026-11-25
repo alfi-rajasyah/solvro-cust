@@ -15,7 +15,7 @@ import { Tabs } from "@/components/Tabs";
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { EMPTY_VALUE } from "@/lib/emptyValue";
-import { canChangeCustomerOwner, canOwnCustomer, saveErrorMessage } from "@/lib/ownerAccess";
+import { canChangeCustomerOwner, saveErrorMessage } from "@/lib/ownerAccess";
 import {
   type CustomerDetail as CustomerDetailType,
   useCustomer,
@@ -172,14 +172,10 @@ export function CustomerDetail() {
     );
   }
 
-  // Members reaching this customer through a project can edit its profile but
-  // not delete it (server: 403 owner_only); only the owner, view-all, or
-  // anyone on an unowned customer can change its owner.
-  const canOwn = canOwnCustomer(
-    user,
-    customer,
-    customer.projects.map((p) => p.tamId),
-  );
+  // The server decides (`canChangeOwner`): changing the owner and deleting a
+  // customer take the same rule — view-all, the owner, or on an unowned
+  // customer the TAM of every project under it. Members reaching it through a
+  // project can edit its profile but not do either (server: 403 owner_only).
   const canChangeOwner = canChangeCustomerOwner(customer);
 
   async function handleDelete() {
@@ -206,7 +202,7 @@ export function CustomerDetail() {
         lastUpdate={latestUpdate.data?.[0] ?? null}
         updatesLoaded={!latestUpdate.isLoading}
         canMutate={canMutate}
-        canDelete={canOwn}
+        canDelete={canChangeOwner}
         onEdit={() => setEditOpen(true)}
         onDelete={() => setConfirmDeleteOpen(true)}
         deleting={deleteCustomer.isPending}
