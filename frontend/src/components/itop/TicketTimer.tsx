@@ -7,7 +7,7 @@
 // starting here while another ticket's timer runs ("Stop the timer on
 // R-004512 first?").
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { formatElapsed, useTicketTimer, type TimerTicketRef } from "./useTicketTimer";
 
 const BUTTON_CLASS =

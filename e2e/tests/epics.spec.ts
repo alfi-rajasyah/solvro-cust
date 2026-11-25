@@ -48,7 +48,6 @@ test.describe("Epics tab", () => {
     await loginViaUi(page);
 
     await page.goto(`/projects/${projectId}/epics`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(800);
 
     // Empty state, since this project has no epics yet.
     await expect(
@@ -82,7 +81,7 @@ test.describe("Epics tab", () => {
     await expect(panel).toBeVisible();
 
     const storyTitle = `Story ${stamp()}`;
-    const storyInput = panel.getByLabel("Add story");
+    const storyInput = panel.getByLabel("Story title");
     await storyInput.fill(storyTitle);
     await storyInput.press("Enter");
     await expect(panel.getByText(storyTitle, { exact: true })).toBeVisible();
@@ -97,7 +96,6 @@ test.describe("Epics tab", () => {
     await patchTaskStatus(base, token, story!.id, "DONE");
 
     await page.reload({ waitUntil: "networkidle" });
-    await page.waitForTimeout(800);
     const panelAfterReload = page.getByRole("dialog", { name: "Epic details" });
     await expect(panelAfterReload).toBeVisible();
     await expect(panelAfterReload.getByText("1/1")).toBeVisible();
@@ -117,7 +115,6 @@ test.describe("Epics tab", () => {
     await expect(page.locator("button:visible", { hasText: renamed })).toHaveCount(0);
 
     await page.goto(`/projects/${projectId}/list`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(800);
     // ProjectList renders both a desktop row (list-dnd.spec.ts's
     // `div[class*="grid-cols-"]` shape) and a `md:hidden` mobile card for
     // the same task — only one is actually visible per viewport. Both the

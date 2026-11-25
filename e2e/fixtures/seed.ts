@@ -169,6 +169,8 @@ export interface CreateTaskInput {
   dueDate?: string | null;
   isMilestone?: boolean;
   isCriticalPath?: boolean;
+  labelIds?: number[];
+  priority?: string;
 }
 
 /**

@@ -26,7 +26,7 @@ export function CriticalPathMark({
     return (
       <span
         role="img"
-        // Google Fonts' `.material-symbols-outlined { font-size: 24px }` is
+        // The `.material-symbols-outlined { font-size: 24px }` rule in index.css is
         // unlayered and beats Tailwind v4's layered `text-[14px]` — force it
         // with the `!` important-utility suffix (see `DateRangeField.tsx`'s
         // `shadow-overlay!`) rather than fighting cascade order.
@@ -56,8 +56,8 @@ export function CriticalPathMark({
     <span className={cn("flex [&>span]:px-1.5", className)}>
       <Chip tone="violet">
         {/* Same unlayered-font-size cascade issue as the glyph variant
-            above — `!` forces the 13px size (text-xs) instead of Google Fonts'
-            24px default. */}
+            above — `!` forces the 13px size (text-xs) instead of the unlayered
+            24px default in index.css. */}
         <span
           aria-hidden="true"
           className="material-symbols-outlined inline-flex items-center text-xs! leading-none"

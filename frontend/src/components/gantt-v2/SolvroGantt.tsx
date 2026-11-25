@@ -17,12 +17,11 @@ import {
   buildFilterContext,
   clearPatch,
   countActiveFilters,
-  reorderAmongVisible,
   scopeFilters,
   taskVisible,
-  visibleOrderUnchanged,
 } from "@/lib/taskFilters";
 import { useGanttExport } from "@/lib/gantt/exportContext";
+import { sectionReorderPatches, topLevelTaskMove } from "@/components/gantt-v2/reorder";
 import { addDays, buildRows, rowsDateRange, startOfDay, type Row } from "@/lib/gantt/geometry";
 import {
   DEFAULT_SECTION_COLOR,
@@ -81,6 +80,7 @@ import {
   buildResources,
   buildRollupEvents,
   eventPatch,
+  parseSectionId,
   parseTaskId,
   sectionNodeId,
   taskNodeId,
@@ -308,13 +308,11 @@ function readStoredTreeWidth(): number {
 // ids onto geometry's shape; task ids pass through unchanged.
 function toGeometryCollapsedIds(resourceIds: string[]): Set<string> {
   return new Set(
-    resourceIds.map((id) =>
-      id === "section-none"
-        ? "sec-none"
-        : id.startsWith("section-")
-          ? `sec-${id.slice("section-".length)}`
-          : id,
-    ),
+    resourceIds.map((id) => {
+      const sectionId = parseSectionId(id);
+      if (sectionId === undefined) return id;
+      return sectionId === null ? "sec-none" : `sec-${sectionId}`;
+    }),
   );
 }
 
@@ -359,6 +357,44 @@ function GanttNavTitleSync({ onTitleChange }: { onTitleChange: (title: string) =
 export function SolvroGantt(props: SolvroGanttProps) {
   const { projectId, projectName, baselineLockedAt, baselineLockedBy, onEditTask, onCreateTaskOpen } =
     props;
+
+  // The row menu keeps focus inside itself until it has unmounted, and Base-UI
+  // then returns focus to the row. A dialog opened from a menu item meanwhile
+  // autofocuses and then loses that focus (or records <body> as the element to
+  // restore on close). So an item that opens a dialog runs it through here: wait
+  // until the menu has unmounted and focus has landed on a real element (the
+  // returned row control), then open. Capped, so a menu that never settles cannot
+  // swallow the click; the frame loop is cancelled on unmount. `item` is the
+  // clicked menu item: the wait watches that item's own menu, never any other
+  // element with the same data-slot (ISS-210).
+  const menuFrame = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (menuFrame.current !== null) cancelAnimationFrame(menuFrame.current);
+    },
+    [],
+  );
+  function afterMenuCloses(item: Element, run: () => void) {
+    const menu = item.closest('[data-slot="gantt-resource-menu"]');
+    const started = performance.now();
+    const tick = () => {
+      // Focus can return to the row while the menu is still animating out, then
+      // be taken again when its popup unmounts: wait for both, the popup gone
+      // and focus on a real element.
+      const active = document.activeElement;
+      const settled =
+        (menu === null || !menu.isConnected) &&
+        active !== null &&
+        active !== document.body;
+      if (!settled && performance.now() - started < 1000) {
+        menuFrame.current = requestAnimationFrame(tick);
+      } else {
+        menuFrame.current = null;
+        run();
+      }
+    };
+    menuFrame.current = requestAnimationFrame(tick);
+  }
 
   const { user } = useAuth();
   // Ported verbatim from GanttFrame.tsx:86-87.
@@ -631,7 +667,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
   // there is no accept-with-adjustment form here).
   const canReorderResource = useCallback(
     (proposal: GanttResourceReorder) =>
-      !proposal.resourceId.startsWith("section-") || canManageSections,
+      parseSectionId(proposal.resourceId) === undefined || canManageSections,
     [canManageSections],
   );
 
@@ -641,42 +677,25 @@ export function SolvroGantt(props: SolvroGanttProps) {
       const { resourceId, parentId, index } = proposal;
 
       // ---- Section-group reorder (root level only) ----
-      if (resourceId.startsWith("section-")) {
+      const movedSectionId = parseSectionId(resourceId);
+      if (movedSectionId !== undefined) {
         if (!canManageSections) return false;
         // The "(No section)" pseudo-group has no backing Section row — old
         // engine only starts a section drag when `sectionId !== null`
         // (GanttFrame.tsx:539).
-        if (resourceId === sectionNodeId(null)) return false;
+        if (movedSectionId === null) return false;
         // Sections never nest under a task (GanttFrame.tsx:542: dropping a
         // section onto the pseudo group is rejected; dropping it under a
         // task isn't even representable in the old engine's flat section
         // list at all).
         if (parentId !== null) return false;
-
-        // Re-derive the desired root order from the CURRENT (pre-drag) root
-        // list — same shape `resources` already is (sections, then the
-        // pseudo group last if present) — splice the move in at `index`,
-        // then patch every REAL section whose position actually changed.
-        // Mirrors GanttFrame.tsx:544-559's ordered/filtered/splice + diffed
-        // Promise.all of useUpdateSection calls.
-        // `index` counts the rows the user sees (`resources`); the new order is
-        // computed on the full list (`allResources`), anchored on the visible
-        // neighbour the section was dropped next to, so sections hidden by the
-        // epic filter keep their place.
-        const nextRootOrder = reorderAmongVisible(
+        const patches = sectionReorderPatches(
           allResources.map((r) => r.id),
           resources.map((r) => r.id),
           resourceId,
           index,
+          sections,
         );
-        // Nothing moved on screen (or no other visible section): save nothing.
-        if (!nextRootOrder) return false;
-
-        const patches = nextRootOrder
-          .filter((id) => id !== sectionNodeId(null))
-          .map((id, i) => ({ id: Number(id.slice("section-".length)), position: i }))
-          .filter(({ id, position }) => sections.find((s) => s.id === id)?.position !== position);
-
         if (patches.length === 0) return false; // no-op — nothing actually moved
         setActionError(null);
         patches.forEach(({ id, position }) => {
@@ -713,56 +732,17 @@ export function SolvroGantt(props: SolvroGanttProps) {
       // section)" pseudo group), never under a task node — promoting a
       // top-level task into a subtask (or vice versa) via drag isn't
       // supported by the old engine's row-drag affordance.
-      if (parentId === null || parseTaskId(parentId) !== null) return false;
-      const targetSectionId =
-        parentId === sectionNodeId(null) ? null : Number(parentId.slice("section-".length));
-
-      // `position` is one GLOBAL dense index across every top-level task in
-      // the project (CLAUDE.md: "one canonical manual order"; backend's
-      // sibling key for parentTaskId===null is project-wide, not
-      // per-section — taskOrdering.ts:17-19). Unifies GanttFrame's two old
-      // drop paths — the row-target case (:431-471, arbitrary same/cross
-      // -section position via a specific target row) and the
-      // section-target case (:500-536, always append at the target
-      // section's block end) — into one index-based computation, since
-      // ReUI's `index` gives the precise slot in EITHER case.
-      const topLevelOrdered = tasks
-        .filter((t) => t.parentTaskId === null)
-        .sort((a, b) => a.position - b.position || a.id - b.id);
-      const others = topLevelOrdered.filter((t) => t.id !== taskId);
-      // `index` counts the siblings the user sees; `others` stays the full order.
-      const visibleIds = new Set(visibleTasks.map((t) => t.id));
-      const targetSiblings = others.filter((t) => t.sectionId === targetSectionId && visibleIds.has(t.id));
-      const crossSection = targetSectionId !== moved.sectionId;
-
-      let position: number | undefined;
-      if (targetSiblings.length === 0) {
-        // No other task in the target section — GanttFrame.tsx:529's `last`
-        // undefined branch: omit position entirely (appends at the global
-        // end; harmless, since display groups by section anyway).
-        position = undefined;
-      } else if (index >= targetSiblings.length) {
-        const last = targetSiblings[targetSiblings.length - 1];
-        position = others.findIndex((t) => t.id === last.id) + 1;
-      } else {
-        const before = targetSiblings[index];
-        position = others.findIndex((t) => t.id === before.id);
-      }
-
-      if (!crossSection) {
-        // Dropped back where it was on screen: hidden siblings must not shift.
-        const visibleInSection = topLevelOrdered
-          .filter((t) => t.sectionId === targetSectionId && visibleIds.has(t.id))
-          .map((t) => t.id);
-        if (visibleOrderUnchanged(visibleInSection, taskId, index)) return false;
-      }
-      if (!crossSection && (position === undefined || position === moved.position)) {
-        return false; // no-op — same section, same slot (or nothing to reorder against)
-      }
-
-      const patch: { sectionId?: number | null; position?: number } = {};
-      if (crossSection) patch.sectionId = targetSectionId;
-      if (position !== undefined) patch.position = position;
+      if (parentId === null) return false;
+      const targetSectionId = parseSectionId(parentId);
+      if (targetSectionId === undefined) return false;
+      const patch = topLevelTaskMove(
+        tasks,
+        new Set(visibleTasks.map((t) => t.id)),
+        moved,
+        targetSectionId,
+        index,
+      );
+      if (!patch) return false;
       setActionError(null);
       updateTask.mutateAsync({ id: taskId, patch }).catch((err: unknown) => {
         setActionError(err instanceof ApiError ? err.message : "Could not move task.");
@@ -894,11 +874,8 @@ export function SolvroGantt(props: SolvroGanttProps) {
         width: TREE_COLOR_COLUMN_WIDTH,
         align: "center",
         render: (ctx) => {
-          if (ctx.resource.id === sectionNodeId(null) || !ctx.resource.id.startsWith("section-")) {
-            return null;
-          }
-          const sectionId = Number(ctx.resource.id.slice("section-".length));
-          if (!sectionColors.has(sectionId)) return null;
+          const sectionId = parseSectionId(ctx.resource.id);
+          if (typeof sectionId !== "number" || !sectionColors.has(sectionId)) return null;
           return (
             <SectionColorCell
               sectionId={sectionId}
@@ -1650,7 +1627,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                     if (!task) return null;
                     return (
                       <>
-                        <ContextMenuItem className="text-xs" onClick={() => onEditTask(task)}>
+                        <ContextMenuItem className="text-xs" onClick={(e) => afterMenuCloses(e.currentTarget, () => onEditTask(task))}>
                           <span
                             className="material-symbols-outlined text-sm text-on-surface-variant"
                             aria-hidden="true"
@@ -1738,7 +1715,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                         {task.parentTaskId === null && (
                           <ContextMenuItem
                             className="text-xs"
-                            onClick={() => onCreateTaskOpen(task.sectionId, task.id)}
+                            onClick={(e) => afterMenuCloses(e.currentTarget, () => onCreateTaskOpen(task.sectionId, task.id))}
                           >
                             <span
                               className="material-symbols-outlined text-sm text-on-surface-variant"
@@ -1753,7 +1730,7 @@ export function SolvroGantt(props: SolvroGanttProps) {
                         <ContextMenuItem
                           className="text-xs"
                           variant="destructive"
-                          onClick={() => setDeleteTarget(task)}
+                          onClick={(e) => afterMenuCloses(e.currentTarget, () => setDeleteTarget(task))}
                         >
                           {/* No explicit color class — inherits
                             ContextMenuItem's `data-[variant=destructive]:

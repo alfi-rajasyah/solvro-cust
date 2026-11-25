@@ -147,7 +147,6 @@ async function mockNewTicketSheetDeps(page: Page, customerId: number): Promise<v
 
 async function openTaskPanel(page: Page, projectId: number, taskId: number) {
   await page.goto(`/projects/${projectId}/list?task=${taskId}`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
   const panel = page.getByRole("dialog", { name: "Task details" });
   await expect(panel).toBeVisible();
   return panel;
@@ -204,7 +203,6 @@ test.describe("TaskPanel iTop ticket field", () => {
 
     await input.fill("nonsense");
     await input.press("Enter");
-    await page.waitForTimeout(400);
 
     await expect(panel.getByText("Use the iTop ref, e.g. R-004512")).toBeVisible();
     expect(patches, `expected no PATCH, got ${JSON.stringify(patches)}`).toHaveLength(0);

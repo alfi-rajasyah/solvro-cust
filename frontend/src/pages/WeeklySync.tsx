@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { MidweekSyncModal } from "@/components/daily-review/MidweekSyncModal";
 import { ReflectionSyncModal } from "@/components/daily-review/ReflectionSyncModal";
 import { HEALTH_CLASS, WEEKLY_STATUS_BADGE } from "@/components/daily-review/SyncField";

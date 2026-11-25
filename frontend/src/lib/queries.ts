@@ -14,6 +14,8 @@ import {
   LONG_TIMEOUT_MS,
   apiRequest,
   apiRequestWithHeaders,
+  apiUploadForm,
+  type UploadProgress,
   setToken,
   setTokenRotating,
 } from "./api";
@@ -28,6 +30,7 @@ import {
   type TaskExpected,
 } from "./taskConflict";
 import { parseWeekKey } from "./isoWeek";
+import { normalizeLabelNames } from "./tasksPageFilters";
 import type { OutlineMentionsData } from "./outlineMentions";
 import type { OutlineSnippetSegment } from "./outlineSnippet";
 
@@ -597,6 +600,13 @@ export interface TasksFilter {
   priority?: Priority;
   assignedToId?: number;
   labelId?: number;
+  /**
+   * Label names, any-of, matched case-insensitively across the caller's visible
+   * projects (sent as repeated `labelName`). Order does not matter:
+   * `normalizeTasksFilter` sorts them before they reach a cache key. Casing
+   * is kept as given, so two spellings of one name are two cache entries.
+   */
+  labelNames?: string[];
   customerId?: number;
   /** Tasks on projects whose TAM is this user. */
   tamId?: number;
@@ -824,6 +834,8 @@ export const queryKeys = {
   project: (id: number) => ["projects", id] as const,
   projectTasks: (id: number) => ["projects", id, "tasks"] as const,
   projectLabels: (id: number) => ["projects", id, "labels"] as const,
+  // Distinct label names across every visible project (the /tasks Label filter).
+  labelNames: ["labels", "names"] as const,
   projectSections: (id: number) => ["projects", id, "sections"] as const,
   // Users with project access through a customer team (not project members).
   projectTeamAccess: (id: number) => ["projects", id, "team-access"] as const,
@@ -878,6 +890,13 @@ export const queryKeys = {
     [...queryKeys.customerNotesRoot(id), limit] as const,
   tasks: (filter?: TasksFilter) => ["tasks", filter ?? {}] as const,
   comments: (taskId: number) => ["tasks", taskId, "comments"] as const,
+  taskAttachments: (taskId: number) => ["tasks", taskId, "attachments"] as const,
+  attachmentConfig: ["attachments", "config"] as const,
+  // One task by id (the /tasks/:id page). Sits under the ["tasks"] prefix on
+  // purpose: every task mutation already invalidates that prefix, so the page's
+  // copy refreshes with the list views. Nothing else may be keyed here.
+  task: (id: number) => ["tasks", "detail", id] as const,
+  taskDetailRoot: ["tasks", "detail"] as const,
   search: (q: string) => ["search", q] as const,
   // B7: ⌘K Outline group and "Mentioned in Outline" (task panel, project Overview).
   // Prefix keys: everything a disconnect / address change must drop.
@@ -1245,6 +1264,52 @@ export function useProjectTasks(id: number | null) {
   });
 }
 
+/** A task from any cached project task list, shaped as `GET /tasks/:id` returns it. */
+function cachedTaskRow(qc: QueryClient, id: number): TaskWithProject | undefined {
+  const lists = qc.getQueriesData<Task[]>({
+    predicate: ({ queryKey: k }) =>
+      k.length === 3 && k[0] === "projects" && typeof k[1] === "number" && k[2] === "tasks",
+  });
+  for (const [, list] of lists) {
+    const task = list?.find((t) => t.id === id);
+    if (!task) continue;
+    const name = qc
+      .getQueriesData<ProjectDetail>({
+        predicate: ({ queryKey: k }) => isProjectDetailKey(k, task.projectId),
+      })
+      .map(([, p]) => p?.name)
+      .find((n) => !!n);
+    // The project's name may not be cached; the crumb waits for the real row.
+    return { ...task, project: { id: task.projectId, name: name ?? "", customer: null } };
+  }
+  return undefined;
+}
+
+/**
+ * One task by id, for the /tasks/:id page, which knows only the id (the
+ * project id comes back with the row). A task the user cannot see answers 404
+ * exactly like a missing one, and a 404 is never retried. The page's fields
+ * render from `useProjectTasks`, so this entry decides existence, the project
+ * and the breadcrumb; it is refreshed by every `["tasks"]` invalidation.
+ */
+export function useTask(id: number | null) {
+  const qc = useQueryClient();
+  return useQuery<TaskWithProject>({
+    queryKey: id !== null ? queryKeys.task(id) : ["tasks", "detail", "noop"],
+    // The placeholder's `project.customer` is unknown (null) and its name may be
+    // empty: only the breadcrumb and the page's project id read it, and the real
+    // row replaces it as soon as the fetch lands. Nothing may rely on its
+    // customer.
+    // A jump from a task already in a cached project list (a subtask row, the
+    // parent link) shows at once from that list while the row loads.
+    placeholderData: () => (id !== null ? cachedTaskRow(qc, id) : undefined),
+    queryFn: ({ signal }) => apiRequest<TaskWithProject>(`/tasks/${id}`, { signal }),
+    enabled: id !== null,
+    retry: (failures, error) =>
+      !(error instanceof ApiError && (error.status === 404 || error.status === 403)) && failures < 1,
+  });
+}
+
 export function useProjectMembers(projectId: number | null) {
   const live = useLiveRefresh();
   return useQuery({
@@ -1526,6 +1591,22 @@ export function useRemoveProjectMember(projectId: number) {
   });
 }
 
+export interface LabelName {
+  name: string;
+  /** Visible projects that have a label of this name. */
+  projectCount: number;
+}
+
+// Distinct label names across the projects the caller can see. Needs project:read.
+export function useLabelNames(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.labelNames,
+    queryFn: ({ signal }) => apiRequest<LabelName[]>("/labels", { signal }),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
 export function useProjectLabels(id: number | null) {
   return useQuery({
     queryKey: id ? queryKeys.projectLabels(id) : ["projects", "noop", "labels"],
@@ -1589,13 +1670,24 @@ function invalidateProjectHealth(qc: QueryClient, projectId: number) {
   ]);
 }
 
-function tasksQueryString(filter: TasksFilter, offset = 0): string {
+/** One cache key per filter: label names sorted, de-duplicated, and absent when empty. */
+export function normalizeTasksFilter(filter: TasksFilter): TasksFilter {
+  const labelNames = normalizeLabelNames(filter.labelNames ?? []);
+  const next = { ...filter };
+  if (labelNames.length > 0) next.labelNames = labelNames;
+  else delete next.labelNames;
+  return next;
+}
+
+export function tasksQueryString(rawFilter: TasksFilter, offset = 0): string {
+  const filter = normalizeTasksFilter(rawFilter);
   const params = new URLSearchParams();
   if (filter.status) params.set("status", filter.status);
   if (filter.statusId) params.set("statusId", String(filter.statusId));
   if (filter.priority) params.set("priority", filter.priority);
   if (filter.assignedToId) params.set("assignedToId", String(filter.assignedToId));
   if (filter.labelId) params.set("labelId", String(filter.labelId));
+  for (const name of filter.labelNames ?? []) params.append("labelName", name);
   if (filter.customerId) params.set("customerId", String(filter.customerId));
   if (filter.tamId) params.set("tamId", String(filter.tamId));
   if (filter.overdue) {
@@ -1622,7 +1714,8 @@ export const TASKS_PAGE_SIZE = 200;
 // chained by `?offset`. Own key suffix so it never shares a cache entry with
 // the single-page shape above, yet stays under the ["tasks"] prefix that task
 // writes invalidate.
-export function useInfiniteTasks(filter: TasksFilter = {}) {
+export function useInfiniteTasks(rawFilter: TasksFilter = {}) {
+  const filter = normalizeTasksFilter(rawFilter);
   const qs = tasksQueryString(filter);
   return useInfiniteQuery({
     queryKey: [...queryKeys.tasks(filter), qs, "pages"],
@@ -1710,6 +1803,8 @@ export function useUpdateProject(id: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["projects"] });
       qc.invalidateQueries({ queryKey: queryKeys.project(id) });
+      // The task page's breadcrumb carries the project's name.
+      qc.invalidateQueries({ queryKey: queryKeys.taskDetailRoot });
       invalidateProjectActivity(qc, id);
       qc.invalidateQueries({ queryKey: queryKeys.overview });
       qc.invalidateQueries({ queryKey: queryKeys.customers });
@@ -2414,7 +2509,10 @@ export function useDeleteTask(projectId: number) {
       const prev = qc.getQueryData<Task[]>(queryKeys.projectTasks(projectId));
       return { epicId: prev?.find((t) => t.id === id)?.epicId ?? null };
     },
-    onSuccess: (_data, _id, ctx) => {
+    onSuccess: (_data, id, ctx) => {
+      // The task page for this id is being left: drop its entry first so the
+      // ["tasks"] invalidation below does not refetch it into a 404.
+      qc.removeQueries({ queryKey: queryKeys.task(id), exact: true });
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: queryKeys.overview });
@@ -2541,6 +2639,7 @@ export function useCreateLabel(projectId: number) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projectLabels(projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.labelNames });
     },
   });
 }
@@ -2552,7 +2651,10 @@ export function useDeleteLabel(projectId: number) {
       apiRequest<void>(`/labels/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.projectLabels(projectId) });
+      qc.invalidateQueries({ queryKey: queryKeys.labelNames });
       qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
+      // List rows (the /tasks table) carry labels.
+      qc.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
 }
@@ -2563,6 +2665,74 @@ export function useComments(taskId: number | null) {
     queryFn: ({ signal }) =>
       apiRequest<Comment[]>(`/tasks/${taskId}/comments`, { signal }),
     enabled: taskId !== null,
+  });
+}
+
+// ---- Task attachments (docs/archive/plans/task-attachments.md) ----------------
+export interface AttachmentConfig {
+  maxFileBytes: number;
+  maxFilesPerTask: number;
+  maxTaskBytes: number;
+  allowedExtensions: string[];
+}
+
+export interface TaskAttachment {
+  id: number;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+  uploadedBy: { id: number; name: string } | null;
+}
+
+export function useAttachmentConfig() {
+  return useQuery({
+    queryKey: queryKeys.attachmentConfig,
+    queryFn: ({ signal }) => apiRequest<AttachmentConfig>("/attachments/config", { signal }),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useTaskAttachments(taskId: number | null) {
+  return useQuery({
+    queryKey: taskId ? queryKeys.taskAttachments(taskId) : ["tasks", "noop", "attachments"],
+    queryFn: ({ signal }) =>
+      apiRequest<TaskAttachment[]>(`/tasks/${taskId}/attachments`, { signal }),
+    enabled: taskId !== null,
+  });
+}
+
+/** One file per call (the server checks the limits per file); the caller queues several. */
+export function useUploadAttachment(taskId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      file,
+      onProgress,
+      signal,
+    }: {
+      file: File;
+      onProgress?: (p: UploadProgress) => void;
+      signal?: AbortSignal;
+    }) => {
+      const form = new FormData();
+      form.append("file", file);
+      return apiUploadForm<TaskAttachment>(`/tasks/${taskId}/attachments`, form, { onProgress, signal });
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.taskAttachments(taskId) });
+    },
+  });
+}
+
+export function useDeleteAttachment(taskId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (attachmentId: number) =>
+      apiRequest<void>(`/attachments/${attachmentId}`, { method: "DELETE" }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.taskAttachments(taskId) });
+    },
   });
 }
 

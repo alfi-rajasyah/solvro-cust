@@ -18,7 +18,7 @@
 // a new token, so it can force the group open again even after the user
 // dismissed a previous force-expand).
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Badge } from "@/components/reui/badge";
 import { isGroupCollapsible } from "@/lib/dailyReviewStats";
 import { dayFromIso } from "@/lib/dateField";

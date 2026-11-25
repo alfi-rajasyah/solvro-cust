@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink } from "react-router";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { NAV_COMMANDS, NAV_GROUPS, type NavCommand } from "@/lib/navCommands";
 import { useNavBadges, useOutlineConfig } from "@/lib/queries";

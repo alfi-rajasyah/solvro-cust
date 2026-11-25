@@ -28,6 +28,10 @@ COPY nginx-frame-protection.conf /etc/nginx/snippets/frame-protection.conf
 COPY nginx-frame-protection-embed.conf /etc/nginx/snippets/frame-protection-embed.conf
 COPY nginx-frame-protection-embed-map.conf.template /etc/nginx/templates/frame-protection-embed-map.conf.template
 COPY --chmod=755 nginx-embed-frame-ancestors.envsh /docker-entrypoint.d/15-embed-frame-ancestors.envsh
+# The attachment upload body limit, from ATTACHMENT_MAX_FILE_MB: the baked file is
+# the default, and the .envsh rewrites it at start.
+COPY nginx-attachment-body-limit.conf /etc/nginx/snippets/attachment-body-limit.conf
+COPY --chmod=755 nginx-attachment-body-limit.envsh /docker-entrypoint.d/16-attachment-body-limit.envsh
 ENV NGINX_ENVSUBST_FILTER="^EMBED_FRAME_" \
     NGINX_ENVSUBST_OUTPUT_DIR="/etc/nginx/snippets" \
     EMBED_FRAME_ANCESTORS="" \

@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi, apiBase } from "../fixtures/test";
+import { test, expect, loginViaUi, apiBase, waitForGanttReady } from "../fixtures/test";
 import type { Page } from "@playwright/test";
 
 // Regression coverage for the sustained Color-by legend
@@ -13,7 +13,7 @@ import type { Page } from "@playwright/test";
 
 async function openGantt(page: Page, projectId: number): Promise<void> {
   await page.goto(`/projects/${projectId}/gantt`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
+  await waitForGanttReady(page);
 }
 
 test.describe("gantt color-by legend — desktop", () => {

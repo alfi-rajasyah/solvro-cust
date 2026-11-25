@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi, apiBase } from "../fixtures/test";
+import { test, expect, loginViaUi, apiBase, openTaskEditModal, settleQuiet, trackApiRequests } from "../fixtures/test";
 import { createTask, getTasks } from "../fixtures/seed";
 import type { Locator, Page } from "@playwright/test";
 
@@ -220,6 +220,8 @@ test.describe("task panel save ordering and dialog keys", () => {
     await renameInPanel(panel, `Mine ${id}`);
     const dialog = page.getByRole("dialog", { name: "Someone changed this task after you opened it" });
     await expect(dialog).toBeVisible();
+    // The dialog can render before its rows do; Escape on that empty frame leaves it open.
+    await expect(dialog.getByTestId("conflict-row")).toHaveCount(1);
 
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
@@ -275,8 +277,8 @@ test.describe("task panel title save ordering", () => {
       .poll(() => fieldOf(base, token, projectId, task.id, "title"), { timeout: 5_000 })
       .toBe(`Renamed ${id}`);
     // A duplicate save would be sent right after the first commits; wait for
-    // the network to drain, then assert exactly one PATCH and no dialog.
-    await page.waitForLoadState("networkidle");
+    // the network to go quiet, then assert exactly one PATCH and no dialog.
+    await settleQuiet(page);
     await expect.poll(() => patches.length, { timeout: 2_000 }).toBe(1);
     await expect(
       page.getByRole("dialog", { name: "Someone changed this task after you opened it" }),
@@ -307,6 +309,7 @@ test.describe("task panel title save ordering", () => {
       await route.continue();
     });
 
+    const tracker = trackApiRequests(page);
     await patchBehindBack(base, token, task.id, { title: `Theirs ${id}` });
     await renameInPanel(panel, `First ${id}`);
     // Second rename of the same field while the first is still in flight: its
@@ -317,39 +320,21 @@ test.describe("task panel title save ordering", () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByTestId("conflict-row")).toHaveCount(1);
     await expect(dialog.getByTestId("conflict-yours")).toHaveText(`First ${id}`);
-    await page.waitForTimeout(1200);
+    // The route above delays each PATCH 600ms; wait for those to land, then
+    // for a quiet window in case a queued save fires after the first returns.
+    await tracker.settled();
+    tracker.dispose();
+    await settleQuiet(page);
     await expect(dialog.getByTestId("conflict-yours")).toHaveText(`First ${id}`);
     expect(patches.filter((p) => p.includes("First") || p.includes("Second"))).toHaveLength(1);
   });
 });
 
-// Opens the edit form from a /tasks row, scoped to the fixture's customer.
-// Two waits matter on a fast (production) build: the Filters popover must be
-// fully gone — while it lingers its focus manager pulls focus back into its
-// own search input and swallows the typing meant for the form — and the form's
-// title input must actually hold focus before the test types into it.
-async function openEditForm(page: Page, customerName: string, projectId: number, title: string) {
-  await page.goto("/tasks", { waitUntil: "networkidle" });
-  await page.getByRole("button", { name: "Filter", exact: true }).click();
-  await page.getByRole("option", { name: "Customer", exact: true }).hover();
-  await page.getByRole("option", { name: customerName, exact: true }).click();
-  await page.keyboard.press("Escape");
-  await expect(page.getByPlaceholder("Filter...")).toBeHidden();
-  const row = page
-    .locator("tr")
-    .filter({ has: page.locator(`a[href="/projects/${projectId}"]`) })
-    .filter({ has: page.getByText(title, { exact: true }) });
-  await row.getByText(title, { exact: true }).click();
-  const titleInput = page.getByPlaceholder("Task title");
-  await expect(titleInput).toHaveValue(title);
-  await expect(titleInput).toBeFocused();
-}
-
-// The edit form (opened from a /tasks row) sends only the fields the user
+// The edit form (opened from a Gantt row) sends only the fields the user
 // changed, checked against the task as the form opened — not the live copy.
 test.describe("task edit form conflict warning (desktop)", () => {
   test.beforeEach(async () => {
-    test.skip(test.info().project.name !== "desktop", "The /tasks filter toolbar is exercised on desktop");
+    test.skip(test.info().project.name !== "desktop", "The Gantt is desktop-only");
   });
 
   test("raises the dialog for a field changed on both sides; Keep mine saves it", async ({
@@ -357,11 +342,11 @@ test.describe("task edit form conflict warning (desktop)", () => {
     seededProject,
   }, testInfo) => {
     const base = apiBase(testInfo);
-    const { token, projectId, customerName } = seededProject;
+    const { token, projectId } = seededProject;
     const id = stamp();
     const task = await createTask(base, token, projectId, { title: `Form ${id}` });
     await loginViaUi(page);
-    await openEditForm(page, customerName, projectId, `Form ${id}`);
+    await openTaskEditModal(page, projectId, task.id, `Form ${id}`);
 
     await patchBehindBack(base, token, task.id, { title: `Theirs ${id}` });
     await page.getByPlaceholder("Task title").fill(`Mine ${id}`);
@@ -384,11 +369,11 @@ test.describe("task edit form conflict warning (desktop)", () => {
     seededProject,
   }, testInfo) => {
     const base = apiBase(testInfo);
-    const { token, projectId, customerName } = seededProject;
+    const { token, projectId } = seededProject;
     const id = stamp();
     const task = await createTask(base, token, projectId, { title: `Form ${id}` });
     await loginViaUi(page);
-    await openEditForm(page, customerName, projectId, `Form ${id}`);
+    await openTaskEditModal(page, projectId, task.id, `Form ${id}`);
 
     // Someone else retitles the task; I only write a description.
     await patchBehindBack(base, token, task.id, { title: `Theirs ${id}` });
@@ -407,7 +392,7 @@ test.describe("task edit form conflict warning (desktop)", () => {
 
 test.describe("task edit form Use theirs (desktop)", () => {
   test.beforeEach(async () => {
-    test.skip(test.info().project.name !== "desktop", "The /tasks filter toolbar is exercised on desktop");
+    test.skip(test.info().project.name !== "desktop", "The Gantt is desktop-only");
   });
 
   test("keeps the form open with my other edits; only the clashing field takes theirs", async ({
@@ -415,11 +400,11 @@ test.describe("task edit form Use theirs (desktop)", () => {
     seededProject,
   }, testInfo) => {
     const base = apiBase(testInfo);
-    const { token, projectId, customerName } = seededProject;
+    const { token, projectId } = seededProject;
     const id = stamp();
     const task = await createTask(base, token, projectId, { title: `Keep ${id}` });
     await loginViaUi(page);
-    await openEditForm(page, customerName, projectId, `Keep ${id}`);
+    await openTaskEditModal(page, projectId, task.id, `Keep ${id}`);
     const titleInput = page.getByPlaceholder("Task title");
 
     await patchBehindBack(base, token, task.id, { title: `Theirs ${id}` });

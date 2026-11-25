@@ -18,7 +18,6 @@ function stamp(): string {
 
 async function openTaskPanel(page: Page, projectId: number, taskId: number): Promise<Locator> {
   await page.goto(`/projects/${projectId}/list?task=${taskId}`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
   const panel = page.getByRole("dialog", { name: "Task details" });
   await expect(panel).toBeVisible();
   return panel;
@@ -114,7 +113,7 @@ test.describe("TaskPanel subtask editing", () => {
     await rename.click();
     await panel.getByLabel("Subtask title").fill("discarded");
     await panel.getByLabel("Subtask title").press("Escape");
-    await page.waitForTimeout(400);
+    await expect(panel.getByLabel("Subtask title")).toHaveCount(0);
 
     // …then edit again. A cancel flag that outlives its own edit session eats
     // this second rename silently — no error, title just reverts.
@@ -139,10 +138,9 @@ test.describe("TaskPanel subtask editing", () => {
     await subPanel.getByRole("button", { name: "Task options" }).click();
     await subPanel.getByRole("button", { name: "Delete task" }).click();
     await page.getByRole("button", { name: "Delete", exact: true }).click();
-    await page.waitForTimeout(900);
 
     // The panel stays open on the parent rather than closing outright.
-    expect(new URL(page.url()).searchParams.get("task")).toBe(String(parent.id));
+    await expect.poll(() => new URL(page.url()).searchParams.get("task")).toBe(String(parent.id));
     await expect(page.getByRole("dialog", { name: "Task details" })).toBeVisible();
     const titles = (await getTasks(base, token, projectId)).map((t) => t.title);
     expect(titles).not.toContain(child.title);
@@ -156,16 +154,14 @@ test.describe("TaskPanel subtask editing", () => {
 
     const panel = await openTaskPanel(page, projectId, parent.id);
     await panel.getByRole("button", { name: child.title, exact: true }).click();
-    await page.waitForTimeout(600);
 
-    expect(new URL(page.url()).searchParams.get("task")).toBe(String(child.id));
+    await expect.poll(() => new URL(page.url()).searchParams.get("task")).toBe(String(child.id));
     const subPanel = page.getByRole("dialog", { name: "Task details" });
     // Fields that were unreachable before: the subtask's own meta grid.
     await expect(subPanel.getByText("Assignee", { exact: true })).toBeVisible();
 
     await subPanel.getByRole("button", { name: parent.title, exact: true }).click();
-    await page.waitForTimeout(600);
-    expect(new URL(page.url()).searchParams.get("task")).toBe(String(parent.id));
+    await expect.poll(() => new URL(page.url()).searchParams.get("task")).toBe(String(parent.id));
   });
 
   test("offers no Add-subtask form on a subtask (max depth is 1)", async ({ page, seededProject }, testInfo) => {

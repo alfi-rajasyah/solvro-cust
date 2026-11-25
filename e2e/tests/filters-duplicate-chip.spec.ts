@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi } from "../fixtures/test";
+import { test, expect, loginViaUi, nextFrames } from "../fixtures/test";
 
 // Regression cover for the "duplicate-chip mouse race" (docs/archive/ISSUES-2026-11-18-phase-log.md, ReUI
 // Filters phase deferred findings): Base UI's `useMenuItemCommonProps` can
@@ -73,12 +73,15 @@ test.describe("filters — duplicate-chip guard (desktop)", () => {
       if (!box) throw new Error(`${valueLabel} option not visible`);
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       await page.mouse.down();
+      // Kept: Base UI arms its mouseup click after a >=200ms press, and nothing
+      // in the DOM changes during the hold, so there is no condition to wait on.
+      // The guard under test is findMatchingFilter.
       await page.waitForTimeout(250);
       await page.mouse.up();
     };
 
     await addChipViaLongPress("Status", "To do");
-    await page.waitForTimeout(300);
+    await nextFrames(page, 5);
 
     // Core invariant: exactly one "Status" chip, never two.
     await expect(chipsFor("Status")).toHaveCount(1);
@@ -87,7 +90,7 @@ test.describe("filters — duplicate-chip guard (desktop)", () => {
     // equality check doesn't over-trigger and block a legitimate add for a
     // field with no existing chip.
     await addChipViaLongPress("Priority", "High");
-    await page.waitForTimeout(300);
+    await nextFrames(page, 5);
 
     await expect(chipsFor("Status")).toHaveCount(1);
     await expect(chipsFor("Priority")).toHaveCount(1);

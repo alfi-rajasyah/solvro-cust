@@ -65,6 +65,7 @@ describe("filterNavCommands", () => {
     expect(NAV_COMMANDS.map((c) => c.to)).toEqual([
       "/overview",
       "/projects",
+      "/tasks",
       "/customers",
       "/daily-review",
       "/weekly-sync",
@@ -79,6 +80,7 @@ describe("filterNavCommands", () => {
     expect(NAV_COMMANDS.map((c) => [c.label, c.group])).toEqual([
       ["Overview", "Workspace"],
       ["Projects", "Workspace"],
+      ["Tasks", "Workspace"],
       ["Customers", "Workspace"],
       ["Daily Review", "Cadence"],
       ["Weekly Sync", "Cadence"],
@@ -90,7 +92,9 @@ describe("filterNavCommands", () => {
     expect(NAV_GROUPS).toEqual(["Workspace", "Cadence", "Insights", "System"]);
   });
 
-  it("keeps /tasks out of the catalogue", () => {
-    expect(NAV_COMMANDS.some((c) => c.to === "/tasks")).toBe(false);
+  it("lists Tasks only to holders of project:read, like GET /tasks", () => {
+    expect(filterNavCommands(none, "").map((c) => c.label)).not.toContain("Tasks");
+    expect(filterNavCommands((p) => p === "project:read", "").map((c) => c.label)).toContain("Tasks");
+    expect(NAV_COMMANDS.find((c) => c.to === "/tasks")?.requires).toBe("project:read");
   });
 });

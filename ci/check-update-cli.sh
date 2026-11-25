@@ -36,6 +36,7 @@ case "$*" in
   "compose ps"*) echo "ghcr.io/shim/solvro-cust-backend:${SHIM_RUNNING}"; exit 0 ;;
   "compose up"*) [[ "${SHIM_UP_FAIL:-0}" == "1" ]] && exit 1; exit 0 ;;
   *pg_dump*) [[ "${SHIM_PGDUMP_FAIL:-0}" == "1" ]] && exit 1; echo "PGDMP-shim"; exit 0 ;;
+  *"--entrypoint tar"*) [[ "${SHIM_TAR_FAIL:-0}" == "1" ]] && exit 2; echo "TAR-shim"; exit 0 ;;
 esac
 exit 0
 SHIM
@@ -73,7 +74,7 @@ run_cli() {
   # setsid: no controlling terminal, so a prompt cannot be answered.
   HOME="$home" PATH="$WORK/bin:$PATH" SHIM_LOG="$log" SHIM_STABLE="$stable" \
     SHIM_INSTALLER_TAG="$itag" SHIM_FRONTEND_MISSING="$fmiss" SHIM_INSTALLER="$WORK/installer" \
-    SHIM_RUNNING="${RUNNING:-$installed}" SHIM_PGDUMP_FAIL="${PGDUMP_FAIL:-0}" \
+    SHIM_RUNNING="${RUNNING:-$installed}" SHIM_PGDUMP_FAIL="${PGDUMP_FAIL:-0}" SHIM_TAR_FAIL="${TAR_FAIL:-0}" \
     setsid bash "$home/solvro/bin/solvro" "$@" </dev/null >"$WORK/out-$label.log" 2>&1
   local code=$? ran=0 backups
   grep -qx "IMAGE_TAG=\"$itag\"" "$home/solvro/.env" && [[ "$itag" != "$installed" ]] && ran=1
@@ -94,6 +95,7 @@ check "frontend unpublished: nothing runs"  "1 0 0" "$(run_cli fmiss 1.2.0 v1.2.
 check "installer for another tag: not run"  "1 0 1" "$(run_cli itag  1.2.0 v1.3.0 0 update --yes)" itag
 check "pinned release not running: says so" "1 0 0" "$(RUNNING=v1.0.0 run_cli notrun 1.1.0 v1.1.0 0 update --yes)" notrun
 check "backup failure is an error"          "1 0 0" "$(PGDUMP_FAIL=1 run_cli bakfail 1.1.0 v1.1.0 0 backup)" bakfail
+check "attachments backup failure stops update" "1 0 1" "$(TAR_FAIL=1 run_cli tarfail 1.2.0 v1.2.0 0 update --yes)" tarfail
 check "1.10.0 is newer than 1.9.0"          "0 1 1" "$(INSTALLED=v1.9.0 run_cli semver 1.10.0 v1.10.0 0 update --yes)" semver
 
 # --- solvro config

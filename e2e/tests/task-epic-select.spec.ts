@@ -14,7 +14,6 @@ function stamp(): string {
 
 async function openTaskPanel(page: Page, projectId: number, taskId: number): Promise<Locator> {
   await page.goto(`/projects/${projectId}/list?task=${taskId}`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
   const panel = page.getByRole("dialog", { name: "Task details" });
   await expect(panel).toBeVisible();
   return panel;
@@ -50,7 +49,6 @@ test.describe("Epic select in TaskPanel", () => {
     // Survives reload — the epicId round-tripped through the API, not just
     // an optimistic cache write.
     await page.reload({ waitUntil: "networkidle" });
-    await page.waitForTimeout(800);
     const reloadedPanel = page.getByRole("dialog", { name: "Task details" });
     await expect(reloadedPanel).toBeVisible();
     const reloadedChip = reloadedPanel.getByTestId("epic-chip");

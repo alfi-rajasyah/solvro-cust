@@ -136,7 +136,6 @@ test.describe("Customer visibility", () => {
     // Customers.tsx data-grid) is visible; customer B's is absent.
     // ------------------------------------------------------------------
     await page.goto("/customers", { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     await expect(page.getByRole("heading", { level: 2, name: customerAName, exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { level: 2, name: customerBName, exact: true })).toHaveCount(0);
 
@@ -149,7 +148,6 @@ test.describe("Customer visibility", () => {
     // as daily-review.spec.ts's `customerHeading` locator.
     // ------------------------------------------------------------------
     await page.goto("/daily-review", { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     await expect(page.getByRole("heading", { level: 2, name: customerAName })).toBeVisible();
     await expect(page.getByRole("heading", { level: 2, name: customerBName })).toHaveCount(0);
   });

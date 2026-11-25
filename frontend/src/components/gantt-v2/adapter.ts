@@ -16,6 +16,16 @@ export function parseTaskId(id: string): number | null {
   const m = /^task-(\d+)$/.exec(id);
   return m ? Number(m[1]) : null;
 }
+/**
+ * Inverse of `sectionNodeId`: the section id of a section node, `null` for the
+ * "(No section)" group, or `undefined` when the id is not a section node (a
+ * task node, for example).
+ */
+export function parseSectionId(id: string): number | null | undefined {
+  if (id === sectionNodeId(null)) return null;
+  const m = /^section-(\d+)$/.exec(id);
+  return m ? Number(m[1]) : undefined;
+}
 
 const byPosition = <T extends { position: number; id: number }>(a: T, b: T) =>
   a.position - b.position || a.id - b.id;

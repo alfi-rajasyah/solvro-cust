@@ -151,7 +151,6 @@ test.describe("Daily Review v2", () => {
     // point, so it contributes nothing to any stats-bar tile yet — see
     // header comment.
     await page.goto("/daily-review", { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     const baseReviewed = await readFraction(page, "stat-reviewed-today");
     const baseWeekly = await readFraction(page, "stat-weekly-updates");
     const baseOverdue = await readCount(page, "stat-overdue-tasks");
@@ -203,7 +202,6 @@ test.describe("Daily Review v2", () => {
     });
 
     await page.reload({ waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
 
     // ------------------------------------------------------------------
     // 1. Page title, week label, our customer group + project card.
@@ -336,7 +334,6 @@ test.describe("Daily Review v2", () => {
     await customerHeading.getByRole("link", { name: customerName }).click();
     await expect(page).toHaveURL(new RegExp(`/customers/${customer.id}$`));
     await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(500);
     const weeklySection = page
       .getByRole("heading", { name: "Weekly updates" })
       .locator("xpath=ancestor::section[1]");
@@ -348,7 +345,6 @@ test.describe("Daily Review v2", () => {
     // 8. /projects/:id/overview — Notes panel shows today's project note.
     // ------------------------------------------------------------------
     await page.goto(`/projects/${projectId}/overview`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     const notesPanel = page
       .getByRole("heading", { name: "Notes", exact: true })
       .locator("xpath=ancestor::section[1]");
@@ -359,7 +355,6 @@ test.describe("Daily Review v2", () => {
     //     and the operations note (its title), newest first.
     // ------------------------------------------------------------------
     await page.goto("/overview", { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     const recentNotes = page
       .getByRole("heading", { name: "Recent notes" })
       .locator("xpath=ancestor::div[1]");
@@ -371,7 +366,6 @@ test.describe("Daily Review v2", () => {
     // 9. Week navigation: Previous changes ?week=, Next returns to it.
     // ------------------------------------------------------------------
     await page.goto("/daily-review", { waitUntil: "networkidle" });
-    await page.waitForTimeout(500);
     await expect(page).toHaveURL(/[?&]week=\d{4}-W\d{2}/);
     const currentWeekKey = new URL(page.url()).searchParams.get("week")!;
     const currentWeekLabel = (await page.getByText(/^Week \d+$/).textContent())?.trim();

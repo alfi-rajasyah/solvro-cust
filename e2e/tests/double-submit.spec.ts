@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi, apiBase } from "../fixtures/test";
+import { test, expect, loginViaUi, apiBase, settleQuiet, trackApiRequests } from "../fixtures/test";
 import { createTask, createEpic } from "../fixtures/seed";
 import type { Page } from "@playwright/test";
 
@@ -52,12 +52,16 @@ test.describe("Inline create inputs ignore a second Enter while pending", () => 
     const posts = await holdTaskCreates(page);
     const title = `Sub ${stamp()}`;
     const input = panel.getByPlaceholder("Add subtask");
+    const tracker = trackApiRequests(page);
     await input.fill(title);
     await input.press("Enter");
     await input.press("Enter");
 
     await expect(panel.getByRole("button", { name: title, exact: true })).toHaveCount(1);
-    await page.waitForTimeout(500);
+    // The held POST takes 1500ms; let it land, then listen for a late second one.
+    await tracker.settled();
+    tracker.dispose();
+    await settleQuiet(page);
     expect(posts.count()).toBe(1);
     await expect(panel.getByRole("button", { name: title, exact: true })).toHaveCount(1);
   });
@@ -74,13 +78,17 @@ test.describe("Inline create inputs ignore a second Enter while pending", () => 
 
     const posts = await holdTaskCreates(page);
     const title = `Story ${stamp()}`;
-    const input = panel.getByLabel("Add story");
+    const input = panel.getByLabel("Story title");
+    const tracker = trackApiRequests(page);
     await input.fill(title);
     await input.press("Enter");
     await input.press("Enter");
 
     await expect(panel.getByText(title, { exact: true })).toHaveCount(1);
-    await page.waitForTimeout(500);
+    // The held POST takes 1500ms; let it land, then listen for a late second one.
+    await tracker.settled();
+    tracker.dispose();
+    await settleQuiet(page);
     expect(posts.count()).toBe(1);
     await expect(panel.getByText(title, { exact: true })).toHaveCount(1);
   });

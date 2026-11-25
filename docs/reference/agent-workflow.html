@@ -822,7 +822,7 @@ section[id] { scroll-margin-top: 86px; } /* clears the sticky nav on anchor jump
           <div class="gate-items">
             <code>changelog-presence</code><code>guardrail-tasks-page</code><code>guardrail-no-gantt-lib</code><code>guardrail-internal-notes</code><code>guardrail-local-only-untracked</code><code>guardrail-kanban-vendor</code><code>guardrail-sortable-vendor</code>
           </div>
-          <p class="gate-why">Each one is a product invariant reduced to a grep: customer exports must filter INTERNAL notes, a page that is hidden from the sidebar must still exist, no npm Gantt library may appear in either package.json, and the vendored engines must carry exactly the recorded number of patch markers.</p>
+          <p class="gate-why">Each one is a product invariant reduced to a grep: customer exports must filter INTERNAL notes, the cross-project Tasks page must never be deleted, no npm Gantt library may appear in either package.json, and the vendored engines must carry exactly the recorded number of patch markers.</p>
         </div>
 
         <div class="gate-group">

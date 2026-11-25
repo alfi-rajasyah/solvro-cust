@@ -21,7 +21,6 @@ import { isMonday, parseWeekKey, weekKeyOf } from "../lib/isoWeek.js";
 import { computeProjectHealth } from "../lib/projectHealth.js";
 import {
   customerVisibilityFilter,
-  ensureCustomerOwnerAccess,
   ensureCustomerVisible,
   projectVisibilityFilter,
 } from "../lib/visibility.js";
@@ -184,8 +183,8 @@ function normalizeText(value: string | null | undefined): string | null | undefi
 
 /**
  * Which of these customers the caller may reassign (PATCH `tamId`) — the one
- * rule behind both the PATCH check and the `canChangeOwner` flag the reads
- * return, so they cannot drift (docs/archive/plans/internal-sync.md): a
+ * rule behind the PATCH check, the DELETE check and the `canChangeOwner` flag
+ * the reads return, so they cannot drift (docs/archive/plans/internal-sync.md): a
  * view-all caller, or the current owner; on an UNOWNED customer, also a caller
  * who is the TAM of every project under it, counting projects the caller
  * cannot see (none at all qualifies). One grouped query however many rows.
@@ -636,7 +635,25 @@ customersRouter.delete(
   validate("params", idParamSchema),
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
-    await ensureCustomerOwnerAccess(req.user!, id);
+    const user = req.user!;
+    await ensureCustomerVisible(user, id);
+    // Deleting unlinks the customer from every project under it, so it takes
+    // the same rule as changing its owner (reassignableCustomerIds), not mere
+    // visibility of an unowned customer.
+    const target = await prisma.customer.findUnique({
+      where: { id },
+      select: { tamId: true },
+    });
+    if (!target) throw new HttpError(404, "customer_not_found", "Customer not found");
+    if (!(await reassignableCustomerIds(user, [{ id, tamId: target.tamId }])).has(id)) {
+      throw new HttpError(
+        403,
+        "owner_only",
+        target.tamId === null
+          ? "An unowned customer can be deleted only by the TAM of all its projects"
+          : "Only the customer's owner can delete it",
+      );
+    }
     // The ProjectCustomer links cascade; projects survive. Where this customer
     // was a project's primary, the oldest remaining link (addedAt) becomes the
     // primary; a project left with no link is simply unlinked

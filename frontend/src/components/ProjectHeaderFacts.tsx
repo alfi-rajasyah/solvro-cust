@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { PrimaryChip } from "@/components/customer/PrimaryChip";
 import { ProjectStatusChip } from "@/components/StatusChip";
 import { dateToDay } from "@/lib/dateField";

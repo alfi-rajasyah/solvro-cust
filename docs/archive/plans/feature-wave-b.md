@@ -3,7 +3,7 @@
 Status: shipped 2026-11-20 (started @ `58c7103`; PRs for B1 and B2)
 Archive path: `docs/archive/plans/feature-wave-b.md`
 
-Lane: P. Wave B of `docs/plans/github-feature-waves.md`. B3 (#92 workload) waits on questions 6b–6d.
+Lane: P. Wave B of `docs/archive/plans/github-feature-waves.md`. B3 (#92 workload) waits on questions 6b–6d.
 
 ## Streams
 

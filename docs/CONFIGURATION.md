@@ -54,7 +54,7 @@ A missing or invalid env var **crashes the process at startup** with a printed Z
 
 The compiled bundle has **no runtime env vars**. It uses the literal string `/api` as its API base and inherits the origin from `window.location`. The only build-time / dev-time variable is `VITE_API_PROXY_TARGET` — which only matters if you run Vite *inside* a container and need to point its dev proxy at `http://backend:3000` instead of `http://localhost:3000`.
 
-The one runtime variable on the frontend side belongs to the **nginx container**, not the bundle: `EMBED_FRAME_ANCESTORS` (the Outline address allowed to frame a few Solvro pages — see [2.2](#22--frontend-environment-variables)). It only changes response headers; it is empty (embedding off) by default.
+The two runtime variables on the frontend side belong to the **nginx container**, not the bundle: `EMBED_FRAME_ANCESTORS` (the Outline address allowed to frame a few Solvro pages; it only changes response headers and is empty, embedding off, by default) and `ATTACHMENT_MAX_FILE_MB` (sets the upload body limit). See [2.2](#22--frontend-environment-variables).
 
 ### Secrets discipline
 
@@ -88,6 +88,16 @@ Defined and validated in [backend/src/env.ts](backend/src/env.ts) (Zod). All oth
 | `ITOP_SYNC_DISABLED` | no | `false` | enum: `true` \| `false` | Kill switch for the in-process iTop sync scheduler (`backend/src/lib/itop/scheduler.ts`) — set `true` to turn the background sync off (e.g. a dev stack with no iTop admin config yet, or a maintenance window). Default off means the sync runs whenever iTop is configured. |
 | `ITOP_ALLOW_PRIVATE_HOSTS` | no | `true` | enum: `true` \| `false` | The iTop address an admin saves or tests (Admin → iTop) must always be an `https://` URL without a user name or password. With the default `true` it may be a private or local host (`itop.local`, an RFC1918 address) — the normal case when Solvro and iTop share a LAN. Set `false` on an internet-facing deployment whose iTop is public: `localhost`, `*.local`, loopback, link-local, RFC1918 and ULA addresses, and public names that resolve to them, are then refused (`backend/src/lib/itop/validateBaseUrl.ts`) so an admin session cannot use the backend to probe the internal network. |
 | `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS` | no | `false` | enum: `true` \| `false` | A personal iTop token (Settings → iTop) is saved only when Solvro can confirm it is the user's own: used with that token, Solvro asks iTop `core/get Person WHERE id = :current_contact_id` with that token and accepts it when the Person it resolves to has the user's email (`backend/src/routes/itopUser.ts`); the `User` / `PersonalToken` reads then only supply the expiry and iTop user id, best-effort. Only when `:current_contact_id` is unavailable does Solvro fall back to requiring those reads (some iTop profiles, e.g. Support Agent, cannot read them); a token refused for that reason gets `400 itop_token_unverified`. Set `true` to accept such a token on the email match alone — the expiry then stays unknown. A token that the `PersonalToken` read shows to belong to someone else is refused either way (`itop_token_not_yours`). For `setup.sh` deploys, set it in `~/solvro/.env` — the generated compose file passes it through (see [2.13](#213--production-deployment-via-setupsh)). |
+| `ATTACHMENTS_DRIVER` | no | `local` | enum: `local` \| `s3` | Where task attachments are stored: `local` keeps them in the `solvro_uploads` volume, `s3` in an S3-compatible bucket. See [2.18](#218--task-attachments). |
+| `ATTACHMENTS_DIR` | no | `/app/uploads` | string (a path) | Root folder of the `local` driver: the mount point of the `solvro_uploads` volume. Leave it unless you change the mount. |
+| `ATTACHMENT_MAX_FILE_MB` | no | `25` | positive number | Largest single file, in MB. `setup.sh` passes it to the frontend container too, where the bundled nginx sets the upload request limit to this value rounded up plus 1 MB for the multipart envelope (26 MB by default; see [2.6](#26--the-api-reverse-proxy-pattern-critical-detail)). After a change, restart both: `docker compose up -d`. A reverse proxy in front of Solvro needs its own limit raised as well. |
+| `ATTACHMENT_MAX_FILES_PER_TASK` | no | `20` | positive int | Most files one task can hold. |
+| `ATTACHMENT_MAX_TASK_MB` | no | `100` | positive number | Largest total size of one task's files, in MB. |
+| `ATTACHMENT_ALLOWED_EXTENSIONS` | no | `png,jpg,jpeg,gif,webp,pdf,docx,xlsx,pptx,txt,csv,log,md,json,yaml,yml,zip` | comma-separated list | File extensions that may be attached. Keep `html`, `htm`, `svg`, executables and scripts off the list: a browser can run code in them. |
+| `S3_ENDPOINT` | no | none | URL | Address of the S3-compatible store. Needed for MinIO, Silo, Garage and other S3-compatible stores; omit it for AWS S3, which derives it from `S3_REGION`. |
+| `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | only when `ATTACHMENTS_DRIVER=s3` | none | strings | Region, bucket and the bucket-only key. With the driver set to `s3`, the backend refuses to start when one of these is missing. An empty value counts as unset. See [2.18](#218--task-attachments). |
+| `S3_FORCE_PATH_STYLE` | no | `false` | `true` or `false` | Path-style addressing (`https://host/bucket/key`). Usually needed (`true`) for MinIO, Silo and Garage; leave `false` for AWS S3. |
+| `S3_KEY_PREFIX` | no | empty | string | Prepended to every object key, so a bucket can be shared by folders. Blank means no prefix. See [2.18](#218--task-attachments) before sharing a bucket. |
 
 > Looking for Google OAuth config (Client ID, allowed domains)? It's **not** an env var — it's admin-managed in the database. See [2.9](#29--auth--rbac-configuration).
 
@@ -110,11 +120,12 @@ The `?schema=public` query param is required by Prisma — if you drop it, migra
 
 The runtime bundle has no `VITE_*` vars baked in. **If you find yourself adding one, reconsider — the `/api` reverse-proxy pattern is what keeps the bundle environment-agnostic.**
 
-One variable is read by the **production frontend container** (the nginx image) rather than the bundle:
+Two variables are read by the **production frontend container** (the nginx image) rather than the bundle:
 
 | Variable | Where it's read | Default | Purpose |
 |---|---|---|---|
 | `EMBED_FRAME_ANCESTORS` | `/docker-entrypoint.d/15-embed-frame-ancestors.envsh` ([frontend/nginx-embed-frame-ancestors.envsh](frontend/nginx-embed-frame-ancestors.envsh)) at container start | empty (embedding off) | Space- or comma-separated `http(s)` origins (`scheme://host[:port]`, no path, wildcard or other characters; one trailing `/` tolerated), e.g. `https://docs.acme.com`: the Outline address(es) allowed to put Solvro pages in an iframe. See below. |
+| `ATTACHMENT_MAX_FILE_MB` | `/docker-entrypoint.d/16-attachment-body-limit.envsh` ([frontend/nginx-attachment-body-limit.envsh](frontend/nginx-attachment-body-limit.envsh)) at container start | `25`, which gives `26m` | The same setting as the backend's ([2.1](#21--backend-environment-variables)). The hook writes `client_max_body_size` for the attachment upload location: the value rounded up plus 1 MB. It accepts a plain decimal number with at most 6 digits before the point; anything else (also forms the backend accepts, such as `1e2`) keeps `26m` and logs `16-attachment-body-limit: ERROR: …`. [ci/check-attachment-body-limit.sh](ci/check-attachment-body-limit.sh) asserts this against the built image. |
 
 **What it widens.** With it set, `Content-Security-Policy: frame-ancestors 'self' <origins>` replaces the strict `frame-ancestors 'self'` on exactly these pages and no others: `/embed/projects/<numeric id>/tasks`, `/embed/projects/<numeric id>/status`, `/embed/projects/<numeric id>/timeline` (the signed-in embeds) and `/share/<token>` (the guest link, also used by the guest embed, `?embed=1`). A trailing `/` and a query string are allowed. Every other page, asset and `/sw.js` keeps `'self'`. While at least one origin is set, `X-Frame-Options` is dropped on those pages (it cannot express an allow-list, and current browsers ignore it when `frame-ancestors` is present); with embedding off it stays (`SAMEORIGIN`).
 
@@ -126,7 +137,7 @@ One variable is read by the **production frontend container** (the nginx image) 
 
 **Signed-in embeds need a shared parent domain (D6).** The embed pages run in a third-party iframe, so the browser partitions their storage unless Solvro and Outline share a registrable parent domain (e.g. `solvro.acme.com` and `docs.acme.com`). On a shared parent domain the Outline page can embed the task table already signed in; otherwise the embed shows its sign-in prompt, and the supported alternative is a guest link embedded with `/share/<token>?embed=1`, which needs no sign-in.
 
-For `setup.sh` deploys it is saved to `~/solvro/.env` and passed to the frontend container — see [2.13](#213--production-deployment-via-setupsh). The Vite dev server (`:5173`) does not read it.
+For `setup.sh` deploys both are saved to `~/solvro/.env` and passed to the frontend container — see [2.13](#213--production-deployment-via-setupsh). The Vite dev server (`:5173`) does not read it.
 
 ### 2.3 — Postgres / database environment variables
 
@@ -166,6 +177,7 @@ Tags [.github/workflows/docker-publish.yml](.github/workflows/docker-publish.yml
 | Volume | Mounted at | Lifetime | Notes |
 |---|---|---|---|
 | `solvro_pgdata` | `/var/lib/postgresql/data` (postgres) | Survives `down`; lost on `down -v` | Postgres data directory. **Treat `down -v` as destructive.** |
+| `solvro_uploads` | `/app/uploads` (backend) | Survives `down`; lost on `down -v` | Task attachment files when `ATTACHMENTS_DRIVER=local` (the default). Production uses the same volume name. Back it up with the one-liner in [2.18](#218--task-attachments). |
 | `solvro_backend_node_modules` | `/app/node_modules` (backend) | Survives `down` | Keeps backend deps off the host filesystem so the bind mount of `./backend` doesn't shadow them. |
 | `solvro_frontend_node_modules` | `/app/node_modules` (frontend) | Survives `down` | Same pattern for frontend. |
 
@@ -211,12 +223,13 @@ location /api/ {
 
 Backend routers stay mounted at `/auth`, `/projects`, `/tasks`, etc. — **without** an `/api` prefix. If you add a router, do **not** prefix it with `/api`; the proxy handles that.
 
-**Nginx files**: [frontend/nginx.conf](frontend/nginx.conf) (locations), [frontend/nginx-frame-protection.conf](frontend/nginx-frame-protection.conf) (strict framing headers), [frontend/nginx-frame-protection-embed.conf](frontend/nginx-frame-protection-embed.conf) (static snippet that sends the mapped framing headers), [frontend/nginx-frame-protection-embed-map.conf.template](frontend/nginx-frame-protection-embed-map.conf.template) (the `map` blocks, rendered at start) and [frontend/nginx-embed-frame-ancestors.envsh](frontend/nginx-embed-frame-ancestors.envsh) (validates `EMBED_FRAME_ANCESTORS`, see [2.2](#22--frontend-environment-variables)). [frontend/Dockerfile](frontend/Dockerfile) copies them into the image.
+**Nginx files**: [frontend/nginx.conf](frontend/nginx.conf) (locations), [frontend/nginx-frame-protection.conf](frontend/nginx-frame-protection.conf) (strict framing headers), [frontend/nginx-frame-protection-embed.conf](frontend/nginx-frame-protection-embed.conf) (static snippet that sends the mapped framing headers), [frontend/nginx-frame-protection-embed-map.conf.template](frontend/nginx-frame-protection-embed-map.conf.template) (the `map` blocks, rendered at start) [frontend/nginx-embed-frame-ancestors.envsh](frontend/nginx-embed-frame-ancestors.envsh) (validates `EMBED_FRAME_ANCESTORS`, see [2.2](#22--frontend-environment-variables)), and [frontend/nginx-attachment-body-limit.conf](frontend/nginx-attachment-body-limit.conf) with [frontend/nginx-attachment-body-limit.envsh](frontend/nginx-attachment-body-limit.envsh) (the upload body limit: the baked default and the start hook that rewrites it). [frontend/Dockerfile](frontend/Dockerfile) copies them into the image.
 
 **Secret-bearing URLs (no access logging)**: `access_log off` is set wherever a secret is part of the URL, so the access log never holds one:
 
 - `/api/public/share/` (`location ^~`) — the guest-link API, proxied to the backend's `/public/share/` exactly like `/api/`, with the same `X-Forwarded-For` / `X-Real-IP` / `X-Forwarded-Proto` headers (this is the hop that `TRUST_PROXY=1` counts).
 - `= /api/outline/oauth/callback` and `= /api/outline/oauth/callback/` — the Outline OAuth callback, whose query string carries the one-time `code` and `state`; proxied to the backend's `/outline/oauth/callback`.
+- `~ ^/api/tasks/[0-9]+/attachments/?\z` — the task attachment upload (and the list on the same path), proxied to `/tasks/<id>/attachments` with a body limit of `ATTACHMENT_MAX_FILE_MB` rounded up plus 1 MB for the multipart envelope (**26 MB** by default). `frontend/nginx-attachment-body-limit.envsh` writes it to `/etc/nginx/snippets/attachment-body-limit.conf` at container start; an unset or invalid value keeps 26 MB and logs why. The location also sets `proxy_request_buffering off`, so the body streams to the backend instead of being written to nginx's temporary files first. Every other path, including `GET`/`DELETE /api/attachments/<id>`, keeps the 1 MB limit. Access logging stays on: the URL carries no secret.
 - `= /api/webhook/outline` — the Outline webhook, proxied to `/webhook/outline` with a **2 MB** body limit (`client_max_body_size 2m`, matching the backend's raw-body limit; the generic `/api/` location caps at 1 MB). Access logging stays on here: the URL carries no secret.
 - `/share/<token>` — a regex location (`^/share/[A-Za-z0-9_-]+/?\z`, the backend's base64url token format) that serves the SPA shell (`index.html`, via `rewrite ^ /index.html break`) with `Cache-Control: no-store`, `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex` on the document itself, so no subresource request can carry the token in a `Referer`. It takes the *widened* framing snippet (see [2.2](#22--frontend-environment-variables)).
 - Any other `/share/…` path (bare `/share/`, extra segments, odd characters) — `location ~ ^/share/`, a regex too, with the same token-hygiene headers and `access_log off` but strict framing.
@@ -225,7 +238,7 @@ nginx keeps `merge_slashes` on, so a doubled slash (`/api//public/share/<token>`
 
 **Icon caching**: `location /icons/` and `location = /favicon.png` send `Cache-Control: public, max-age=86400` (these files are not fingerprinted), with `Referrer-Policy` and the framing snippet.
 
-The guest page still loads Google Fonts from Google; the no-referrer policy keeps the token out of those requests.
+The guest page loads its fonts from the app itself and contacts no third-party host.
 
 `access_log off` does **not** cover nginx's `error_log`: when the backend is down or times out, the error-log lines for `/api/public/share/…` and the OAuth callback can contain the token or one-time `code` in the request path. Treat nginx error logs as sensitive (restrict access, don't ship them to shared tooling).
 
@@ -330,13 +343,13 @@ The committed `docker-compose.yml` is a **dev** file. Production is bootstrapped
 3. **`bash setup.sh --advanced`** replaces step 2's derivation with prompts for the website port (`80`), API port (`3000`), Postgres host port (blank = unpublished), bind address (`127.0.0.1`; `0.0.0.0` publishes to the network) and `EMBED_FRAME_ANCESTORS` (the Outline address allowed to embed Solvro; blank = embedding off), then asks for `APP_URL` with a default derived from the bind address and website port. `EMBED_FRAME_ANCESTORS` is validated as a list of bare `http(s)` origins. `bash setup.sh --help` prints the options.
 4. **Auto-generates** `POSTGRES_PASSWORD` (`openssl rand -hex 24`), `JWT_SECRET` (`openssl rand -hex 48`), and `SECRETS_KEY` (`openssl rand -base64 32`) — these are never prompted for. On a **re-run** against an install that predates `SECRETS_KEY` (older installs), the script generates one and appends it to `~/solvro/.env` once, without overwriting any value already there.
 5. Writes `~/solvro/.env` (`chmod 600`, including `IMAGE_TAG`, `APP_URL` and, when given, `EMBED_FRAME_ANCESTORS`, the latter two double-quoted) and `~/solvro/docker-compose.yml` — a prod-shaped compose file with the GHCR image references hardcoded (see [2.4](#24--ghcr-image-references-production-only)).
-6. Before anything is written or wiped (i.e. before step 5), pulls the backend image on its own; if the pull fails the script stops with a `docker login ghcr.io` hint, so a re-run is still a fresh install. Then drops any prior `solvro_pgdata` volume (`docker compose down` + `docker volume rm` — **destructive**, intentional on a fresh install to clear stale postgres state; refused unless `FORCE_FRESH=1` when the volume already exists without a `.env`, see `OPERATIONS.md`), then pulls images and starts the stack.
+6. Before anything is written or wiped (i.e. before step 5), pulls the backend image on its own; if the pull fails the script stops with a `docker login ghcr.io` hint, so a re-run is still a fresh install. Then drops any prior `solvro_pgdata` volume and the `solvro_uploads` attachments volume (`docker compose down` + `docker volume rm` — **destructive**, intentional on a fresh install to clear stale postgres state; the attachments go with the database they belonged to; refused unless `FORCE_FRESH=1` when the volume already exists without a `.env`, see `OPERATIONS.md`), then pulls images and starts the stack.
 7. Polls `GET /health` for up to ~2 minutes, then runs `scripts/create-admin.ts` inside the backend container with the collected admin credentials — a fresh install ends with a working login, no manual step required.
 8. Installs the `solvro` command (`~/solvro/bin/solvro`, linked into `/usr/local/bin` when writable, else `~/.local/bin`; rewritten on every install and update). It is the supported upgrade path — see below.
 
 **Re-run / update** (`~/solvro/.env` already exists): skips all prompts, reuses the persisted ports/bind address, rewrites the compose file, pins `IMAGE_TAG` to the release this copy of the script belongs to, then `docker compose pull`, saves the new `IMAGE_TAG` to `.env` (only after the pull succeeded), and `docker compose up -d`. Does not touch the admin user or the database volume. `APP_URL` and `EMBED_FRAME_ANCESTORS` are read from `~/solvro/.env` without sourcing it (a hand-edited, unquoted list with spaces would otherwise be run as a command); a value passed in the environment of the re-run replaces the saved one. An older install with no `APP_URL` gets the default derived from the bind address and website port, saved to `.env` with a note; when no valid address can be derived, `APP_URL` stays unset (Outline disabled, boot-log warning), never a placeholder. Set the real public address by `solvro config set APP_URL=https://…` (or re-running with `APP_URL=https://… bash setup.sh`).
 
-**Upgrading**: `solvro update` is the normal path. It looks up the newest release (the `stable` image tag), shows the installed and new version, asks to confirm (`--yes` skips; with no terminal and no `--yes` it stops), backs up the database to `~/solvro/backups/` (`--no-backup` skips), checks that both images of the release are published, then runs the installer that release's backend image carries (`/opt/solvro/setup.sh`) — i.e. the re-run path above. It refuses to move to an older release. `solvro version` and `solvro backup` are also provided; all options are in the INSTALL.md [Command reference](INSTALL.md#command-reference). A server installed before the command existed upgrades once with `git pull` + `bash setup.sh` in its repository checkout, which installs the command. `docker compose pull` alone never changes the version (`IMAGE_TAG` is pinned).
+**Upgrading**: `solvro update` is the normal path. It looks up the newest release (the `stable` image tag), shows the installed and new version, asks to confirm (`--yes` skips; with no terminal and no `--yes` it stops), backs up the database and, with `ATTACHMENTS_DRIVER=local`, the attachments volume to `~/solvro/backups/` (`--no-backup` skips), checks that both images of the release are published, then runs the installer that release's backend image carries (`/opt/solvro/setup.sh`) — i.e. the re-run path above. It refuses to move to an older release. `solvro version` and `solvro backup` are also provided; all options are in the INSTALL.md [Command reference](INSTALL.md#command-reference). A server installed before the command existed upgrades once with `git pull` + `bash setup.sh` in its repository checkout, which installs the command. `docker compose pull` alone never changes the version (`IMAGE_TAG` is pinned).
 
 Backend container command in both cases: `prisma migrate deploy && prisma db seed && node dist/index.js` — see [2.7](#27--database-migrations).
 
@@ -415,6 +428,49 @@ Solvro connects to the deployment's own, self-hosted Outline wiki in two directi
 **Rate limits.** Outline counts its rate limits per client IP as well as per token, and every Solvro user reaches it from the backend's address, so all users share each limit (notably the OAuth token/authorize/revoke endpoints at 100 per hour and search/list at 100 per minute). A limit hit surfaces as an `outline_rate_limited` answer carrying Outline's retry-after, not a retry loop.
 
 **Database.** The mentions index relies on `UNIQUE … NULLS NOT DISTINCT`, so **PostgreSQL 15 or newer is required** (the dev and prod stacks use `postgres:15-alpine`); the migration fails on older servers.
+
+### 2.18 — Task attachments
+
+Users can attach files to a task. The server enforces the limits in [2.1](#21--backend-environment-variables) (file size, files per task, total size per task, allowed extensions). Files are never served from the storage itself: every download goes through the backend, which checks that the user may see the task, so the bucket (or the volume) is never public.
+
+**Local storage (the default).** `setup.sh` writes `ATTACHMENTS_DRIVER=local` and the `ATTACHMENT_*` defaults to `~/solvro/.env`, and the generated compose file mounts the named volume `solvro_uploads` at `/app/uploads` in the backend container. Nothing else is needed on a fresh server. The volume survives `docker compose down`, `solvro update` and a re-run of `setup.sh`. It is deleted by `docker compose down -v`, and by a fresh install run with `FORCE_FRESH=1`, which also deletes `solvro_pgdata`: without the database the files have no rows and would be orphans.
+
+`solvro backup` and `solvro update` archive the volume next to the database dump, as `~/solvro/backups/solvro_uploads-<release>-<date>-<time>.tar.gz`. To archive it by hand, for example from a scheduled job:
+
+```bash
+docker run --rm -v solvro_uploads:/data:ro -v "$PWD":/backup alpine \
+  tar czf /backup/solvro_uploads-$(date +%F).tar.gz -C /data .
+```
+
+Restore into an empty volume:
+
+```bash
+docker run --rm -v solvro_uploads:/data -v "$PWD":/backup alpine \
+  tar xzf /backup/<archive>.tar.gz -C /data
+```
+
+**S3 or an S3-compatible store.** Any store that speaks the S3 API works: AWS S3, MinIO, Silo, Garage and similar. Set these in `~/solvro/.env`, then run `docker compose up -d` in `~/solvro`:
+
+```bash
+ATTACHMENTS_DRIVER=s3
+S3_ENDPOINT=https://s3.example.com   # MinIO, Silo, Garage and other S3-compatible stores; omit for AWS S3
+S3_REGION=us-east-1                   # required; many self-hosted stores accept any value
+S3_BUCKET=solvro-attachments
+S3_ACCESS_KEY_ID=...
+S3_SECRET_ACCESS_KEY='...'            # single-quote it when it holds $ or other shell characters
+S3_FORCE_PATH_STYLE=true              # usually true for MinIO, Silo and Garage; false for AWS S3
+S3_KEY_PREFIX=                        # optional, e.g. solvro/ ; blank = no prefix
+```
+
+- **One Solvro per bucket (or per bucket and `S3_KEY_PREFIX`).** The daily cleanup deletes every object under `tasks/` in the bucket (or under `<prefix>tasks/` when `S3_KEY_PREFIX` is set) that has no row in this Solvro's database. Another Solvro, application or person that writes under the same path will lose those files. Give each Solvro deployment (including a test copy restored from a backup) its own bucket or its own prefix.
+- Create the bucket first, and keep it **private** (no public read, no public listing, no static-website mode). Solvro never hands out a bucket URL.
+- Use a key that can reach **only that bucket**, with the rights to put, get, delete and list objects in it. Do not use an account-wide or admin key. The key lives only in `.env` (mode 600).
+- The backend checks the S3 values at start and does not start when one is missing.
+- Files are stored under `tasks/<task id>/<random id>`; the user's file name is kept only in the database.
+- Switching drivers does not move existing files: attachments uploaded under one driver are not visible under the other, and moving them is manual. Decide before the first upload.
+- Back up the bucket with the store's own tools (versioning, replication or a periodic sync); the `solvro_uploads` volume is then unused.
+
+**Cleanup.** Deleting a task, or a project, deletes its files. A daily job in the backend also removes stored files that have no database row and are older than 24 hours.
 
 ## Quick reference card
 

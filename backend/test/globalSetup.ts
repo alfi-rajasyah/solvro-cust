@@ -1,5 +1,15 @@
 import { execSync } from "node:child_process";
+import { mkdirSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { PrismaClient } from "@prisma/client";
+
+// Fixed path: test/env.ts runs once per test file, so a per-file mkdtemp left
+// a folder behind each time. Emptied here, removed in teardown.
+export const TEST_UPLOADS_DIR = path.join(os.tmpdir(), "solvro-test-uploads");
+export function teardown() {
+  rmSync(TEST_UPLOADS_DIR, { recursive: true, force: true });
+}
 
 // Runs once before the whole test run (vitest `globalSetup`). Applies every
 // migration (including 20260707013113_add_task_position) to the disposable
@@ -10,6 +20,10 @@ import { PrismaClient } from "@prisma/client";
 // `taskOrdering.test.ts` take-200 accumulation flake — see
 // backend/CLAUDE.md and docs/archive/ISSUES-2026-11-18-phase-log.md).
 export default async function setup() {
+  // One throwaway attachment folder for the whole run (test/env.ts points at
+  // the same path), removed in teardown.
+  rmSync(TEST_UPLOADS_DIR, { recursive: true, force: true });
+  mkdirSync(TEST_UPLOADS_DIR, { recursive: true });
   const databaseUrl =
     process.env.DATABASE_URL ?? "postgresql://solvro:test@localhost:5433/solvro?schema=public";
   // Guard BEFORE anything touches the database — `prisma migrate deploy` is
@@ -22,6 +36,7 @@ export default async function setup() {
     env: { ...process.env, DATABASE_URL: databaseUrl },
   });
   await truncateAllTables(databaseUrl);
+  return teardown;
 }
 
 // Hard safety guard: this function is destructive (TRUNCATE ... CASCADE on

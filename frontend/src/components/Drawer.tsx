@@ -67,14 +67,20 @@ export function Drawer({
     return () => clearTimeout(fallback);
   }, [closing, onClosed]);
 
+  // Latest onClose in a ref, so the Escape listener does not re-subscribe on a
+  // new onClose mid-drag and run after dnd-kit's (see isDragActive in Modal.tsx).
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !isDragActive()) onClose();
+      if (e.key === "Escape" && !isDragActive()) onCloseRef.current();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open]);
 
   // Focus: the drawer is non-modal, so nothing moves on open and there is
   // no trap. We only remember the opener and hand focus back when the
@@ -93,7 +99,11 @@ export function Drawer({
     if (!open) return;
     const opener = openerRef.current;
     return () => {
-      if (opener && opener !== document.body && opener.isConnected) {
+      // Only when focus has fallen to <body> (the drawer's own controls just
+      // unmounted). A cleanup that runs with focus still inside the open drawer
+      // (React StrictMode's simulated unmount in dev) must not pull it out.
+      const active = document.activeElement;
+      if (opener && opener !== document.body && opener.isConnected && (active === null || active === document.body)) {
         opener.focus();
       }
     };

@@ -14,7 +14,7 @@
 // reach the note editor even when the body is folded — it force-expands
 // the body with the same dismissed-token bookkeeping CustomerGroup uses.
 import { type ReactNode, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { ApiError } from "@/lib/api";

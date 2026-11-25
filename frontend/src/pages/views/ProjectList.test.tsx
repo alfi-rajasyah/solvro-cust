@@ -2,11 +2,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render as rtlRender, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import type { ReactElement } from "react";
 import { ProjectList } from "./ProjectList";
 
-const state = { permissions: [] as string[] };
+const state = { permissions: [] as string[], tasks: [] as unknown[] };
 
 vi.mock("@/lib/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth")>();
@@ -42,7 +42,7 @@ vi.mock("@/lib/queries", async (importOriginal) => {
   const section = (id: number, name: string) => ({ id, name, position: id, projectId: 1 });
   return {
     ...actual,
-    useProjectTasks: () => ({ data: [], isLoading: false, isError: false, error: null }),
+    useProjectTasks: () => ({ data: state.tasks, isLoading: false, isError: false, error: null }),
     useProjectSections: () => ({
       data: [section(1, "Alpha"), section(2, "Beta")],
       isLoading: false,
@@ -86,6 +86,7 @@ function render(ui: ReactElement) {
 afterEach(() => {
   cleanup();
   state.permissions = [];
+  state.tasks = [];
 });
 
 describe("ProjectList section actions", () => {
@@ -118,5 +119,47 @@ describe("ProjectList section actions", () => {
     expect(dots[0].style.backgroundColor).not.toBe("");
     expect(dots[0].style.backgroundColor).not.toBe("rgb(148, 163, 184)");
     expect(dots[0].style.backgroundColor).not.toBe(dots[1].style.backgroundColor);
+  });
+});
+
+describe("ProjectList description preview", () => {
+  const base = {
+    projectId: 1,
+    sectionId: 1,
+    status: "TODO",
+    statusId: null,
+    statusDef: null,
+    priority: "MEDIUM",
+    position: 1,
+    labels: [],
+    epicId: null,
+    assignedToId: null,
+    assignedTo: null,
+    startDate: null,
+    dueDate: null,
+    isCriticalPath: false,
+    storyPoints: null,
+  };
+
+  it("shows one preview line for tasks and subtasks that have a description", () => {
+    state.tasks = [
+      { ...base, id: 1, title: "Parent", parentTaskId: null, description: "Line one\nline two" },
+      { ...base, id: 2, title: "Child", parentTaskId: 1, position: 2, description: "Sub notes" },
+      { ...base, id: 3, title: "Bare", parentTaskId: null, position: 3, description: null },
+    ];
+    const { container } = render(<ProjectList />);
+    const texts = Array.from(container.querySelectorAll("[data-testid=list-description-preview]")).map(
+      (el) => el.textContent,
+    );
+    expect(texts).toContain("Line one\nline two");
+    // Bare has none: its title is not followed by a preview.
+    expect(texts.filter((t) => t === null || t === "")).toHaveLength(0);
+    expect(container.querySelector("[data-testid=list-description-preview]")?.className).toContain("truncate");
+  });
+
+  it("renders no preview for a blank description", () => {
+    state.tasks = [{ ...base, id: 1, title: "Blank", parentTaskId: null, description: "   " }];
+    const { container } = render(<ProjectList />);
+    expect(container.querySelector("[data-testid=list-description-preview]")).toBeNull();
   });
 });

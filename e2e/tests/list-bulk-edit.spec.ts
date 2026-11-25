@@ -7,7 +7,7 @@ import { getTasks } from "../fixtures/seed";
 
 async function openList(page: Page, projectId: number): Promise<void> {
   await page.goto(`/projects/${projectId}/list`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
+  await expect(page.getByRole("heading", { level: 2 }).first()).toBeVisible();
 }
 
 async function createLabel(base: string, token: string, projectId: number, name: string) {
@@ -40,6 +40,26 @@ test.describe("list bulk edit", () => {
     await page.getByRole("checkbox", { name: "Select Alpha" }).click();
     await expect(page).not.toHaveURL(/task=/);
     await expect(page.getByText("1 selected")).toBeVisible();
+  });
+
+  test("a task with a description shows one preview line under its name", async ({
+    page,
+    seededProject,
+  }, testInfo) => {
+    const alpha = (await getTasks(apiBase(testInfo), seededProject.token, seededProject.projectId)).find(
+      (t) => t.title === "Alpha",
+    );
+    if (!alpha) throw new Error("fixture task Alpha missing");
+    const res = await fetch(`${apiBase(testInfo)}/api/tasks/${alpha.id}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${seededProject.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ description: "First line of notes\nsecond line of notes" }),
+    });
+    if (!res.ok) throw new Error(`PATCH task failed: ${res.status}`);
+    await openList(page, seededProject.projectId);
+    await expect(page.getByTestId("list-description-preview").first()).toContainText(
+      "First line of notes second line of notes",
+    );
   });
 
   test("adds a label to two tasks in one request and clears the selection", async ({

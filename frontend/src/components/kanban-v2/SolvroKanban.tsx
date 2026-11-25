@@ -29,7 +29,7 @@
 // refing `<KanbanBoard>` directly too).
 import { useCallback, useEffect, useMemo, useId, useRef, useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import {
   Kanban,
   KanbanBoard,

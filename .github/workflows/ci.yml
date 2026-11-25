@@ -300,6 +300,12 @@ jobs:
         if: matrix.project == 'desktop' && matrix.shard == 1
         run: ci/check-frame-ancestors.sh solvro-ci-frontend:latest
 
+      # The attachment upload body limit must follow ATTACHMENT_MAX_FILE_MB and
+      # fall back to 26m for a missing or invalid value. Same image, one shard.
+      - name: Check attachment upload body limit rendering
+        if: matrix.project == 'desktop' && matrix.shard == 1
+        run: ci/check-attachment-body-limit.sh solvro-ci-frontend:latest
+
       - name: Start stack
         run: docker compose -f ci/docker-compose.ci.yml up -d --no-build
 

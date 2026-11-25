@@ -14,7 +14,7 @@ Three containers on one Docker network, in `~/solvro/docker-compose.yml`:
 
 The browser talks to the website port only. The website forwards `/api/*` to the backend inside the Docker network. The API port is published for tools and scripts that call the API directly; you can leave it firewalled.
 
-Data lives in one Docker volume, `solvro_pgdata`.
+Data lives in Docker volumes: `solvro_pgdata` (the database) and, with `ATTACHMENTS_DRIVER=local` (the default), `solvro_uploads` (attachment files).
 
 ## 2. Files on the server
 
@@ -23,7 +23,7 @@ Data lives in one Docker volume, `solvro_pgdata`.
 | `~/solvro/.env` | The installer, on first install | Change ports, bind address and the other settings with `solvro config set` ([Command reference](INSTALL.md#command-reference)), not by hand. Edit it by hand only for the secrets and `ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS`; keep the file at mode `600`. |
 | `~/solvro/docker-compose.yml` | The installer, on every run | No. It is regenerated from `.env` each time `setup.sh` runs. |
 | `~/solvro/bin/solvro` | The installer, on every run | No. The `solvro` command (`solvro update`, `version`, `backup`); linked into `/usr/local/bin` or `~/.local/bin`. |
-| `~/solvro/backups/` | `solvro update` and `solvro backup` | Delete old dumps yourself; nothing is pruned automatically. |
+| `~/solvro/backups/` | `solvro update` and `solvro backup` | Database dumps and attachments archives. Delete old ones yourself; nothing is pruned automatically. |
 
 `~/solvro/.env` holds:
 
@@ -112,6 +112,8 @@ docker compose exec -T postgres pg_restore -U solvro -d solvro --no-owner < solv
 docker compose up -d
 ```
 
+If attachments are stored in the `solvro_uploads` volume (the default), back it up too: `pg_dump` does not include the files. `solvro backup` writes both; the one-liner for a scheduled job, the restore command and the S3 alternative are in `docs/CONFIGURATION.md` section 2.18. A database restored without its files shows attachments that fail to download, and files restored without their database are removed by the daily cleanup after 24 hours.
+
 Test a restore once after the first install, on a spare machine or a second database, so the first real restore is not the first attempt. Take a dump before every upgrade.
 
 Also keep a copy of `~/solvro/.env`: it holds `SECRETS_KEY`, without which the stored iTop and Outline tokens in a restored database cannot be read (users would connect them again), and `JWT_SECRET`. Store it with the dumps, with the same care.
@@ -130,12 +132,16 @@ Container logs rotate: each container keeps at most 5 files of 10 MB (the `loggi
 
 ## 9. Fresh install on a server that already has Solvro
 
-`setup.sh` treats a server **without** `~/solvro/.env` as a fresh install and **deletes the `solvro_pgdata` volume** to start clean. Since 2026-10-22 it first checks whether that volume already exists: if it does, the script stops with an error before it writes anything, and deletes the volume only when you run it as `FORCE_FRESH=1 bash setup.sh`. The same check protects you when the script runs as a different Unix user than the one who installed Solvro (`~/solvro/.env` is per user; the volume is shared by the whole host). If you lose `.env` on a server with data, restore `.env` from your backup before running the installer, or move the volume aside first:
+`setup.sh` treats a server **without** `~/solvro/.env` as a fresh install and **deletes the `solvro_pgdata` volume** (the database) **and the `solvro_uploads` volume** (task attachments) to start clean. It first checks whether either volume already exists: if one does, the script stops with an error before it writes anything, and deletes them only when you run it as `FORCE_FRESH=1 bash setup.sh`. Attachments kept in an S3 bucket are not touched. The same check protects you when the script runs as a different Unix user than the one who installed Solvro (`~/solvro/.env` is per user; the volume is shared by the whole host). If you lose `.env` on a server with data, restore `.env` from your backup before running the installer, or move the volume aside first:
 
 ```bash
 docker volume create solvro_pgdata_keep
 docker run --rm -v solvro_pgdata:/from -v solvro_pgdata_keep:/to alpine cp -a /from/. /to/
+docker volume create solvro_uploads_keep
+docker run --rm -v solvro_uploads:/from -v solvro_uploads_keep:/to alpine cp -a /from/. /to/
 ```
+
+Skip the last two lines when the server stores attachments in S3.
 
 ## 10. The backend restarts forever after an upgrade
 

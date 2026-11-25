@@ -3,12 +3,15 @@ import {
   expect,
   loginViaUi,
   openKanban,
+  openTaskEditModal,
   gripFor,
   center,
   mouseDrag,
   touchDrag,
   apiBase,
   captureTaskRequests,
+  nextFrames,
+  settleAnimations,
 } from "../fixtures/test";
 import { getTasks, setWipLimits, type SeededTask, createEpic } from "../fixtures/seed";
 import type { Page } from "@playwright/test";
@@ -80,56 +83,6 @@ async function apiPatchTask(
  * second user (CP0 decision log #2: G9 uses the priority filter, not assignee). */
 async function setPriority(base: string, token: string, id: number, priority: string): Promise<void> {
   await apiPatchTask(base, token, id, { priority });
-}
-
-/** T10 Fix 3: the modal trio (subtask re-parent, subtask promote, G10) moved
- * off the Gantt/Timeline paths — the Gantt route never actually opened the
- * dialog (timeout waiting for the parent select) — onto `/tasks` instead,
- * whose every Row.onClick reliably opens TaskFormModal mode="edit"
- * (Tasks.tsx ~line 198 -> 181).
- *
- * T10 stabilization: `/tasks` with no filters queries unscoped `GET /tasks`,
- * which the backend windows to `take: 200` globally position/id-ordered rows
- * (backend/src/routes/tasks.ts). On a dev DB that's accumulated thousands of
- * tasks across every prior e2e/QA run, this fixture's own rows can fall
- * entirely outside that window and no matching `<tr>` ever renders. Scope
- * the page to this fixture's own customer first via the Customer filter
- * (`TasksFilter.customerId`, frontend/src/lib/queries.ts) — driven through
- * the ReUI Filters chip toolbar by the customer's display name. */
-async function openTasksPage(page: Page, customerName: string): Promise<void> {
-  await page.goto(`/tasks`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
-  // The customer filter is a ReUI Filters chip flow (2026-07-31): open the
-  // "+ Filter" menu, hover the Customer field to open its option submenu,
-  // pick the fixture customer by exact display name.
-  await page.getByRole("button", { name: /filter/i }).first().click();
-  await page.getByRole("option", { name: "Customer", exact: true }).hover();
-  await page.waitForTimeout(400);
-  await page.getByRole("option", { name: customerName, exact: true }).click();
-  await page.waitForTimeout(500);
-}
-
-/** `/tasks` lists tasks across EVERY project, and this file's generic seeded
- * titles ("Alpha", "Sub one", ...) can collide with other specs' fixture
- * projects left in the shared dev DB — so a row must be scoped to both the
- * exact title AND this test's own seeded project. `Row`'s Project cell
- * (Tasks.tsx ~line 208) renders a `<Link to={`/projects/${task.project.id}`}>`,
- * whose deterministic `href` is the disambiguator (no need to know the
- * project's display name). */
-function taskRowByProject(page: Page, projectId: number, title: string) {
-  return page
-    .locator("tr")
-    .filter({ has: page.locator(`a[href="/projects/${projectId}"]`) })
-    .filter({ has: page.getByText(title, { exact: true }) });
-}
-
-/** Clicks the title cell (not the bare row, whose bounding-box center could
- * land on the Project link, which `stopPropagation`s) of the uniquely-scoped
- * row for `title` within `projectId`'s tasks. */
-async function clickTaskRow(page: Page, projectId: number, title: string): Promise<void> {
-  const row = taskRowByProject(page, projectId, title);
-  await expect(row, `expected exactly one /tasks row for "${title}" in project ${projectId}`).toHaveCount(1);
-  await row.getByText(title, { exact: true }).click();
 }
 
 /** Closes the Kanban toolbar's filter popover via its full-screen backdrop —
@@ -591,7 +544,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
       await page.mouse.move(grip!.x, grip!.y);
       await page.mouse.down();
       await page.mouse.move(grip!.x + 2, grip!.y + 1);
-      await page.waitForTimeout(150);
+      await nextFrames(page, 3);
       await page.mouse.up();
     });
 
@@ -656,10 +609,11 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
       await page.mouse.down();
       for (let i = 1; i <= 8; i++) {
         await page.mouse.move(from.x + ((to.x - from.x) * i) / 8, from.y + ((to.y - from.y) * i) / 8);
-        await page.waitForTimeout(35);
+        await nextFrames(page, 1);
       }
       await page.keyboard.press("Escape");
-      await page.waitForTimeout(300);
+      await nextFrames(page, 3);
+      await settleAnimations(page);
       await page.mouse.up();
     });
 
@@ -737,7 +691,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // otherwise-identical runs of this case, and looping the gesture with
     // an added settle pause here made every offset in a 0-82px sweep pass
     // consistently — a settle wait, not a geometry tweak, was the fix.
-    await page.waitForTimeout(400);
+    await settleAnimations(page);
 
     const grip = await gripFor(page, v2.title, "Move");
     // T10 stabilization: FULL card box (`cardBoxFor`) — v1 is picked
@@ -817,7 +771,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // T10 stabilization: same settle wait as G9a above — let the remaining
     // cards' post-filter reflow transition (`animateLayoutChanges`) finish
     // before measuring geometry, not just before the drag starts.
-    await page.waitForTimeout(400);
+    await settleAnimations(page);
 
     const grip = await gripFor(page, source.title, "Move");
     const lastVisibleBox = await page.getByText(visibleOther.title, { exact: true }).first().boundingBox();
@@ -897,7 +851,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
       await page.mouse.move(grip!.x, grip!.y);
       await page.mouse.down();
       await page.mouse.move(grip!.x + 2, grip!.y + 1);
-      await page.waitForTimeout(150);
+      await nextFrames(page, 3);
       await page.mouse.up();
     });
 
@@ -977,7 +931,6 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // param) and confirm the status committed by the filtered drag persisted
     // server-side and renders correctly once more, unfiltered.
     await page.reload({ waitUntil: "networkidle" });
-    await page.waitForTimeout(800);
     const afterReload = await getTasks(base, token, projectId);
     expect(byTitle(afterReload, tagged.title)?.status).toBe("IN_PROGRESS");
     const reloadedCard = page
@@ -988,24 +941,18 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
   });
 
   // RG-2 rewrite (T10 follow-up): board-level subtask re-parent is retired;
-  // the modal-path replacement is TaskFormModal's Parent field. Originally
-  // reached via the Gantt tree, but that path never actually opened the
-  // dialog in practice (timeout waiting for the parent select) — rewritten
-  // onto `/tasks` (Tasks.tsx), whose default filter is `topLevel: true`
-  // (line 26) so the "Top-level only" checkbox must be unchecked first to
-  // reveal Sub one's row; every Row.onClick opens TaskFormModal mode="edit"
-  // regardless of whether the task is top-level.
-  test("subtask re-parent (modal path via Tasks): Sub one's Parent set to Delta", async ({
+  // the modal-path replacement is TaskFormModal's Parent field. It was first
+  // rewritten onto the /tasks page, whose rows opened the modal; a /tasks row
+  // now opens the task's own page (no Parent field), so the modal is reached
+  // through the Gantt row menu's Edit item (openTaskEditModal), which mounts it
+  // for any task, top-level or not.
+  test("subtask re-parent (modal path via Gantt row menu): Sub one's Parent set to Delta", async ({
     page,
     seededProject,
   }) => {
     const base = apiBase(test.info());
-    await openTasksPage(page, seededProject.customerName);
-
-    await page.getByRole("checkbox", { name: "Top-level only" }).uncheck();
-    await page.waitForTimeout(500);
-
-    await clickTaskRow(page, seededProject.projectId, "Sub one");
+    const subOne = byTitle(await getTasks(base, seededProject.token, seededProject.projectId), "Sub one")!;
+    await openTaskEditModal(page, seededProject.projectId, subOne.id, "Sub one");
     const dialog = page.getByRole("dialog", { name: "Edit task" });
     await expect(dialog).toBeVisible();
 
@@ -1026,7 +973,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     await parentSelect.selectOption(String(seededProject.delta.id));
 
     await dialog.getByRole("button", { name: "Save", exact: true }).click();
-    await page.waitForTimeout(600);
+    await expect(dialog).toBeHidden();
 
     const tasks = await getTasks(base, seededProject.token, seededProject.projectId);
     const s = byTitle(tasks, "Sub one");
@@ -1040,7 +987,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
   // unified-task-ordering fix (append at the GLOBAL end via `insertAt`'s
   // `undefined` handling, not the front), since a modal-driven parent change
   // never sends a `position` key (TaskFormModal.tsx's patch object literal).
-  test("subtask promote (modal path via Tasks): Sub two's Parent cleared to top-level, status set to Done", async ({
+  test("subtask promote (modal path via Gantt row menu): Sub two's Parent cleared to top-level, status set to Done", async ({
     page,
     seededProject,
   }) => {
@@ -1050,11 +997,8 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
       .filter((t) => t.title !== "Sub two")
       .map((t) => t.title);
 
-    await openTasksPage(page, seededProject.customerName);
-    await page.getByRole("checkbox", { name: "Top-level only" }).uncheck();
-    await page.waitForTimeout(500);
-
-    await clickTaskRow(page, seededProject.projectId, "Sub two");
+    const subTwo = byTitle(before, "Sub two")!;
+    await openTaskEditModal(page, seededProject.projectId, subTwo.id, "Sub two");
     const dialog = page.getByRole("dialog", { name: "Edit task" });
     await expect(dialog).toBeVisible();
 
@@ -1068,7 +1012,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     await page.getByRole("option", { name: "Done", exact: true }).click();
 
     await dialog.getByRole("button", { name: "Save", exact: true }).click();
-    await page.waitForTimeout(600);
+    await expect(dialog).toBeHidden();
 
     const tasks = await getTasks(base, seededProject.token, seededProject.projectId);
     const s = byTitle(tasks, "Sub two");
@@ -1122,8 +1066,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
       });
     });
 
-    await openTasksPage(page, seededProject.customerName);
-    await clickTaskRow(page, seededProject.projectId, target!.title);
+    await openTaskEditModal(page, seededProject.projectId, target!.id, target!.title);
     const dialog = page.getByRole("dialog", { name: "Edit task" });
     await expect(dialog).toBeVisible();
 
@@ -1161,7 +1104,7 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     expect(expectedOrder.length).toBeGreaterThan(0);
 
     await page.goto(`/projects/${seededProject.projectId}/list`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(800);
+    await expect(page.getByText(expectedOrder[0], { exact: true }).first()).toBeVisible();
 
     const positioned: Array<{ title: string; y: number }> = [];
     for (const title of expectedOrder) {
@@ -1262,13 +1205,14 @@ test.describe("kanban drag & drop — mobile (touch)", () => {
     await expect(sheet).toBeVisible({ timeout: 3000 });
 
     await page.getByText("Done", { exact: true }).last().click();
-    await page.waitForTimeout(1000);
 
-    const tasks = await getTasks(apiBase(test.info()), seededProject.token, seededProject.projectId);
-    const moved = tasks.some(
-      (x) => x.parentTaskId === null && x.status === "DONE" && ["Gamma", "Alpha"].includes(x.title),
-    );
-    expect(moved).toBe(true);
+    await expect
+      .poll(async () =>
+        (await getTasks(apiBase(test.info()), seededProject.token, seededProject.projectId)).some(
+          (x) => x.parentTaskId === null && x.status === "DONE" && ["Gamma", "Alpha"].includes(x.title),
+        ),
+      )
+      .toBe(true);
   });
 
   test("no page errors during mobile drag/action-sheet interactions", async ({ page, seededProject }) => {

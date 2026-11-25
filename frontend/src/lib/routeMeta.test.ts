@@ -126,3 +126,30 @@ describe("customer detail", () => {
     expect(matchRoute("/customers").kind).toBe("static");
   });
 });
+
+describe("/tasks/:id", () => {
+  it("is a task route with the id", () => {
+    expect(matchRoute("/tasks/42")).toMatchObject({ kind: "task", taskId: 42, projectId: null });
+    expect(matchRoute("/tasks").kind).toBe("static");
+    expect(matchRoute("/tasks/abc").kind).toBe("static");
+    // Ids the server could never hold are not task routes, here or on the page.
+    expect(matchRoute("/tasks/0").kind).toBe("static");
+    expect(matchRoute("/tasks/2147483648").kind).toBe("static");
+    expect(matchRoute("/tasks/2147483647")).toMatchObject({ kind: "task", taskId: 2147483647 });
+  });
+
+  it("builds Tasks > project (linked) > task once the row is known", () => {
+    expect(
+      buildCrumbs("/tasks/42", { taskTitle: "Ship it", taskProject: { id: 7, name: "Atlas" } }),
+    ).toEqual([
+      { label: "Tasks", to: "/tasks" },
+      { label: "Atlas", to: "/projects/7" },
+      { label: "Ship it" },
+    ]);
+    expect(routeTitle("/tasks/42", { taskTitle: "Ship it" })).toBe("Ship it");
+  });
+
+  it("falls back to a bare Task crumb while loading", () => {
+    expect(buildCrumbs("/tasks/42")).toEqual([{ label: "Tasks", to: "/tasks" }, { label: "Task" }]);
+  });
+});

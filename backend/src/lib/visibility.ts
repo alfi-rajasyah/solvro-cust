@@ -26,8 +26,8 @@ import { HttpError } from "../http/errors.js";
 //
 // `{ viaMembership: false }` drops the member arm AND the customer-team arm: it is the rule for actions
 // that membership alone must not allow (changing a project's TAM or customer,
-// deleting a project, changing/deleting a customer — see the *OwnerAccess
-// helpers below).
+// deleting a project — see ensureProjectOwnerAccess below; changing or
+// deleting a customer uses the rule in routes/customers.ts instead).
 //
 // TWO REPRESENTATIONS OF THE SAME RULE live side by side below:
 // `projectVisibilityFilter` (a Prisma `where`, used by every route) and
@@ -39,14 +39,6 @@ import { HttpError } from "../http/errors.js";
 // new arm.
 export interface VisibilityOptions {
   viaMembership?: boolean;
-  /**
-   * Customer filter only: the caller is asking "do I OWN this?", not "can I
-   * see this?". Skips the `customer:view-all` short-circuit, because that
-   * permission grants visibility, never ownership. Independent of
-   * `viaMembership`, so a future membership-excluding READ check keeps
-   * `customer:view-all`.
-   */
-  ownership?: boolean;
 }
 
 export function projectVisibilityFilter(
@@ -143,7 +135,7 @@ export async function ensureTaskVisible(
 
 // Customer-scoping (docs/archive/plans/customer-visibility-spec.md §3, Decisions 1-2):
 // `project:view-all` (or "*") sees every customer, as does `customer:view-all`
-// (visibility, and the writes that follow visibility — never ownership; see below). Everyone else sees a
+// (visibility, and the writes that follow visibility — never ownership). Everyone else sees a
 // customer when they own it (`Customer.tamId`), when nobody owns it
 // (`tamId: null` — unowned customers stay visible to all, as before the
 // rule existed), or when at least one of its projects is visible to them
@@ -167,27 +159,21 @@ export function customerVisibilityFilter(
   if (hasPermission(user, "project:view-all")) return {};
   // `customer:view-all` (user decision 2026-11-03) widens customer visibility
   // — and with it the customer sub-resource writes that follow visibility —
-  // never ownership. Owner checks pass `{ ownership: true }`, skip this
-  // short-circuit and fall through to the arms below. Projects stay gated by
+  // never ownership (owner-only customer actions use
+  // `reassignableCustomerIds` in routes/customers.ts). Projects stay gated by
   // projectVisibilityFilter.
-  if (!opts.ownership && hasPermission(user, "customer:view-all")) return {};
+  if (hasPermission(user, "customer:view-all")) return {};
   return {
     OR: [
       { tamId: user.sub },
       { tamId: null },
       // Customer team (GitHub #93): visible even with no projects at all. Like
-      // the member arm it is dropped by `viaMembership: false`, and an
-      // ownership check never counts it.
-      ...(opts.viaMembership !== false && !opts.ownership
+      // the member arm it is dropped by `viaMembership: false`.
+      ...(opts.viaMembership !== false
         ? [{ teamMembers: { some: { userId: user.sub } } }]
         : []),
-      // Plain visibility: any project the caller can see. An OWNER check
-      // (`ownership`) narrows this to projects the caller is TAM of: the owner
-      // of one linked customer owns the shared PROJECT, never the other
-      // customer (docs/archive/plans/multi-customer-projects.md, decision 4).
-      opts.ownership
-        ? { projects: { some: { project: { tamId: user.sub } } } }
-        : { projects: { some: { project: projectVisibilityFilter(user, opts) } } },
+      // Any project the caller can see.
+      { projects: { some: { project: projectVisibilityFilter(user, opts) } } },
     ],
   };
 }
@@ -232,24 +218,5 @@ export async function ensureCustomerVisible(
 ): Promise<void> {
   if (!(await isCustomerVisible(user, customerId))) {
     throw new HttpError(404, "customer_not_found", "Customer not found");
-  }
-}
-
-// Owner-only gate for customers: changing a customer's owner or deleting it
-// needs the access a non-member had before project members existed (owner,
-// unowned customer, a project the caller is TAM of, or `project:view-all`).
-// 404 first, then 403 `owner_only` for a caller who sees it only through a
-// project membership.
-export async function ensureCustomerOwnerAccess(
-  user: JwtPayload,
-  customerId: number,
-): Promise<void> {
-  await ensureCustomerVisible(user, customerId);
-  const owned = await prisma.customer.findFirst({
-    where: { id: customerId, ...customerVisibilityFilter(user, { viaMembership: false, ownership: true }) },
-    select: { id: true },
-  });
-  if (!owned) {
-    throw new HttpError(403, "owner_only", "Only the customer's owner can do this");
   }
 }

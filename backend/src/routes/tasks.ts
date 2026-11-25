@@ -6,6 +6,7 @@ import { requireAuth, requirePermission, type JwtPayload } from "../http/auth.js
 import { HttpError } from "../http/errors.js";
 import { dateInput, dateString } from "../lib/dateInput.js";
 import { validate } from "../http/validate.js";
+import { labelNameKey } from "../lib/labelNames.js";
 import { ensureTaskVisible, projectVisibilityFilter } from "../lib/visibility.js";
 import {
   isValidDayString,
@@ -32,6 +33,7 @@ import { assertUserExists } from "../lib/userRefs.js";
 import { diffTaskChanges, recordActivity } from "../lib/activity.js";
 import { filterActiveUsersWhoCanSeeProject, notifyForEvent } from "../lib/notifications.js";
 import { storyPointsField } from "../lib/storyPoints.js";
+import { collectTaskAttachmentKeys, deleteStoredObjects } from "../lib/attachments/cleanup.js";
 import { bulkTasksSchema, bulkUpdateTasks, type BulkTasksBody } from "../lib/bulkTasks.js";
 
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
@@ -128,6 +130,14 @@ const tasksListQuerySchema = z
     priority: z.nativeEnum(Priority).optional(),
     assignedToId: z.coerce.number().int().positive().optional(),
     labelId: z.coerce.number().int().positive().optional(),
+    // Label names, any-of, matched case-insensitively across the caller's
+    // visible projects (one name is a different label row per project).
+    // A single value arrives as a string, repeats as an array.
+    labelName: z
+      .union([z.string(), z.array(z.string())])
+      .transform((v) => (Array.isArray(v) ? v : [v]))
+      .pipe(z.array(z.string().trim().min(1).max(50)).min(1).max(20))
+      .optional(),
     customerId: z.coerce.number().int().positive().optional(),
     // Tasks on projects whose TAM is this user (Overview TAM filter).
     tamId: z.coerce.number().int().positive().optional(),
@@ -249,6 +259,7 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
     priority,
     assignedToId,
     labelId,
+    labelName,
     customerId,
     tamId,
     overdue,
@@ -296,6 +307,18 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
     // TODOs; status=DONE&overdue=true is a contradiction and returns
     // nothing, by construction.
     and.push({ dueDate: { lt: overdueBoundary(today) } }, { status: { not: "DONE" } });
+  }
+  if (labelName) {
+    // Names match by labelNameKey (trimmed, lower-cased, exact), never ILIKE:
+    // `_` and `%` in a name stay literal. Only labels of projects the caller
+    // can see are candidates; no matching id means no tasks, not all of them.
+    const wanted = new Set(labelName.map(labelNameKey));
+    const candidates = await prisma.label.findMany({
+      where: { project: projectVisibilityFilter(req.user!) },
+      select: { id: true, name: true },
+    });
+    const visible = candidates.filter((l) => wanted.has(labelNameKey(l.name)));
+    and.push({ labels: { some: { id: { in: visible.map((l) => l.id) } } } });
   }
   if (dueFrom) and.push({ dueDate: { gte: utcMidnightOfDayString(dueFrom) } });
   if (dueTo) {
@@ -347,6 +370,34 @@ tasksRouter.get("/", validate("query", tasksListQuerySchema), async (req, res) =
       return { ...t, project: { ...project, customer: customers[0]?.customer ?? null } };
     }),
   );
+});
+
+// One task by id, for the task page. The same row as a list item (the project
+// has the same { id, name, customer } shape) plus its `section`. A hidden task
+// answers 404 exactly like a missing one.
+tasksRouter.get("/:id", validate("params", idParamSchema), async (req, res) => {
+  const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
+  const task = await prisma.task.findFirst({
+    where: { id, project: projectVisibilityFilter(req.user!) },
+    include: {
+      ...taskResponseInclude,
+      project: {
+        select: {
+          id: true,
+          name: true,
+          // The row's customer is the project's primary, as in the list.
+          customers: {
+            where: { isPrimary: true },
+            take: 1,
+            select: { customer: { select: { id: true, name: true } } },
+          },
+        },
+      },
+    },
+  });
+  if (!task) throw new HttpError(404, "not_found", "Task not found");
+  const { customers, ...project } = task.project;
+  res.json({ ...task, project: { ...project, customer: customers[0]?.customer ?? null } });
 });
 
 // Registered before the "/:id" routes so a literal "bulk" is never read as an id.
@@ -683,7 +734,7 @@ tasksRouter.delete(
   async (req, res) => {
     const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
     await ensureTaskVisible(req.user!, id);
-    await prisma.$transaction(async (tx) => {
+    const storedKeys = await prisma.$transaction(async (tx) => {
       const task = await tx.task.findUnique({
         where: { id },
         select: { projectId: true, title: true, parentTaskId: true },
@@ -691,6 +742,11 @@ tasksRouter.delete(
       if (!task) throw new HttpError(404, "not_found", "Task not found");
       // The delete re-packs the sibling list: take the order lock first.
       await lockProjectOrder(tx, "tasks", task.projectId);
+      // Attachment rows go with the task (cascade); their files are removed
+      // after the commit. Lock the task and its subtasks first: an upload
+      // commits before the keys are read, or finds the task gone.
+      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${id} OR parent_task_id = ${id} FOR UPDATE`;
+      const keys = await collectTaskAttachmentKeys(tx, id);
       await tx.task.delete({ where: { id } });
       await closeGap(tx, { projectId: task.projectId, parentTaskId: task.parentTaskId }, id);
       await recordActivity(tx, {
@@ -701,7 +757,9 @@ tasksRouter.delete(
         action: "deleted",
         entityLabel: task.title,
       });
+      return keys;
     });
+    void deleteStoredObjects(storedKeys);
     res.status(204).end();
   },
 );

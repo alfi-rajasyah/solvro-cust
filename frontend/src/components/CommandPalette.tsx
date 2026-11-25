@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router";
 import {
   Autocomplete,
   AutocompleteCollection,
@@ -172,8 +172,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             value: `task:${t.id}`,
             label: t.title,
             group: "Tasks" as const,
-            // ProjectDetail.tsx already reads ?task= to open the TaskPanel.
-            to: `/projects/${t.projectId}/list?task=${t.id}`,
+            // The task's own page; it carries its project in the response.
+            to: `/tasks/${t.id}`,
             hint: t.projectName,
           })),
           ...data.customers.map((c) => ({

@@ -17,6 +17,7 @@ import { publicShareRouter } from "./routes/publicShare.js";
 import { activityRouter } from "./routes/activity.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { tasksRouter } from "./routes/tasks.js";
+import { attachmentsRouter, taskAttachmentsRouter } from "./routes/attachments.js";
 import { taskStatusesRouter } from "./routes/taskStatuses.js";
 import { overviewRouter } from "./routes/overview.js";
 import { labelsRouter } from "./routes/labels.js";
@@ -96,6 +97,8 @@ export function createApp(opts: { logger?: Logger } = {}): Express {
   app.use("/notes", notesRouter);
   app.use("/tasks", tasksRouter);
   app.use("/tasks", taskOutlineMentionsRouter);
+  app.use("/tasks", taskAttachmentsRouter);
+  app.use("/attachments", attachmentsRouter);
   app.use("/task-statuses", taskStatusesRouter);
   app.use("/labels", labelsRouter);
   app.use("/sections", sectionsRouter);

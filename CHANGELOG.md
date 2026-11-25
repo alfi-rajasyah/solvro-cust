@@ -15,6 +15,135 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-11-25
+
+### Changed — 2026-11-25 — Version 1.4.0
+
+- The release version is `1.4.0` in `VERSION`, `backend/package.json`, `frontend/package.json` and the image tag in `setup.sh` (`SOLVRO_IMAGE_TAG="v1.4.0"`), so the login page and new installs show and pull this release.
+
+### Fixed — 2026-11-25 — Deleting a customer follows the owner rule
+
+- `DELETE /customers/:id` now uses the same rule as changing a customer's owner: an admin, the customer's owner, or, for a customer with no owner, the TAM of every project under it. Before, any user with `customer:write` who could see a customer with no owner could delete it, which unlinked it from other TAMs' projects. The Delete action in the customer list and on the customer page now appears only for people who may delete.
+
+### Changed — 2026-11-24 — End-to-end tests wait for conditions, not fixed sleeps
+
+- The Playwright specs under `e2e/tests/` now wait for the condition a step depends on (a pane rendering, a request finishing, an animation ending) instead of a fixed `waitForTimeout`; 124 sleeps drop to 3. The shared helpers in `e2e/fixtures/test.ts` (`loginViaUi`, `openKanban`, `mouseDrag`, `touchDrag`, `captureTaskRequests`) drive most of this. The 3 remaining sleeps each carry a comment: the touch-activation hold, a press-hold that a guard needs, and outwaiting a search debounce to prove no request fires.
+
+### Changed — 2026-11-24 — The app serves its own fonts
+
+- Source Sans 3 (latin and latin-ext) and the Material Symbols Outlined icon font now ship in the frontend bundle (`frontend/src/assets/fonts/`, with their SIL OFL 1.1 and Apache 2.0 licences) instead of loading from Google Fonts, so no page, including shared guest pages under `/share/`, contacts Google. Text and icons render as before, and the service worker precaches the fonts for offline use. The Google preconnect and stylesheet links are gone from `frontend/index.html`, and the Google font cache rules from `frontend/vite.config.ts`. Text in Cyrillic, Greek or Vietnamese script now falls back to the system font.
+
+### Security — 2026-11-24 — Frontend router upgraded to React Router 7
+
+- The frontend moves from React Router 6 (`react-router-dom`) to React Router 7 (`react-router`) in `frontend/package.json`, and every import under `frontend/src` now names `react-router`. Routes, redirects and links behave as before, and the router's 2 advisories no longer appear in the production dependency audit.
+
+### Security — 2026-11-24 — Backend request validation upgraded to zod 4
+
+- The backend validation library (zod) moves from 3 to 4 (`backend/package.json`), which clears advisory GHSA-mrhx-c7xc-m3w5 (memory exhaustion on crafted input) from the production dependency audit. Every valid API request, response and the error body shape are unchanged; the wording of individual validation messages inside `details.fieldErrors` follows zod 4. A few malformed inputs that zod 3 let through are now refused: a date-time offset without a colon (`+0200` instead of `+02:00`), an Outline document id that is not a standard UUID, an integer above JavaScript's safe-integer limit, and `Infinity` as `ATTACHMENT_MAX_FILE_MB` or `ATTACHMENT_MAX_TASK_MB`. The one schema that needed a code change, `S3_FORCE_PATH_STYLE` in `backend/src/lib/attachments/config.ts`, still defaults to false.
+
+### Fixed — 2026-11-24 — The favicon stays readable on dark browser tabs
+
+- A new `frontend/public/favicon.svg`, linked from `frontend/index.html` next to the PNG, holds both the on-light and the on-dark mark and shows the one for the browser's colour scheme. On a dark tab strip the grey half of the old mark had 2.38:1 contrast; the on-dark mark's light half has 10.78:1 on Chrome's dark tab. Browsers without SVG favicons keep `favicon.png`. The bundled nginx (`frontend/nginx.conf`) caches the new file for a day, like the PNG.
+
+### Fixed — 2026-11-24 — Attachment temp-file test no longer fails at random
+
+- The backend test that checks a refused upload leaves no temp file (`backend/test/attachments.test.ts`) compared the total number of entries in the OS temp folder. The upload route removes an accepted upload's temp file just after it answers, so a file from the test before could disappear during this one and fail it. The test now looks only at entries it adds, and waits up to 2 seconds for them to go.
+
+### Changed — 2026-11-24 — Sort risks by probability and impact
+
+- On a project's Risks tab (`frontend/src/pages/views/ProjectRisks.tsx`), the Probability and Impact columns can now be sorted from their headers, like Score, Category and Status. They were left unsortable so their headers could stay centred, which the data grid's sortable header could not do. The vendored header (`frontend/src/components/reui/data-grid/data-grid-column-header.tsx`) now centres a sortable header when the column's header class is `text-center`, the same way it already right-aligns one for `text-right`.
+
+### Changed — 2026-11-24 — Gantt section and reorder code tidied, no behaviour change
+
+- `frontend/src/components/gantt-v2/adapter.ts` has a new `parseSectionId`, the inverse of `sectionNodeId`. The Gantt (`SolvroGantt.tsx`) uses it in the collapse export, the reorder handler and the colour column, instead of cutting `"section-"` off ids in five places. A new unit test (`adapter.test.ts`) covers it.
+- The Gantt row reorder handler (`handleResourceReorder` in `SolvroGantt.tsx`) was one long callback with three branches. Its two drop calculations, for a section and for a top-level task, now live in `frontend/src/components/gantt-v2/reorder.ts` as `sectionReorderPatches` and `topLevelTaskMove`, with unit tests (`reorder.test.ts`). The callback keeps the permission checks and the save calls.
+
+### Fixed — 2026-11-24 — Gantt row menu dialogs wait for their own menu only
+
+- The Edit, Add subtask and Delete items of the Gantt row menu (`frontend/src/components/gantt-v2/SolvroGantt.tsx`) open their dialog once the menu has closed. They checked for that by searching the whole page for any row menu, so a second matching menu could hold the dialog back for up to a second. They now watch only the menu the item belongs to.
+
+### Changed — 2026-11-24 — The nginx upload limit follows ATTACHMENT_MAX_FILE_MB
+
+- The bundled nginx (`frontend/nginx.conf`) now sets the body limit of the attachment upload path from `ATTACHMENT_MAX_FILE_MB`: the value rounded up plus 1 MB for the multipart envelope, 26 MB by default as before. A start script in the frontend image (`frontend/nginx-attachment-body-limit.envsh`) writes it; an unset or invalid value keeps 26 MB and logs why. `setup.sh` now passes `ATTACHMENT_MAX_FILE_MB` to the frontend container. Before, raising the setting past 25 made larger uploads fail at nginx until `nginx.conf` was edited by hand. A new CI step (`ci/check-attachment-body-limit.sh`) checks the rendered limit against the built image for valid and invalid values.
+
+### Changed — 2026-11-24 — solvro backup and solvro update also back up attachments
+
+- `solvro backup` and the backup step of `solvro update` (`setup.sh`) now also write an archive of the `solvro_uploads` volume to `~/solvro/backups/solvro_uploads-<release>-<date>-<time>.tar.gz` (mode 600), next to the database dump. Before, they backed up only the database, so attachment files needed a manual step. With `ATTACHMENTS_DRIVER=s3` the bucket keeps the files and no archive is written. A one-off container of the installed backend image writes the archive, so the backup also works while the backend is stopped or restarting, and no other image is pulled. `INSTALL.md`, `OPERATIONS.md` and `docs/CONFIGURATION.md` describe the new behaviour.
+
+### Added — 2026-11-24 — Attachment e2e tests for read-only members and the server type check
+
+- `e2e/tests/task-attachments.spec.ts` has two new tests. A project member with the built-in STAKEHOLDER role (`project:read`, no `task:write`) sees and downloads a file, sees no Attach or Delete control, and the server refuses that member's upload with 403. A direct upload of a disallowed file type gets the server's 415 `attachment_type_not_allowed`, which the browser's own type check otherwise hides.
+
+### Changed — 2026-11-24 — Dropdown submenus can rise above a modal
+
+- `DropdownMenuSubContent` (`frontend/src/components/ui/dropdown-menu.tsx`) takes an optional `positionerClassName`, the same prop `DropdownMenuContent` already has. A submenu opened from a menu inside a modal or drawer can now set its z-index above the host. Existing submenus do not change. A new test (`dropdown-menu.test.tsx`) covers the prop.
+
+### Fixed — 2026-11-24 — Escape during a drag no longer closes the open panel after a re-render
+
+- The task panel, epic panel, iTop ticket panel, drawer and modal (`frontend/src/components/TaskPanel.tsx`, `EpicPanel.tsx`, `itop/TicketPanel.tsx`, `Drawer.tsx`, `Modal.tsx`) now add their Escape listener once, when they open, and read the latest close handler from a ref. Before, a page re-render during a keyboard drag re-added the listener behind the drag library's own, so the Escape that cancelled the drag also closed the panel.
+
+### Fixed — 2026-11-24 — E2E cleanup also deletes stored attachment files
+
+- `backend/scripts/dev/cleanup-e2e-data.ts` now deletes the stored files of the attachments on the e2e projects it removes, right after the rows. Before, those files stayed in the bucket or volume until the daily orphan sweep, at least 24 hours later.
+
+### Added — 2026-11-23 — Task attachments
+
+- An Attachments section in the task side panel and on the task page (`frontend/src/components/TaskAttachments.tsx`) lets you attach files to a task: pick several at once, see every limit and the allowed file types above the Attach files button, follow a progress bar for each file, and dismiss an error for a file that was refused. Each file shows its name (non-Latin names are kept intact), size, uploader and date, with a download button and a delete that asks first. People without permission to edit tasks can see and download the files but not add or remove them.
+- New API (`backend/src/routes/attachments.ts`): `GET` and `POST /tasks/:id/attachments`, `GET` and `DELETE /attachments/:id`, and `GET /attachments/config` for the limits and allowed file types. Uploads are checked for file type, size per file, file count and total size per task, and the limits hold when uploads arrive at the same time. A task you cannot see answers 404 on every route, before any file data is read. Downloads always come through the server as attachments, so the task's visibility is checked on every download.
+- Deleting a task (with its subtasks) or a project also deletes its files from storage, and a daily job removes stored files that no longer belong to a task.
+
+### Added — 2026-11-23 — Task attachments: storage and deployment
+
+- A new `task_attachments` table (`backend/prisma/schema.prisma`, migration `20261123181600_task_attachments`) records each file attached to a task: name, type, size, storage key, uploader and date. Rows go with their task; the uploader reference is cleared when the user is deleted.
+- Attachment files can live in any S3-compatible bucket (AWS S3, MinIO, Silo, Garage) with `ATTACHMENTS_DRIVER=s3` and `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`, or on a local volume (`ATTACHMENTS_DRIVER=local`, the default, under `ATTACHMENTS_DIR`). `S3_ENDPOINT` and `S3_FORCE_PATH_STYLE` cover stores other than AWS S3, and `S3_KEY_PREFIX` lets several installs share one bucket. The storage layer is in `backend/src/lib/attachments/`. The backend refuses to start when the S3 driver is selected and a required `S3_*` value is missing, or when the allowed-extensions list is empty; a blank setting counts as unset.
+- New optional settings `ATTACHMENT_MAX_FILE_MB` (25), `ATTACHMENT_MAX_FILES_PER_TASK` (20), `ATTACHMENT_MAX_TASK_MB` (100) and `ATTACHMENT_ALLOWED_EXTENSIONS` set the limits and the allowed file types.
+- `setup.sh` creates a `solvro_uploads` Docker volume, mounts it in the backend at `/app/uploads`, and writes the attachment defaults to `.env`. Upgrades and re-runs keep the volume. A fresh install over a server that already has the database or attachments volume stops unless `FORCE_FRESH=1` is set, because it would delete both. The backend image creates `/app/uploads`.
+- The bundled nginx (`frontend/nginx.conf`) accepts uploads of up to 26 MB on `POST /api/tasks/<id>/attachments` only and streams them to the backend; every other API path keeps its 1 MB limit.
+- New backend dependencies: `multer`, `@aws-sdk/client-s3` and `@aws-sdk/lib-storage`.
+- `docs/CONFIGURATION.md`, `OPERATIONS.md` and `INSTALL.md` document the new settings, the volume, how to back it up, and how to switch a server to S3.
+
+### Added — 2026-11-23 — Task page
+
+- A task has its own page at `/tasks/:id` (`frontend/src/pages/TaskPage.tsx`). It shows the same fields as the side panel: two columns on a wide screen (title, description, subtasks and comments on the left; the task fields on the right) and one column on a phone. The top bar shows a breadcrumb through the task's project. A task that does not exist, or that you cannot see, shows a not-found page.
+- Ways to open it: the new "Open as page" link in the task side panel, a row on the Tasks page, or a task result in the Ctrl+K search. The side panel's Copy link button now copies the task page address, so a shared link opens the task on its own.
+- `GET /tasks/:id` (`backend/src/routes/tasks.ts`) returns one task in the same shape as a task list row, including its project's primary customer. It needs `project:read`, and a task you cannot see answers 404, the same as one that does not exist.
+- The side panel's content and its Task options menu are now shared components (`frontend/src/components/TaskDetail.tsx`, `TaskOptionsMenu.tsx`), used by both the panel and the page, so the two always show the same fields with the same save rules.
+
+### Fixed — 2026-11-23 — Keyboard focus in Gantt row-menu dialogs
+
+- In the Gantt row menu (`frontend/src/components/gantt-v2/SolvroGantt.tsx`), Edit, Add subtask and Delete now open their dialog after the menu has closed, so the dialog keeps keyboard focus (for example on the task title) and returns it to the row or to the "Task actions" button when it closes. Before, the closing menu could pull focus out of the dialog to the page.
+- The task edit form's drawer (`frontend/src/components/Drawer.tsx`) gives focus back to the control that opened it only when focus has fallen to the page on close, so it no longer takes focus from a control the user moved to.
+
+### Changed — 2026-11-23 — Tasks page rows open the task page
+
+- A click on a row of the Tasks page now opens that task's page instead of a pop-up editor, and each task title is a link, so Enter and a middle click work too.
+
+
+### Added — 2026-11-23 — Tasks in the sidebar
+
+- The cross-project Tasks page (`/tasks`) is now listed in the sidebar's Workspace group, after Projects, and in the Ctrl+K page commands (`frontend/src/lib/navCommands.ts`). Before, it was reachable only by its address or from Overview links. Like its data (`GET /tasks`), the entry and the route need `project:read`: the route in `frontend/src/App.tsx` now has the same permission guard as the other gated pages. The Help page has a Tasks page section.
+
+### Added — 2026-11-23 — Label filter on the Tasks page
+
+- The Filter menu on the cross-project Tasks page (`frontend/src/pages/Tasks.tsx`) has a Label field. Pick one or more label names to see the tasks that carry any of them, across every project you can see. Labels belong to one project, so the picker lists each name once and matches it without regard to case or surrounding spaces. (#132)
+- `GET /labels` (`backend/src/routes/labels.ts`) lists the label names of the projects you can see, with the number of projects that use each. `GET /tasks` (`backend/src/routes/tasks.ts`) accepts a repeatable `labelName` filter (up to 20 names) that matches those names across visible projects; `_` and `%` in a name match only themselves.
+
+### Changed — 2026-11-23 — Tasks page filters are kept in the URL
+
+- Every Filter menu chip on the Tasks page is now kept in the URL (`?status=`, `?priority=`, `?assignee=`, `?customer=`, `?label=`), so a reload or a shared link restores it. Before, these chips were lost on a reload. A value that no longer exists, such as a deleted user, customer or label, is dropped from the URL once its list loads. The Overview's `?assigneeId=` link keeps working, and an Assignee chip still takes precedence over it. (#132)
+
+### Added — 2026-11-23 — Description preview in the List view
+
+- In the project List view (`frontend/src/pages/views/ProjectList.tsx`), a task or subtask with a description shows one muted line of it under its name, cut with an ellipsis when it is too long. Line breaks show as spaces. Rows without a description keep their height. The preview uses the same text style as the Kanban card. (#134)
+
+### Fixed — 2026-11-23 — Bulk label picker shows what to do
+
+- The "Add label" and "Remove label" panels of the List bulk action bar (`frontend/src/components/BulkActionBar.tsx`) now say "Pick one or more labels to add." (or "to remove."). A picked label shows a filled check box and a stronger outline instead of a thin ring, so the selected state does not depend on colour alone and it is clear why "Add to N tasks" stays disabled until a label is picked. (#135)
+
+### Fixed — 2026-11-23 — Epic panel "Add story" button
+
+- The "+" next to "Add story…" in the epic panel (`frontend/src/components/EpicPanel.tsx`) is now a real submit button. A click adds the story, the same as Enter. The button is disabled while the title is empty or the story is being created, and has a touch-sized tap target on phones. The text box is now labelled "Story title", so the button and the box have different accessible names. (#133)
+
 ## [1.3.0] — 2026-11-22
 
 ### Changed — 2026-11-22 — Version 1.3.0

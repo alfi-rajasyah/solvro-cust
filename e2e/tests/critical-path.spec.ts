@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi, apiBase, openKanban } from "../fixtures/test";
+import { test, expect, loginViaUi, apiBase, openKanban, waitForGanttReady } from "../fixtures/test";
 import { createTask, isoDateOffset } from "../fixtures/seed";
 import type { Page } from "@playwright/test";
 
@@ -37,7 +37,7 @@ function stamp(): string {
 async function gotoGantt(page: Page, projectId: number, taskId?: number): Promise<void> {
   const url = taskId ? `/projects/${projectId}/gantt?task=${taskId}` : `/projects/${projectId}/gantt`;
   await page.goto(url, { waitUntil: "networkidle" });
-  await page.waitForTimeout(800);
+  await waitForGanttReady(page);
 }
 
 test.describe("critical path mark — Gantt + task panel (desktop)", () => {

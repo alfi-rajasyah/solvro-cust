@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ComponentType } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router";
 import { AdminGuard } from "@/components/AdminGuard";
 import { AuthGuard } from "@/components/AuthGuard";
 import { ExecutiveGuard } from "@/components/ExecutiveGuard";
@@ -35,6 +35,7 @@ const ProjectDetail = lazyPage(() => import("@/pages/ProjectDetail"), "ProjectDe
 const Projects = lazyPage(() => import("@/pages/Projects"), "Projects");
 const PublicShare = lazyPage(() => import("@/pages/PublicShare"), "PublicShare");
 const Settings = lazyPage(() => import("@/pages/Settings"), "Settings");
+const TaskPage = lazyPage(() => import("@/pages/TaskPage"), "TaskPage");
 const Tasks = lazyPage(() => import("@/pages/Tasks"), "Tasks");
 const Utilization = lazyPage(() => import("@/pages/Utilization"), "Utilization");
 const WeeklySync = lazyPage(() => import("@/pages/WeeklySync"), "WeeklySync");
@@ -115,8 +116,8 @@ export function App() {
             <Route path="services" element={<ProjectServices />} />
             <Route path="docs" element={<ProjectDocs />} />
           </Route>
-          {/* Customers and Daily Review are gated on project:read, like their nav
-              entries and API routes (docs/archive/plans/internal-sync.md). */}
+          {/* Customers is gated on customer:read and Daily Review on project:read,
+              like their nav entries and API routes (docs/archive/plans/internal-sync.md). */}
           <Route
             path="customers"
             element={
@@ -149,7 +150,24 @@ export function App() {
               </PermissionGuard>
             }
           />
-          <Route path="tasks" element={<Tasks />} />
+          {/* Gated on project:read like the nav entry and GET /tasks. */}
+          <Route
+            path="tasks"
+            element={
+              <PermissionGuard permission="project:read">
+                <Tasks />
+              </PermissionGuard>
+            }
+          />
+          {/* The task page reads GET /tasks/:id, which needs project:read too. */}
+          <Route
+            path="tasks/:taskId"
+            element={
+              <PermissionGuard permission="project:read">
+                <TaskPage />
+              </PermissionGuard>
+            }
+          />
           {/* Utilization is gated on project:read, like its nav entry — hours mean
               nothing without project access (docs/archive/plans/internal-sync.md). */}
           <Route

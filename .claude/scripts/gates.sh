@@ -247,7 +247,7 @@ else fail guardrail-filters-vendor "frontend/src/components/reui/filters.tsx mis
 
 # Same drift guards for the vendored Data Grid family (dir-total) and Badge
 # (vendored 2026-08-01; counts include comment-only markers).
-EXPECTED_DATAGRID_PATCHES=41
+EXPECTED_DATAGRID_PATCHES=42
 if [ -d frontend/src/components/reui/data-grid ]; then
   N="$(grep -rc 'SOLVRO PATCH' frontend/src/components/reui/data-grid/ | awk -F: '{s+=$2} END {print s}')"
   if [ "$N" -eq "$EXPECTED_DATAGRID_PATCHES" ]; then pass guardrail-datagrid-vendor
@@ -280,6 +280,16 @@ if [ -f frontend/src/components/reui/autocomplete.tsx ]; then
   if [ "$N" -eq "$EXPECTED_AUTOCOMPLETE_PATCHES" ]; then pass guardrail-autocomplete-vendor
   else fail guardrail-autocomplete-vendor "SOLVRO PATCH count $N != recorded $EXPECTED_AUTOCOMPLETE_PATCHES"; fi
 else fail guardrail-autocomplete-vendor "frontend/src/components/reui/autocomplete.tsx missing"; fi
+
+# The uncustomized section colour lives twice: Section.color's schema default and
+# DEFAULT_SECTION_COLOR, which resolveSectionColors compares against to spot a
+# section that never went through the picker. The two packages share no module,
+# so this check keeps them equal (ISS-020).
+SCHEMA_SECTION_COLOR="$(awk '/^model Section \{/{f=1} f&&/^}/{exit} f&&/^[[:space:]]+color[[:space:]]/' backend/prisma/schema.prisma | grep -o '#[0-9a-fA-F]\{6\}')"
+FRONT_SECTION_COLOR="$(grep -o 'DEFAULT_SECTION_COLOR = "#[0-9a-fA-F]\{6\}"' frontend/src/lib/gantt/palette.ts | grep -o '#[0-9a-fA-F]\{6\}')"
+if [ -n "$SCHEMA_SECTION_COLOR" ] && [ "$(printf %s "$SCHEMA_SECTION_COLOR" | tr A-F a-f)" = "$(printf %s "$FRONT_SECTION_COLOR" | tr A-F a-f)" ]; then
+  pass section-default-color-parity
+else fail section-default-color-parity "Section.color default '$SCHEMA_SECTION_COLOR' (schema.prisma) != DEFAULT_SECTION_COLOR '$FRONT_SECTION_COLOR' (frontend/src/lib/gantt/palette.ts)"; fi
 
 # ---------- design guard checks (always) ----------
 # antislop guards (2026-11-12, docs/archive/plans/antislop-port.md). App code

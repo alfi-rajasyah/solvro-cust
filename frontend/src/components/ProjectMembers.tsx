@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { AssigneeAvatar } from "@/components/AssigneeAvatar";
 import { Modal } from "@/components/Modal";
 import { Alert, AlertDescription } from "@/components/reui/alert";

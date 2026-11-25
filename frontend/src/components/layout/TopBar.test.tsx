@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { TopBar } from "./TopBar";
 
 vi.mock("@/lib/auth", () => ({
@@ -14,6 +14,8 @@ vi.mock("@/lib/theme", () => ({ useTheme: () => ({ resolved: "light", toggle: vi
 vi.mock("@/lib/queries", () => ({
   useProject: () => ({ data: undefined }),
   useCustomer: () => ({ data: undefined }),
+  useTask: () => ({ data: undefined }),
+  useProjectTasks: () => ({ data: undefined }),
 }));
 vi.mock("./SidebarContext", () => ({ useSidebar: () => ({ open: true, toggle: vi.fn() }) }));
 vi.mock("./NotificationBell", () => ({ NotificationBell: () => null }));

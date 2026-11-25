@@ -27,8 +27,8 @@ test.describe("sidebar", () => {
       await expect(rail.getByText(label, { exact: true })).toBeVisible();
     }
     await expect(rail.getByRole("link", { name: "Overview" })).toBeVisible();
-    // /tasks is intentionally not in the rail.
-    await expect(rail.locator('a[href="/tasks"]')).toHaveCount(0);
+    // The cross-project Tasks page is listed in the rail (user decision 2026-11-23).
+    await expect(rail.getByRole("link", { name: "Tasks" })).toBeVisible();
 
     await page.getByRole("button", { name: "Collapse sidebar" }).click();
     await expect(rail.getByText("Workspace", { exact: true })).toHaveCount(0);

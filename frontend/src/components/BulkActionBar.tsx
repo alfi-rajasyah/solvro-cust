@@ -1,3 +1,4 @@
+import { CheckIcon } from "lucide-react";
 import { useState } from "react";
 import { LabelChip } from "@/components/LabelChip";
 import { StatusSelect } from "@/components/StatusSelect";
@@ -128,6 +129,10 @@ export function BulkActionBar({
               {labels.length === 0 ? (
                 <p className="text-xs text-on-surface-variant">This project has no labels yet.</p>
               ) : (
+                <>
+                <p className="text-xs text-on-surface-variant">
+                  {open === "addLabel" ? "Pick one or more labels to add." : "Pick one or more labels to remove."}
+                </p>
                 <div className="flex flex-wrap gap-1.5" role="group" aria-label={open === "addLabel" ? "Labels to add" : "Labels to remove"}>
                   {labels.map((l) => (
                     <button
@@ -136,14 +141,29 @@ export function BulkActionBar({
                       aria-pressed={pickedLabels.includes(l.id)}
                       onClick={() => toggleLabel(l.id)}
                       className={cn(
-                        "[@media(pointer:coarse)]:min-h-11 flex items-center rounded-full outline-hidden focus-visible:ring-2 focus-visible:ring-primary",
-                        pickedLabels.includes(l.id) ? "ring-2 ring-primary" : "opacity-80 hover:opacity-100",
+                        "[@media(pointer:coarse)]:min-h-11 flex items-center gap-1.5 rounded-full border py-0.5 pl-1.5 pr-0.5 outline-hidden focus-visible:ring-2 focus-visible:ring-primary",
+                        pickedLabels.includes(l.id)
+                          ? "border-primary bg-primary/10"
+                          : "border-outline-variant hover:border-primary",
                       )}
                     >
+                      <span
+                        aria-hidden="true"
+                        data-selected-marker={pickedLabels.includes(l.id) ? "true" : undefined}
+                        className={cn(
+                          "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border",
+                          pickedLabels.includes(l.id)
+                            ? "border-primary bg-primary text-on-primary"
+                            : "border-outline bg-transparent",
+                        )}
+                      >
+                        {pickedLabels.includes(l.id) && <CheckIcon className="h-3 w-3" strokeWidth={3} />}
+                      </span>
                       <LabelChip label={l} />
                     </button>
                   ))}
                 </div>
+                </>
               )}
               <button
                 type="button"

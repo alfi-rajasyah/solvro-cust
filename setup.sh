@@ -10,7 +10,9 @@
 #   - Wipes any prior solvro_pgdata volume (clears stale postgres state) —
 #     but refuses when that volume already exists unless FORCE_FRESH=1 is
 #     set, because a missing ~/solvro/.env on a server with data (lost file,
-#     or a run as another Unix user) must not destroy the database
+#     or a run as another Unix user) must not destroy the database. The
+#     solvro_uploads volume (task attachments) goes with it: without the
+#     database its files have no rows and would only be orphans
 #   - Brings the stack up and creates the admin user
 #
 # Re-runs on a server that already has ~/solvro/.env:
@@ -60,12 +62,13 @@ DEPLOY_DIR="$HOME/solvro"
 COMPOSE_FILE="$DEPLOY_DIR/docker-compose.yml"
 ENV_FILE="$DEPLOY_DIR/.env"
 VOLUME_NAME="solvro_pgdata"
+UPLOADS_VOLUME_NAME="solvro_uploads"
 # The release this installer belongs to — the image tag it pins in
 # ~/solvro/.env (IMAGE_TAG). Bumped with VERSION on every release
 # (ci/check-version.sh keeps them equal). A newer setup.sh is the upgrade
 # (`solvro update` fetches and runs it): it rewrites IMAGE_TAG and pulls; a
 # plain `docker compose pull` / `up -d` never changes the release.
-SOLVRO_IMAGE_TAG="v1.3.0"
+SOLVRO_IMAGE_TAG="v1.4.0"
 
 # ------------------------------------------------------------------ options
 ADVANCED=0
@@ -294,6 +297,27 @@ COMPOSE_HEAD
       # either in ~/solvro/.env.
       ITOP_ALLOW_PRIVATE_HOSTS: "${ITOP_ALLOW_PRIVATE_HOSTS:-true}"
       ITOP_SYNC_DISABLED: "${ITOP_SYNC_DISABLED:-false}"
+      # Task attachments. "local" keeps files in the solvro_uploads volume
+      # (mounted below); "s3" stores them in an S3-compatible bucket instead
+      # (AWS S3, MinIO, Silo, Garage). To switch, set ATTACHMENTS_DRIVER=s3
+      # and the S3_* values in ~/solvro/.env, then `docker compose up -d`
+      # (docs/CONFIGURATION.md). The limits are optional overrides.
+      ATTACHMENTS_DRIVER: "${ATTACHMENTS_DRIVER:-local}"
+      ATTACHMENTS_DIR: /app/uploads
+      ATTACHMENT_MAX_FILE_MB: "${ATTACHMENT_MAX_FILE_MB:-25}"
+      ATTACHMENT_MAX_FILES_PER_TASK: "${ATTACHMENT_MAX_FILES_PER_TASK:-20}"
+      ATTACHMENT_MAX_TASK_MB: "${ATTACHMENT_MAX_TASK_MB:-100}"
+      ATTACHMENT_ALLOWED_EXTENSIONS: "${ATTACHMENT_ALLOWED_EXTENSIONS:-png,jpg,jpeg,gif,webp,pdf,docx,xlsx,pptx,txt,csv,log,md,json,yaml,yml,zip}"
+      # Used only when ATTACHMENTS_DRIVER=s3 (S3_ENDPOINT is optional for AWS S3).
+      S3_ENDPOINT: "${S3_ENDPOINT:-}"
+      S3_REGION: "${S3_REGION:-}"
+      S3_BUCKET: "${S3_BUCKET:-}"
+      S3_ACCESS_KEY_ID: "${S3_ACCESS_KEY_ID:-}"
+      S3_SECRET_ACCESS_KEY: "${S3_SECRET_ACCESS_KEY:-}"
+      S3_FORCE_PATH_STYLE: "${S3_FORCE_PATH_STYLE:-false}"
+      S3_KEY_PREFIX: "${S3_KEY_PREFIX:-}"
+    volumes:
+      - solvro_uploads:/app/uploads
     ports:
       # Local only, whatever BIND_ADDR is: the website's nginx proxies /api/
       # inside the compose network, and a directly reachable API would bypass
@@ -325,6 +349,8 @@ COMPOSE_HEAD
     environment:
       # Outline origin(s) allowed to frame /embed/* and /share/*; empty = off.
       EMBED_FRAME_ANCESTORS: "${EMBED_FRAME_ANCESTORS:-}"
+      # nginx sets the attachment upload body limit from it (plus 1 MB).
+      ATTACHMENT_MAX_FILE_MB: "${ATTACHMENT_MAX_FILE_MB:-25}"
     ports:
       - "${BIND_ADDR:-127.0.0.1}:${FRONTEND_PORT:-80}:80"
     logging:
@@ -337,6 +363,8 @@ COMPOSE_HEAD
 volumes:
   solvro_pgdata:
     name: solvro_pgdata
+  solvro_uploads:
+    name: solvro_uploads
 COMPOSE_REST
   } > "$COMPOSE_FILE"
 }
@@ -386,8 +414,8 @@ usage() {
 Usage: solvro <command>
 
   update [--yes] [--no-backup]  Upgrade to the newest Solvro release. Backs up
-                                the database first and asks before changing
-                                anything (--yes: don't ask).
+                                the database and attachments first and asks
+                                before changing anything (--yes: don't ask).
   config                        Show the server settings.
   config get KEY                Print one setting.
   config set KEY=VALUE ...      Change settings and restart what they affect,
@@ -396,7 +424,8 @@ Usage: solvro <command>
                                 TRUST_PROXY, EMBED_FRAME_ANCESTORS,
                                 ITOP_ALLOW_PRIVATE_HOSTS, ITOP_SYNC_DISABLED).
   version                       Show the installed release.
-  backup                        Write a database dump to ~/solvro/backups/.
+  backup                        Write a database dump and an archive of the
+                                attachments to ~/solvro/backups/.
   help                          Show this help.
 
 Settings: APP_URL BIND_ADDR FRONTEND_PORT BACKEND_PORT POSTGRES_PORT
@@ -431,6 +460,30 @@ backup() {
   printf '%s' "$file"
 }
 
+# Prints the path of a new archive of the attachments volume in
+# ~/solvro/backups/, or nothing when ATTACHMENTS_DRIVER=s3: the bucket keeps
+# those files and the volume holds none. A one-off container of the installed
+# backend image writes the archive, so it works while the backend container is
+# stopped or restarting (the database dump needs only postgres), and no other
+# image is pulled.
+backup_uploads() {
+  local driver dir="$DEPLOY_DIR/backups" file rc=0
+  driver="$(env_file_get ATTACHMENTS_DRIVER)"
+  [[ "${driver:-local}" == "local" ]] || return 0
+  mkdir -p "$dir"
+  chmod 700 "$dir"
+  file="$dir/solvro_uploads-$(installed_tag)-$(date +%Y%m%d-%H%M%S).tar.gz"
+  ( umask 077
+    docker compose run --rm --no-deps -T --entrypoint tar backend \
+      --warning=no-file-changed -czf - -C /app/uploads . > "$file" ) || rc=$?
+  # GNU tar exits 1 when a file changed while it was read (an upload or a
+  # delete during the backup); every other file is in the archive.
+  [[ $rc -le 1 ]] \
+    || { rm -f "$file"; die "attachments backup failed (exit $rc; see above)."; }
+  [[ -s "$file" ]] || { rm -f "$file"; die "attachments backup is empty."; }
+  printf '%s' "$file"
+}
+
 # 0 when version $1 is strictly newer than $2 (vX.Y.Z).
 is_newer() {
   [[ "$1" != "$2" ]] && [[ "$(printf '%s\n%s\n' "${1#v}" "${2#v}" | sort -V | tail -n 1)" == "${1#v}" ]]
@@ -447,7 +500,7 @@ cmd_update() {
   done
   require_install
 
-  local current latest dump=""
+  local current latest dump="" uploads=""
   current="$(installed_tag)"
   [[ -n "$current" ]] || die "IMAGE_TAG is not set in $ENV_FILE."
 
@@ -479,7 +532,7 @@ cmd_update() {
   echo "Solvro $current -> $latest"
   echo "Release notes (read 'Action required' first): $RELEASES_URL/$latest"
   if [[ $do_backup -eq 1 ]]; then
-    echo "The database is backed up to $DEPLOY_DIR/backups/ first."
+    echo "The database and attachments are backed up to $DEPLOY_DIR/backups/ first."
   fi
   if [[ $assume_yes -eq 0 ]]; then
     local answer=""
@@ -494,9 +547,11 @@ cmd_update() {
     || die "$latest is not fully published yet; try again in a few minutes. Nothing changed."
 
   if [[ $do_backup -eq 1 ]]; then
-    echo "Backing up the database..."
+    echo "Backing up the database and attachments..."
     dump="$(backup)"
     echo "Backup: $dump"
+    uploads="$(backup_uploads)"
+    [[ -z "$uploads" ]] || echo "Attachments backup: $uploads"
   fi
 
   # The release's own installer, as shipped in its backend image.
@@ -508,11 +563,14 @@ cmd_update() {
     || die "the installer in the stable image is not for $latest; the stack was not changed."
 
   bash "$INSTALLER" \
-    || die "the $latest installer failed (see above). Database backup from before: ${dump:-none}. INSTALL.md, Upgrade, has the manual steps."
+    || die "the $latest installer failed (see above). Database backup from before: ${dump:-none}. Attachments backup: ${uploads:-none}. INSTALL.md, Upgrade, has the manual steps."
   echo
   echo "Updated Solvro $current -> $latest."
   if [[ -n "$dump" ]]; then
     echo "Database backup from before the upgrade: $dump"
+  fi
+  if [[ -n "$uploads" ]]; then
+    echo "Attachments backup from before the upgrade: $uploads"
   fi
 }
 
@@ -695,7 +753,11 @@ main() {
     update)  shift; cmd_update "$@" ;;
     config)  shift; cmd_config "$@" ;;
     version) require_install; echo "Solvro $(installed_tag)" ;;
-    backup)  require_install; file="$(backup)"; echo "Backup: $file" ;;
+    backup)
+      require_install
+      file="$(backup)"; echo "Backup: $file"
+      file="$(backup_uploads)"; [[ -z "$file" ]] || echo "Attachments backup: $file"
+      ;;
     help|-h|--help) usage ;;
     *) usage >&2; exit 1 ;;
   esac
@@ -735,8 +797,10 @@ if [[ -f "$ENV_FILE" ]]; then
   set -a
   # APP_URL and EMBED_FRAME_ANCESTORS are read separately below: they may hold
   # spaces and be unquoted in a hand-edited file, which sourcing would run.
+  # The S3_* lines are skipped too: a secret key can hold $ or ( ) characters.
+  # Compose reads ~/solvro/.env itself, so the backend still gets them.
   # shellcheck disable=SC1090
-  . <(grep -vE '^(APP_URL|EMBED_FRAME_ANCESTORS)=' "$ENV_FILE")
+  . <(grep -vE '^(APP_URL|EMBED_FRAME_ANCESTORS|S3_[A-Z_]+)=' "$ENV_FILE")
   set +a
   # Older installs predate SECRETS_KEY (secrets-at-rest for integration
   # tokens) — generate it once and append, never overwriting an existing value.
@@ -805,7 +869,7 @@ fi
 # ------------------------------------------------------------------ fresh install
 
 # Guard BEFORE anything is prompted or written: a fresh install deletes the
-# solvro_pgdata volume further down so the new POSTGRES_PASSWORD matches an
+# solvro_pgdata volume (and solvro_uploads) further down so the new POSTGRES_PASSWORD matches an
 # empty database. Without ~/solvro/.env this script cannot tell a new server
 # from one whose env file was lost — or from a run as a different Unix user
 # ($HOME differs per user; the Docker volume is global to the host). If the
@@ -817,23 +881,30 @@ if ! docker info >/dev/null 2>&1; then
   echo "ERROR: cannot talk to the Docker daemon. Is it running, and is $(id -un) allowed to use it (docker group)?"
   exit 1
 fi
-if docker volume inspect "$VOLUME_NAME" >/dev/null 2>&1; then
+# Either volume counts: the uploads volume holds files that no backup of the
+# database contains, so it is never deleted without the FORCE_FRESH=1 opt-in.
+EXISTING_VOLUMES=""
+for _vol in "$VOLUME_NAME" "$UPLOADS_VOLUME_NAME"; do
+  docker volume inspect "$_vol" >/dev/null 2>&1 && EXISTING_VOLUMES="${EXISTING_VOLUMES:+$EXISTING_VOLUMES, }'$_vol'"
+done
+if [[ -n "$EXISTING_VOLUMES" ]]; then
   if [[ "${FORCE_FRESH:-}" != "1" ]]; then
     cat <<MSG
-ERROR: the Docker volume '$VOLUME_NAME' already exists, but $ENV_FILE does not.
+ERROR: the Docker volume(s) $EXISTING_VOLUMES already exist, but $ENV_FILE does not.
 
 This looks like an existing Solvro install whose .env file is missing, or this
 script is running as a different user than the one who installed it. A fresh
-install would DELETE that volume and every record in it. Nothing was changed.
+install would DELETE both '$VOLUME_NAME' (every record) and '$UPLOADS_VOLUME_NAME'
+(task attachments). Nothing was changed.
 
   - To keep the data:  restore $ENV_FILE from your backup, then re-run.
-  - To start over with an empty database:  FORCE_FRESH=1 bash setup.sh
+  - To start over with an empty database and no attachments:  FORCE_FRESH=1 bash setup.sh
 
 See OPERATIONS.md, section 9.
 MSG
     exit 1
   fi
-  echo "FORCE_FRESH=1 is set: the existing volume '$VOLUME_NAME' will be deleted."
+  echo "FORCE_FRESH=1 is set: the existing volume(s) $EXISTING_VOLUMES will be deleted, '$VOLUME_NAME' (database) and '$UPLOADS_VOLUME_NAME' (task attachments) alike."
 fi
 
 if [[ $ADVANCED -eq 1 ]]; then
@@ -1042,6 +1113,20 @@ SECRETS_KEY=$SECRETS_KEY
 BIND_ADDR=$BIND_ADDR
 FRONTEND_PORT=$FRONTEND_PORT
 BACKEND_PORT=$BACKEND_PORT
+ATTACHMENTS_DRIVER=local
+ATTACHMENT_MAX_FILE_MB=25
+ATTACHMENT_MAX_FILES_PER_TASK=20
+ATTACHMENT_MAX_TASK_MB=100
+ATTACHMENT_ALLOWED_EXTENSIONS="png,jpg,jpeg,gif,webp,pdf,docx,xlsx,pptx,txt,csv,log,md,json,yaml,yml,zip"
+# To keep attachments in an S3-compatible bucket instead of the solvro_uploads
+# volume, set ATTACHMENTS_DRIVER=s3 and add (then run: docker compose up -d):
+#   S3_ENDPOINT=...  S3_REGION=...  S3_BUCKET=...
+#   S3_ACCESS_KEY_ID=...  S3_SECRET_ACCESS_KEY=...  S3_FORCE_PATH_STYLE=true
+#   S3_KEY_PREFIX=...   (optional; a folder inside a shared bucket)
+# S3_ENDPOINT is needed for MinIO, Silo, Garage and other S3-compatible stores,
+# and omitted for AWS S3. Single-quote a secret that holds $ or other shell
+# characters. The bucket (or bucket plus prefix) must serve this Solvro only.
+# See docs/CONFIGURATION.md.
 EOF
 [[ -n "$APP_URL" ]] && echo "APP_URL=\"$APP_URL\"" >> "$ENV_FILE"
 [[ -n "$POSTGRES_PORT" ]] && echo "POSTGRES_PORT=$POSTGRES_PORT" >> "$ENV_FILE"
@@ -1060,6 +1145,9 @@ echo
 echo "Clearing any prior stack and database volume..."
 docker compose down 2>/dev/null || true
 docker volume rm "$VOLUME_NAME" 2>/dev/null || true
+# The attachment files belong to the database rows just deleted; an old
+# volume would hold only orphans. (Attachments kept in S3 are not touched.)
+docker volume rm "$UPLOADS_VOLUME_NAME" 2>/dev/null || true
 
 echo "Pulling images..."
 docker compose pull
