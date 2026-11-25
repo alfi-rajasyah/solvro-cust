@@ -5,7 +5,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Webhook } from "@/lib/queries";
 import { WebhooksPanel } from "./WebhooksPanel";
-import { eventsSummary, lastDeliveryText, webhookHost } from "./webhookPresentation";
+import { deliveryErrorLabel } from "@/lib/labels";
+import { eventsSummary, lastDeliveryText } from "./webhookPresentation";
 
 const fetchMock = vi.fn();
 
@@ -13,7 +14,8 @@ function webhook(over: Partial<Webhook> = {}): Webhook {
   return {
     id: 1,
     name: "Delivery channel",
-    url: "https://hooks.example.com/path/with-a-token?key=abc",
+    host: "hooks.example.com",
+    urlPreview: "https://hooks.example.com/path/with-a-token?…",
     format: "STANDARD",
     eventTypes: ["task.created", "comment.created"],
     projectIds: [],
@@ -115,11 +117,11 @@ describe("WebhooksPanel", () => {
 
   it("shows the result of Send test", async () => {
     routes["GET /api/webhooks"] = () => json(200, { webhooks: [webhook()] });
-    routes["POST /api/webhooks/1/test"] = () => json(200, { ok: false, statusCode: 503, error: "HTTP 503" });
+    routes["POST /api/webhooks/1/test"] = () => json(200, { ok: false, statusCode: 503, error: "http_503" });
     renderPanel();
     const row = await screen.findByTestId("webhook-1");
     fireEvent.click(within(row).getByRole("button", { name: "Send test" }));
-    expect(await within(row).findByText("Test failed (503): HTTP 503")).toBeTruthy();
+    expect(await within(row).findByText("Test failed (503): The receiver answered 503.")).toBeTruthy();
   });
 
   it("creates a webhook, sends the events in contract order, and shows the secret once", async () => {
@@ -200,10 +202,46 @@ describe("WebhooksPanel", () => {
   });
 });
 
+describe("WebhooksPanel edit", () => {
+  async function openEdit() {
+    routes["GET /api/webhooks"] = () => json(200, { webhooks: [webhook()] });
+    routes["GET /api/projects"] = () => json(200, []);
+    routes["PATCH /api/webhooks/1"] = () => json(200, { webhook: webhook() });
+    renderPanel();
+    const row = await screen.findByTestId("webhook-1");
+    fireEvent.click(within(row).getByRole("button", { name: "Edit" }));
+    return screen.findByRole("dialog", { name: "Edit webhook" });
+  }
+
+  it("starts the URL empty, shows the redacted target, and keeps the stored URL when left blank", async () => {
+    const dialog = await openEdit();
+    expect((within(dialog).getByPlaceholderText("https://example.com/hooks/solvro") as HTMLInputElement).value).toBe("");
+    expect(within(dialog).getByTestId("webhook-current-target").textContent).toBe(
+      "https://hooks.example.com/path/with-a-token?…",
+    );
+    expect(within(dialog).getByText("Leave blank to keep the current URL.")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(sentBody("PATCH /api/webhooks/1")).toBeDefined());
+    expect(sentBody("PATCH /api/webhooks/1")).not.toHaveProperty("url");
+  });
+
+  it("sends the URL only when one is typed", async () => {
+    const dialog = await openEdit();
+    fireEvent.change(within(dialog).getByPlaceholderText("https://example.com/hooks/solvro"), {
+      target: { value: " https://new.example.com/h " },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(sentBody("PATCH /api/webhooks/1")).toBeDefined());
+    expect(sentBody("PATCH /api/webhooks/1").url).toBe("https://new.example.com/h");
+  });
+});
+
 describe("webhookPresentation", () => {
-  it("reduces a URL to its host and survives a bad one", () => {
-    expect(webhookHost("https://chat.googleapis.com/v1/spaces/X/messages?key=k&token=t")).toBe("chat.googleapis.com");
-    expect(webhookHost("not a url")).toBe("–");
+  it("maps delivery error codes to sentences, with a generic fallback", () => {
+    expect(deliveryErrorLabel("http_500")).toBe("The receiver answered 500.");
+    expect(deliveryErrorLabel("timeout")).toBe("The receiver did not answer in time.");
+    expect(deliveryErrorLabel("target_private")).toMatch(/private network/);
+    expect(deliveryErrorLabel("something_new")).toBe("The delivery failed.");
   });
 
   it("summarises events compactly", () => {

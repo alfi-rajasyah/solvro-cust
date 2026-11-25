@@ -14,17 +14,16 @@ import {
   type Webhook,
   type WebhookTestResult,
 } from "@/lib/queries";
+import { WEBHOOK_FORMAT_LABEL, deliveryErrorLabel } from "@/lib/labels";
 import { WebhookDeliveriesModal } from "./WebhookDeliveriesModal";
 import { WebhookFormModal } from "./WebhookFormModal";
 import { WebhookSecretModal } from "./WebhookSecretModal";
 import {
-  WEBHOOK_FORMAT_LABEL,
   eventLabels,
   eventsSummary,
   lastDeliveryText,
   projectsSummary,
   webhookErrorMessage,
-  webhookHost,
 } from "./webhookPresentation";
 
 const ROW_BUTTON =
@@ -224,7 +223,7 @@ function WebhookRow({
         <span className="min-w-0 break-words font-display text-sm font-semibold text-on-surface">{w.name}</span>
         <Chip tone={w.active ? "emerald" : "amber"}>{w.active ? "Active" : "Disabled"}</Chip>
       </div>
-      <p className="break-all font-mono text-meta text-on-surface-variant">{webhookHost(w.url)}</p>
+      <p className="break-all font-mono text-meta text-on-surface-variant">{w.host}</p>
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-meta">
         <dt className="text-on-surface-variant">Format</dt>
         <dd className="text-on-surface">{WEBHOOK_FORMAT_LABEL[w.format]}</dd>
@@ -281,7 +280,7 @@ function TestResultLine({ result }: { result: WebhookTestResult | string }) {
   return (
     <p className="text-meta text-error">
       Test failed{result.statusCode != null ? ` (${result.statusCode})` : ""}
-      {result.error ? `: ${result.error}` : "."}
+      {result.error ? `: ${deliveryErrorLabel(result.error)}` : "."}
     </p>
   );
 }

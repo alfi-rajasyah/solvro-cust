@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Modal } from "@/components/Modal";
+import { TableSkeleton } from "@/components/skeletons";
 import { Alert, AlertDescription } from "@/components/reui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -10,12 +11,8 @@ import {
   type Webhook,
   type WebhookFormat,
 } from "@/lib/queries";
-import {
-  WEBHOOK_EVENT_LABEL,
-  WEBHOOK_FORMAT_LABEL,
-  WEBHOOK_MAX_PROJECTS,
-  webhookErrorMessage,
-} from "./webhookPresentation";
+import { WEBHOOK_EVENT_LABEL, WEBHOOK_FORMAT_LABEL } from "@/lib/labels";
+import { WEBHOOK_MAX_PROJECTS, webhookErrorMessage } from "./webhookPresentation";
 
 const INPUT_CLASS =
   "[@media(pointer:coarse)]:min-h-11 w-full rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-70";
@@ -55,7 +52,7 @@ export function WebhookFormModal({
     if (!open) return;
     setError(null);
     setName(webhook?.name ?? "");
-    setUrl(webhook?.url ?? "");
+    setUrl("");
     setFormat(webhook?.format ?? "STANDARD");
     setEvents(webhook?.eventTypes ?? []);
     setScope(webhook && webhook.projectIds.length > 0 ? "selected" : "all");
@@ -80,7 +77,8 @@ export function WebhookFormModal({
     setError(null);
     const trimmed = name.trim();
     if (!trimmed) return setError("Name is required.");
-    if (!url.trim()) return setError("URL is required.");
+    // Editing: a blank URL keeps the stored one (the browser never holds it).
+    if (!isEdit && !url.trim()) return setError("URL is required.");
     if (events.length === 0) return setError("Pick at least one event.");
     if (scope === "selected" && projectIds.length === 0) {
       return setError("Pick at least one project, or send events from every project you can see.");
@@ -90,7 +88,13 @@ export function WebhookFormModal({
     const ids = scope === "all" ? [] : projectIds;
     try {
       if (webhook) {
-        await update.mutateAsync({ id: webhook.id, name: trimmed, url: url.trim(), eventTypes, projectIds: ids });
+        await update.mutateAsync({
+          id: webhook.id,
+          name: trimmed,
+          ...(url.trim() ? { url: url.trim() } : {}),
+          eventTypes,
+          projectIds: ids,
+        });
         onClose();
       } else {
         const res = await create.mutateAsync({
@@ -179,7 +183,15 @@ export function WebhookFormModal({
           )}
         </fieldset>
 
-        <Field label="URL">
+        {isEdit && (
+          <p className="text-sm text-on-surface">
+            <span className="mb-1 block text-label-caps uppercase text-on-surface-variant">Current target</span>
+            <span className="break-all font-mono text-meta" data-testid="webhook-current-target">
+              {webhook.urlPreview}
+            </span>
+          </p>
+        )}
+        <Field label={isEdit ? "New URL" : "URL"}>
           <input
             type="url"
             inputMode="url"
@@ -191,6 +203,7 @@ export function WebhookFormModal({
             }
             className={`${INPUT_CLASS} font-mono`}
           />
+          {isEdit && <span className="mt-1 block text-meta text-on-surface-variant">Leave blank to keep the current URL.</span>}
         </Field>
 
         <fieldset className="min-w-0">
@@ -244,7 +257,7 @@ export function WebhookFormModal({
                 className="max-h-48 space-y-1 overflow-y-auto rounded-sm border border-outline-variant bg-surface-container-lowest p-2"
               >
                 {projectsLoading ? (
-                  <p className="text-sm text-on-surface-variant">Loading projects…</p>
+                  <TableSkeleton rows={3} columns={1} />
                 ) : sortedProjects.length === 0 ? (
                   <p className="text-sm text-on-surface-variant">No projects to pick from yet.</p>
                 ) : (

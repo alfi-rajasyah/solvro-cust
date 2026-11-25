@@ -5559,7 +5559,10 @@ export type WebhookDeliveryStatus = "PENDING" | "SUCCEEDED" | "FAILED";
 export interface Webhook {
   id: number;
   name: string;
-  url: string;
+  /** Target host. The full URL never reaches the browser: it can carry a Google Chat key and token. */
+  host: string;
+  /** scheme://host/path with any query replaced by "?…". */
+  urlPreview: string;
   format: WebhookFormat;
   eventTypes: string[];
   /** Empty means every project the owner can see. */
@@ -5591,7 +5594,7 @@ export interface WebhookCreateInput {
   projectIds: number[];
 }
 
-/** The format is fixed at creation (`format_immutable`). */
+/** The format is fixed at creation (`format_immutable`). Omitting `url` keeps the stored one. */
 export type WebhookUpdateInput = Partial<Omit<WebhookCreateInput, "format">> & { active?: boolean };
 
 export interface WebhookTestResult {

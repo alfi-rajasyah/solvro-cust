@@ -1,9 +1,10 @@
 import { Modal } from "@/components/Modal";
 import { QueryErrorAlert } from "@/components/QueryErrorAlert";
+import { TableSkeleton } from "@/components/skeletons";
 import { EMPTY_VALUE } from "@/lib/emptyValue";
 import { fmtDateTime } from "@/lib/formatDate";
+import { DELIVERY_STATUS_LABEL, WEBHOOK_EVENT_LABEL, deliveryErrorLabel } from "@/lib/labels";
 import { useWebhookDeliveries, type Webhook } from "@/lib/queries";
-import { DELIVERY_STATUS_LABEL, WEBHOOK_EVENT_LABEL } from "./webhookPresentation";
 
 /** The last 50 deliveries of one webhook, newest first. */
 export function WebhookDeliveriesModal({ webhook, onClose }: { webhook: Webhook | null; onClose: () => void }) {
@@ -29,7 +30,7 @@ export function WebhookDeliveriesModal({ webhook, onClose }: { webhook: Webhook 
       {q.isError ? (
         <QueryErrorAlert title="Could not load deliveries" error={q.error} onRetry={q.refetch} />
       ) : q.isLoading ? (
-        <p className="text-sm text-on-surface-variant">Loading deliveries…</p>
+        <TableSkeleton rows={4} columns={5} />
       ) : rows.length === 0 ? (
         <p className="text-sm text-on-surface-variant">
           Nothing sent yet. Deliveries appear here once a matching event happens.
@@ -56,7 +57,7 @@ export function WebhookDeliveriesModal({ webhook, onClose }: { webhook: Webhook 
                       {DELIVERY_STATUS_LABEL[d.status]}
                     </span>
                     {d.status === "FAILED" && d.lastError && (
-                      <span className="block max-w-xs break-words text-meta text-on-surface-variant">{d.lastError}</span>
+                      <span className="block max-w-xs break-words text-meta text-on-surface-variant">{deliveryErrorLabel(d.lastError)}</span>
                     )}
                   </td>
                   <td className="py-2 pr-3 tabular-nums text-on-surface">{d.attempts}</td>

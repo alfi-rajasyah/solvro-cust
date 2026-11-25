@@ -148,6 +148,14 @@ test.describe("Webhooks settings", () => {
     await expect(row.getByRole("button", { name: "Disable" })).toBeVisible();
     await expect(row.getByRole("button", { name: "Rotate secret" })).toHaveCount(0);
     await expect(page.getByTestId("webhook-secret")).toHaveCount(0);
+
+    // Edit never receives the full URL: the field is blank and the target is redacted.
+    await row.getByRole("button", { name: "Edit" }).click();
+    const edit = page.getByRole("dialog", { name: "Edit webhook" });
+    await expect(edit.getByText("Leave blank to keep the current URL.")).toBeVisible();
+    await expect(edit.getByTestId("webhook-current-target")).toContainText("chat.googleapis.com");
+    expect(await edit.textContent()).not.toContain("token=");
+    expect(await edit.locator("input").evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value).join(" "))).not.toContain("token=");
   });
 
   test("a user without webhook:manage gets 403 from the API and no Webhooks section", async ({ page }) => {
