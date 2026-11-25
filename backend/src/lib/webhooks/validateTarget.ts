@@ -8,7 +8,7 @@ import { env } from "../../env.js";
 import { HttpError } from "../../http/errors.js";
 import { isPrivateAddress, type Lookup } from "../itop/validateBaseUrl.js";
 
-export type TargetRefusal = "invalid" | "scheme" | "userinfo" | "private" | "unresolvable";
+export type TargetRefusal = "invalid" | "scheme" | "userinfo" | "private" | "loop" | "unresolvable";
 
 /** 400 `webhook_target_refused`; `reason` tells the sender whether a retry can help (only `unresolvable`). */
 export class WebhookTargetError extends HttpError {
@@ -23,6 +23,8 @@ export class WebhookTargetError extends HttpError {
 export interface TargetPolicy {
   allowHttp?: boolean;
   allowPrivate?: boolean;
+  /** The public Solvro origin the loop rule compares against; defaults to `APP_URL`. */
+  appUrl?: string;
   lookup?: Lookup;
 }
 
@@ -87,7 +89,44 @@ export function parseTarget(raw: string, policy: TargetPolicy = {}): URL {
   if (url.username !== "" || url.password !== "") {
     throw new WebhookTargetError("userinfo", "The URL must not contain a user name or password");
   }
+  if (pointsAtIncomingUrl(url, policy.appUrl ?? env.APP_URL ?? undefined)) {
+    throw new WebhookTargetError("loop", "The URL is a Solvro incoming webhook URL; sending events there would make Solvro call itself");
+  }
   return url;
+}
+
+/**
+ * True for a URL on the Solvro host whose path is an incoming webhook path, so
+ * an outgoing webhook can never feed an incoming one
+ * (docs/archive/plans/webhooks.md).
+ */
+function pointsAtIncomingUrl(url: URL, appUrl: string | undefined): boolean {
+  if (!appUrl) return false;
+  const bareHost = (h: string) => h.toLowerCase().replace(/\.+$/, "");
+  let appHost: string;
+  try {
+    appHost = bareHost(new URL(appUrl).hostname);
+  } catch {
+    return false;
+  }
+  // The port is ignored on purpose: the same host on another port may be the same app behind a proxy.
+  if (bareHost(url.hostname) !== appHost) return false;
+  // Compare the path the way a server would read it: percent-decoded, runs of
+  // `/` collapsed, case-insensitive. A path that cannot be decoded is refused.
+  let segments: string[];
+  try {
+    segments = url.pathname
+      .split("/")
+      .map((segment) => decodeURIComponent(segment))
+      .join("/")
+      .toLowerCase()
+      .split("/")
+      .filter((segment) => segment !== "");
+  } catch {
+    return true;
+  }
+  const at = (i: number) => segments[i];
+  return (at(0) === "api" && at(1) === "webhook" && at(2) === "in") || (at(0) === "webhook" && at(1) === "in");
 }
 
 /**

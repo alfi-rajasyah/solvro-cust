@@ -82,6 +82,14 @@ export async function dispatchActivity(): Promise<number> {
       orderBy: { id: "asc" },
       select: { id: true, projectId: true, entityType: true, entityId: true, action: true, changes: true },
     });
+    // A comment written by an incoming webhook URL (`source` set) sends no
+    // `comment.created`, so a relay between the two directions cannot loop.
+    const commentIds = rows.filter((r) => r.entityType === "comment" && r.action === "created").map((r) => r.entityId);
+    const sourced = new Set<number>();
+    if (commentIds.length > 0) {
+      const found = await tx.comment.findMany({ where: { id: { in: commentIds }, source: { not: null } }, select: { id: true } });
+      for (const c of found) sourced.add(c.id);
+    }
     const subs = await tx.webhookSubscription.findMany({
       where: { active: true },
       select: { id: true, ownerId: true, eventTypes: true, projectIds: true },
@@ -103,7 +111,9 @@ export async function dispatchActivity(): Promise<number> {
     const candidates: { sub: (typeof subs)[number]; row: (typeof rows)[number]; type: WebhookEventType }[] = [];
     for (const row of rows) {
       const name = newStatusName(row);
-      const events = mapActivityToEvents(row, name !== null && doneNames.has(name));
+      const events = mapActivityToEvents(row, name !== null && doneNames.has(name)).filter(
+        (type) => !(type === "comment.created" && sourced.has(row.entityId)),
+      );
       if (events.length === 0) continue;
       for (const sub of subs) {
         if (sub.projectIds.length > 0 && !sub.projectIds.includes(row.projectId)) continue;

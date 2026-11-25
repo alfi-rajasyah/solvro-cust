@@ -275,6 +275,40 @@ describe("sending", () => {
     expect(payload.data.task.id).toBe(f.task.id);
   });
 
+  it("sends nothing for a comment written by an incoming URL, and still marks its row dispatched", async () => {
+    const f = await projectFixture();
+    const sub = await makeSubscription(f.owner.userId, receiver.url, { eventTypes: ["comment.created"] });
+    const hook = await prisma.inboundHook.create({
+      data: { projectId: f.project.id, createdById: f.owner.userId, name: "CI", tokenHash: uniq("hash"), tokenPreview: "abcd" },
+    });
+    const sourced = await prisma.comment.create({
+      data: { taskId: f.task.id, authorId: f.owner.userId, body: "Deployed", source: "incoming", inboundHookId: hook.id },
+    });
+    const ordinary = await prisma.comment.create({ data: { taskId: f.task.id, authorId: f.other.userId, body: "Looks good" } });
+    const record = (commentId: number) =>
+      recordActivity(prisma, {
+        projectId: f.project.id,
+        actorId: f.owner.userId,
+        entityType: "comment",
+        entityId: commentId,
+        entityLabel: f.task.title,
+        action: "created",
+        changes: { taskId: f.task.id },
+      });
+    const sourcedEvent = await record(sourced.id);
+    const ordinaryEvent = await record(ordinary.id);
+    await runDispatchOnce();
+    // One claim handled both rows: only the ordinary comment produced a delivery.
+    expect(receiver.received).toHaveLength(1);
+    expect(JSON.parse(receiver.received[0].body).data.comment.text).toBe("Looks good");
+    const deliveries = await prisma.webhookDelivery.findMany({ where: { subscriptionId: sub.id } });
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0].activityEventId).toBe(ordinaryEvent!.id);
+    const rows = await prisma.activityEvent.findMany({ where: { id: { in: [sourcedEvent!.id, ordinaryEvent!.id] } } });
+    expect(rows).toHaveLength(2);
+    for (const row of rows) expect(row.webhookDispatchedAt).not.toBeNull();
+  });
+
   it("does not follow a redirect and does not retry it", async () => {
     const f = await projectFixture();
     const sub = await makeSubscription(f.owner.userId, receiver.url);

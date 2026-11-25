@@ -11,9 +11,14 @@ import { pinoHttp } from "pino-http";
 //    /share/<token> that shows up in a Referer) — anyone reading the logs
 //    could otherwise open the link;
 //  - the Outline OAuth callback's `code` (a single-use authorization code) and
-//    `state` query parameters (GET /outline/oauth/callback).
+//    `state` query parameters (GET /outline/oauth/callback);
+//  - an incoming webhook URL's token (POST /webhook/in/<token>).
 
 const SHARE_TOKEN_IN_PATH = /(\/share\/)[^/?#\s"']+/gi;
+
+// The incoming webhook URL's token (POST /webhook/in/<token>, or /api/webhook/in/<token>
+// in a Referer): the path is the credential, so it is masked like a guest-link token.
+const INBOUND_TOKEN_IN_PATH = /(\/webhook\/in\/)[^/?#\s"']+/gi;
 
 const OUTLINE_CALLBACK_PATH = /\/outline\/oauth\/callback\/*(?=[?#]|$)/i;
 const OUTLINE_CALLBACK_PARAMS = /([?&](?:code|state)=)[^&#\s"']*/gi;
@@ -34,7 +39,7 @@ const SECRET_HEADERS = [
 
 /** Replaces the token segment of any `/share/<token>` (page or API path). */
 export function redactShareTokens(text: string): string {
-  return text.replace(SHARE_TOKEN_IN_PATH, "$1[redacted]");
+  return text.replace(SHARE_TOKEN_IN_PATH, "$1[redacted]").replace(INBOUND_TOKEN_IN_PATH, "$1[redacted]");
 }
 
 type SerializedReq = ReturnType<typeof stdSerializers.req>;

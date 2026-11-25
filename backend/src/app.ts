@@ -13,6 +13,7 @@ import { usersRouter } from "./routes/users.js";
 import { projectsRouter } from "./routes/projects.js";
 import { projectMembersRouter } from "./routes/projectMembers.js";
 import { shareLinksRouter } from "./routes/shareLinks.js";
+import { inboundHooksRouter } from "./routes/inboundHooks.js";
 import { publicShareRouter } from "./routes/publicShare.js";
 import { activityRouter } from "./routes/activity.js";
 import { notificationsRouter } from "./routes/notifications.js";
@@ -90,6 +91,7 @@ export function createApp(opts: { logger?: Logger } = {}): Express {
   app.use("/projects", projectsRouter);
   app.use("/projects", projectMembersRouter);
   app.use("/projects", shareLinksRouter);
+  app.use("/projects", inboundHooksRouter);
   app.use("/projects", activityRouter);
   app.use("/projects", projectOutlineMentionsRouter);
   app.use("/projects", projectOutlineDocsRouter);

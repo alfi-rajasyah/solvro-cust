@@ -28,12 +28,21 @@ export async function deleteExpiredWebhookDeliveries(now: Date = new Date()): Pr
   return count;
 }
 
+/** Deletes the `webhook-id` records of incoming URLs older than 24 hours (the replay window is 5 minutes). */
+export async function deleteExpiredInboundHookMessages(now: Date = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const { count } = await prisma.inboundHookMessage.deleteMany({ where: { createdAt: { lt: cutoff } } });
+  return count;
+}
+
 async function runCleanup(): Promise<void> {
   try {
     const count = await deleteExpiredActivityEvents();
     if (count > 0) logger.info({ count }, "Activity cleanup removed expired events");
     const deliveries = await deleteExpiredWebhookDeliveries();
     if (deliveries > 0) logger.info({ count: deliveries }, "Activity cleanup removed old webhook deliveries");
+    const messages = await deleteExpiredInboundHookMessages();
+    if (messages > 0) logger.info({ count: messages }, "Activity cleanup removed old incoming webhook ids");
   } catch (err) {
     logger.warn(
       { err: err instanceof Error ? err.message : String(err) },

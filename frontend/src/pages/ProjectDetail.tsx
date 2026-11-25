@@ -33,6 +33,7 @@ import { ApiError } from "@/lib/api";
 import { useNewParam } from "@/hooks/useNewParam";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { GanttExportProvider } from "@/lib/gantt/exportContext";
+import { ProjectIntegrationsDialog } from "@/components/projects/integrations/ProjectIntegrationsDialog";
 import { canOwnProject, saveErrorMessage } from "@/lib/ownerAccess";
 import { safeOutlineHref } from "@/lib/outlineUrl";
 import { preloadProjectTab, projectTabFromPath } from "@/lib/projectTabPreload";
@@ -79,6 +80,7 @@ export function ProjectDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [embedOpen, setEmbedOpen] = useState(false);
+  const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -305,6 +307,14 @@ export function ProjectDetail() {
                     Embed in Outline
                   </DropdownMenuItem>
                 )}
+                {canEdit && isOwner && (
+                  <DropdownMenuItem onClick={() => setIntegrationsOpen(true)} className="text-xs">
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">
+                      webhook
+                    </span>
+                    Integrations
+                  </DropdownMenuItem>
+                )}
                 {canDelete && (
                   <DropdownMenuItem
                     variant="destructive"
@@ -403,6 +413,13 @@ export function ProjectDetail() {
           open={embedOpen}
           onClose={() => setEmbedOpen(false)}
           canCreateGuestLink={canEdit && isOwner}
+        />
+      )}
+      {canEdit && isOwner && (
+        <ProjectIntegrationsDialog
+          projectId={project.id}
+          open={integrationsOpen}
+          onClose={() => setIntegrationsOpen(false)}
         />
       )}
       <DeleteProjectDialog

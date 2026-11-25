@@ -89,68 +89,69 @@ model Role {
 }
 
 model User {
-  id                     Int                     @id @default(autoincrement())
-  username               String                  @unique
-  email                  String                  @unique
+  id                      Int                     @id @default(autoincrement())
+  username                String                  @unique
+  email                   String                  @unique
   // Nullable since Google-provisioned users have no password.
   // POST /auth/login rejects users with a null hash (HTTP 401 "google_only").
-  passwordHash           String?                 @map("password_hash")
+  passwordHash            String?                 @map("password_hash")
   // Google `sub` claim. Unique per Google identity; null for password-only users.
-  googleSub              String?                 @unique @map("google_sub")
-  avatarUrl              String?                 @map("avatar_url")
-  roleId                 Int                     @map("role_id")
-  role                   Role                    @relation(fields: [roleId], references: [id])
-  active                 Boolean                 @default(true)
+  googleSub               String?                 @unique @map("google_sub")
+  avatarUrl               String?                 @map("avatar_url")
+  roleId                  Int                     @map("role_id")
+  role                    Role                    @relation(fields: [roleId], references: [id])
+  active                  Boolean                 @default(true)
   // Session version (2026-10 security hardening). Embedded in every JWT as
   // `ver` and compared on every request (http/auth.ts); bumped by a password
   // change, an admin reset or a deactivation so older tokens stop verifying.
-  tokenVersion           Int                     @default(0) @map("token_version")
-  createdAt              DateTime                @default(now()) @map("created_at")
-  projectsAsTAM          Project[]               @relation("ProjectTAM")
-  projectBaselinesLocked Project[]               @relation("ProjectBaselineLockedBy")
-  assignedTasks          Task[]
-  epicsOwned             Epic[]
-  comments               Comment[]
-  taskAttachments        TaskAttachment[]
-  projectNotes           ProjectNote[]
-  webhookSubscriptions   WebhookSubscription[]
-  authConfigUpdates      AuthConfig[]            @relation("AuthConfigUpdatedBy")
-  tamCustomers           Customer[]              @relation("CustomerTam")
-  customerNotes          CustomerNote[]
-  weeklyUpdates          WeeklyUpdate[]
-  projectReviews         ProjectReview[]
-  itopConfigUpdates      ItopConfig[]            @relation("ItopConfigUpdatedBy")
-  outlineConfigUpdates   OutlineConfig[]         @relation("OutlineConfigUpdatedBy")
+  tokenVersion            Int                     @default(0) @map("token_version")
+  createdAt               DateTime                @default(now()) @map("created_at")
+  projectsAsTAM           Project[]               @relation("ProjectTAM")
+  projectBaselinesLocked  Project[]               @relation("ProjectBaselineLockedBy")
+  assignedTasks           Task[]
+  epicsOwned              Epic[]
+  comments                Comment[]
+  taskAttachments         TaskAttachment[]
+  projectNotes            ProjectNote[]
+  webhookSubscriptions    WebhookSubscription[]
+  inboundHooks            InboundHook[]
+  authConfigUpdates       AuthConfig[]            @relation("AuthConfigUpdatedBy")
+  tamCustomers            Customer[]              @relation("CustomerTam")
+  customerNotes           CustomerNote[]
+  weeklyUpdates           WeeklyUpdate[]
+  projectReviews          ProjectReview[]
+  itopConfigUpdates       ItopConfig[]            @relation("ItopConfigUpdatedBy")
+  outlineConfigUpdates    OutlineConfig[]         @relation("OutlineConfigUpdatedBy")
   // iTop Person/User object keys this account is matched to (by email).
-  itopPersonId           Int?                    @unique @map("itop_person_id")
-  itopUserId             Int?                    @unique @map("itop_user_id")
-  itopTimeEntries        ItopTimeEntry[]
+  itopPersonId            Int?                    @unique @map("itop_person_id")
+  itopUserId              Int?                    @unique @map("itop_user_id")
+  itopTimeEntries         ItopTimeEntry[]
   // Personal iTop token (Phase 5 write path, backend/src/routes/itopUser.ts).
   // Sealed at rest (lib/secretBox.ts) — never the plaintext token. Writes to
   // iTop always use this token for the acting user; the application token
   // (ItopConfig.appTokenEnc) is read-only and never used for a write.
-  itopTokenEnc           String?                 @map("itop_token_enc")
-  itopTokenCheckedAt     DateTime?               @map("itop_token_checked_at")
-  itopTokenPersonName    String?                 @map("itop_token_person_name")
-  itopTokenExpiresAt     DateTime?               @map("itop_token_expires_at")
+  itopTokenEnc            String?                 @map("itop_token_enc")
+  itopTokenCheckedAt      DateTime?               @map("itop_token_checked_at")
+  itopTokenPersonName     String?                 @map("itop_token_person_name")
+  itopTokenExpiresAt      DateTime?               @map("itop_token_expires_at")
   // Personal Outline OAuth tokens (docs/archive/plans/outline-integration.md, D2).
   // Both sealed at rest (lib/secretBox.ts). An Outline call always runs under the
   // acting user's own token, accepted only when `auth.info` returned this
   // account's Solvro email; Solvro holds no Outline application/admin token.
-  outlineAccessTokenEnc  String?                 @map("outline_access_token_enc")
-  outlineRefreshTokenEnc String?                 @map("outline_refresh_token_enc")
-  outlineTokenExpiresAt  DateTime?               @map("outline_token_expires_at")
-  outlineUserId          String?                 @unique @map("outline_user_id")
-  outlineEmail           String?                 @map("outline_email")
-  outlineOAuthStates     OutlineOAuthState[]
-  projectMemberships     ProjectMember[]         @relation("ProjectMemberUser")
-  projectMembersAdded    ProjectMember[]         @relation("ProjectMemberAddedBy")
-  activityEvents         ActivityEvent[]
-  customerActivityEvents CustomerActivityEvent[]
-  customerTeamMemberships CustomerTeamMember[]  @relation("CustomerTeamUser")
-  customerTeamAdded      CustomerTeamMember[]    @relation("CustomerTeamAddedBy")
-  shareLinksCreated      ShareLink[]
-  notifications          Notification[]
+  outlineAccessTokenEnc   String?                 @map("outline_access_token_enc")
+  outlineRefreshTokenEnc  String?                 @map("outline_refresh_token_enc")
+  outlineTokenExpiresAt   DateTime?               @map("outline_token_expires_at")
+  outlineUserId           String?                 @unique @map("outline_user_id")
+  outlineEmail            String?                 @map("outline_email")
+  outlineOAuthStates      OutlineOAuthState[]
+  projectMemberships      ProjectMember[]         @relation("ProjectMemberUser")
+  projectMembersAdded     ProjectMember[]         @relation("ProjectMemberAddedBy")
+  activityEvents          ActivityEvent[]
+  customerActivityEvents  CustomerActivityEvent[]
+  customerTeamMemberships CustomerTeamMember[]    @relation("CustomerTeamUser")
+  customerTeamAdded       CustomerTeamMember[]    @relation("CustomerTeamAddedBy")
+  shareLinksCreated       ShareLink[]
+  notifications           Notification[]
 
   @@index([roleId])
   @@map("users")
@@ -274,40 +275,41 @@ model OutlineMention {
 }
 
 model Project {
-  id                   Int              @id @default(autoincrement())
+  id                   Int               @id @default(autoincrement())
   name                 String
   description          String?
   // Optional link to this project's Outline page or collection (http/https,
   // validated by lib/outlineUrl.ts). Never inherited from the customer and
   // never part of the guest payload or any export.
-  outlineUrl           String?          @map("outline_url")
-  tamId                Int              @map("tam_id")
-  tam                  User             @relation("ProjectTAM", fields: [tamId], references: [id])
+  outlineUrl           String?           @map("outline_url")
+  tamId                Int               @map("tam_id")
+  tam                  User              @relation("ProjectTAM", fields: [tamId], references: [id])
   // Customers this project belongs to (docs/archive/plans/multi-customer-projects.md):
   // zero or more links, at most one `isPrimary` (partial unique index in the
   // migration). Visibility goes through ANY link; breadcrumbs, guest links and
   // portfolio rows use the primary.
   customers            ProjectCustomer[]
-  status               ProjectStatus    @default(PLANNING)
+  status               ProjectStatus     @default(PLANNING)
   // Kanban WIP limits per task status. Shape: {"<TaskStatusDef id>":
   // number|null, ...} (docs/archive/plans/custom-task-statuses.md §2).
   // null (or an absent key) means "no limit" for that column. Visual only —
   // the board never blocks a move when a column is over its limit, it just
   // renders the count pill in amber.
-  wipLimits            Json?            @map("wip_limits") @db.JsonB
+  wipLimits            Json?             @map("wip_limits") @db.JsonB
   // Administrative containers (e.g. per-TAM "Opty Timelines") stay usable as
   // projects but are excluded from portfolio roll-ups (Executive dashboard,
   // Overview, overdue monitoring) via computePortfolioRows.
-  excludeFromPortfolio Boolean          @default(false) @map("exclude_from_portfolio")
-  baselineLockedAt     DateTime?        @map("baseline_locked_at")
-  baselineLockedById   Int?             @map("baseline_locked_by_id")
-  baselineLockedBy     User?            @relation("ProjectBaselineLockedBy", fields: [baselineLockedById], references: [id])
-  createdAt            DateTime         @default(now()) @map("created_at")
-  updatedAt            DateTime         @updatedAt @map("updated_at")
+  excludeFromPortfolio Boolean           @default(false) @map("exclude_from_portfolio")
+  baselineLockedAt     DateTime?         @map("baseline_locked_at")
+  baselineLockedById   Int?              @map("baseline_locked_by_id")
+  baselineLockedBy     User?             @relation("ProjectBaselineLockedBy", fields: [baselineLockedById], references: [id])
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
   tasks                Task[]
   labels               Label[]
   sections             Section[]
   epics                Epic[]
+  inboundHooks         InboundHook[]
   risks                Risk[]
   taskDependencies     TaskDependency[]
   notes                ProjectNote[]
@@ -599,39 +601,39 @@ model TaskStatusDef {
 }
 
 model Task {
-  id                Int              @id @default(autoincrement())
-  projectId         Int              @map("project_id")
-  project           Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  sectionId         Int?             @map("section_id")
-  section           Section?         @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  id                Int               @id @default(autoincrement())
+  projectId         Int               @map("project_id")
+  project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sectionId         Int?              @map("section_id")
+  section           Section?          @relation(fields: [sectionId], references: [id], onDelete: SetNull)
   title             String
   description       String?
   // `status` is the CATEGORY of `statusDef` and is always written in lockstep
   // with `statusId` (lib/taskStatuses.ts) — every "is it done / open?" read
   // keeps using it (docs/archive/plans/custom-task-statuses.md §1).
-  status            TaskStatus       @default(TODO)
-  statusId          Int              @map("status_id")
-  statusDef         TaskStatusDef    @relation(fields: [statusId], references: [id], onDelete: Restrict)
-  priority          Priority         @default(MEDIUM)
-  startDate         DateTime?        @map("start_date")
-  dueDate           DateTime?        @map("due_date")
+  status            TaskStatus        @default(TODO)
+  statusId          Int               @map("status_id")
+  statusDef         TaskStatusDef     @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  priority          Priority          @default(MEDIUM)
+  startDate         DateTime?         @map("start_date")
+  dueDate           DateTime?         @map("due_date")
   // Explicit milestone flag. Historically derived in the frontend
   // (startDate === dueDate, or dueDate-only); backfilled once by the
   // task_is_milestone migration, user-controlled thereafter.
-  isMilestone       Boolean          @default(false) @map("is_milestone")
+  isMilestone       Boolean           @default(false) @map("is_milestone")
   // Manual "if this task slips, the project end date slips" flag, set by the
   // TAM. Independent of priority; NOT computed from dependencies — the
   // computed critical path (Kahn sort + longest path) stays deferred.
-  isCriticalPath    Boolean          @default(false) @map("is_critical_path")
+  isCriticalPath    Boolean           @default(false) @map("is_critical_path")
   // Optional size estimate, whole numbers 0-100 (validated in the routes).
-  storyPoints       Int?             @map("story_points")
-  baselineStartDate DateTime?        @map("baseline_start_date")
-  baselineDueDate   DateTime?        @map("baseline_due_date")
-  assignedToId      Int?             @map("assigned_to")
-  assignedTo        User?            @relation(fields: [assignedToId], references: [id])
-  parentTaskId      Int?             @map("parent_task_id")
-  parent            Task?            @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
-  subtasks          Task[]           @relation("TaskSubtasks")
+  storyPoints       Int?              @map("story_points")
+  baselineStartDate DateTime?         @map("baseline_start_date")
+  baselineDueDate   DateTime?         @map("baseline_due_date")
+  assignedToId      Int?              @map("assigned_to")
+  assignedTo        User?             @relation(fields: [assignedToId], references: [id])
+  parentTaskId      Int?              @map("parent_task_id")
+  parent            Task?             @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  subtasks          Task[]            @relation("TaskSubtasks")
   // Sibling ordering. For top-level tasks (parentTaskId null) the sibling
   // list is the project's single dense top-level order (projectId alone) —
   // ONE canonical order shared by List, Kanban, and Gantt; status does NOT
@@ -639,13 +641,14 @@ model Task {
   // sibling list is the parent's subtask list (unchanged: also unpartitioned
   // by status). Dense 0..n-1 within a sibling list — maintained by the
   // reorder/re-parent logic in routes/tasks.ts and routes/projects.ts.
-  position          Int              @default(0) @map("position")
+  position          Int               @default(0) @map("position")
   labels            Label[]
   comments          Comment[]
+  inboundHookLinks  InboundHookLink[]
   attachments       TaskAttachment[]
   // Dependency edges (Gantt connector arrows).
-  predecessors      TaskDependency[] @relation("DependencySuccessor")
-  successors        TaskDependency[] @relation("DependencyPredecessor")
+  predecessors      TaskDependency[]  @relation("DependencySuccessor")
+  successors        TaskDependency[]  @relation("DependencyPredecessor")
   outlineMentions   OutlineMention[]
   // Optional pin to one iTop ticket ref (e.g. "R-000123"), validated in
   // routes/tasks.ts. Free-form string, not an FK to ItopTicket — the ref may
@@ -658,15 +661,15 @@ model Task {
   /// the iTop ticket panel and the task-to-ticket flow (later phases) to
   /// find a task from a ticket, the opposite direction of the by-ref
   /// endpoint above (which resolves a ref to a ticket).
-  itopTicketRef     String?          @map("itop_ticket_ref")
+  itopTicketRef     String?           @map("itop_ticket_ref")
   // Optional Jira-style Epic link — top-level tasks only. A subtask always
   // has epicId null and inherits its parent's epic for display; routes/
   // tasks.ts and routes/projects.ts enforce that (400 epic_on_subtask) and
   // re-parenting a task clears its epicId in the same transaction. Deleting
   // the epic keeps the task (SetNull), mirroring section delete. See
   // docs/archive/plans/epics-spec.md §4.
-  epicId            Int?             @map("epic_id")
-  epic              Epic?            @relation(fields: [epicId], references: [id], onDelete: SetNull)
+  epicId            Int?              @map("epic_id")
+  epic              Epic?             @relation(fields: [epicId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@index([sectionId])
@@ -767,20 +770,82 @@ model Label {
 }
 
 model Comment {
-  id               Int      @id @default(autoincrement())
-  taskId           Int      @map("task_id")
-  task             Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  authorId         Int      @map("author_id")
-  author           User     @relation(fields: [authorId], references: [id])
-  body             String   @db.Text
+  id               Int          @id @default(autoincrement())
+  taskId           Int          @map("task_id")
+  task             Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId         Int          @map("author_id")
+  author           User         @relation(fields: [authorId], references: [id])
+  body             String       @db.Text
   // Users @mentioned in the body: only active users who could see the project
   // when the comment was written (routes/tasks.ts filters before storing).
-  mentionedUserIds Int[]    @default([]) @map("mentioned_user_ids")
-  createdAt        DateTime @default(now()) @map("created_at")
+  mentionedUserIds Int[]        @default([]) @map("mentioned_user_ids")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  // Set (`incoming`) when an incoming webhook URL wrote the comment; the
+  // outgoing dispatcher never sends `comment.created` for it
+  // (docs/archive/plans/webhooks.md).
+  source           String?
+  inboundHookId    Int?         @map("inbound_hook_id")
+  inboundHook      InboundHook? @relation(fields: [inboundHookId], references: [id], onDelete: SetNull)
 
   @@index([taskId])
   @@index([authorId])
+  @@index([inboundHookId])
   @@map("comments")
+}
+
+// Incoming webhook URL of a project (docs/archive/plans/webhooks.md). Only the
+// SHA-256 of the path token is stored; `tokenPreview` is its first characters.
+model InboundHook {
+  id               Int       @id @default(autoincrement())
+  projectId        Int       @map("project_id")
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdById      Int       @map("created_by_id")
+  createdBy        User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  name             String
+  tokenHash        String    @unique @map("token_hash")
+  tokenPreview     String    @map("token_preview")
+  // Optional Standard Webhooks secret, sealed with lib/secretBox.ts.
+  signingSecretEnc String?   @map("signing_secret_enc")
+  active           Boolean   @default(true)
+  disabledReason   String?   @map("disabled_reason")
+  lastReceivedAt   DateTime? @map("last_received_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  links    InboundHookLink[]
+  messages InboundHookMessage[]
+  comments Comment[]
+
+  @@index([projectId])
+  @@map("inbound_hooks")
+}
+
+// One comment per (task, source): a re-sent delivery or re-pushed commit
+// comments once.
+model InboundHookLink {
+  id        Int         @id @default(autoincrement())
+  hookId    Int         @map("hook_id")
+  hook      InboundHook @relation(fields: [hookId], references: [id], onDelete: Cascade)
+  taskId    Int         @map("task_id")
+  task      Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  sourceKey String      @map("source_key")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  @@unique([taskId, sourceKey])
+  @@index([hookId])
+  @@map("inbound_hook_links")
+}
+
+// `webhook-id` values seen in the last 24 hours, for replay dedup.
+model InboundHookMessage {
+  id        Int         @id @default(autoincrement())
+  hookId    Int         @map("hook_id")
+  hook      InboundHook @relation(fields: [hookId], references: [id], onDelete: Cascade)
+  messageId String      @map("message_id")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  @@unique([hookId, messageId])
+  @@index([createdAt])
+  @@map("inbound_hook_messages")
 }
 
 model TaskAttachment {

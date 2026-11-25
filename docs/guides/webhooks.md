@@ -1,10 +1,10 @@
-# Send Solvro events to other tools with webhooks
+# Connect Solvro to other tools with webhooks
 
-A webhook sends a message to another tool when something happens in Solvro, for example when a task changes status or someone comments. Use it to feed your own app.
+A webhook sends a message to another tool when something happens in Solvro, for example when a task changes status or someone comments. Use it to feed your own app. In the other direction, an [incoming URL](#receive-events-from-other-tools) lets a tool such as GitLab or GitHub comment on Solvro tasks.
 
 Each user manages their own webhooks. A webhook sends events only about projects its owner can open. If the owner loses access to a project, loses the `webhook:manage` or `project:read` permission, or their account is deactivated, the webhook stops sending events.
 
-**Steps:** [1. Check the permission](#1-check-the-permission) → [2. Add a webhook](#2-add-a-webhook) → [3. Check the signature](#3-check-the-signature) → [Events and payload](#events-and-payload) → [Deliveries and retries](#deliveries-and-retries) → [Troubleshooting](#troubleshooting)
+**Steps:** [1. Check the permission](#1-check-the-permission) → [2. Add a webhook](#2-add-a-webhook) → [3. Check the signature](#3-check-the-signature) → [Events and payload](#events-and-payload) → [Deliveries and retries](#deliveries-and-retries) → [Receive events from other tools](#receive-events-from-other-tools) → [Troubleshooting](#troubleshooting)
 
 For the server settings, see the [configuration reference](../CONFIGURATION.md#21--backend-environment-variables) (`WEBHOOK_ALLOW_PRIVATE_HOSTS`, `WEBHOOK_ALLOW_HTTP`).
 
@@ -75,6 +75,44 @@ A Standard Webhooks body looks like this:
 - After 20 failed deliveries in a row, Solvro turns the webhook off and shows why in Settings. Select **Enable** to turn it on again.
 - **Deliveries** shows the last 50 deliveries of a webhook. Solvro keeps them for 30 days.
 
+## Receive events from other tools
+
+An incoming URL lets any tool that can send a webhook write comments on the tasks of one project. Solvro has no setup for each tool: it reads the JSON the tool sends and finds the Solvro task links in it.
+
+### Add an incoming URL
+
+1. Open the project, open the actions menu (**⋯**) and select **Integrations**. Only the project's owner sees it: its TAM, or the owner of a linked customer.
+2. Give the URL a name, for example "GitLab", select **Add URL**, and copy the URL. Solvro shows it **once**. Select **Rotate URL** later to make a new one; the old URL stops at once.
+3. In the other tool, paste the URL into its webhook settings and choose JSON:
+   - **GitLab:** Project > Settings > Webhooks. Turn on "Push events" and "Merge request events". Leave "Secret token" empty, because the token is in the URL.
+   - **GitHub:** Repository > Settings > Webhooks > Add webhook. Content type `application/json` (`application/x-www-form-urlencoded` also works). Pick "Pushes" and "Pull requests".
+   - **Any other tool or script:** send a `POST` with a JSON body.
+4. Put task links in commit messages, merge request titles or descriptions, for example `Fix cut-over script https://solvro.example.com/tasks/345`.
+
+Each project can have up to 5 incoming URLs.
+
+### What Solvro writes
+
+- For each task link it finds, Solvro adds a comment with the first line of the text that held the link, and a link back to the source (the commit or merge request) when the JSON has one.
+- The comment's author is the user who created the incoming URL, and the comment shows "via <URL name>". When another owner rotates the URL, changes its signing secret or enables it, that owner becomes the author of later comments.
+- Only tasks of the URL's own project count. Links to other projects are ignored. One request comments on at most 20 tasks, with at most 100 comments in all.
+- The same commit or merge request comments once, even when the tool sends it again. Solvro writes a comment with the same text, or the same source link, on the same task only once, with no time limit. To get one comment for each run of a script, send a different `url` for each run.
+- If the author is deactivated, can no longer open the project, or can no longer comment on tasks, the URL turns itself off. The Integrations dialog shows why. Select **Enable** to make yourself the author and turn it on again.
+
+To write a comment from your own script, send a body with a `solvro` key:
+
+```bash
+curl -X POST "https://solvro.example.com/api/webhook/in/<token>" \
+  -H "Content-Type: application/json" \
+  -d '{ "solvro": { "task": 345, "text": "Deployed to prod", "url": "https://ci.example.com/run/88" } }'
+```
+
+`task` is a task number or a task link, `text` is required (up to 2,000 characters), and `url` is optional. A wrong body gets a 400 answer that says what to fix.
+
+### Require a signature
+
+The token in the URL is enough to send comments, so treat the URL as a password. For extra safety, select **Require a Standard Webhooks signature**. Solvro shows a signing secret (`whsec_…`) once. From then on, every request must be signed in the [Standard Webhooks](https://www.standardwebhooks.com/) format, at most 5 minutes old, or Solvro refuses it. Use this for a sender that signs this way, such as another Solvro server or your own app with a Standard Webhooks library. GitLab and GitHub do not sign this way, so leave it off for them.
+
 ## Troubleshooting
 
 | Symptom | Cause and fix |
@@ -84,3 +122,6 @@ A Standard Webhooks body looks like this:
 | Send test shows "The receiver answered 301" or "302" | The URL redirects. Use the final URL. |
 | The webhook shows "Disabled" | It failed 20 times in a row. Fix the receiver, then select **Enable**. |
 | No events for one project | The webhook owner cannot open that project any more, or the webhook is limited to other projects. Deliveries show "The webhook owner can no longer see this project, or lost the permission to receive its events" when access was lost after an event. |
+| An incoming URL answers 404 | The URL is wrong, was rotated, deleted or turned off. Check it in **Integrations**. Select **Enable** to turn it on again as its new author, or **Rotate URL** when the old URL is lost. |
+| An incoming URL answers 401 | The URL requires a Standard Webhooks signature, and the request was unsigned, wrongly signed, or older than 5 minutes. |
+| A commit with a task link adds no comment | The link points to a task of another project, the link does not start with the server's `APP_URL`, or Solvro already wrote a comment with the same text or source link on that task. |

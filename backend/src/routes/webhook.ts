@@ -19,6 +19,11 @@ import { z } from "zod";
 import { prisma } from "../prisma.js";
 import { env } from "../env.js";
 import { rememberOutlineSignature, verifyOutlineSignature } from "../lib/outline/webhookSignature.js";
+import { hashInboundToken } from "../lib/inbound/token.js";
+import { parseInboundBody } from "../lib/inbound/parse.js";
+import { candidatesFromBody } from "../lib/inbound/scan.js";
+import { verifyStandardWebhook } from "../lib/inbound/signature.js";
+import { writeInboundComments } from "../lib/inbound/writer.js";
 import { clampTitle, deleteDocMentions, syncDocMentions, toRelativeDocPath } from "../lib/outline/mentions.js";
 
 export const webhookRouter = Router();
@@ -346,5 +351,108 @@ webhookRouter.post(
     // Event name and page id only - the body (full page text) and the signature stay out of the log.
     logger.debug({ event, docId }, "Outline webhook: delivery processed");
     res.status(200).json({ accepted: true });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /webhook/in/:token - the general incoming URL (docs/archive/plans/webhooks.md,
+// Phase 2). The token in the path is the secret: it is looked up by its SHA-256
+// hash, and an unknown, inactive or deleted URL all answer the same 404. Same
+// rules as the routes above (unauthenticated, mounted before express.json(),
+// rate-limited, raw body), plus:
+//  - 60 requests a minute per client address and per URL;
+//  - the token never reaches a log (http/requestLogger.ts masks the path segment,
+//    nginx turns the access log off for the location) and the body is never logged;
+//  - an optional Standard Webhooks signature, required once the URL holds a secret.
+// ---------------------------------------------------------------------------
+
+const INBOUND_RATE_LIMIT = 60;
+const INBOUND_MAX_BODY = "1mb";
+const INBOUND_MAX_HOOKS_TRACKED = 10_000;
+
+const inboundAddressLimiter = createRateLimiter({ limit: INBOUND_RATE_LIMIT, windowMs: RATE_LIMIT_WINDOW_MS });
+const inboundHookWindows = new Map<number, { count: number; resetAt: number }>();
+
+/** Test-only: clears the incoming URL's rate-limit windows. */
+export function resetInboundWebhookStateForTests(): void {
+  inboundAddressLimiter.reset();
+  inboundHookWindows.clear();
+}
+
+/** Fixed window per hook id; the table is capped and evicts its oldest entry. */
+function hookWithinRateLimit(hookId: number, now: number): boolean {
+  let entry = inboundHookWindows.get(hookId);
+  if (!entry || entry.resetAt <= now) {
+    inboundHookWindows.delete(hookId);
+    if (inboundHookWindows.size >= INBOUND_MAX_HOOKS_TRACKED) {
+      const oldest = inboundHookWindows.keys().next();
+      if (!oldest.done) inboundHookWindows.delete(oldest.value);
+    }
+    entry = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
+    inboundHookWindows.set(hookId, entry);
+  }
+  entry.count += 1;
+  return entry.count <= INBOUND_RATE_LIMIT;
+}
+
+type InboundHookRow = { id: number; projectId: number; createdById: number; signingSecretEnc: string | null };
+
+webhookRouter.post(
+  "/in/:token",
+  inboundAddressLimiter.middleware,
+  async (req, res, next) => {
+    // Resolve the URL before any body is read: an unknown token costs one indexed lookup.
+    const token = String(req.params.token ?? "");
+    const hook =
+      token.length > 0 && token.length <= 200
+        ? await prisma.inboundHook.findUnique({
+            where: { tokenHash: hashInboundToken(token) },
+            select: { id: true, projectId: true, createdById: true, signingSecretEnc: true, active: true },
+          })
+        : null;
+    if (!hook || !hook.active) throw new HttpError(404, "not_found", "Not found");
+    if (!hookWithinRateLimit(hook.id, Date.now())) {
+      res.setHeader("Retry-After", "60");
+      throw new HttpError(429, "rate_limited", "Too many requests");
+    }
+    res.locals.inboundHook = hook satisfies InboundHookRow & { active: boolean };
+    next();
+  },
+  express.raw({ type: () => true, limit: INBOUND_MAX_BODY }),
+  async (req, res) => {
+    const hook = res.locals.inboundHook as InboundHookRow;
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+
+    let messageId: string | null = null;
+    if (hook.signingSecretEnc) {
+      let secret: string;
+      try {
+        secret = open(hook.signingSecretEnc);
+      } catch (err) {
+        if (err instanceof SecretBoxError) {
+          logger.warn({ hookId: hook.id }, "Incoming webhook: stored signing secret could not be decrypted (SECRETS_KEY rotated?)");
+          throw new HttpError(401, "unauthorized", "Invalid webhook signature");
+        }
+        throw err;
+      }
+      const verdict = verifyStandardWebhook(
+        secret,
+        { id: req.get("webhook-id"), timestamp: req.get("webhook-timestamp"), signature: req.get("webhook-signature") },
+        rawBody.toString("utf8"),
+      );
+      if (verdict !== "ok") {
+        logger.warn({ hookId: hook.id, verdict }, "Incoming webhook: rejected a call (signature)");
+        throw new HttpError(401, "unauthorized", "Invalid webhook signature");
+      }
+      messageId = req.get("webhook-id") ?? "";
+      if (messageId.length > 200) throw new HttpError(400, "invalid_webhook_id", "The webhook-id header is longer than 200 characters");
+    }
+
+    const body = parseInboundBody(req.get("content-type"), rawBody);
+    const candidates = candidatesFromBody(body, env.APP_URL);
+    const result = await writeInboundComments(hook, candidates, messageId);
+    // Counts only: the body, the token and the comment text stay out of the log.
+    logger.debug({ hookId: hook.id, linked: result.linked }, "Incoming webhook: delivery processed");
+    res.status(200).json(result);
   },
 );
