@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-25 — Kanban drag test aims at the target card's center
+
+- `e2e/tests/kanban-dnd.spec.ts` "same-column downward one-slot drop": the mouse drop now puts the dragged card's center on the target card's center, instead of a fixed 20px below the target. The old drop point depended on where the drag handle sits in the card, and with a tall card below the target it landed one slot too far, so the test failed on every run. No app change.
+
 ### Added — 2026-11-25 — Outgoing webhooks
 
 - Settings > Integrations > Webhooks: a user with the new `webhook:manage` permission (added to the built-in TAM and Stakeholder roles) can add up to 10 webhooks that send Solvro events to another tool. Events: task created, status changed, assigned, due date changed and completed, comment added, project created and risk created, only about projects the webhook's owner can open; when the owner loses access to a project, loses the `webhook:manage` or `project:read` permission, or is deactivated, deliveries stop. The list and the edit dialog show only the target's host and a shortened path, never the full URL, so a token in the query string or the path stays on the server. Each webhook sends signed [Standard Webhooks](https://www.standardwebhooks.com/) JSON (HMAC-SHA256, secret shown once, rotatable). The section can send a test event, disable, enable and delete a webhook, and list its last 50 deliveries (`frontend/src/components/settings/webhooks/`, `backend/src/routes/webhooks.ts`).
