@@ -425,9 +425,10 @@ model WebhookDelivery {
   lastError       String?               @map("last_error")
   createdAt       DateTime              @default(now()) @map("created_at")
 
-  @@unique([subscriptionId, activityEventId])
+  @@unique([subscriptionId, activityEventId, eventType])
   @@index([status, nextAttemptAt])
   @@index([activityEventId])
+  @@index([createdAt])
   @@map("webhook_deliveries")
 }
 

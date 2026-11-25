@@ -5,6 +5,7 @@ import { createApp } from "./app.js";
 import { startItopScheduler, stopItopScheduler } from "./lib/itop/scheduler.js";
 import { appUrlWarning } from "./lib/outline/appUrl.js";
 import { startActivityCleanup, stopActivityCleanup } from "./lib/activityCleanup.js";
+import { startWebhookDispatcher, stopWebhookDispatcher } from "./lib/webhooks/dispatcher.js";
 import { startAttachmentSweep, stopAttachmentSweep } from "./lib/attachments/sweep.js";
 
 const app = createApp();
@@ -23,6 +24,7 @@ const server = app.listen(env.PORT, () => {
   logger.info(`Solvro API listening on http://0.0.0.0:${env.PORT}`);
   startItopScheduler();
   startActivityCleanup();
+  startWebhookDispatcher();
   startAttachmentSweep();
 });
 
@@ -30,6 +32,7 @@ async function shutdown(signal: string) {
   logger.info(`Received ${signal}, shutting down…`);
   stopItopScheduler();
   stopActivityCleanup();
+  stopWebhookDispatcher();
   stopAttachmentSweep();
   server.close(async () => {
     await prisma.$disconnect();

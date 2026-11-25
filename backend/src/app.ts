@@ -43,6 +43,7 @@ import { searchRouter } from "./routes/search.js";
 import { dailyReviewRouter } from "./routes/dailyReview.js";
 import { notesRouter } from "./routes/notes.js";
 import { webhookRouter } from "./routes/webhook.js";
+import { webhooksRouter } from "./routes/webhooks.js";
 
 export function createApp(opts: { logger?: Logger } = {}): Express {
   const app = express();
@@ -107,6 +108,7 @@ export function createApp(opts: { logger?: Logger } = {}): Express {
   app.use("/services", servicesRouter);
   app.use("/risks", risksRouter);
   app.use("/dependencies", dependenciesRouter);
+  app.use("/webhooks", webhooksRouter);
   app.use("/admin", adminRouter);
   app.use("/admin/itop", itopAdminRouter);
   app.use("/admin/settings/outline", outlineAdminRouter);
