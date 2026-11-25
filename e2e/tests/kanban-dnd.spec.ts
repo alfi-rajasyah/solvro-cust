@@ -455,10 +455,27 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
     // column with a tall distractor and a plain 2-card column, all landing
     // correctly with exactly one PATCH; 20px is comfortably inside that
     // working range.
+    //
+    // Stabilization (2026-11-25): the fixed 20px clearance still depended on
+    // where the grip sits inside the moved card. dnd-kit's closestCenter
+    // compares the dragged card's CENTER with each card's center as measured
+    // at drag start, so the drop resolves to `target` only while the dragged
+    // center sits between the midpoints (moved|target) and (target|next).
+    // With the grip near the card's top, "target bottom + 20px" put the
+    // dragged center about 8px past the target|next midpoint once the next
+    // card was tall, and the drop landed one slot too far (position 2). Aim
+    // the dragged card's center at the target's center instead: the pointer
+    // ends at the target's center plus the grip's offset from the moved
+    // card's center, which is the middle of that window whatever the card
+    // heights are.
+    const movedBox = await cardBoxFor(page, moved.title);
+    expect(movedBox, `${moved.title} card not found`).toBeTruthy();
+    const gripCenter = center(grip!);
+    const grabOffsetY = gripCenter.y - (movedBox!.y + movedBox!.height / 2);
     const requests = await captureTaskRequests(page, async () => {
-      await mouseDrag(page, center(grip!), {
+      await mouseDrag(page, gripCenter, {
         x: targetBox!.x + 60,
-        y: targetBox!.y + targetBox!.height + 20,
+        y: targetBox!.y + targetBox!.height / 2 + grabOffsetY,
       });
     });
 
