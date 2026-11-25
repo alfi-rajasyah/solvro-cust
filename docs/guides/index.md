@@ -10,6 +10,7 @@ Step-by-step guides for running Solvro and connecting it to the tools around it.
 | [Production runbook](production-runbook.md) | You install all three on a production server and need the order of the steps. |
 | [iTop](itop.md) | You connect Solvro to an iTop service desk. |
 | [Outline](outline.md) | You connect Solvro to an Outline wiki. |
+| [Webhooks](webhooks.md) | You want Solvro to send task, comment, project or risk events to Google Chat or your own app. |
 
 ## Reading order
 
