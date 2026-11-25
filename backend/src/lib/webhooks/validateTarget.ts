@@ -48,11 +48,25 @@ export function hostForLog(raw: string): string {
   }
 }
 
-/** `scheme://host/path` with any query string replaced by "?…", for showing a target without its token. */
+/**
+ * A target shown without its secrets: scheme and host in full, the first path
+ * segment in full, every later path segment cut to its first 4 characters plus
+ * "…" (a segment of 4 characters or fewer becomes just "…"), and a query string
+ * replaced by "?…". Services put their tokens in the path (Zapier, n8n) or the
+ * query (Google Chat), so neither reaches the browser.
+ */
 export function urlPreview(raw: string): string {
   try {
     const u = new URL(raw);
-    return `${u.protocol}//${u.host}${u.pathname}${u.search ? "?…" : ""}`;
+    const segments = u.pathname.split("/"); // "" before the first slash, and after a trailing one
+    let seen = 0;
+    const masked = segments.map((segment) => {
+      if (segment === "") return segment;
+      seen += 1;
+      if (seen === 1) return segment;
+      return segment.length <= 4 ? "…" : `${Array.from(segment).slice(0, 4).join("")}…`;
+    });
+    return `${u.protocol}//${u.host}${masked.join("/")}${u.search ? "?…" : ""}`;
   } catch {
     return "invalid-url";
   }

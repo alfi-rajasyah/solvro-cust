@@ -28,6 +28,8 @@ export const CLAIM_BATCH = 100;
 const SEND_BATCH = 50;
 /** At most this many deliveries to one webhook per tick, so a dead target cannot hold the queue. */
 const PER_SUBSCRIPTION_PER_TICK = 3;
+/** ... or this many when no other webhook has anything due. */
+const LONE_WEBHOOK_PER_TICK = 10;
 const SEND_CONCURRENCY = 5;
 /** A claimed delivery that never reports back (a crash mid-send) is retried after this. */
 const LEASE_MS = 2 * 60_000;
@@ -133,7 +135,11 @@ export async function dispatchActivity(): Promise<number> {
     if (deliveries.length > 0) await tx.webhookDelivery.createMany({ data: deliveries, skipDuplicates: true });
     await tx.activityEvent.updateMany({ where: { id: { in: ids } }, data: { webhookDispatchedAt: new Date() } });
     return ids.length;
-  });
+    // The default 5 s interactive-transaction limit is too tight for a 100-row
+    // claim with per-project access checks on a busy database. The work stays
+    // small (no network inside the transaction), so 30 s is a ceiling, not a
+    // budget.
+  }, { timeout: 30_000, maxWait: 10_000 });
 }
 
 async function failFinally(deliveryId: number, subscriptionId: number, now: Date, patch: Prisma.WebhookDeliveryUpdateInput, countsTowardDisable: boolean) {
@@ -163,20 +169,31 @@ export async function sendDueDeliveries(opts: { now?: Date; send?: SendFn } = {}
   // reads the clock again, so a slow tick never stamps stale times.
   const clock = () => opts.now ?? new Date();
   const send = opts.send ?? sendRequest;
-  const candidates = await prisma.webhookDelivery.findMany({
-    where: { status: "PENDING", nextAttemptAt: { lte: clock() } },
-    orderBy: { id: "asc" },
-    take: SEND_BATCH * PER_SUBSCRIPTION_PER_TICK * 4,
-    select: { id: true, subscriptionId: true },
+  // A webhook that was switched off or removed its owner's access: its pending
+  // rows fail in bulk here, outside the per-webhook cap and without a request.
+  await prisma.webhookDelivery.updateMany({
+    where: { status: "PENDING", subscription: { active: false } },
+    data: { status: "FAILED", lastError: "webhook_disabled", nextAttemptAt: clock() },
   });
-  const perSub = new Map<number, number>();
-  const due: number[] = [];
-  for (const c of candidates) {
-    const n = perSub.get(c.subscriptionId) ?? 0;
-    if (n >= PER_SUBSCRIPTION_PER_TICK || due.length >= SEND_BATCH) continue;
-    perSub.set(c.subscriptionId, n + 1);
-    due.push(c.id);
-  }
+
+  // Due rows are picked per webhook in SQL, so one webhook's backlog never
+  // hides another's: at most 3 per webhook, or 10 when only one webhook has
+  // anything due (so a lone busy webhook still drains), oldest first, 50 in all.
+  const nowForQuery = clock();
+  const due = (
+    await prisma.$queryRaw<{ id: number }[]>`
+      WITH ranked AS (
+        SELECT id, subscription_id,
+               ROW_NUMBER() OVER (PARTITION BY subscription_id ORDER BY id) AS rn
+        FROM webhook_deliveries
+        WHERE status = 'PENDING' AND next_attempt_at <= ${nowForQuery}
+      ),
+      busy AS (SELECT COUNT(DISTINCT subscription_id) AS webhooks FROM ranked)
+      SELECT ranked.id FROM ranked, busy
+      WHERE ranked.rn <= CASE WHEN busy.webhooks = 1 THEN ${LONE_WEBHOOK_PER_TICK} ELSE ${PER_SUBSCRIPTION_PER_TICK} END
+      ORDER BY ranked.rn, ranked.id
+      LIMIT ${SEND_BATCH}`
+  ).map((r) => r.id);
 
   let attempted = 0;
   let next = 0;
@@ -231,6 +248,9 @@ async function attemptDelivery(id: number, clock: () => Date, send: SendFn): Pro
   }
   const mayReceive = await ownersWhoMayReceive(prisma, event.projectId, [sub.ownerId]);
   if (!mayReceive.has(sub.ownerId)) {
+    // `owner_no_access` covers every way the owner stopped being entitled: the
+    // account is inactive, the role lost `webhook:manage` or `project:read`, or
+    // the project is no longer visible to them.
     await failFinally(id, sub.id, clock(), { lastError: "owner_no_access" }, false);
     return;
   }

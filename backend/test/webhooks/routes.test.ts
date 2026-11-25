@@ -56,7 +56,7 @@ describe("POST /webhooks", () => {
     const url = "https://203.0.113.7/v1/spaces/AAA/messages?key=KEYVALUE&token=TOKENVALUE";
     const created = await request(app).post("/webhooks").set(auth(tam.token)).send(body({ url, format: "GOOGLE_CHAT" }));
     expect(created.status).toBe(201);
-    expect(created.body.webhook).toMatchObject({ host: "203.0.113.7", urlPreview: "https://203.0.113.7/v1/spaces/AAA/messages?…" });
+    expect(created.body.webhook).toMatchObject({ host: "203.0.113.7", urlPreview: "https://203.0.113.7/v1/spac…/…/mess…?…" });
     expect(created.body.webhook.url).toBeUndefined();
     const id = created.body.webhook.id as number;
 

@@ -151,9 +151,18 @@ describe("address policy", () => {
 });
 
 describe("urlPreview", () => {
-  it("keeps scheme, host and path and hides the query string", () => {
-    expect(urlPreview("https://chat.example.com/v1/spaces/A/messages?key=k&token=t")).toBe("https://chat.example.com/v1/spaces/A/messages?…");
+  it("keeps scheme, host and the first path segment, cuts later segments to 4 characters, hides the query", () => {
+    expect(urlPreview("https://chat.example.com/v1/spaces/A/messages?key=k&token=t")).toBe("https://chat.example.com/v1/spac…/…/mess…?…");
+    expect(urlPreview("https://hooks.example.com/inbound/team/123456/abcdef/")).toBe("https://hooks.example.com/inbound/…/1234…/abcd…/");
+    expect(urlPreview("https://n8n.example.com/webhook/3f2b8c1e-9a47-4d0e-b6a1-5c7d2e8f9a10")).toBe("https://n8n.example.com/webhook/3f2b…");
     expect(urlPreview("https://hooks.example.com:8443/in")).toBe("https://hooks.example.com:8443/in");
+    expect(urlPreview("https://hooks.example.com/in/abcd/abcde")).toBe("https://hooks.example.com/in/…/abcd…");
     expect(urlPreview("https://hooks.example.com")).toBe("https://hooks.example.com/");
+    expect(urlPreview("https://hooks.example.com/in?x=1")).toBe("https://hooks.example.com/in?…");
+  });
+
+  it("never lets a path or query secret through", () => {
+    const preview = urlPreview("https://hooks.example.com/services/T0001/B0002/SECRETSECRETSECRET?sig=SECRETQUERY");
+    expect(preview).not.toMatch(/SECRETSECRET|SECRETQUERY|T0001|B0002/);
   });
 });

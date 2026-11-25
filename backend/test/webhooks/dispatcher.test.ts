@@ -434,12 +434,57 @@ describe("send scheduling", () => {
     expect(Date.now() - started).toBeLessThan(1000);
   });
 
-  it("sends at most 3 deliveries per webhook per tick", async () => {
+  it("sends at most 3 deliveries per webhook per tick while another webhook has work, 10 when it is alone", async () => {
     const f = await projectFixture();
     const sub = await makeSubscription(f.owner.userId, "http://127.0.0.1:9/x");
-    await pendingFor(sub, f, 5);
-    expect(await sendDueDeliveries({ send: async () => ok })).toBe(3);
+    const other = await makeSubscription(f.owner.userId, "http://127.0.0.1:9/y");
+    await pendingFor(sub, f, 25);
+    await pendingFor(other, f, 1);
+    expect(await sendDueDeliveries({ send: async () => ok })).toBe(4); // 3 + 1
+    expect(await sendDueDeliveries({ send: async () => ok })).toBe(10); // only `sub` is left
+    expect(await sendDueDeliveries({ send: async () => ok })).toBe(10);
     expect(await sendDueDeliveries({ send: async () => ok })).toBe(2);
+  });
+
+  it("a webhook with a huge backlog never hides another webhook's newer row", async () => {
+    const f = await projectFixture();
+    const busy = await makeSubscription(f.owner.userId, "http://127.0.0.1:9/busy");
+    const quiet = await makeSubscription(f.owner.userId, "http://127.0.0.1:9/quiet");
+    const event = await prisma.activityEvent.create({
+      data: { projectId: f.project.id, entityType: "task", entityId: f.task.id, action: "created", webhookDispatchedAt: new Date() },
+    });
+    await prisma.$executeRaw`
+      INSERT INTO webhook_deliveries (subscription_id, activity_event_id, event_type, status, next_attempt_at, created_at)
+      SELECT ${busy.id}, ${event.id}, 'e' || g, 'PENDING', now() - interval '1 hour', now()
+      FROM generate_series(1, 700) g`;
+    await pendingFor(quiet, f, 1);
+    const urls: string[] = [];
+    const send: SendFn = async (url) => {
+      urls.push(url);
+      return ok;
+    };
+    await sendDueDeliveries({ send });
+    expect(urls.filter((u) => u.endsWith("/quiet"))).toHaveLength(1);
+    expect(urls.filter((u) => u.endsWith("/busy"))).toHaveLength(3);
+  });
+
+  it("fails a disabled webhook's pending rows in bulk in one tick, without sending", async () => {
+    const f = await projectFixture();
+    const off = await makeSubscription(f.owner.userId, "http://127.0.0.1:9/off", { active: false });
+    const live = await makeSubscription(f.owner.userId, "http://127.0.0.1:9/live");
+    await pendingFor(off, f, 50);
+    await pendingFor(live, f, 1);
+    const urls: string[] = [];
+    await sendDueDeliveries({
+      send: async (url) => {
+        urls.push(url);
+        return ok;
+      },
+    });
+    expect(await prisma.webhookDelivery.count({ where: { subscriptionId: off.id, status: "FAILED", lastError: "webhook_disabled" } })).toBe(50);
+    expect(await prisma.webhookDelivery.count({ where: { subscriptionId: off.id, status: "PENDING" } })).toBe(0);
+    expect(urls).toEqual(["http://127.0.0.1:9/live"]);
+    expect((await prisma.webhookSubscription.findUniqueOrThrow({ where: { id: off.id } })).consecutiveFailures).toBe(0);
   });
 
   it("stamps claims and results with the clock at that moment, not the start of the tick", async () => {
