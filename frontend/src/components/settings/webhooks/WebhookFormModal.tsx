@@ -154,35 +154,41 @@ export function WebhookFormModal({
           />
         </Field>
 
-        <fieldset className="min-w-0">
-          <legend className="mb-1.5 text-label-caps uppercase text-on-surface-variant">Format</legend>
-          <div className="space-y-1.5">
-            {(["STANDARD", "GOOGLE_CHAT"] as const).map((f) => (
-              <label key={f} className="flex items-start gap-2 text-sm text-on-surface">
-                <input
-                  type="radio"
-                  name={`${formId}-format`}
-                  value={f}
-                  checked={format === f}
-                  disabled={isEdit}
-                  onChange={() => setFormat(f)}
-                  className="mt-1 accent-primary"
-                />
-                <span>
-                  {WEBHOOK_FORMAT_LABEL[f]}
-                  <span className="block text-meta text-on-surface-variant">
-                    {f === "STANDARD"
-                      ? "A signed JSON request. You get a secret to check the signature."
-                      : "A plain chat message for a Google Chat space. No signature."}
+        {webhook ? (
+          <p className="text-sm text-on-surface">
+            <span className="mb-1 block text-label-caps uppercase text-on-surface-variant">Format</span>
+            <span data-testid="webhook-format">{WEBHOOK_FORMAT_LABEL[webhook.format]}</span>
+            <span className="mt-1 block text-meta text-on-surface-variant">
+              The format is fixed once the webhook exists.
+            </span>
+          </p>
+        ) : (
+          <fieldset className="min-w-0">
+            <legend className="mb-1.5 text-label-caps uppercase text-on-surface-variant">Format</legend>
+            <div className="space-y-1.5">
+              {(["STANDARD", "GOOGLE_CHAT"] as const).map((f) => (
+                <label key={f} className="flex items-start gap-2 text-sm text-on-surface">
+                  <input
+                    type="radio"
+                    name={`${formId}-format`}
+                    value={f}
+                    checked={format === f}
+                    onChange={() => setFormat(f)}
+                    className="mt-1 accent-primary"
+                  />
+                  <span>
+                    {WEBHOOK_FORMAT_LABEL[f]}
+                    <span className="block text-meta text-on-surface-variant">
+                      {f === "STANDARD"
+                        ? "A signed JSON request. You get a secret to check the signature."
+                        : "A plain chat message for a Google Chat space. No signature."}
+                    </span>
                   </span>
-                </span>
-              </label>
-            ))}
-          </div>
-          {isEdit && (
-            <p className="mt-1.5 text-meta text-on-surface-variant">The format is fixed once the webhook exists.</p>
-          )}
-        </fieldset>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
 
         {isEdit && (
           <p className="text-sm text-on-surface">
