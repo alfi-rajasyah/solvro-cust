@@ -26,7 +26,7 @@ import { parseStoryPoints } from "@/lib/storyPoints";
 import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
 import { assignableUsers, assigneeOptionLabel } from "@/lib/assignableUsers";
 import { isApplePlatform } from "@/lib/platform";
-import { PRIORITY_LABEL } from "@/lib/labels";
+import { commentSourceLabel, PRIORITY_LABEL } from "@/lib/labels";
 import {
   buildExpected,
   datePatchFromEdit,
@@ -1261,7 +1261,15 @@ function PanelComments({ taskId, projectId }: { taskId: number; projectId: numbe
               <AssigneeAvatar user={c.author} size="xs" />
               <div className="min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2">
                 <div className="mb-0.5 flex items-center justify-between gap-2 text-meta">
-                  <span className="min-w-0 truncate font-medium text-on-surface">{c.author.username}</span>
+                  <span className="min-w-0 truncate">
+                    <span className="font-medium text-on-surface">{c.author.username}</span>
+                    {commentSourceLabel(c) && (
+                      <span className="text-on-surface-variant" data-testid="comment-source">
+                        {" "}
+                        {commentSourceLabel(c)}
+                      </span>
+                    )}
+                  </span>
                   <span className="shrink-0 text-on-surface-variant">{fmtAgo(c.createdAt)}</span>
                 </div>
                 <CommentBody body={c.body} mentionedUserIds={c.mentionedUserIds} users={people} />

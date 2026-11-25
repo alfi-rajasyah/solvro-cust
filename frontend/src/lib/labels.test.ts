@@ -18,6 +18,8 @@ import {
   riskLevel,
   riskLevelFromScore,
   riskStatusOptions,
+  commentSourceLabel,
+  inboundHookDisabledLabel,
 } from "./labels";
 
 describe("label maps", () => {
@@ -170,5 +172,23 @@ describe("roleLabel", () => {
   it("shows a custom role exactly as stored", () => {
     expect(roleLabel("PMO")).toBe("PMO");
     expect(roleLabel("VENDOR_LEAD")).toBe("VENDOR_LEAD");
+  });
+});
+
+describe("commentSourceLabel", () => {
+  it("names the incoming URL, falls back when it was deleted, and is null for a person", () => {
+    expect(commentSourceLabel({ source: "incoming", inboundHook: { name: "GitLab" } })).toBe("via GitLab");
+    expect(commentSourceLabel({ source: "incoming", inboundHook: null })).toBe("via incoming URL");
+    expect(commentSourceLabel({ source: null, inboundHook: null })).toBeNull();
+    expect(commentSourceLabel({})).toBeNull();
+  });
+});
+
+describe("inboundHookDisabledLabel", () => {
+  it("words each server code and falls back for an unknown one", () => {
+    expect(inboundHookDisabledLabel("creator_inactive")).toBe("The user who created this URL is deactivated.");
+    expect(inboundHookDisabledLabel("creator_lost_access")).toBe("The user who created this URL can no longer open this project.");
+    expect(inboundHookDisabledLabel("creator_lost_permission")).toBe("The user who created this URL can no longer comment on tasks.");
+    expect(inboundHookDisabledLabel("whatever")).toBe("Turned off.");
   });
 });
