@@ -1,6 +1,6 @@
 # Webhooks: outgoing events and a general incoming URL (GitHub #166)
 
-Status: in progress (written 2026-11-25 @ `259fd0a`; Phase 1 started 2026-11-25)
+Status: shipped 2026-11-25 (written 2026-11-25 @ `259fd0a`; Phase 1 in #172; Phase 2 in the incoming-webhooks PR)
 Archive path: `docs/archive/plans/webhooks.md`
 
 Lane: P (new models and migrations, new routes, a new signed unauthenticated route, a new Settings section). Two phases, each its own branch and PR: **Phase 1** outgoing webhooks, **Phase 2** a general incoming URL. Phase 2 starts after Phase 1 merges; the two never carry a migration at the same time.
@@ -112,6 +112,7 @@ Decision (user, 2026-11-25): incoming events are general, not written for one to
 - An unknown token, an inactive URL and a deleted URL all get the same 404.
 - The token never reaches a log: `http/requestLogger.ts` masks the path segment after `/webhook/in/`, and `frontend/nginx.conf` turns off the access log for that location (the setup.sh deployment uses the same file).
 - Rotate makes a new token; the old URL stops at once.
+- Optional Standard Webhooks check (user decision 2026-11-25). An incoming URL can also hold a Standard Webhooks secret (`whsec_…`, sealed with `lib/secretBox.ts`, shown once). When it has one, a request must carry a valid `webhook-id`, `webhook-timestamp` and `webhook-signature` (`v1,<base64 HMAC-SHA256 of id.timestamp.body>`, any one of the space-separated signatures may match, compared in constant time), and the timestamp must be within 5 minutes of the server clock. A request that fails the check gets 401; the path token is still required. A sender that signs this way (another Solvro server, or any Standard Webhooks library) is checked; a URL without the secret works with the path token alone. The secret can be added, rotated or removed from the dialog. The same `webhook-id` seen twice within 24 hours writes nothing the second time.
 
 ### Two modes, chosen by the body
 
@@ -141,18 +142,19 @@ An outgoing webhook pointed at an incoming URL would make each comment send a ne
 
 ### Data model (one migration)
 
-- `InboundHook`: `id`, `projectId` (cascade), `createdById` → User, `name`, `tokenHash` (unique), `tokenPreview` (first 4 characters, for the list), `active`, `disabledReason?`, `lastReceivedAt?`, `createdAt`. Limit: 5 per project.
+- `InboundHook`: `id`, `projectId` (cascade), `createdById` → User, `name`, `tokenHash` (unique), `tokenPreview` (first 4 characters, for the list), `signingSecretEnc?` (the optional Standard Webhooks secret), `active`, `disabledReason?`, `lastReceivedAt?`, `createdAt`. Limit: 5 per project.
 - `InboundHookLink`: `hookId` (cascade), `taskId` (cascade), `sourceKey`, `createdAt`; unique on (`taskId`, `sourceKey`).
+- `InboundHookMessage`: `hookId` (cascade), `messageId` (the `webhook-id`), `createdAt`; unique on (`hookId`, `messageId`). Rows older than 24 hours are deleted by the activity cleanup job.
 - `Comment.source String?` (`incoming`) and `Comment.inboundHookId Int?` (set null on delete), so the marker shows the URL's name.
 
 ### Routes for managing incoming URLs (`routes/inboundHooks.ts`)
 
-- `GET /projects/:id/inbound-hooks`, `POST`, `PATCH …/:hookId` (name, active), `DELETE …/:hookId`, `POST …/:hookId/rotate-token`.
+- `GET /projects/:id/inbound-hooks`, `POST`, `PATCH …/:hookId` (name, active), `DELETE …/:hookId`, `POST …/:hookId/rotate-token`, `POST …/:hookId/signing-secret` (adds or rotates; returns the secret once), `DELETE …/:hookId/signing-secret`.
 - Gate: `project:write` plus `ensureProjectOwnerAccess` (the project's TAM or the owner of a linked customer). `POST` and rotate return the full URL once. The list shows the name, `tokenPreview`, the last received time and the disabled reason, never the URL.
 
 ### Frontend
 
-- Project page: an "Integrations" entry in the project's actions menu, for owners. It opens a dialog: the list of incoming URLs, Add (name only), the full URL shown once with a copy button, Rotate, Disable/Enable, Delete.
+- Project page: an "Integrations" entry in the project's actions menu, for owners. It opens a dialog: the list of incoming URLs, Add (name only), the full URL shown once with a copy button, Rotate, Disable/Enable, Delete, and an optional "Require a Standard Webhooks signature" control that makes and shows the secret once.
 - The dialog's help text is general: paste the URL into the tool's webhook settings, choose JSON, and put task links in commit messages or titles. Tool-by-tool steps (GitLab, GitHub, n8n, curl) live in the guide, not in the UI.
 - Task comments from an incoming URL show "via <URL name>".
 
@@ -161,7 +163,7 @@ An outgoing webhook pointed at an incoming URL would make each comment send a ne
 | Task | Content | Depends on |
 |---|---|---|
 | 2.1 | Migration, `Comment.source` and `inboundHookId` in the comment DTOs, the outgoing loop rules | Phase 1 merged |
-| 2.2 | Incoming route: token lookup, body types, Solvro JSON mode, scanner, comment writer, dedup, logger and nginx masking, tests with GitLab, GitHub and plain fixtures | 2.1 |
+| 2.2 | Incoming route: token lookup, optional Standard Webhooks check (reuse `lib/webhooks/sign.ts`), body types, Solvro JSON mode, scanner, comment writer, dedup, logger and nginx masking, tests with GitLab, GitHub, plain and signed fixtures | 2.1 |
 | 2.3 | Management routes, tests | 2.1 |
 | 2.4 | Project dialog, comment marker, tests | 2.3 |
 | 2.5 | e2e spec (create a URL, post a push fixture and a Solvro JSON body, see both comments), guide section, `backend/CLAUDE.md` public-surface line | 2.2, 2.4 |
@@ -182,3 +184,9 @@ Wave: 2.1 first, then 2.2 ∥ 2.3, then 2.4, then 2.5.
 - Short task references (`SOL-123`).
 - An admin view of all users' webhooks.
 - Slack or Microsoft Teams formats.
+
+## Phase 2 record
+
+- Reviews: an instant review of the schema and migration (2 should-fix, 2 nits, all fixed), then one phase review (1 blocker: focus loss and inline destructive confirms in the Integrations dialog; 6 should-fix; 7 nits). All fixed except the deferred ISS-223 (loop check with an `APP_URL` path prefix). A re-check found nothing left.
+- Changes from the plan made during review: rotating a URL, setting its signing secret or enabling it makes the caller the author of later comments; the author check also needs `task:comment`; disabled reasons are codes (`creator_inactive`, `creator_lost_access`, `creator_lost_permission`); a cap of 100 comments per request; the 20-task cap counts only the URL's own project.
+- Delivery Gate: PASS (2026-11-25), light and dark, 1280px and 375px. Checked: the Integrations dialog list, the one-time URL panel with focus on its copy button, the Rotate confirm (Escape closes only the confirm), the limit error with focus back on the Name input, no horizontal overflow, and a task comment showing "via GitLab". One FAIL during the gate (focus lost after a failed Add) was fixed and covered by a test.

@@ -15,6 +15,16 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-25 — Incoming webhooks
+
+- Each project can have up to 5 incoming webhook URLs (`POST /api/webhook/in/<token>`) that let any tool able to send a webhook (GitLab, GitHub, CI jobs, n8n, your own scripts) write task comments, with no tool-specific setup. Any JSON body, a form with a `payload` field, or plain text is scanned for Solvro task links, and each task found gets a comment with the first line of the text (for example a commit message) and the source link. A body with a top-level `solvro` key writes one comment directly: `{ "solvro": { "task": 345, "text": "Deployed to prod", "url": "https://ci.example.com/run/88" } }`. Only tasks of the URL's own project count, at most 20 tasks and 100 comments per request, and the same text or source link comments once on a task (`backend/src/lib/inbound/`, `backend/src/routes/webhook.ts`).
+- The token in the URL is the credential: it is stored only as a hash, shown once, kept out of the request log, and the proxy turns its access log off (`frontend/nginx.conf`). An unknown, disabled or deleted URL gets the same 404, and requests are rate-limited per URL and per address. A URL can also require a [Standard Webhooks](https://www.standardwebhooks.com/) signature: with a signing secret set, an unsigned, wrongly signed or older than 5 minutes request is refused, and a repeated `webhook-id` writes nothing.
+- Comments from an incoming URL are written as the user who created it; another owner who rotates it, changes its signing secret or enables it becomes the author of later comments. When the author is deactivated, can no longer open the project or loses the permission to comment, the URL turns itself off. Task comments show "via <URL name>" next to the author.
+- Project owners manage the URLs from "Integrations" in the project's actions menu: add, rotate, disable, enable, delete, and require or stop requiring a signature (`frontend/src/components/projects/integrations/`, `backend/src/routes/inboundHooks.ts`, endpoints under `/projects/:id/inbound-hooks`).
+- Outgoing webhooks refuse a target that is this server's own incoming URL, and they do not send `comment.created` for a comment written by an incoming URL, so the two directions cannot loop.
+- New tables `inbound_hooks`, `inbound_hook_links` and `inbound_hook_messages`, and new comment columns `source` and `inbound_hook_id`. Deleting a user also deletes the incoming URLs they created. Received `webhook-id` records are kept for 24 hours.
+- Tests: `backend/test/inbound/` (GitLab, GitHub, form and plain-text bodies, Solvro JSON, signatures, deduplication, project scoping, access, logging), new cases in `backend/test/webhooks/` for the loop rules, and `e2e/tests/incoming-webhooks.spec.ts`.
+
 ### Fixed — 2026-11-25 — Kanban drag test aims at the target card's center
 
 - `e2e/tests/kanban-dnd.spec.ts` "same-column downward one-slot drop": the mouse drop now puts the dragged card's center on the target card's center, instead of a fixed 20px below the target. The old drop point depended on where the drag handle sits in the card, and with a tall card below the target it landed one slot too far, so the test failed on every run. No app change.
