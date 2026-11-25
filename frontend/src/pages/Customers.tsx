@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import {
   getCoreRowModel,
@@ -30,7 +30,7 @@ import { useNewParam } from "@/hooks/useNewParam";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { EMPTY_VALUE } from "@/lib/emptyValue";
 import { TOOLBAR_BUTTON_PRIMARY } from "@/lib/utils";
-import { canChangeCustomerOwner, canOwnCustomer, saveErrorMessage } from "@/lib/ownerAccess";
+import { canChangeCustomerOwner, saveErrorMessage } from "@/lib/ownerAccess";
 import { WEEKLY_STATUS_LABEL } from "@/lib/labels";
 import {
   type CustomerSummary,
@@ -43,27 +43,12 @@ export function Customers() {
   const { user } = useAuth();
   const { data: customers, isLoading, isError, error, refetch } = useCustomers();
   const deleteCustomer = useDeleteCustomer();
-  // TAM ids of the visible projects per customer — the "TAM of one of its
-  // projects" arm of customer ownership (the list rows only carry a count).
+  // Projects feed the shared-projects warning in the delete dialog.
   const { data: projects } = useProjects();
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<CustomerSummary | null>(null);
   const [deleting, setDeleting] = useState<CustomerSummary | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  const projectTamIdsByCustomer = useMemo(() => {
-    const map = new Map<number, number[]>();
-    for (const p of projects ?? []) {
-      // A shared project counts toward EVERY linked customer.
-      for (const c of p.customers) map.set(c.id, [...(map.get(c.id) ?? []), p.tamId]);
-    }
-    return map;
-  }, [projects]);
-  // Owner-only delete — see lib/ownerAccess.ts (changing the owner is narrower, and server-decided: canChangeCustomerOwner).
-  const ownsCustomer = useCallback(
-    (c: CustomerSummary) => canOwnCustomer(user, c, projectTamIdsByCustomer.get(c.id) ?? []),
-    [user, projectTamIdsByCustomer],
-  );
 
   const canMutate = hasPermission(user, "customer:write");
   // Copy only: whether the list shows every customer. Unowned/create rules stay project:view-all.
@@ -146,7 +131,6 @@ export function Customers() {
           canMutate={canMutate}
           onEdit={setEditing}
           onDelete={setDeleting}
-          canOwn={ownsCustomer}
         />
       )}
 
@@ -196,14 +180,11 @@ function CustomersTable({
   canMutate,
   onEdit,
   onDelete,
-  canOwn,
 }: {
   customers: CustomerSummary[];
   canMutate: boolean;
   onEdit: (c: CustomerSummary) => void;
   onDelete: (c: CustomerSummary) => void;
-  /** Owner-only actions (Delete) show only where this is true. */
-  canOwn: (c: CustomerSummary) => boolean;
 }) {
   const navigate = useNavigate();
   // The server returns rows by name; a header click re-sorts client-side.
@@ -362,7 +343,8 @@ function CustomersTable({
                   </span>
                   Edit
                 </DropdownMenuItem>
-                {canOwn(row.original) && (
+                {/* Delete takes the owner-change rule, decided by the server. */}
+                {canChangeCustomerOwner(row.original) && (
                   <DropdownMenuItem
                     variant="destructive"
                     onClick={() => onDelete(row.original)}
@@ -382,7 +364,7 @@ function CustomersTable({
       });
     }
     return cols;
-  }, [canMutate, onEdit, onDelete, canOwn]);
+  }, [canMutate, onEdit, onDelete]);
 
   const table = useReactTable({
     data: customers,

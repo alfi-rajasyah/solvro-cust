@@ -171,7 +171,7 @@ describe("owners keep their access", () => {
     expect((await request(app).delete(`/customers/${customer.id}`).set(auth(admin.token))).status).toBe(204);
   });
 
-  it("an unowned customer stays deletable by anyone who can see it", async () => {
+  it("an unowned customer with no projects is deletable by anyone who can see it", async () => {
     const someone = await createUserWithRole("TAM");
     const customer = await prisma.customer.create({
       data: { name: uniq("Unowned"), description: "d", tamId: null },

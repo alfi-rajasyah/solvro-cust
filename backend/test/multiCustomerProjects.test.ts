@@ -409,9 +409,11 @@ describe("owning one linked customer is not owning the other", () => {
     expect((await request(app).delete(`/customers/${a.id}`).set(auth(tamA.token))).status).toBe(204);
   });
 
-  it("the project's TAM still passes the customer owner check on a customer under their project", async () => {
+  it("the project's TAM cannot delete another TAM's customer just because a project of theirs sits under it", async () => {
     const { tamA, b } = await world();
-    // Project TAM rule unchanged: TAM of a project under B.
-    expect((await request(app).delete(`/customers/${b.id}`).set(auth(tamA.token))).status).toBe(204);
+    const del = await request(app).delete(`/customers/${b.id}`).set(auth(tamA.token));
+    expect(del.status).toBe(403);
+    expect(del.body.code).toBe("owner_only");
+    expect(await prisma.customer.count({ where: { id: b.id } })).toBe(1);
   });
 });

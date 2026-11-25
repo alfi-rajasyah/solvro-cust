@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-25 — Deleting a customer follows the owner rule
+
+- `DELETE /customers/:id` now uses the same rule as changing a customer's owner: an admin, the customer's owner, or, for a customer with no owner, the TAM of every project under it. Before, any user with `customer:write` who could see a customer with no owner could delete it, which unlinked it from other TAMs' projects. The Delete action in the customer list and on the customer page now appears only for people who may delete.
+
 ### Changed — 2026-11-24 — End-to-end tests wait for conditions, not fixed sleeps
 
 - The Playwright specs under `e2e/tests/` now wait for the condition a step depends on (a pane rendering, a request finishing, an animation ending) instead of a fixed `waitForTimeout`; 124 sleeps drop to 3. The shared helpers in `e2e/fixtures/test.ts` (`loginViaUi`, `openKanban`, `mouseDrag`, `touchDrag`, `captureTaskRequests`) drive most of this. The 3 remaining sleeps each carry a comment: the touch-activation hold, a press-hold that a guard needs, and outwaiting a search debounce to prove no request fires.
