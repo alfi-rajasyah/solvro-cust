@@ -3,7 +3,7 @@
 Status: shipped 2026-11-20 (started @ `59d3e68`)
 Archive path: `docs/archive/plans/customer-team.md`
 
-Lane: P (new model and migration, visibility change, new routes). Wave D of `docs/plans/github-feature-waves.md`; ships alone.
+Lane: P (new model and migration, visibility change, new routes). Wave D of `docs/archive/plans/github-feature-waves.md`; ships alone.
 
 ## Decisions (user, 2026-11-19 and 2026-11-20)
 
