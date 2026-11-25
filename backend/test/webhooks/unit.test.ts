@@ -87,6 +87,33 @@ describe("address policy", () => {
     await expect(resolveTarget("https://example.com/hook", { lookup: lookupTo("203.0.113.7") })).resolves.toMatchObject({ family: 4 });
   });
 
+  it("refuses a target that is this deployment's incoming webhook URL", () => {
+    const policy = { allowHttp: true, appUrl: "https://solvro.example.com" };
+    for (const target of [
+      "https://solvro.example.com/api/webhook/in/abc123",
+      "https://SOLVRO.example.com/webhook/in/abc123?x=1",
+      "http://solvro.example.com/API/webhook/in/abc123",
+    ]) {
+      expect(() => parseTarget(target, policy)).toThrowError(expect.objectContaining({ code: "webhook_target_refused", reason: "loop" }));
+    }
+    // Trailing dot, port, percent-encoding and doubled slashes do not get past it.
+    for (const target of [
+      "https://solvro.example.com./api/webhook/in/T",
+      "https://solvro.example.com:3000/api/webhook/in/T",
+      "https://solvro.example.com/api/webhook/%69n/T",
+      "https://solvro.example.com/%61pi/webhook/in/T",
+      "https://solvro.example.com/api//webhook/in/T",
+      "https://solvro.example.com/api/webhook%2Fin/T",
+      "https://solvro.example.com/api/webhook/in/%E0%A4%A",
+    ]) {
+      expect(() => parseTarget(target, policy)).toThrowError(expect.objectContaining({ reason: "loop" }));
+    }
+    // Another host, or another path on the same host, is not a loop.
+    expect(() => parseTarget("https://other.example.com/api/webhook/in/abc123", policy)).not.toThrow();
+    expect(() => parseTarget("https://solvro.example.com/api/webhook/outline", policy)).not.toThrow();
+    expect(() => parseTarget("https://solvro.example.com/hook/in/abc", policy)).not.toThrow();
+  });
+
   it("refuses userinfo and unparsable URLs", () => {
     expect(() => parseTarget("https://user:pw@example.com/")).toThrowError(/user name or password/);
     expect(() => parseTarget("https://user@example.com/")).toThrowError(/user name or password/);

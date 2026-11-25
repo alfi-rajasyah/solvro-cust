@@ -838,7 +838,10 @@ tasksRouter.get(
     const comments = await prisma.comment.findMany({
       where: { taskId: id },
       orderBy: { createdAt: "asc" },
-      include: { author: { select: { id: true, username: true, email: true } } },
+      include: {
+        author: { select: { id: true, username: true, email: true } },
+        inboundHook: { select: { id: true, name: true } },
+      },
     });
     res.json(comments);
   },
@@ -876,7 +879,10 @@ tasksRouter.post(
           body,
           mentionedUserIds,
         },
-        include: { author: { select: { id: true, username: true, email: true } } },
+        include: {
+          author: { select: { id: true, username: true, email: true } },
+          inboundHook: { select: { id: true, name: true } },
+        },
       });
       // Never the comment body or the mention ids: the event carries the
       // comment id and the task it belongs to (so the log can link to it).
