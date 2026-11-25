@@ -6,7 +6,6 @@ import http from "node:http";
 import https from "node:https";
 import { open } from "../secretBox.js";
 import type { WebhookPayload } from "./payload.js";
-import { googleChatText } from "./payload.js";
 import { standardHeaders } from "./sign.js";
 import { pinnedLookup, resolveTarget, WebhookTargetError, type TargetPolicy } from "./validateTarget.js";
 
@@ -27,11 +26,10 @@ export interface PreparedRequest {
 }
 
 export interface WebhookTargetFields {
-  format: "STANDARD" | "GOOGLE_CHAT";
-  secretEnc: string | null;
+  secretEnc: string;
 }
 
-/** The body and headers for one send. Throws if a STANDARD webhook's secret cannot be opened. */
+/** The body and headers for one send. Throws if the webhook's secret cannot be opened. */
 export function prepareRequest(
   sub: WebhookTargetFields,
   deliveryId: string,
@@ -39,10 +37,6 @@ export function prepareRequest(
   nowSeconds: number = Math.floor(Date.now() / 1000),
 ): PreparedRequest {
   const base = { "content-type": "application/json", "user-agent": "Solvro-Webhooks/1" };
-  if (sub.format === "GOOGLE_CHAT") {
-    return { headers: base, body: JSON.stringify({ text: googleChatText(payload) }) };
-  }
-  if (!sub.secretEnc) throw new Error("secret_missing");
   const body = JSON.stringify(payload);
   return { headers: { ...base, ...standardHeaders(open(sub.secretEnc), deliveryId, nowSeconds, body) }, body };
 }

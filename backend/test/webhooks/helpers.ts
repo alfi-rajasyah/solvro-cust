@@ -98,21 +98,18 @@ export function makeSubscription(
   ownerId: number,
   url: string,
   extra: Partial<{
-    format: "STANDARD" | "GOOGLE_CHAT";
     eventTypes: string[];
     projectIds: number[];
     active: boolean;
     consecutiveFailures: number;
   }> = {},
 ) {
-  const format = extra.format ?? "STANDARD";
   return prisma.webhookSubscription.create({
     data: {
       ownerId,
       name: uniq("hook"),
       url,
-      format,
-      secretEnc: format === "STANDARD" ? seal(SECRET) : null,
+      secretEnc: seal(SECRET),
       eventTypes: extra.eventTypes ?? ["task.created", "task.status_changed", "task.completed", "comment.created", "project.created", "risk.created"],
       projectIds: extra.projectIds ?? [],
       active: extra.active ?? true,

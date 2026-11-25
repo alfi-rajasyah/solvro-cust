@@ -13,7 +13,6 @@ const PUBLIC_URL = "https://203.0.113.7/hook";
 const body = (extra: Record<string, unknown> = {}) => ({
   name: "Ops channel",
   url: PUBLIC_URL,
-  format: "STANDARD",
   eventTypes: ["task.created", "comment.created"],
   projectIds: [],
   ...extra,
@@ -33,7 +32,6 @@ describe("POST /webhooks", () => {
       name: "Ops channel",
       host: "203.0.113.7",
       urlPreview: PUBLIC_URL,
-      format: "STANDARD",
       eventTypes: ["task.created", "comment.created"],
       projectIds: [],
       active: true,
@@ -43,7 +41,7 @@ describe("POST /webhooks", () => {
     });
     const row = await prisma.webhookSubscription.findUniqueOrThrow({ where: { id: created.body.webhook.id } });
     expect(row.secretEnc).not.toContain(created.body.secret);
-    expect(open(row.secretEnc!)).toBe(created.body.secret);
+    expect(open(row.secretEnc)).toBe(created.body.secret);
 
     const list = await request(app).get("/webhooks").set(auth(tam.token));
     expect(list.status).toBe(200);
@@ -51,10 +49,10 @@ describe("POST /webhooks", () => {
     expect(JSON.stringify(list.body)).not.toMatch(/whsec_|secret/i);
   });
 
-  it("never returns the full URL: only the host and a preview with the query replaced", async () => {
+  it("never returns the full URL: only the host and a preview with the path masked and the query replaced", async () => {
     const tam = await createUserWithRole("TAM");
     const url = "https://203.0.113.7/v1/spaces/AAA/messages?key=KEYVALUE&token=TOKENVALUE";
-    const created = await request(app).post("/webhooks").set(auth(tam.token)).send(body({ url, format: "GOOGLE_CHAT" }));
+    const created = await request(app).post("/webhooks").set(auth(tam.token)).send(body({ url }));
     expect(created.status).toBe(201);
     expect(created.body.webhook).toMatchObject({ host: "203.0.113.7", urlPreview: "https://203.0.113.7/v1/spac…/…/mess…?…" });
     expect(created.body.webhook.url).toBeUndefined();
@@ -65,14 +63,6 @@ describe("POST /webhooks", () => {
     const list = await request(app).get("/webhooks").set(auth(tam.token));
     for (const res of [created, patched, list]) expect(JSON.stringify(res.body)).not.toMatch(/KEYVALUE|TOKENVALUE|key=|token=/);
     expect((await prisma.webhookSubscription.findUniqueOrThrow({ where: { id } })).url).toBe(url);
-  });
-
-  it("gives Google Chat no secret", async () => {
-    const tam = await createUserWithRole("TAM");
-    const created = await request(app).post("/webhooks").set(auth(tam.token)).send(body({ format: "GOOGLE_CHAT" }));
-    expect(created.status).toBe(201);
-    expect(created.body.secret).toBeNull();
-    expect((await prisma.webhookSubscription.findUniqueOrThrow({ where: { id: created.body.webhook.id } })).secretEnc).toBeNull();
   });
 
   it("allows 10 webhooks per user and answers 409 webhook_limit on the 11th", async () => {
@@ -105,7 +95,6 @@ describe("POST /webhooks", () => {
       { eventTypes: [] },
       { eventTypes: ["task.created", "task.created"] },
       { eventTypes: ["note.created"] },
-      { format: "SLACK" },
       { projectIds: [0] },
       { projectIds: Array.from({ length: 51 }, (_, i) => i + 1) },
     ]) {
@@ -165,17 +154,13 @@ describe("owner-only access", () => {
 });
 
 describe("PATCH, rotate, delete", () => {
-  it("edits fields, refuses a format change, and resets the failure streak when re-enabled", async () => {
+  it("edits fields and resets the failure streak when re-enabled", async () => {
     const tam = await createUserWithRole("TAM");
     const id = (await request(app).post("/webhooks").set(auth(tam.token)).send(body())).body.webhook.id as number;
 
     const renamed = await request(app).patch(`/webhooks/${id}`).set(auth(tam.token)).send({ name: "Renamed", eventTypes: ["risk.created"] });
     expect(renamed.status).toBe(200);
     expect(renamed.body.webhook).toMatchObject({ name: "Renamed", eventTypes: ["risk.created"] });
-
-    const format = await request(app).patch(`/webhooks/${id}`).set(auth(tam.token)).send({ format: "GOOGLE_CHAT" });
-    expect(format.status).toBe(400);
-    expect(format.body.code).toBe("format_immutable");
 
     const badUrl = await request(app).patch(`/webhooks/${id}`).set(auth(tam.token)).send({ url: "http://203.0.113.7/x" });
     expect(badUrl.body.code).toBe("webhook_target_refused");
@@ -190,7 +175,7 @@ describe("PATCH, rotate, delete", () => {
     expect(off.body.webhook).toMatchObject({ active: false, disabledReason: null });
   });
 
-  it("rotates a STANDARD secret (shown once) and refuses it for Google Chat", async () => {
+  it("rotates the secret (shown once)", async () => {
     const tam = await createUserWithRole("TAM");
     const created = await request(app).post("/webhooks").set(auth(tam.token)).send(body());
     const id = created.body.webhook.id as number;
@@ -198,12 +183,7 @@ describe("PATCH, rotate, delete", () => {
     expect(rotated.status).toBe(200);
     expect(rotated.body.secret).toMatch(/^whsec_/);
     expect(rotated.body.secret).not.toBe(created.body.secret);
-    expect(open((await prisma.webhookSubscription.findUniqueOrThrow({ where: { id } })).secretEnc!)).toBe(rotated.body.secret);
-
-    const chat = (await request(app).post("/webhooks").set(auth(tam.token)).send(body({ format: "GOOGLE_CHAT" }))).body.webhook.id as number;
-    const refused = await request(app).post(`/webhooks/${chat}/rotate-secret`).set(auth(tam.token));
-    expect(refused.status).toBe(400);
-    expect(refused.body.code).toBe("no_secret");
+    expect(open((await prisma.webhookSubscription.findUniqueOrThrow({ where: { id } })).secretEnc)).toBe(rotated.body.secret);
   });
 
   it("deletes with 204 and cascades its deliveries", async () => {

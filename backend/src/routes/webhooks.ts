@@ -31,7 +31,6 @@ const projectIdsSchema = z.array(z.number().int().positive()).max(50);
 const createSchema = z.object({
   name: nameSchema,
   url: urlSchema,
-  format: z.enum(["STANDARD", "GOOGLE_CHAT"]),
   eventTypes: eventTypesSchema,
   projectIds: projectIdsSchema.default([]),
 });
@@ -39,8 +38,6 @@ const createSchema = z.object({
 const updateSchema = z.object({
   name: nameSchema.optional(),
   url: urlSchema.optional(),
-  // Accepted only so a different value can answer `format_immutable`.
-  format: z.string().optional(),
   eventTypes: eventTypesSchema.optional(),
   projectIds: projectIdsSchema.optional(),
   active: z.boolean().optional(),
@@ -55,7 +52,6 @@ function toDto(w: WebhookWithLast) {
     name: w.name,
     host: hostForLog(w.url),
     urlPreview: urlPreview(w.url),
-    format: w.format,
     eventTypes: w.eventTypes,
     projectIds: w.projectIds,
     active: w.active,
@@ -109,7 +105,7 @@ webhooksRouter.post("/", validate("body", createSchema), async (req, res) => {
   const userId = req.user!.sub;
   await assertWebhookTarget(body.url);
   const projectIds = await assertProjectsVisible(req.user, body.projectIds);
-  const secret = body.format === "STANDARD" ? generateSecret() : null;
+  const secret = generateSecret();
 
   const created = await prisma.$transaction(async (tx) => {
     // Serialises one user's creates so two requests cannot both pass the limit.
@@ -123,8 +119,7 @@ webhooksRouter.post("/", validate("body", createSchema), async (req, res) => {
         ownerId: userId,
         name: body.name,
         url: body.url,
-        format: body.format,
-        secretEnc: secret ? seal(secret) : null,
+        secretEnc: seal(secret),
         eventTypes: body.eventTypes,
         projectIds,
       },
@@ -138,9 +133,6 @@ webhooksRouter.patch("/:id", validate("params", idParamSchema), validate("body",
   const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
   const body = req.body as z.infer<typeof updateSchema>;
   const current = await ownWebhook(req.user!.sub, id);
-  if (body.format !== undefined && body.format !== current.format) {
-    throw new HttpError(400, "format_immutable", "A webhook's format cannot be changed; create a new webhook instead");
-  }
   if (body.url !== undefined && body.url !== current.url) await assertWebhookTarget(body.url);
   const projectIds = body.projectIds ? await assertProjectsVisible(req.user, body.projectIds) : undefined;
 
@@ -169,9 +161,6 @@ webhooksRouter.delete("/:id", validate("params", idParamSchema), async (req, res
 webhooksRouter.post("/:id/rotate-secret", validate("params", idParamSchema), async (req, res) => {
   const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
   const current = await ownWebhook(req.user!.sub, id);
-  if (current.format !== "STANDARD") {
-    throw new HttpError(400, "no_secret", "This webhook format is not signed, so it has no secret");
-  }
   const secret = generateSecret();
   await prisma.webhookSubscription.update({ where: { id }, data: { secretEnc: seal(secret) } });
   res.json({ secret });

@@ -73,11 +73,6 @@ enum WeeklyStatus {
   DONE
 }
 
-enum WebhookFormat {
-  STANDARD
-  GOOGLE_CHAT
-}
-
 enum WebhookDeliveryStatus {
   PENDING
   SUCCEEDED
@@ -385,16 +380,14 @@ model ActivityEvent {
 }
 
 // Outgoing webhook (docs/archive/plans/webhooks.md): one target URL owned by one user.
-// `secretEnc` is sealed with lib/secretBox.ts (null for GOOGLE_CHAT, which is
-// unsigned). `projectIds` empty = every project the owner can see.
+// `secretEnc` is the signing secret, sealed with lib/secretBox.ts. `projectIds` empty = every project the owner can see.
 model WebhookSubscription {
   id                  Int               @id @default(autoincrement())
   ownerId             Int               @map("owner_id")
   owner               User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   name                String
   url                 String
-  format              WebhookFormat     @default(STANDARD)
-  secretEnc           String?           @map("secret_enc")
+  secretEnc           String            @map("secret_enc")
   eventTypes          String[]          @map("event_types")
   projectIds          Int[]             @map("project_ids")
   active              Boolean           @default(true)

@@ -2,7 +2,7 @@ import "../env.js";
 import { describe, expect, it } from "vitest";
 import { mapActivityToEvents } from "../../src/lib/webhooks/events.js";
 import { WEBHOOK_EVENT_TYPES } from "../../src/lib/webhooks/eventTypes.js";
-import { excerpt, googleChatText } from "../../src/lib/webhooks/payload.js";
+import { excerpt } from "../../src/lib/webhooks/payload.js";
 import { generateSecret, signStandardWebhook } from "../../src/lib/webhooks/sign.js";
 import { parseTarget, pinnedLookup, resolveTarget, urlPreview } from "../../src/lib/webhooks/validateTarget.js";
 
@@ -70,22 +70,6 @@ describe("payload helpers", () => {
     expect(excerpt("a".repeat(600))).toHaveLength(500);
     expect(Array.from(excerpt("😀".repeat(600)))).toHaveLength(500);
     expect(excerpt("short")).toBe("short");
-  });
-
-  it("writes Google Chat text on one line without an em dash", () => {
-    const text = googleChatText({
-      type: "comment.created",
-      timestamp: "2026-11-25T08:00:00.000Z",
-      data: {
-        project: { name: "Core banking", url: "https://x.test/projects/1" },
-        task: { title: "Cut-over", url: "https://x.test/tasks/2" },
-        comment: { text: "line one\n\nline two" },
-        actor: "rizky",
-      },
-    });
-    expect(text).toBe('rizky commented on "Cut-over": line one line two · Core banking · https://x.test/tasks/2');
-    expect(text).not.toContain("\n");
-    expect(text).not.toContain("—");
   });
 });
 

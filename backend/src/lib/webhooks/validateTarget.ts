@@ -53,7 +53,7 @@ export function hostForLog(raw: string): string {
  * segment in full, every later path segment cut to its first 4 characters plus
  * "…" (a segment of 4 characters or fewer becomes just "…"), and a query string
  * replaced by "?…". Services put their tokens in the path (Zapier, n8n) or the
- * query (Google Chat), so neither reaches the browser.
+ * query, so neither reaches the browser.
  */
 export function urlPreview(raw: string): string {
   try {

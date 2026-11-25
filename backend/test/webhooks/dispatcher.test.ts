@@ -275,17 +275,6 @@ describe("sending", () => {
     expect(payload.data.task.id).toBe(f.task.id);
   });
 
-  it("sends Google Chat as unsigned {text}", async () => {
-    const f = await projectFixture();
-    await makeSubscription(f.owner.userId, receiver.url, { format: "GOOGLE_CHAT" });
-    await taskCreated(f);
-    await runDispatchOnce();
-    const { headers, body } = receiver.received[0];
-    expect(headers["webhook-signature"]).toBeUndefined();
-    expect(Object.keys(JSON.parse(body))).toEqual(["text"]);
-    expect(JSON.parse(body).text).toContain(f.task.title);
-  });
-
   it("does not follow a redirect and does not retry it", async () => {
     const f = await projectFixture();
     const sub = await makeSubscription(f.owner.userId, receiver.url);

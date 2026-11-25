@@ -1,7 +1,4 @@
 -- CreateEnum
-CREATE TYPE "WebhookFormat" AS ENUM ('STANDARD', 'GOOGLE_CHAT');
-
--- CreateEnum
 CREATE TYPE "WebhookDeliveryStatus" AS ENUM ('PENDING', 'SUCCEEDED', 'FAILED');
 
 -- AlterTable
@@ -18,8 +15,7 @@ CREATE TABLE "webhook_subscriptions" (
     "owner_id" INTEGER NOT NULL,
     "name" TEXT NOT NULL,
     "url" TEXT NOT NULL,
-    "format" "WebhookFormat" NOT NULL DEFAULT 'STANDARD',
-    "secret_enc" TEXT,
+    "secret_enc" TEXT NOT NULL,
     "event_types" TEXT[],
     "project_ids" INTEGER[],
     "active" BOOLEAN NOT NULL DEFAULT true,
