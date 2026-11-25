@@ -710,6 +710,8 @@ function useFieldOptions<T = unknown>(
     return () => {
       cancelled = true
     }
+  // SOLVRO PATCH: lint suppression, vendored deps kept as shipped.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch only when the query or async mode changes, not when the field object identity does
   }, [isAsync, enabled, debouncedQuery])
 
   const resolveSelected = useCallback(

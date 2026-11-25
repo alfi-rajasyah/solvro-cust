@@ -561,14 +561,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Accepted in e2e/CLAUDE.md. Trigger: running e2e against the dev server. Optional: skip the specs when BASE_URL is :5173.
 - **Source:** snapshot line 216, section "Known bugs / inconsistencies"
 
-### ISS-143 · P3 · No ESLint setup, so the exhaustive-deps guard on TaskFormModal is inert
-
-- **Type:** debt · **Found:** 2026-07-23 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** eslint-disable comment in frontend/src/components/TaskFormModal.tsx (line 182)
-- **Problem:** The repo has no ESLint config or lint script, so the directive does nothing. Nothing stops a future edit from re-adding the whole props object to the reset effect deps.
-- **Why deferred / fix direction:** Add ESLint with react-hooks/exhaustive-deps and an npm run lint step in CI.
-- **Source:** snapshot line 476, section "Tech debt / follow-ups from recent work"; merged duplicates at snapshot lines 2330
-
 ### ISS-145 · P3 · Connector hover-delete e2e test flakes rarely
 
 - **Type:** watch · **Found:** 2026-07-25 · **Verified:** 2026-11-24 @ `670f206`
@@ -838,3 +830,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-010 · 2026-11-24 · CHANGELOG "The app serves its own fonts" · Guest link pages contact Google for fonts
 - ISS-146 · 2026-11-24 · CHANGELOG "End-to-end tests wait for conditions, not fixed sleeps" · E2E suite uses fixed waitForTimeout sleeps
 - ISS-002 · 2026-11-25 · CHANGELOG "Deleting a customer follows the owner rule" · DELETE /customers/:id lets the TAM of one project delete an unowned customer
+- ISS-143 · 2026-11-25 · CHANGELOG "Frontend lint for React hooks rules" · No ESLint setup, so the exhaustive-deps guard on TaskFormModal is inert
