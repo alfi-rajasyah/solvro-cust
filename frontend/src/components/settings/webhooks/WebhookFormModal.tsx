@@ -9,9 +9,8 @@ import {
   useProjects,
   useUpdateWebhook,
   type Webhook,
-  type WebhookFormat,
 } from "@/lib/queries";
-import { WEBHOOK_EVENT_LABEL, WEBHOOK_FORMAT_LABEL } from "@/lib/labels";
+import { WEBHOOK_EVENT_LABEL } from "@/lib/labels";
 import { WEBHOOK_MAX_PROJECTS, webhookErrorMessage } from "./webhookPresentation";
 
 const INPUT_CLASS =
@@ -19,7 +18,7 @@ const INPUT_CLASS =
 
 /**
  * Create (no `webhook`) or edit one outgoing webhook. `onCreated` receives the
- * one-time secret (null for Google Chat); the caller shows it.
+ * one-time secret; the caller shows it.
  */
 export function WebhookFormModal({
   open,
@@ -30,7 +29,7 @@ export function WebhookFormModal({
   open: boolean;
   webhook: Webhook | null;
   onClose: () => void;
-  onCreated: (webhook: Webhook, secret: string | null) => void;
+  onCreated: (webhook: Webhook, secret: string) => void;
 }) {
   const isEdit = webhook != null;
   const create = useCreateWebhook();
@@ -41,7 +40,6 @@ export function WebhookFormModal({
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
-  const [format, setFormat] = useState<WebhookFormat>("STANDARD");
   const [events, setEvents] = useState<string[]>([]);
   const [scope, setScope] = useState<"all" | "selected">("all");
   const [projectIds, setProjectIds] = useState<number[]>([]);
@@ -54,7 +52,6 @@ export function WebhookFormModal({
     setError(null);
     setName(webhook?.name ?? "");
     setUrl("");
-    setFormat(webhook?.format ?? "STANDARD");
     setEvents(webhook?.eventTypes ?? []);
     setScope(webhook && webhook.projectIds.length > 0 ? "selected" : "all");
     setProjectIds(webhook?.projectIds ?? []);
@@ -101,7 +98,6 @@ export function WebhookFormModal({
         const res = await create.mutateAsync({
           name: trimmed,
           url: url.trim(),
-          format,
           eventTypes,
           projectIds: ids,
         });
@@ -154,42 +150,6 @@ export function WebhookFormModal({
           />
         </Field>
 
-        {webhook ? (
-          <p className="text-sm text-on-surface">
-            <span className="mb-1 block text-label-caps uppercase text-on-surface-variant">Format</span>
-            <span data-testid="webhook-format">{WEBHOOK_FORMAT_LABEL[webhook.format]}</span>
-            <span className="mt-1 block text-meta text-on-surface-variant">
-              The format is fixed once the webhook exists.
-            </span>
-          </p>
-        ) : (
-          <fieldset className="min-w-0">
-            <legend className="mb-1.5 text-label-caps uppercase text-on-surface-variant">Format</legend>
-            <div className="space-y-1.5">
-              {(["STANDARD", "GOOGLE_CHAT"] as const).map((f) => (
-                <label key={f} className="flex items-start gap-2 text-sm text-on-surface">
-                  <input
-                    type="radio"
-                    name={`${formId}-format`}
-                    value={f}
-                    checked={format === f}
-                    onChange={() => setFormat(f)}
-                    className="mt-1 accent-primary"
-                  />
-                  <span>
-                    {WEBHOOK_FORMAT_LABEL[f]}
-                    <span className="block text-meta text-on-surface-variant">
-                      {f === "STANDARD"
-                        ? "A signed JSON request. You get a secret to check the signature."
-                        : "A plain chat message for a Google Chat space. No signature."}
-                    </span>
-                  </span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        )}
-
         {isEdit && (
           <p className="text-sm text-on-surface">
             <span className="mb-1 block text-label-caps uppercase text-on-surface-variant">Current target</span>
@@ -206,12 +166,15 @@ export function WebhookFormModal({
             aria-describedby={isEdit ? urlHintId : undefined}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder={
-              format === "GOOGLE_CHAT" ? "https://chat.googleapis.com/v1/spaces/…" : "https://example.com/hooks/solvro"
-            }
+            placeholder="https://example.com/hooks/solvro"
             className={`${INPUT_CLASS} font-mono`}
           />
         </Field>
+        {!isEdit && (
+          <p className="-mt-3 text-meta text-on-surface-variant">
+            The receiver gets a signed Standard Webhooks request and a secret to check it.
+          </p>
+        )}
         {isEdit && (
           <p id={urlHintId} className="-mt-3 text-meta text-on-surface-variant">
             Leave blank to keep the current URL.
@@ -231,9 +194,8 @@ export function WebhookFormModal({
             ))}
           </div>
           <p className="mt-1.5 text-meta text-on-surface-variant">
-            “Comment added” sends the first 500 characters of the comment.
-            {format === "GOOGLE_CHAT" &&
-              " A shared chat space can include people who cannot open these projects, and they will read this text."}
+            “Comment added” sends the first 500 characters of the comment. The receiving tool may show it to people
+            who cannot open these projects.
           </p>
         </fieldset>
 

@@ -60,7 +60,6 @@ describe("webhook hooks", () => {
     const input = {
       name: "Ops",
       url: "https://example.com/h",
-      format: "STANDARD" as const,
       eventTypes: ["task.created"],
       projectIds: [],
     };

@@ -123,10 +123,10 @@ test.describe("Webhooks settings", () => {
     await expect(section.getByRole("listitem")).toHaveCount(0);
   });
 
-  test("a Google Chat webhook has no signing secret to rotate", async ({ page }) => {
+  test("a URL with a query string shows only its host, in the row and in Edit", async ({ page }) => {
     const user = await createUser(base, adminToken, "TAM");
     createdUserIds.push(user.id);
-    const name = `e2e-chat-${stamp()}`;
+    const name = `e2e-query-${stamp()}`;
 
     await loginViaUi(page, user.email, PASSWORD);
     await page.goto("/settings?tab=integrations");
@@ -135,27 +135,24 @@ test.describe("Webhooks settings", () => {
     await section.getByRole("button", { name: "Add webhook" }).click();
     const form = page.getByRole("dialog", { name: "New webhook" });
     await form.getByLabel("Name").fill(name);
-    await form.getByRole("radio", { name: /Google Chat/ }).check();
-    await form.getByLabel("URL").fill("https://chat.googleapis.com/v1/spaces/e2e/messages?key=e2e&token=e2e");
+    await form.getByLabel("URL").fill("https://example.com/solvro-e2e-hook?token=abc");
     await form.getByRole("checkbox", { name: "Task created" }).check();
     await form.getByRole("button", { name: "Create webhook" }).click();
+    await page.getByRole("dialog", { name: "Webhook created" }).getByRole("button", { name: "I have saved it" }).click();
 
-    // No secret for Google Chat, so no secret dialog: the row appears directly.
     const row = section.getByRole("listitem").filter({ hasText: name });
-    await expect(row).toBeVisible();
-    await expect(row.getByText("chat.googleapis.com", { exact: true })).toBeVisible();
+    await expect(row.getByText("example.com", { exact: true })).toBeVisible();
     await expect(row).not.toContainText("token=");
-    await expect(row.getByRole("button", { name: "Disable" })).toBeVisible();
-    await expect(row.getByRole("button", { name: "Rotate secret" })).toHaveCount(0);
-    await expect(page.getByTestId("webhook-secret")).toHaveCount(0);
 
     // Edit never receives the full URL: the field is blank and the target is redacted.
     await row.getByRole("button", { name: "Edit" }).click();
     const edit = page.getByRole("dialog", { name: "Edit webhook" });
     await expect(edit.getByText("Leave blank to keep the current URL.")).toBeVisible();
-    await expect(edit.getByTestId("webhook-current-target")).toContainText("chat.googleapis.com");
+    await expect(edit.getByTestId("webhook-current-target")).toContainText("example.com");
     expect(await edit.textContent()).not.toContain("token=");
-    expect(await edit.locator("input").evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value).join(" "))).not.toContain("token=");
+    expect(
+      await edit.locator("input").evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value).join(" ")),
+    ).not.toContain("token=");
   });
 
   test("a user without webhook:manage gets 403 from the API and no Webhooks section", async ({ page }) => {

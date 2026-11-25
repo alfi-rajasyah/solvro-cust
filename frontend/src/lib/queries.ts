@@ -5553,17 +5553,15 @@ export const WEBHOOK_EVENT_TYPES = [
   "risk.created",
 ] as const;
 export type WebhookEventType = (typeof WEBHOOK_EVENT_TYPES)[number];
-export type WebhookFormat = "STANDARD" | "GOOGLE_CHAT";
 export type WebhookDeliveryStatus = "PENDING" | "SUCCEEDED" | "FAILED";
 
 export interface Webhook {
   id: number;
   name: string;
-  /** Target host. The full URL never reaches the browser: it can carry a Google Chat key and token. */
+  /** Target host. The full URL never reaches the browser: a URL can carry a token. */
   host: string;
   /** scheme://host/path with any query replaced by "?…". */
   urlPreview: string;
-  format: WebhookFormat;
   eventTypes: string[];
   /** Empty means every project the owner can see. */
   projectIds: number[];
@@ -5589,13 +5587,12 @@ export interface WebhookDelivery {
 export interface WebhookCreateInput {
   name: string;
   url: string;
-  format: WebhookFormat;
   eventTypes: string[];
   projectIds: number[];
 }
 
-/** The format is fixed at creation (`format_immutable`). Omitting `url` keeps the stored one. */
-export type WebhookUpdateInput = Partial<Omit<WebhookCreateInput, "format">> & { active?: boolean };
+/** Omitting `url` keeps the stored one. */
+export type WebhookUpdateInput = Partial<WebhookCreateInput> & { active?: boolean };
 
 export interface WebhookTestResult {
   ok: boolean;
@@ -5615,7 +5612,7 @@ export function useCreateWebhook() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: WebhookCreateInput) =>
-      apiRequest<{ webhook: Webhook; secret: string | null }>("/webhooks", { method: "POST", body: input }),
+      apiRequest<{ webhook: Webhook; secret: string }>("/webhooks", { method: "POST", body: input }),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.webhooks, exact: true }),
   });
 }

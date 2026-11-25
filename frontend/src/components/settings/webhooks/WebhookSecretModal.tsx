@@ -11,7 +11,7 @@ export function WebhookSecretModal({
   rotated,
   onClose,
 }: {
-  secret: string | null;
+  secret: string | null; // null while closed
   webhookName: string;
   rotated?: boolean;
   onClose: () => void;

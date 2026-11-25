@@ -60,7 +60,7 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   { value: "report:executive", label: "Executive dashboard", hint: "See the org-wide Executive portfolio dashboard (all projects across all TAMs) and overdue-projects monitoring. Read-only." },
   { value: "workload:team", label: "Team workload", hint: "On the Utilization page's Workload tab, see the open tasks of every person assigned to a project this user owns, plus the unassigned tasks in those projects. Without it a user sees only their own row. Read-only." },
   { value: "workload:all", label: "Org-wide workload", hint: "On the Utilization page's Workload tab, see every assignee's open tasks and all unassigned tasks. Counts cover every project; task names show only for projects the user can open. Read-only." },
-  { value: "webhook:manage", label: "Outgoing webhooks", hint: "Create webhooks in Settings > Integrations that send task, comment, project and risk events to a URL or a Google Chat space. A webhook sees only the projects its owner can see." },
+  { value: "webhook:manage", label: "Outgoing webhooks", hint: "Create webhooks in Settings > Integrations that send task, comment, project and risk events to a URL. A webhook sees only the projects its owner can see." },
 ];
 
 /**

@@ -11,7 +11,6 @@ import type {
   WeeklyHealth,
   WeeklyStatus,
   WebhookDeliveryStatus,
-  WebhookFormat,
 } from "@/lib/queries";
 import type { ShareLinkStatus } from "@/lib/shareLinks";
 
@@ -148,11 +147,6 @@ export const WEBHOOK_EVENT_LABEL: Record<string, string> = {
   "comment.created": "Comment added",
   "project.created": "Project created",
   "risk.created": "Risk added",
-};
-
-export const WEBHOOK_FORMAT_LABEL: Record<WebhookFormat, string> = {
-  STANDARD: "Standard Webhooks",
-  GOOGLE_CHAT: "Google Chat",
 };
 
 export const DELIVERY_STATUS_LABEL: Record<WebhookDeliveryStatus, string> = {

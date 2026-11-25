@@ -16,7 +16,6 @@ function webhook(over: Partial<Webhook> = {}): Webhook {
     name: "Delivery channel",
     host: "hooks.example.com",
     urlPreview: "https://hooks.example.com/path/with-a-token?…",
-    format: "STANDARD",
     eventTypes: ["task.created", "comment.created"],
     projectIds: [],
     active: true,
@@ -89,7 +88,7 @@ describe("WebhooksPanel", () => {
     expect(within(row).getByText("hooks.example.com")).toBeTruthy();
     expect(row.textContent).not.toContain("with-a-token");
     expect(within(row).getByText("Active")).toBeTruthy();
-    expect(within(row).getByText("Standard Webhooks")).toBeTruthy();
+    expect(within(row).queryByText("Format")).toBeNull();
     expect(within(row).getByText("Task created, Comment added")).toBeTruthy();
     expect(within(row).getByText("All visible projects")).toBeTruthy();
     expect(within(row).getByText("Delivered (200), just now")).toBeTruthy();
@@ -107,12 +106,11 @@ describe("WebhooksPanel", () => {
     await waitFor(() => expect(sentBody("PATCH /api/webhooks/1")).toEqual({ active: true }));
   });
 
-  it("offers Rotate secret for Standard Webhooks only", async () => {
-    routes["GET /api/webhooks"] = () =>
-      json(200, { webhooks: [webhook(), webhook({ id: 2, format: "GOOGLE_CHAT", name: "Chat" })] });
+  it("offers Rotate secret on every row", async () => {
+    routes["GET /api/webhooks"] = () => json(200, { webhooks: [webhook(), webhook({ id: 2, name: "Second" })] });
     renderPanel();
     expect(within(await screen.findByTestId("webhook-1")).getByRole("button", { name: "Rotate secret" })).toBeTruthy();
-    expect(within(screen.getByTestId("webhook-2")).queryByRole("button", { name: "Rotate secret" })).toBeNull();
+    expect(within(screen.getByTestId("webhook-2")).getByRole("button", { name: "Rotate secret" })).toBeTruthy();
   });
 
   it("shows the result of Send test", async () => {
@@ -147,8 +145,7 @@ describe("WebhooksPanel", () => {
     expect(sentBody("POST /api/webhooks")).toEqual({
       name: "Ops",
       url: "https://example.com/h",
-      format: "STANDARD",
-      eventTypes: ["task.created", "comment.created"],
+        eventTypes: ["task.created", "comment.created"],
       projectIds: [],
     });
 
@@ -215,6 +212,8 @@ describe("WebhooksPanel edit", () => {
 
   it("starts the URL empty, shows the redacted target, and keeps the stored URL when left blank", async () => {
     const dialog = await openEdit();
+    expect(within(dialog).queryByText("Format")).toBeNull();
+    expect(within(dialog).queryAllByRole("radio", { name: /Standard Webhooks|Google Chat/ })).toHaveLength(0);
     expect((within(dialog).getByPlaceholderText("https://example.com/hooks/solvro") as HTMLInputElement).value).toBe("");
     expect(within(dialog).getByTestId("webhook-current-target").textContent).toBe(
       "https://hooks.example.com/path/with-a-token?…",

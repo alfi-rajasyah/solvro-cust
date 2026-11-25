@@ -14,7 +14,7 @@ import {
   type Webhook,
   type WebhookTestResult,
 } from "@/lib/queries";
-import { WEBHOOK_FORMAT_LABEL, deliveryErrorLabel } from "@/lib/labels";
+import { deliveryErrorLabel } from "@/lib/labels";
 import { WebhookDeliveriesModal } from "./WebhookDeliveriesModal";
 import { WebhookFormModal } from "./WebhookFormModal";
 import { WebhookSecretModal } from "./WebhookSecretModal";
@@ -115,7 +115,7 @@ export function WebhooksPanel() {
       <EmptyState
         icon="webhook"
         title="No webhooks yet"
-        message="A webhook sends an event, such as a new task or comment, to another tool or a Google Chat space as it happens."
+        message="A webhook sends an event, such as a new task or comment, to another tool as it happens."
         action={addButton}
       />
     );
@@ -159,7 +159,7 @@ export function WebhooksPanel() {
         onClose={() => setForm({ open: false })}
         onCreated={(created, value) => {
           setForm({ open: false });
-          if (value) setSecret({ value, name: created.name, rotated: false });
+          setSecret({ value, name: created.name, rotated: false });
         }}
       />
       <WebhookSecretModal
@@ -225,8 +225,6 @@ function WebhookRow({
       </div>
       <p className="break-all font-mono text-meta text-on-surface-variant">{w.host}</p>
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-meta">
-        <dt className="text-on-surface-variant">Format</dt>
-        <dd className="text-on-surface">{WEBHOOK_FORMAT_LABEL[w.format]}</dd>
         <dt className="text-on-surface-variant">Events</dt>
         <dd className="text-on-surface" title={eventLabels(w.eventTypes).join(", ")}>
           {eventsSummary(w.eventTypes)}
@@ -249,11 +247,9 @@ function WebhookRow({
         <button type="button" onClick={onEdit} className={ROW_BUTTON}>
           Edit
         </button>
-        {w.format === "STANDARD" && (
-          <button type="button" onClick={onRotate} className={ROW_BUTTON}>
-            Rotate secret
-          </button>
-        )}
+        <button type="button" onClick={onRotate} className={ROW_BUTTON}>
+          Rotate secret
+        </button>
         <button type="button" onClick={onToggle} disabled={busy} className={ROW_BUTTON}>
           {w.active ? "Disable" : "Enable"}
         </button>

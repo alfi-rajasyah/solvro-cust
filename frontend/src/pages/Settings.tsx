@@ -218,7 +218,7 @@ export function Settings() {
             <SettingsRow
               id="settings-webhooks"
               title="Webhooks"
-              description="Send events from the projects you can see to another tool or a Google Chat space."
+              description="Send events from the projects you can see to another tool."
               wide
               flush={!showItopRow && !showOutlineRow}
             >
