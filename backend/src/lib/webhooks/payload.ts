@@ -2,7 +2,9 @@
 // columns, never from a whole row: a task never sends its description, a
 // comment sends its first 500 characters only, a risk never sends its plans.
 // Activity `changes` carry no free text by design (lib/activity.ts), and only
-// the allow-listed keys per event are copied here.
+// the allow-listed keys per event are copied here. A risk's `title` is its
+// activity label, the first 120 characters of the risk description (the
+// description itself is never sent beyond that).
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { env } from "../../env.js";
 import { dayString } from "../activity.js";

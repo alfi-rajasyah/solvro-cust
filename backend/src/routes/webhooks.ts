@@ -11,7 +11,7 @@ import { WEBHOOK_EVENT_TYPES } from "../lib/webhooks/eventTypes.js";
 import { buildTestPayload } from "../lib/webhooks/payload.js";
 import { prepareRequest, sendRequest } from "../lib/webhooks/sender.js";
 import { generateSecret } from "../lib/webhooks/sign.js";
-import { assertWebhookTarget } from "../lib/webhooks/validateTarget.js";
+import { assertWebhookTarget, hostForLog, urlPreview } from "../lib/webhooks/validateTarget.js";
 
 // Outgoing webhooks (docs/archive/plans/webhooks.md): a user manages their own
 // target URLs. Every route is owner-only (another user's id answers 404), and
@@ -53,7 +53,8 @@ function toDto(w: WebhookWithLast) {
   return {
     id: w.id,
     name: w.name,
-    url: w.url,
+    host: hostForLog(w.url),
+    urlPreview: urlPreview(w.url),
     format: w.format,
     eventTypes: w.eventTypes,
     projectIds: w.projectIds,

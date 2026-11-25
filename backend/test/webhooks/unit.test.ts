@@ -4,7 +4,7 @@ import { mapActivityToEvents } from "../../src/lib/webhooks/events.js";
 import { WEBHOOK_EVENT_TYPES } from "../../src/lib/webhooks/eventTypes.js";
 import { excerpt, googleChatText } from "../../src/lib/webhooks/payload.js";
 import { generateSecret, signStandardWebhook } from "../../src/lib/webhooks/sign.js";
-import { parseTarget, pinnedLookup, resolveTarget } from "../../src/lib/webhooks/validateTarget.js";
+import { parseTarget, pinnedLookup, resolveTarget, urlPreview } from "../../src/lib/webhooks/validateTarget.js";
 
 const row = (entityType: string, action: string, changes: unknown = null) => ({ entityType, action, changes });
 const assignee = { from: null, to: { id: 4, username: "maya" } };
@@ -147,5 +147,13 @@ describe("address policy", () => {
     lookup("evil.example", { all: true }, (_e, address) => {
       expect(address).toEqual([{ address: "203.0.113.7", family: 4 }]);
     });
+  });
+});
+
+describe("urlPreview", () => {
+  it("keeps scheme, host and path and hides the query string", () => {
+    expect(urlPreview("https://chat.example.com/v1/spaces/A/messages?key=k&token=t")).toBe("https://chat.example.com/v1/spaces/A/messages?…");
+    expect(urlPreview("https://hooks.example.com:8443/in")).toBe("https://hooks.example.com:8443/in");
+    expect(urlPreview("https://hooks.example.com")).toBe("https://hooks.example.com/");
   });
 });

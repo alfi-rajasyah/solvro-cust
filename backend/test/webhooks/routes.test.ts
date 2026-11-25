@@ -31,7 +31,8 @@ describe("POST /webhooks", () => {
     expect(created.body.secret).toMatch(/^whsec_[A-Za-z0-9+/]{32}$/);
     expect(created.body.webhook).toMatchObject({
       name: "Ops channel",
-      url: PUBLIC_URL,
+      host: "203.0.113.7",
+      urlPreview: PUBLIC_URL,
       format: "STANDARD",
       eventTypes: ["task.created", "comment.created"],
       projectIds: [],
@@ -48,6 +49,22 @@ describe("POST /webhooks", () => {
     expect(list.status).toBe(200);
     expect(list.body.webhooks).toHaveLength(1);
     expect(JSON.stringify(list.body)).not.toMatch(/whsec_|secret/i);
+  });
+
+  it("never returns the full URL: only the host and a preview with the query replaced", async () => {
+    const tam = await createUserWithRole("TAM");
+    const url = "https://203.0.113.7/v1/spaces/AAA/messages?key=KEYVALUE&token=TOKENVALUE";
+    const created = await request(app).post("/webhooks").set(auth(tam.token)).send(body({ url, format: "GOOGLE_CHAT" }));
+    expect(created.status).toBe(201);
+    expect(created.body.webhook).toMatchObject({ host: "203.0.113.7", urlPreview: "https://203.0.113.7/v1/spaces/AAA/messages?…" });
+    expect(created.body.webhook.url).toBeUndefined();
+    const id = created.body.webhook.id as number;
+
+    // A PATCH without url keeps the stored URL; the response still hides it.
+    const patched = await request(app).patch(`/webhooks/${id}`).set(auth(tam.token)).send({ name: "Renamed" });
+    const list = await request(app).get("/webhooks").set(auth(tam.token));
+    for (const res of [created, patched, list]) expect(JSON.stringify(res.body)).not.toMatch(/KEYVALUE|TOKENVALUE|key=|token=/);
+    expect((await prisma.webhookSubscription.findUniqueOrThrow({ where: { id } })).url).toBe(url);
   });
 
   it("gives Google Chat no secret", async () => {

@@ -54,6 +54,9 @@ CREATE INDEX "webhook_subscriptions_owner_id_idx" ON "webhook_subscriptions"("ow
 CREATE INDEX "webhook_deliveries_status_next_attempt_at_idx" ON "webhook_deliveries"("status", "next_attempt_at");
 
 -- CreateIndex
+CREATE INDEX "webhook_deliveries_subscription_id_id_idx" ON "webhook_deliveries"("subscription_id", "id");
+
+-- CreateIndex
 CREATE INDEX "webhook_deliveries_created_at_idx" ON "webhook_deliveries"("created_at");
 
 -- CreateIndex

@@ -13,7 +13,7 @@ import {
 } from "../../src/lib/webhooks/dispatcher.js";
 import { sendRequest, type SendFn } from "../../src/lib/webhooks/sender.js";
 import { signStandardWebhook } from "../../src/lib/webhooks/sign.js";
-import { seedRoles } from "../testAuth.js";
+import { createUserWithRole, seedRoles } from "../testAuth.js";
 import {
   allowLocalTargets,
   makeSubscription,
@@ -21,6 +21,7 @@ import {
   SECRET,
   startReceiver,
   stampAllDispatched,
+  uniq,
   type Receiver,
 } from "./helpers.js";
 
@@ -128,20 +129,104 @@ describe("dispatchActivity", () => {
     expect(await prisma.webhookDelivery.count({ where: { subscriptionId: both.id } })).toBe(4);
   });
 
-  it("task.completed needs the task to be in a DONE status now", async () => {
+  it("task.completed follows the status the row moved to, not the task's status now (two rows, one claim)", async () => {
     const f = await projectFixture();
     const sub = await makeSubscription(f.owner.userId, receiver.url, { eventTypes: ["task.completed"] });
+    const row = (to: string) =>
+      recordActivity(prisma, {
+        projectId: f.project.id,
+        actorId: f.owner.userId,
+        entityType: "task",
+        entityId: f.task.id,
+        action: "updated",
+        changes: { status: { from: "x", to } },
+      });
+    const toDone = (await row("Done"))!;
+    const toProgress = (await row("In progress"))!;
+    const toUnknown = (await row("Renamed away"))!;
+    // The task ends on a DONE status; only the row that moved it there counts.
     await prisma.task.update({ where: { id: f.task.id }, data: { statusId: 3, status: "DONE" } });
-    await recordActivity(prisma, {
-      projectId: f.project.id,
-      actorId: f.owner.userId,
-      entityType: "task",
-      entityId: f.task.id,
-      action: "updated",
-      changes: { status: { from: "To do", to: "Done" } },
-    });
     await dispatchActivity();
-    expect((await prisma.webhookDelivery.findMany({ where: { subscriptionId: sub.id } })).map((d) => d.eventType)).toEqual(["task.completed"]);
+    const deliveries = await prisma.webhookDelivery.findMany({ where: { subscriptionId: sub.id } });
+    expect(deliveries.map((d) => [d.activityEventId, d.eventType])).toEqual([[toDone.id, "task.completed"]]);
+    expect([toProgress.id, toUnknown.id].some((id) => deliveries.some((d) => d.activityEventId === id))).toBe(false);
+  });
+});
+
+describe("who may receive (permissions and visibility at claim time)", () => {
+  it("creates no delivery for an empty-scope webhook whose owner cannot see the project", async () => {
+    const f = await projectFixture();
+    const outsider = await createUserWithRole("TAM");
+    const hidden = await makeSubscription(outsider.userId, receiver.url); // projectIds [] = every visible project
+    const visible = await makeSubscription(f.owner.userId, receiver.url);
+    const event = (await taskCreated(f))!;
+    await dispatchActivity();
+    const rows = await prisma.webhookDelivery.findMany({ where: { activityEventId: event.id } });
+    expect(rows.map((d) => d.subscriptionId)).toEqual([visible.id]);
+    expect(rows.some((d) => d.subscriptionId === hidden.id)).toBe(false);
+  });
+
+  it("creates no delivery for an explicit list that holds a project the owner lost", async () => {
+    const f = await projectFixture();
+    const sub = await makeSubscription(f.owner.userId, receiver.url, { projectIds: [f.project.id] });
+    await prisma.project.update({ where: { id: f.project.id }, data: { tamId: f.other.userId } });
+    await taskCreated(f);
+    await dispatchActivity();
+    expect(await prisma.webhookDelivery.count({ where: { subscriptionId: sub.id } })).toBe(0);
+  });
+
+  it("creates no delivery for an owner demoted to PENDING or whose role lost webhook:manage / project:read", async () => {
+    const f = await projectFixture();
+    const sub = await makeSubscription(f.owner.userId, receiver.url);
+    const role = await prisma.role.create({ data: { roleName: uniq("Role"), permissions: ["project:read", "project:view-all", "webhook:manage"] } });
+    const custom = await createUserWithRole("TAM");
+    await prisma.user.update({ where: { id: custom.userId }, data: { roleId: role.id } });
+    const customSub = await makeSubscription(custom.userId, receiver.url);
+
+    await taskCreated(f);
+    await dispatchActivity();
+    expect(await prisma.webhookDelivery.count({ where: { subscriptionId: customSub.id } })).toBe(1);
+    expect(await prisma.webhookDelivery.count({ where: { subscriptionId: sub.id } })).toBe(1);
+
+    const pending = await prisma.role.findUniqueOrThrow({ where: { roleName: "PENDING" } });
+    await prisma.user.update({ where: { id: f.owner.userId }, data: { roleId: pending.id } });
+    await prisma.role.update({ where: { id: role.id }, data: { permissions: ["project:read", "project:view-all"] } });
+    await taskCreated(f);
+    await dispatchActivity();
+    expect(await prisma.webhookDelivery.count({ where: { subscriptionId: sub.id } })).toBe(1);
+    expect(await prisma.webhookDelivery.count({ where: { subscriptionId: customSub.id } })).toBe(1);
+    await prisma.role.update({ where: { id: role.id }, data: { permissions: ["webhook:manage", "project:view-all"] } });
+    await taskCreated(f);
+    await dispatchActivity();
+    expect(await prisma.webhookDelivery.count({ where: { subscriptionId: customSub.id } })).toBe(1);
+    await prisma.user.update({ where: { id: custom.userId }, data: { roleId: (await prisma.role.findUniqueOrThrow({ where: { roleName: "TAM" } })).id } });
+    await prisma.role.delete({ where: { id: role.id } });
+    await prisma.user.update({ where: { id: f.owner.userId }, data: { roleId: (await prisma.role.findUniqueOrThrow({ where: { roleName: "TAM" } })).id } });
+  });
+
+  it("re-checks at send time: demoted to PENDING, or webhook:manage removed from a custom role, fails owner_no_access without sending", async () => {
+    const f = await projectFixture();
+    const demoted = await makeSubscription(f.owner.userId, receiver.url, { consecutiveFailures: 2 });
+    const role = await prisma.role.create({ data: { roleName: uniq("Role"), permissions: ["project:read", "project:view-all", "webhook:manage"] } });
+    const custom = await createUserWithRole("TAM");
+    await prisma.user.update({ where: { id: custom.userId }, data: { roleId: role.id } });
+    const stripped = await makeSubscription(custom.userId, receiver.url, { consecutiveFailures: 2 });
+    await taskCreated(f);
+    await dispatchActivity();
+    expect(await prisma.webhookDelivery.count({ where: { status: "PENDING" } })).toBe(2);
+
+    const pending = await prisma.role.findUniqueOrThrow({ where: { roleName: "PENDING" } });
+    await prisma.user.update({ where: { id: f.owner.userId }, data: { roleId: pending.id } });
+    await prisma.role.update({ where: { id: role.id }, data: { permissions: ["project:read", "project:view-all"] } });
+    await sendDueDeliveries({ send: neverSend });
+
+    for (const sub of [demoted, stripped]) {
+      expect(await prisma.webhookDelivery.findFirstOrThrow({ where: { subscriptionId: sub.id } })).toMatchObject({ status: "FAILED", lastError: "owner_no_access" });
+      expect((await prisma.webhookSubscription.findUniqueOrThrow({ where: { id: sub.id } })).consecutiveFailures).toBe(2);
+    }
+    expect(receiver.received).toHaveLength(0);
+    await prisma.user.update({ where: { id: custom.userId }, data: { roleId: (await prisma.role.findUniqueOrThrow({ where: { roleName: "TAM" } })).id } });
+    await prisma.role.delete({ where: { id: role.id } });
   });
 });
 
@@ -319,7 +404,73 @@ describe("retries and auto-disable", () => {
   });
 });
 
+describe("send scheduling", () => {
+  async function pendingFor(sub: { id: number }, f: Awaited<ReturnType<typeof projectFixture>>, n: number) {
+    for (let i = 0; i < n; i++) {
+      const event = await prisma.activityEvent.create({
+        data: { projectId: f.project.id, entityType: "task", entityId: f.task.id, action: "created", webhookDispatchedAt: new Date() },
+      });
+      await prisma.webhookDelivery.create({ data: { subscriptionId: sub.id, activityEventId: event.id, eventType: "task.created" } });
+    }
+  }
+  const ok: Awaited<ReturnType<SendFn>> = { ok: true, statusCode: 200, error: null, retryable: false };
+
+  it("a slow target does not delay another webhook's delivery in the same tick", async () => {
+    const f = await projectFixture();
+    const slow = await makeSubscription(f.owner.userId, "http://127.0.0.1:9/slow");
+    const fast = await makeSubscription(f.owner.userId, "http://127.0.0.1:9/fast");
+    await pendingFor(slow, f, 3);
+    await pendingFor(fast, f, 1);
+    const finished: string[] = [];
+    const send: SendFn = async (url) => {
+      if (url.endsWith("/slow")) await new Promise((r) => setTimeout(r, 400));
+      finished.push(url.endsWith("/slow") ? "slow" : "fast");
+      return ok;
+    };
+    const started = Date.now();
+    expect(await sendDueDeliveries({ send })).toBe(4);
+    expect(finished[0]).toBe("fast");
+    // Run concurrently: three 400 ms sends took well under 3 x 400 ms.
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it("sends at most 3 deliveries per webhook per tick", async () => {
+    const f = await projectFixture();
+    const sub = await makeSubscription(f.owner.userId, "http://127.0.0.1:9/x");
+    await pendingFor(sub, f, 5);
+    expect(await sendDueDeliveries({ send: async () => ok })).toBe(3);
+    expect(await sendDueDeliveries({ send: async () => ok })).toBe(2);
+  });
+
+  it("stamps claims and results with the clock at that moment, not the start of the tick", async () => {
+    const f = await projectFixture();
+    const sub = await makeSubscription(f.owner.userId, "http://127.0.0.1:9/x");
+    await pendingFor(sub, f, 1);
+    const before = Date.now();
+    const send: SendFn = async () => {
+      await new Promise((r) => setTimeout(r, 300));
+      return { ok: false, statusCode: 503, error: "http_503", retryable: true };
+    };
+    await sendDueDeliveries({ send });
+    const d = await prisma.webhookDelivery.findFirstOrThrow({ where: { subscriptionId: sub.id } });
+    // The 5 s retry delay counts from when the attempt finished (>= 300 ms after the tick began).
+    expect(d.nextAttemptAt.getTime()).toBeGreaterThanOrEqual(before + 300 + RETRY_DELAYS_MS[0]);
+  });
+});
+
 describe("sendRequest", () => {
+  it("connects to the pinned address whatever the host name says", async () => {
+    const port = new URL(receiver.url).port;
+    const result = await sendRequest(
+      `http://pinned-host.example:${port}/hook`,
+      { headers: {}, body: "{}" },
+      { allowHttp: true, allowPrivate: true, lookup: async () => [{ address: "127.0.0.1", family: 4 }] },
+    );
+    expect(result.ok).toBe(true);
+    expect(receiver.received).toHaveLength(1);
+    expect(receiver.received[0].headers.host).toBe(`pinned-host.example:${port}`);
+  });
+
   it("times out on a hanging receiver and reports it as retryable", async () => {
     const slow = await startReceiver();
     slow.hang();

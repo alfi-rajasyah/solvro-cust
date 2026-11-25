@@ -22,11 +22,11 @@ function assigneeSet(changes: Record<string, unknown> | null): boolean {
 
 /**
  * The event types for one activity row, in the order a subscription picks
- * from when it subscribes to more than one of them. `taskIsDone` is the
- * task's current status category being DONE (the dispatcher looks it up for
- * task `updated` rows that changed status).
+ * from when it subscribes to more than one of them. `statusIsDone` is the
+ * category of the status the row moved to being DONE (the dispatcher resolves
+ * the recorded status name against task_status_defs).
  */
-export function mapActivityToEvents(row: ActivityRowForMapping, taskIsDone = false): WebhookEventType[] {
+export function mapActivityToEvents(row: ActivityRowForMapping, statusIsDone = false): WebhookEventType[] {
   const changes = asRecord(row.changes);
   const events: WebhookEventType[] = [];
   if (row.entityType === "task") {
@@ -36,7 +36,7 @@ export function mapActivityToEvents(row: ActivityRowForMapping, taskIsDone = fal
     } else if (row.action === "updated" && changes) {
       if (changes.status !== undefined) {
         events.push("task.status_changed");
-        if (taskIsDone) events.push("task.completed");
+        if (statusIsDone) events.push("task.completed");
       }
       if (assigneeSet(changes)) events.push("task.assigned");
       if (changes.startDate !== undefined || changes.dueDate !== undefined) events.push("task.due_date_changed");
@@ -49,8 +49,9 @@ export function mapActivityToEvents(row: ActivityRowForMapping, taskIsDone = fal
   return events;
 }
 
-/** Whether the row needs the task's current status category to map (see `mapActivityToEvents`). */
-export function needsTaskCategory(row: ActivityRowForMapping): boolean {
-  const changes = asRecord(row.changes);
-  return row.entityType === "task" && row.action === "updated" && changes?.status !== undefined;
+/** The name of the status a task `updated` row moved to (`changes.status.to`), or null. */
+export function newStatusName(row: ActivityRowForMapping & { entityType: string; action: string }): string | null {
+  if (row.entityType !== "task" || row.action !== "updated") return null;
+  const to = asRecord(asRecord(row.changes)?.status)?.to;
+  return typeof to === "string" ? to : null;
 }

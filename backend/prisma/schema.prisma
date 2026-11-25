@@ -429,6 +429,7 @@ model WebhookDelivery {
   @@index([status, nextAttemptAt])
   @@index([activityEventId])
   @@index([createdAt])
+  @@index([subscriptionId, id])
   @@map("webhook_deliveries")
 }
 

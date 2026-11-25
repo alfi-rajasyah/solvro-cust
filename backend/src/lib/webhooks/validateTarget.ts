@@ -48,6 +48,16 @@ export function hostForLog(raw: string): string {
   }
 }
 
+/** `scheme://host/path` with any query string replaced by "?…", for showing a target without its token. */
+export function urlPreview(raw: string): string {
+  try {
+    const u = new URL(raw);
+    return `${u.protocol}//${u.host}${u.pathname}${u.search ? "?…" : ""}`;
+  } catch {
+    return "invalid-url";
+  }
+}
+
 /** Parses and checks the scheme and userinfo rules; no network. */
 export function parseTarget(raw: string, policy: TargetPolicy = {}): URL {
   let url: URL;
