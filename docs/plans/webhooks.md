@@ -1,6 +1,6 @@
 # Webhooks: outgoing events and GitLab incoming links (GitHub #166)
 
-Status: planned (written 2026-11-25 @ `259fd0a`)
+Status: in progress (written 2026-11-25 @ `259fd0a`; Phase 1 started 2026-11-25)
 Archive path: `docs/archive/plans/webhooks.md`
 
 Lane: P (new models and migrations, new routes, a new signed unauthenticated route, a new Settings section). Two phases, each its own branch and PR: **Phase 1** outgoing webhooks, **Phase 2** GitLab incoming links. Phase 2 starts after Phase 1 merges; the two never carry a migration at the same time.
@@ -14,15 +14,13 @@ Lane: P (new models and migrations, new routes, a new signed unauthenticated rou
 - A webhook sends only events about projects its owner can see at delivery time. When the owner loses access, deliveries for that project stop.
 - Incoming: one URL per project with a secret token. A GitLab commit or merge request that contains a Solvro task URL adds a comment with the link to that task. Tasks are named by their URL (`${APP_URL}/tasks/<id>`), not by a new short reference (option (b)): no task-reference schema change.
 
-## Questions for the user
+Defaults accepted by the user, 2026-11-25:
 
-Each has a default the plan uses if the user does not choose otherwise.
-
-1. **Private addresses.** May a webhook target a LAN or loopback address (a custom app on the same network)? Default: refused, switched on per deployment with `WEBHOOK_ALLOW_PRIVATE_HOSTS=true` (the iTop setting defaults the other way because iTop shares the LAN).
-2. **Plain http.** Default: https only, switched on with `WEBHOOK_ALLOW_HTTP=true`.
-3. **Comment text.** Does `comment.created` carry the comment text? Default: yes, the first 500 characters. A Google Chat space can hold people without project access, so the create dialog says this.
-4. **Who gets the permission.** The new permission `webhook:manage` gates the Settings section. Default: the migration adds it to the built-in TAM and STAKEHOLDER roles (so all users have it, as the issue asks); custom roles get it only when an admin adds it; admins have it through `*`.
-5. **Incoming comment author.** A GitLab comment needs a Solvro author. Default: the user who created the incoming URL, with a "via GitLab" marker on the comment. If that user is deactivated or loses access to the project, the URL stops accepting events.
+- Private and loopback targets are refused; `WEBHOOK_ALLOW_PRIVATE_HOSTS=true` allows them for one deployment.
+- Targets must be https; `WEBHOOK_ALLOW_HTTP=true` allows plain http.
+- `comment.created` carries the first 500 characters of the comment. The create dialog says that a shared chat space can hold people without project access.
+- The new permission `webhook:manage` gates the Settings section. The migration adds it to the built-in TAM and STAKEHOLDER roles; custom roles get it only when an admin adds it; admins have it through `*`.
+- A GitLab comment's author is the user who created the incoming URL, with a "via GitLab" marker. If that user is deactivated or loses access to the project, the URL stops accepting events.
 
 ## Phase 1: outgoing webhooks
 
