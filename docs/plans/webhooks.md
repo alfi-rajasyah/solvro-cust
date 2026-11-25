@@ -27,7 +27,7 @@ Defaults accepted by the user, 2026-11-25:
 ### Data model (one migration)
 
 - `WebhookSubscription`: `id`, `ownerId` → User, `name`, `url`, `format` (`standard` | `google_chat`), `secretEnc` (sealed with `lib/secretBox.ts`, `null` for Google Chat), `eventTypes String[]`, `projectIds Int[]` (empty = every project the owner can see), `active`, `consecutiveFailures`, `disabledReason?`, `createdAt`, `updatedAt`. Limit: 10 per user.
-- `WebhookDelivery`: `id`, `subscriptionId` (cascade), `activityEventId` (cascade), `eventType`, `status` (`pending` | `succeeded` | `failed`), `attempts`, `nextAttemptAt`, `lastStatusCode?`, `lastError?` (short, never the response body), `createdAt`. Unique on (`subscriptionId`, `activityEventId`). Index on (`status`, `nextAttemptAt`).
+- `WebhookDelivery`: `id`, `subscriptionId` (cascade), `activityEventId` (cascade), `eventType`, `status` (`pending` | `succeeded` | `failed`), `attempts`, `nextAttemptAt`, `lastStatusCode?`, `lastError?` (short, never the response body), `createdAt`. Unique on (`subscriptionId`, `activityEventId`, `eventType`), so one change that maps to two events a webhook follows sends both. Indexes on (`subscriptionId`, `id`) and `createdAt`. Index on (`status`, `nextAttemptAt`).
 - `ActivityEvent.webhookDispatchedAt DateTime?` with a partial index where it is null. The migration sets it to `now()` on every existing row, so past events are never sent.
 - No change to any write path: the dispatcher reads the activity log, which every write already records in the same transaction (`lib/activity.ts`). Bulk edits, duplicates and imports send events exactly when they record activity.
 
@@ -67,8 +67,8 @@ Google Chat gets one line built from the same data, for example `rizky.pratama m
 ### Dispatcher (`lib/webhooks/dispatcher.ts`, started in `src/index.ts` like the iTop scheduler)
 
 - Every 5 seconds: claim up to 100 undispatched activity rows with `FOR UPDATE SKIP LOCKED` (safe with more than one backend instance), map them, match active subscriptions by event type and project, create the `WebhookDelivery` rows, and set `webhookDispatchedAt`, in one transaction.
-- Visibility: before each send, `filterActiveUsersWhoCanSeeProject` (`lib/notifications.ts`) on the owner. An owner who is inactive or cannot see the project: the delivery is marked `failed` with `owner_no_access` and never sent.
-- Send: 10-second timeout, no redirects followed, response body read only up to 1 KB and never stored. 2xx = success.
+- Visibility: deliveries are created only for owners who can see the project and hold `webhook:manage` and `project:read`; before each send the same check runs again (`filterActiveUsersWhoCanSeeProject` in `lib/notifications.ts` plus the permissions). An owner who is inactive or cannot see the project: the delivery is marked `failed` with `owner_no_access` and never sent.
+- Send: 10-second timeout, no redirects followed; the response body is never read or stored. 2xx = success.
 - Retries for a network error, a timeout, 429 or 5xx: after 5 s, 5 min, 30 min, 2 h, 5 h, 10 h (7 attempts in about 18 hours), then `failed`. Any other 4xx fails at once.
 - After 20 failed deliveries in a row the subscription turns inactive with `disabledReason`, and the owner sees it in Settings. Re-enabling resets the count.
 - Address policy (`lib/webhooks/validateTarget.ts`): reuses `isPrivateAddress` from `lib/itop/validateBaseUrl.ts`. Checked at save time and again at each send, where the request connects to the address that was checked (a pinned lookup), so DNS rebinding cannot reach a private address. No userinfo in the URL.
@@ -99,7 +99,7 @@ Google Chat gets one line built from the same data, for example `rizky.pratama m
 | 1.2 | Event mapping, payload builders, signing, address policy, dispatcher, retries, auto-disable, tests | 1.1 |
 | 1.3 | Routes, validation, tests | 1.1 |
 | 1.4 | Settings section, dialogs, deliveries panel, `queries.ts` hooks, tests | 1.3 (API shape) |
-| 1.5 | e2e spec (create, test-send to a local receiver, disable), `docs/guides/webhooks.md`, `docs/CONFIGURATION.md` env rows | 1.2, 1.4 |
+| 1.5 | e2e spec (create, one-time secret, disable, delete, Google Chat row, 403 without the permission; the test-send is covered by backend tests against a local receiver), `docs/guides/webhooks.md`, `docs/CONFIGURATION.md` env rows | 1.2, 1.4 |
 
 Wave: 1.1 first, then 1.2 ∥ 1.3 (separate files; the orchestrator mounts the router in `app.ts`), then 1.4, then 1.5.
 

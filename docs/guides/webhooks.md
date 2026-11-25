@@ -2,7 +2,7 @@
 
 A webhook sends a message to another tool when something happens in Solvro, for example when a task changes status or someone comments. Use it to post updates in a Google Chat space, or to feed your own app.
 
-Each user manages their own webhooks. A webhook sends events only about projects its owner can open. If the owner loses access to a project, or their account is deactivated, the webhook stops sending events about it.
+Each user manages their own webhooks. A webhook sends events only about projects its owner can open. If the owner loses access to a project, loses the `webhook:manage` permission, or their account is deactivated, the webhook stops sending events.
 
 **Steps:** [1. Check the permission](#1-check-the-permission) → [2. Add a webhook](#2-add-a-webhook) → [3. Check the signature](#3-check-the-signature-standard-webhooks-only) → [Events and payload](#events-and-payload) → [Deliveries and retries](#deliveries-and-retries) → [Troubleshooting](#troubleshooting)
 
@@ -66,7 +66,7 @@ A Standard Webhooks body looks like this:
 ```
 
 - `comment.created` adds `comment: { id, text }`, with the first 500 characters of the comment.
-- `risk.created` adds `risk: { id, title, status, probability, impact }`.
+- `risk.created` adds `risk: { id, title, status, probability, impact }`. `title` is the first 120 characters of the risk description.
 - A task description is never sent. Notes are never sent, so an internal note can never leave Solvro through a webhook.
 - The links use the server's `APP_URL`. Without it, `url` fields are empty.
 
