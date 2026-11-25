@@ -67,7 +67,7 @@ Google Chat gets one line built from the same data, for example `rizky.pratama m
 ### Dispatcher (`lib/webhooks/dispatcher.ts`, started in `src/index.ts` like the iTop scheduler)
 
 - Every 5 seconds: claim up to 100 undispatched activity rows with `FOR UPDATE SKIP LOCKED` (safe with more than one backend instance), map them, match active subscriptions by event type and project, create the `WebhookDelivery` rows, and set `webhookDispatchedAt`, in one transaction.
-- Visibility: deliveries are created only for owners who can see the project and hold `webhook:manage` and `project:read`; before each send the same check runs again (`filterActiveUsersWhoCanSeeProject` in `lib/notifications.ts` plus the permissions). An owner who is inactive or cannot see the project: the delivery is marked `failed` with `owner_no_access` and never sent.
+- Visibility: deliveries are created only for owners who can see the project and hold `webhook:manage` and `project:read`; before each send the same check runs again (`filterActiveUsersWhoCanSeeProject` in `lib/notifications.ts` plus the permissions). An owner who is inactive, cannot see the project, or lost `webhook:manage` or `project:read`: the delivery is marked `failed` with `owner_no_access` and never sent.
 - Send: 10-second timeout, no redirects followed; the response body is never read or stored. 2xx = success.
 - Retries for a network error, a timeout, 429 or 5xx: after 5 s, 5 min, 30 min, 2 h, 5 h, 10 h (7 attempts in about 18 hours), then `failed`. Any other 4xx fails at once.
 - After 20 failed deliveries in a row the subscription turns inactive with `disabledReason`, and the owner sees it in Settings. Re-enabling resets the count.

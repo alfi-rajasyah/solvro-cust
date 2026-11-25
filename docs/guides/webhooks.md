@@ -2,7 +2,7 @@
 
 A webhook sends a message to another tool when something happens in Solvro, for example when a task changes status or someone comments. Use it to post updates in a Google Chat space, or to feed your own app.
 
-Each user manages their own webhooks. A webhook sends events only about projects its owner can open. If the owner loses access to a project, loses the `webhook:manage` permission, or their account is deactivated, the webhook stops sending events.
+Each user manages their own webhooks. A webhook sends events only about projects its owner can open. If the owner loses access to a project, loses the `webhook:manage` or `project:read` permission, or their account is deactivated, the webhook stops sending events.
 
 **Steps:** [1. Check the permission](#1-check-the-permission) → [2. Add a webhook](#2-add-a-webhook) → [3. Check the signature](#3-check-the-signature-standard-webhooks-only) → [Events and payload](#events-and-payload) → [Deliveries and retries](#deliveries-and-retries) → [Troubleshooting](#troubleshooting)
 
@@ -22,7 +22,7 @@ Webhooks need the `webhook:manage` permission. The built-in TAM and Stakeholder 
 4. Pick the events, and either every project you can open or only some of them.
 5. Save. For Standard Webhooks, Solvro shows the signing secret (`whsec_…`) **once**. Copy it into the receiving app now. You can make a new one later with **Rotate secret**, which stops the old one from working.
 6. Select **Send test** to send a `webhook.test` event and see the answer the receiver gave.
-7. To change the URL later, select **Edit** and type a new one. Solvro never shows the stored URL again, only its host and path; leave the field blank to keep it.
+7. To change the URL later, select **Edit** and type a new one. Solvro never shows the stored URL again, only its host and a shortened path; leave the field blank to keep it.
 
 Each user can have up to 10 webhooks. The URL must be `https://` and reach a public address, unless the server allows otherwise (see [Troubleshooting](#troubleshooting)).
 
@@ -87,4 +87,4 @@ A Standard Webhooks body looks like this:
 | Send test shows "The receiver did not answer in time" or "Could not connect to the receiver" | The receiver did not answer within 10 seconds, or the Solvro server cannot reach it. Check the URL and the receiver's firewall. |
 | Send test shows "The receiver answered 301" or "302" | The URL redirects. Use the final URL. |
 | The webhook shows "Disabled" | It failed 20 times in a row. Fix the receiver, then select **Enable**. |
-| No events for one project | The webhook owner cannot open that project any more, or the webhook is limited to other projects. Deliveries show "The webhook owner can no longer see this project" when access was lost after an event. |
+| No events for one project | The webhook owner cannot open that project any more, or the webhook is limited to other projects. Deliveries show "The webhook owner can no longer see this project, or lost the permission to receive its events" when access was lost after an event. |
