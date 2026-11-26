@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-26 — A key id in stored secrets, and SECRETS_KEY rotation
+
+- `backend/src/lib/secretBox.ts` now writes stored integration tokens and webhook secrets as `v2:`, with a key id taken from the key. The new optional `SECRETS_KEY_PREVIOUS` (`backend/src/env.ts`) keeps values sealed under the old key readable while `SECRETS_KEY` is rotated. Before, a new `SECRETS_KEY` made every stored iTop and Outline token and every webhook signing secret unreadable. Existing `v1:` values still open, and they move to the new key only when they are written again.
+- `setup.sh` passes `SECRETS_KEY_PREVIOUS` into the compose file it writes, and `solvro config` refuses to show or set it, like the other secrets. The rotation steps are in `docs/CONFIGURATION.md`.
+- **Action required before a rollback:** earlier releases cannot read `v2:` values. After an upgrade, roll back only together with the database backup taken before the upgrade. Tokens and secrets saved after the upgrade must then be entered again.
+
 ### Fixed — 2026-11-26 — Escape closes a dialog in its first frame
 
 - `frontend/src/components/Modal.tsx` now attaches its Escape listener before the dialog paints (a layout effect, not a passive one). Before, a dialog that opened after a server response, such as the task conflict dialog after a 409, ignored an Escape pressed in its first frame. The listener still attaches once per open, so it stays ahead of the drag-cancel listener.

@@ -44,7 +44,6 @@ describe("secretBox", () => {
   });
 
   it("throws SecretBoxError when the ciphertext is tampered with", () => {
-    const sealed = seal("do-not-touch");
     const [version, iv, tag, ciphertext] = legacySeal("do-not-touch", TEST_KEY).split(":");
     const tamperedByte = Buffer.from(ciphertext, "base64");
     tamperedByte[0] = tamperedByte[0] ^ 0xff;
@@ -53,7 +52,6 @@ describe("secretBox", () => {
   });
 
   it("throws SecretBoxError when the auth tag is tampered with", () => {
-    const sealed = seal("do-not-touch");
     const [version, iv, tag, ciphertext] = legacySeal("do-not-touch", TEST_KEY).split(":");
     const tamperedTag = Buffer.from(tag, "base64");
     tamperedTag[0] = tamperedTag[0] ^ 0xff;
@@ -62,7 +60,6 @@ describe("secretBox", () => {
   });
 
   it("throws SecretBoxError when the auth tag is truncated", () => {
-    const sealed = seal("do-not-touch");
     const [version, iv, tag, ciphertext] = legacySeal("do-not-touch", TEST_KEY).split(":");
     const truncated = Buffer.from(tag, "base64").subarray(0, 8);
     expect(() => open([version, iv, truncated.toString("base64"), ciphertext].join(":"))).toThrow(SecretBoxError);
@@ -70,7 +67,6 @@ describe("secretBox", () => {
   });
 
   it("throws SecretBoxError when the auth tag is longer than 16 bytes", () => {
-    const sealed = seal("do-not-touch");
     const [version, iv, tag, ciphertext] = legacySeal("do-not-touch", TEST_KEY).split(":");
     const longer = Buffer.concat([Buffer.from(tag, "base64"), Buffer.from([0])]);
     expect(() => open([version, iv, longer.toString("base64"), ciphertext].join(":"))).toThrow(SecretBoxError);
@@ -117,9 +113,18 @@ describe("secretBox", () => {
 
   it("throws SecretBoxError on an IV of the wrong length", () => {
     const shortIv = Buffer.alloc(4).toString("base64");
-    const sealed = seal("whatever");
     const [version, , tag, ciphertext] = legacySeal("whatever", TEST_KEY).split(":");
     expect(() => open([version, shortIv, tag, ciphertext].join(":"))).toThrow(SecretBoxError);
+  });
+
+  it("throws SecretBoxError when a v2 value is rewritten as v1", () => {
+    const parts = seal("downgrade").split(":");
+    expect(() => open(["v1", ...parts.slice(2)].join(":"))).toThrow(SecretBoxError);
+  });
+
+  it("round-trips when the previous key equals the current key", () => {
+    const box = createSecretBox(TEST_KEY, TEST_KEY);
+    expect(box.open(box.seal("same-key"))).toBe("same-key");
   });
 
   it("still opens a value stored in the old v1 format", () => {

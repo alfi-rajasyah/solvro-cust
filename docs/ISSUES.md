@@ -39,13 +39,13 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 - **Why deferred / fix direction:** Revisit if custom roles start splitting the two permissions.
 - **Source:** snapshot line 1863, section "Duplicate tasks, subtasks, and sections — deferred findings (2026-09-02)"
 
-### ISS-011 · P3 · SECRETS_KEY rotation invalidates every stored token
+### ISS-224 · P3 · Nothing re-seals stored secrets after a SECRETS_KEY rotation
 
-- **Type:** debt · **Found:** 2026-10-09 · **Verified:** 2026-11-26 @ `f25aac3`
-- **Where:** seal()/open() in backend/src/lib/secretBox.ts
-- **Problem:** The sealed format has no key id, so rotating SECRETS_KEY makes every stored iTop and Outline token and every webhook signing secret unreadable; webhook sends then fail with `internal_error` and count toward the 20-failure auto-disable. The tag-length and iTop webhook limiter parts of this entry were fixed 2026-11-20 (CHANGELOG "Backend hardening: CORS header, secret tags, iTop webhook and sync retries, `solvro config`").
-- **Why deferred / fix direction:** Only matters if a key rotation is ever needed. Fix: add a key id to the sealed format and accept the old key during a transition.
-- **Source:** snapshot line 2361, section "Internal sync — deferred findings (2026-10-09)"
+- **Type:** debt · **Found:** 2026-11-26 · **Verified:** 2026-11-26 @ `87c4c0b`
+- **Where:** open() in backend/src/lib/secretBox.ts (line ~107); rotation steps in docs/CONFIGURATION.md (line ~64)
+- **Problem:** A value moves to the new key only when it is written again. Nothing re-seals or counts the values still under `SECRETS_KEY_PREVIOUS` (an idle user's iTop token, an unchanged webhook secret), so the operator cannot know when the previous key can be removed.
+- **Why deferred / fix direction:** Rotation is rare, and keeping the previous key set is safe. Add a `backend/scripts/reseal-secrets.ts` that re-seals every `*Enc` column under the current key (or log a count at boot), then document "run it, then remove SECRETS_KEY_PREVIOUS".
+- **Source:** instant review of the ISS-011 fix, 2026-11-26
 
 ### ISS-012 · P3 · Any customer:write user can set the Outline link of an unowned customer
 
@@ -803,3 +803,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-221 · 2026-11-26 · CHANGELOG "Webhook address checks and a limit on Send test" · Webhook Send test has no rate limit
 - ISS-223 · 2026-11-26 · CHANGELOG "Webhook address checks and a limit on Send test" · Outgoing loop check misses an APP_URL with a path prefix
 - ISS-218 · 2026-11-26 · CHANGELOG "Escape closes a dialog in its first frame" · Task conflict dialog can be open with no rows, and Escape then leaves it open
+- ISS-011 · 2026-11-26 · CHANGELOG "A key id in stored secrets, and SECRETS_KEY rotation" · SECRETS_KEY rotation invalidates every stored token

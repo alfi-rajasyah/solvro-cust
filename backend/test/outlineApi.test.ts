@@ -247,7 +247,7 @@ describe("admin Outline settings: OAuth client and webhook secret", () => {
     const row = await prisma.outlineConfig.findUniqueOrThrow({ where: { id: "default" } });
     expect(row.oauthClientSecretEnc).not.toBeNull();
     expect(row.oauthClientSecretEnc).not.toContain("s3cret-value");
-    expect(row.oauthClientSecretEnc!.startsWith("v1:")).toBe(true);
+    expect(row.oauthClientSecretEnc!.startsWith("v2:")).toBe(true);
     expect(open(row.oauthClientSecretEnc!)).toBe("s3cret-value");
   });
 
