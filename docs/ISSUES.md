@@ -87,30 +87,6 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 - **Why deferred / fix direction:** Deferred. Accept as a product trade-off or scope uniqueness by visibility.
 - **Source:** snapshot line 2434, section "iTop and Outline hardening — deferred findings (2026-10-26)"
 
-### ISS-220 · P3 · Webhook address check misses NAT64 and 6to4 forms
-
-- **Type:** debt · **Found:** 2026-11-25 · **Verified:** 2026-11-26 @ `f25aac3`
-- **Where:** isPrivateAddress in backend/src/lib/itop/validateBaseUrl.ts (line ~27), used by backend/src/lib/webhooks/validateTarget.ts
-- **Problem:** `64:ff9b::/96` (NAT64), `2002::/16` (6to4) and `::ffff:0:a.b.c.d` are not decoded to their embedded IPv4, so on a NAT64-routed host `https://[64:ff9b::a00:1]/` could reach 10.0.0.1.
-- **Why deferred / fix direction:** Only matters on a NAT64 or 6to4 network with the default policy. Decode the embedded IPv4 for those prefixes, run isPrivateIPv4 on it, add unit cases.
-- **Source:** webhooks Phase 1 review, 2026-11-25
-
-### ISS-221 · P3 · Webhook Send test has no rate limit
-
-- **Type:** debt · **Found:** 2026-11-25 · **Verified:** 2026-11-26 @ `f25aac3`
-- **Where:** POST /webhooks/:id/test in backend/src/routes/webhooks.ts
-- **Problem:** Each click sends one outbound POST of up to 10 seconds to the saved URL, with no per-user limit.
-- **Why deferred / fix direction:** Needs `webhook:manage`, and the target passes the address policy. Add a per-user limiter from http/rateLimit.ts (for example 10 per minute).
-- **Source:** webhooks Phase 1 review, 2026-11-25
-
-### ISS-223 · P3 · Outgoing loop check misses an APP_URL with a path prefix
-
-- **Type:** debt · **Found:** 2026-11-25 · **Verified:** 2026-11-26 @ `f25aac3`
-- **Where:** the incoming-URL refusal in backend/src/lib/webhooks/validateTarget.ts (line ~129, in pointsAtIncomingUrl)
-- **Problem:** The refusal matches `/api/webhook/in/` and `/webhook/in/` only at the root of the path, so on a deployment whose `APP_URL` has a path (`https://host/solvro`) an outgoing webhook can target the server's own incoming URL.
-- **Why deferred / fix direction:** No loop results: outgoing webhooks already skip `comment.created` for comments an incoming URL wrote. Match the prefix after `APP_URL`'s own path, add a unit case.
-- **Source:** webhooks Phase 2 review, 2026-11-25
-
 ## Open — Data & performance
 
 ### ISS-018 · P2 · GET /users returns every user with no pagination
@@ -831,3 +807,6 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-146 · 2026-11-24 · CHANGELOG "End-to-end tests wait for conditions, not fixed sleeps" · E2E suite uses fixed waitForTimeout sleeps
 - ISS-002 · 2026-11-25 · CHANGELOG "Deleting a customer follows the owner rule" · DELETE /customers/:id lets the TAM of one project delete an unowned customer
 - ISS-143 · 2026-11-25 · CHANGELOG "Frontend lint for React hooks rules" · No ESLint setup, so the exhaustive-deps guard on TaskFormModal is inert
+- ISS-220 · 2026-11-26 · CHANGELOG "Webhook address checks and a limit on Send test" · Webhook address check misses NAT64 and 6to4 forms
+- ISS-221 · 2026-11-26 · CHANGELOG "Webhook address checks and a limit on Send test" · Webhook Send test has no rate limit
+- ISS-223 · 2026-11-26 · CHANGELOG "Webhook address checks and a limit on Send test" · Outgoing loop check misses an APP_URL with a path prefix
