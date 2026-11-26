@@ -370,6 +370,7 @@ export function SolvroKanban({ project }: SolvroKanbanProps) {
       if (el) observer.observe(el);
     }
     return () => observer.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps key on the joined visible column ids, so the observer only rebuilds when the column set changes
   }, [isLoading, isError, defsLoading, defsError, visibleDefs.map((d) => d.id).join(",")]);
 
   // Vendor's live-preview reshuffles during a drag (dragOver) call this —

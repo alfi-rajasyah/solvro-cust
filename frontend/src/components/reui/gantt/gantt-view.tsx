@@ -720,6 +720,8 @@ function GanttView({
       )
     }
     return map
+  // SOLVRO PATCH: lint suppression, vendored deps kept as shipped.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only the getSummaryProgress callback matters, not the whole viewConfig object
   }, [rows, allEvents, descendantIds, viewConfig.getSummaryProgress])
 
   // Lane memory across layout passes, keyed by getLaneKey (event identity,

@@ -704,6 +704,8 @@ function DataGridTableVirtual<TData>({
     ...virtualizerOptionsRest,
   }) as DataGridTableVirtualizerInstance
 
+  // SOLVRO PATCH: lint suppression, vendored deps kept as shipped.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the disabled branch's fresh [] is harmless: the fetch-more effect returns early when !isVirtualizationEnabled, and getVirtualItems() is memoized when enabled
   const virtualItems = isVirtualizationEnabled
     ? virtualizer.getVirtualItems()
     : []

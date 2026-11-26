@@ -22,6 +22,6 @@ export function useNewParam(value: string, enabled: boolean, onOpen: () => void)
       },
       { replace: true },
     );
-    // onOpen is a state setter closure; only the request itself should re-fire.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- onOpen (a state setter closure) and setSearchParams are left out so only the request itself re-fires
   }, [requested, enabled]);
 }

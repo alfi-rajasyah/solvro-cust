@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-25 — Frontend lint for React hooks rules
+
+- `npm run lint` in `frontend/` runs ESLint (`frontend/eslint.config.js`) with two rules only: `react-hooks/rules-of-hooks` and `react-hooks/exhaustive-deps`. CI runs it after the frontend typecheck. Before this, the repo had no ESLint setup, so the existing `eslint-disable` comments did nothing and a hook with a missing dependency went unnoticed.
+- New dev dependencies: `eslint`, `typescript-eslint` (parser only, no rules on) and `eslint-plugin-react-hooks`.
+- 8 existing hooks break the dependency rule on purpose (a dependency left out, a computed dependency, or a value that is not memoized). Each now has a disable comment with the reason. No hook code or dependency list changed.
+
 ### Fixed — 2026-11-25 — e2e cleanup finds fixture rows whose stamp has no digit
 
 - `backend/scripts/dev/cleanup-e2e-data.ts` (dev only): a fixture stamp is `Date.now()` in base 36 plus 4 random characters, and it can be all letters. The old check required a digit, so it missed those rows, and 32 test projects and 33 test customers stayed in the dev database. The check now reads the time in the stamp and matches a row only when it was created within 12 hours of that time, so a real name that ends in a long word still does not match.
