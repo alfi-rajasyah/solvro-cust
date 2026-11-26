@@ -29,6 +29,23 @@ describe("isPrivateAddress", () => {
       expect(isPrivateAddress(ip), ip).toBe(false);
     }
   });
+  it("decodes the IPv4 embedded in NAT64, 6to4 and IPv4-translated addresses", () => {
+    for (const ip of [
+      "64:ff9b::a00:1", "64:ff9b::10.0.0.1", "64:ff9b:0:0:0:0:7f00:1", "64:ff9b::169.254.169.254", "64:ff9b::c0a8:101",
+      "2002:a00:1::", "2002:a00:1::1", "2002:7f00:1::1", "2002:c0a8:101:1::5", "2002:a9fe:a9fe::",
+      "::ffff:0:a00:1", "::ffff:0:10.0.0.1", "::ffff:0:7f00:1", "0:0:0:0:ffff:0:c0a8:101",
+    ]) {
+      expect(isPrivateAddress(ip), ip).toBe(true);
+    }
+    for (const ip of [
+      "64:ff9b::cb00:7107", "64:ff9b::203.0.113.7", "64:ff9b::808:808",
+      "2002:cb00:7107::1", "2002:808:808::",
+      "::ffff:0:cb00:7107", "::ffff:0:203.0.113.7",
+      "64:ff9b:1::a00:1", // outside 64:ff9b::/96, not decoded
+    ]) {
+      expect(isPrivateAddress(ip), ip).toBe(false);
+    }
+  });
 });
 
 describe("assertPublicItopUrl", () => {

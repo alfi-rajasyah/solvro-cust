@@ -121,7 +121,7 @@ describe("address policy", () => {
   });
 
   it("refuses private, loopback, link-local and IPv4-mapped addresses, by literal and by name", async () => {
-    for (const host of ["127.0.0.1", "10.1.2.3", "192.168.0.9", "169.254.169.254", "[::1]", "[::ffff:10.0.0.1]", "[::ffff:7f00:1]", "[fd00::1]"]) {
+    for (const host of ["127.0.0.1", "10.1.2.3", "192.168.0.9", "169.254.169.254", "[::1]", "[::ffff:10.0.0.1]", "[::ffff:7f00:1]", "[fd00::1]", "[64:ff9b::a00:1]", "[2002:a00:1::]", "[::ffff:0:a00:1]"]) {
       await refused(resolveTarget(`https://${host}/hook`), "private");
     }
     await refused(resolveTarget("https://localhost/hook"), "private");
