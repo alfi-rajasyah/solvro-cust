@@ -21,6 +21,21 @@ const schema = z.object({
           "SECRETS_KEY must be a base64 string that decodes to exactly 32 bytes (generate with: openssl rand -base64 32)",
       },
     ),
+  // Optional during a SECRETS_KEY rotation: the key being rotated away from, so
+  // values sealed under it stay readable. An empty value counts as unset.
+  SECRETS_KEY_PREVIOUS: z
+    .string()
+    .optional()
+    .transform((value) => (value === undefined || value.trim() === "" ? undefined : value.trim()))
+    .refine(
+      (value) =>
+        value === undefined ||
+        (/^[A-Za-z0-9+/]{43}=$/.test(value) && Buffer.from(value, "base64").length === 32),
+      {
+        message:
+          "SECRETS_KEY_PREVIOUS must be a base64 string that decodes to exactly 32 bytes (the SECRETS_KEY you are rotating away from)",
+      },
+    ),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   // The public origin of this Solvro deployment (e.g. https://solvro.acme.com):
   // the Outline OAuth redirect URI / webhook URL are derived from it and Solvro
