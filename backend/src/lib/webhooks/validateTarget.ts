@@ -113,20 +113,29 @@ function pointsAtIncomingUrl(url: URL, appUrl: string | undefined): boolean {
   if (bareHost(url.hostname) !== appHost) return false;
   // Compare the path the way a server would read it: percent-decoded, runs of
   // `/` collapsed, case-insensitive. A path that cannot be decoded is refused.
-  let segments: string[];
-  try {
-    segments = url.pathname
+  const normalize = (pathname: string): string[] =>
+    pathname
       .split("/")
       .map((segment) => decodeURIComponent(segment))
       .join("/")
       .toLowerCase()
       .split("/")
       .filter((segment) => segment !== "");
+  let segments: string[];
+  let prefix: string[];
+  try {
+    segments = normalize(url.pathname);
+    prefix = normalize(new URL(appUrl).pathname);
   } catch {
     return true;
   }
-  const at = (i: number) => segments[i];
-  return (at(0) === "api" && at(1) === "webhook" && at(2) === "in") || (at(0) === "webhook" && at(1) === "in");
+  // The incoming path sits at the root of the host, or after the path APP_URL
+  // itself carries (`https://host/solvro` serves `/solvro/api/webhook/in/…`).
+  const startsIncoming = (from: number) =>
+    (segments[from] === "api" && segments[from + 1] === "webhook" && segments[from + 2] === "in") ||
+    (segments[from] === "webhook" && segments[from + 1] === "in");
+  if (startsIncoming(0)) return true;
+  return prefix.length > 0 && prefix.every((segment, i) => segments[i] === segment) && startsIncoming(prefix.length);
 }
 
 /**
