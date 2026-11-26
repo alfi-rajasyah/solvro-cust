@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-25 — e2e cleanup finds fixture rows whose stamp has no digit
+
+- `backend/scripts/dev/cleanup-e2e-data.ts` (dev only): a fixture stamp is `Date.now()` in base 36 plus 4 random characters, and it can be all letters. The old check required a digit, so it missed those rows, and 32 test projects and 33 test customers stayed in the dev database. The check now reads the time in the stamp and matches a row only when it was created within 12 hours of that time, so a real name that ends in a long word still does not match.
+
 ### Added — 2026-11-25 — Incoming webhooks
 
 - Each project can have up to 5 incoming webhook URLs (`POST /api/webhook/in/<token>`) that let any tool able to send a webhook (GitLab, GitHub, CI jobs, n8n, your own scripts) write task comments, with no tool-specific setup. Any JSON body, a form with a `payload` field, or plain text is scanned for Solvro task links, and each task found gets a comment with the first line of the text (for example a commit message) and the source link. A body with a top-level `solvro` key writes one comment directly: `{ "solvro": { "task": 345, "text": "Deployed to prod", "url": "https://ci.example.com/run/88" } }`. Only tasks of the URL's own project count, at most 20 tasks and 100 comments per request, and the same text or source link comments once on a task (`backend/src/lib/inbound/`, `backend/src/routes/webhook.ts`).
