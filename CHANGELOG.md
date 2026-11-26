@@ -15,6 +15,11 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-26 — A release tag creates its GitHub Release
+
+- `.github/workflows/docker-publish.yml` has a new `release` job. After both images of a `v*` tag are pushed, it creates the tag's GitHub Release, titled "Solvro vX.Y.Z", with GitHub's generated "What's Changed" notes. Before, a tag published images but the Releases page stayed at the last Release made by hand.
+- "Latest" follows the same rule as the `stable` image tag: only the newest final `vX.Y.Z` gets it, so a backport tag pushed later does not. A tag with a suffix, such as `v1.6.0-rc1`, becomes a pre-release. A tag that already has a Release is left alone. Only this job can write to the repository contents; the image build keeps read-only access.
+
 ## [1.5.0] — 2026-11-26
 
 ### Changed — 2026-11-26 — Version 1.5.0
