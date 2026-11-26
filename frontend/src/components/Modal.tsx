@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
@@ -49,10 +49,14 @@ export function Modal({
   // Latest onClose in a ref, so the Escape listener does not re-subscribe on a
   // new onClose mid-drag and run after dnd-kit's (see isDragActive above).
   const onCloseRef = useRef(onClose);
-  useEffect(() => {
+  useLayoutEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
-  useEffect(() => {
+  // A layout effect, not a passive one: a modal opened from an async update
+  // (a 409 response) paints before passive effects run, and an Escape in that
+  // frame would find no listener (ISS-218). Subscribed once per `open`, so the
+  // order ahead of dnd-kit's listener is unchanged.
+  useLayoutEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" && !isDragActive()) onCloseRef.current();
