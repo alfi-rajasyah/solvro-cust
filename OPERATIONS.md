@@ -31,7 +31,7 @@ Data lives in Docker volumes: `solvro_pgdata` (the database) and, with `ATTACHME
 |---|---|---|
 | `POSTGRES_PASSWORD` | generated | Database password. Changing it after install breaks the database login. |
 | `JWT_SECRET` | generated | Signs login sessions. Changing it signs everyone out. |
-| `SECRETS_KEY` | generated | Encrypts integration tokens at rest (currently the iTop connection token). Changing it invalidates every stored token — they must be re-entered. |
+| `SECRETS_KEY` | generated | Encrypts integration tokens at rest (currently the iTop connection token). Changing it without `SECRETS_KEY_PREVIOUS` invalidates every stored token — they must be re-entered. To rotate it without that, see the `SECRETS_KEY_PREVIOUS` row in [docs/CONFIGURATION.md](docs/CONFIGURATION.md#21--backend-environment-variables). |
 | `BIND_ADDR` | derived from the address; `--advanced` prompt | Interface the website and API bind to. `127.0.0.1` local only, `0.0.0.0` all interfaces, or one LAN IP. |
 | `FRONTEND_PORT` | derived from the address; `--advanced` prompt | Website port. `8090` for an `https://` address, otherwise the address's port (default `80`). |
 | `BACKEND_PORT` | default; `--advanced` prompt | API port. Default `3000`. |
