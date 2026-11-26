@@ -130,6 +130,10 @@ check "config set ITOP_SYNC_DISABLED=maybe: refused" "1 http://localhost 0 0"   
 if grep -q '^ITOP_SYNC_DISABLED=' "$(cat "$WORK/home-itopbad")/solvro/.env"; then fail "ITOP_SYNC_DISABLED=maybe was written"; fi
 check "config set ITOP_SYNC_DISABLED=true: saved"    "0 http://localhost 1 1"    "$(cfg itopok set ITOP_SYNC_DISABLED=true)" itopok
 if grep -qx 'ITOP_SYNC_DISABLED="true"' "$(cat "$WORK/home-itopok")/solvro/.env"; then pass "ITOP_SYNC_DISABLED saved as a quoted value"; else fail "ITOP_SYNC_DISABLED not saved as ITOP_SYNC_DISABLED=\"true\""; fi
+check "config set WEBHOOK_ALLOW_HTTP=maybe: refused" "1 http://localhost 0 0"    "$(cfg hookbad set WEBHOOK_ALLOW_HTTP=maybe)" hookbad
+if grep -q '^WEBHOOK_ALLOW_HTTP=' "$(cat "$WORK/home-hookbad")/solvro/.env"; then fail "WEBHOOK_ALLOW_HTTP=maybe was written"; fi
+check "config set WEBHOOK_ALLOW_HTTP=true: saved"    "0 http://localhost 1 1"    "$(cfg hookok set WEBHOOK_ALLOW_HTTP=true)" hookok
+if grep -qx 'WEBHOOK_ALLOW_HTTP="true"' "$(cat "$WORK/home-hookok")/solvro/.env"; then pass "WEBHOOK_ALLOW_HTTP saved as a quoted value"; else fail "WEBHOOK_ALLOW_HTTP not saved as WEBHOOK_ALLOW_HTTP=\"true\""; fi
 if grep -q 'POSTGRES_PASSWORD\|JWT_SECRET\|SECRETS_KEY' "$WORK/out-show.log"; then fail "config show printed a secret"; fi
 
 if [[ $FAILED -ne 0 ]]; then

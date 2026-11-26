@@ -153,6 +153,7 @@ export function WeeklySync() {
     copyTimeoutRef.current = setTimeout(() => setCopyMessage(null), 2000);
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- customers falls back to a fresh [] when data is absent; the memos below stay correct and cheap
   const customers = data?.customers ?? [];
   // Rows without an update for the active tab are hidden unless `showAll`.
   // Pinned rows always carry a managerDecision, so the filter never changes

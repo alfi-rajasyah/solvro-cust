@@ -43,7 +43,7 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 
 - **Type:** debt · **Found:** 2026-10-09 · **Verified:** 2026-11-24 @ `670f206`
 - **Where:** seal()/open() in backend/src/lib/secretBox.ts
-- **Problem:** The sealed format has no key id, so rotating SECRETS_KEY makes every stored iTop and Outline token unreadable. The tag-length and iTop webhook limiter parts of this entry were fixed 2026-11-20 (CHANGELOG "Backend hardening: CORS header, secret tags, iTop webhook and sync retries, `solvro config`").
+- **Problem:** The sealed format has no key id, so rotating SECRETS_KEY makes every stored iTop and Outline token and every webhook signing secret unreadable; webhook sends then fail with `internal_error` and count toward the 20-failure auto-disable. The tag-length and iTop webhook limiter parts of this entry were fixed 2026-11-20 (CHANGELOG "Backend hardening: CORS header, secret tags, iTop webhook and sync retries, `solvro config`").
 - **Why deferred / fix direction:** Only matters if a key rotation is ever needed. Fix: add a key id to the sealed format and accept the old key during a transition.
 - **Source:** snapshot line 2361, section "Internal sync — deferred findings (2026-10-09)"
 
@@ -86,6 +86,30 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Problem:** A TAM can learn that a customer name exists by getting 409 instead of 201, even for customers they cannot see.
 - **Why deferred / fix direction:** Deferred. Accept as a product trade-off or scope uniqueness by visibility.
 - **Source:** snapshot line 2434, section "iTop and Outline hardening — deferred findings (2026-10-26)"
+
+### ISS-220 · P3 · Webhook address check misses NAT64 and 6to4 forms
+
+- **Type:** debt · **Found:** 2026-11-25 · **Verified:** 2026-11-25 @ `78862e9`
+- **Where:** isPrivateAddress in backend/src/lib/itop/validateBaseUrl.ts (line ~27), used by backend/src/lib/webhooks/validateTarget.ts
+- **Problem:** `64:ff9b::/96` (NAT64), `2002::/16` (6to4) and `::ffff:0:a.b.c.d` are not decoded to their embedded IPv4, so on a NAT64-routed host `https://[64:ff9b::a00:1]/` could reach 10.0.0.1.
+- **Why deferred / fix direction:** Only matters on a NAT64 or 6to4 network with the default policy. Decode the embedded IPv4 for those prefixes, run isPrivateIPv4 on it, add unit cases.
+- **Source:** webhooks Phase 1 review, 2026-11-25
+
+### ISS-221 · P3 · Webhook Send test has no rate limit
+
+- **Type:** debt · **Found:** 2026-11-25 · **Verified:** 2026-11-25 @ `78862e9`
+- **Where:** POST /webhooks/:id/test in backend/src/routes/webhooks.ts
+- **Problem:** Each click sends one outbound POST of up to 10 seconds to the saved URL, with no per-user limit.
+- **Why deferred / fix direction:** Needs `webhook:manage`, and the target passes the address policy. Add a per-user limiter from http/rateLimit.ts (for example 10 per minute).
+- **Source:** webhooks Phase 1 review, 2026-11-25
+
+### ISS-223 · P3 · Outgoing loop check misses an APP_URL with a path prefix
+
+- **Type:** debt · **Found:** 2026-11-25 · **Verified:** 2026-11-25 @ `c1d4d4e`
+- **Where:** the incoming-URL refusal in backend/src/lib/webhooks/validateTarget.ts (line ~127)
+- **Problem:** The refusal matches `/api/webhook/in/` and `/webhook/in/` only at the root of the path, so on a deployment whose `APP_URL` has a path (`https://host/solvro`) an outgoing webhook can target the server's own incoming URL.
+- **Why deferred / fix direction:** No loop results: outgoing webhooks already skip `comment.created` for comments an incoming URL wrote. Match the prefix after `APP_URL`'s own path, add a unit case.
+- **Source:** webhooks Phase 2 review, 2026-11-25
 
 ## Open — Data & performance
 
@@ -537,14 +561,6 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Why deferred / fix direction:** Accepted in e2e/CLAUDE.md. Trigger: running e2e against the dev server. Optional: skip the specs when BASE_URL is :5173.
 - **Source:** snapshot line 216, section "Known bugs / inconsistencies"
 
-### ISS-143 · P3 · No ESLint setup, so the exhaustive-deps guard on TaskFormModal is inert
-
-- **Type:** debt · **Found:** 2026-07-23 · **Verified:** 2026-11-24 @ `670f206`
-- **Where:** eslint-disable comment in frontend/src/components/TaskFormModal.tsx (line 182)
-- **Problem:** The repo has no ESLint config or lint script, so the directive does nothing. Nothing stops a future edit from re-adding the whole props object to the reset effect deps.
-- **Why deferred / fix direction:** Add ESLint with react-hooks/exhaustive-deps and an npm run lint step in CI.
-- **Source:** snapshot line 476, section "Tech debt / follow-ups from recent work"; merged duplicates at snapshot lines 2330
-
 ### ISS-145 · P3 · Connector hover-delete e2e test flakes rarely
 
 - **Type:** watch · **Found:** 2026-07-25 · **Verified:** 2026-11-24 @ `670f206`
@@ -632,6 +648,14 @@ Last full triage: 2026-11-24 @ `670f206` (94 open entries checked against the co
 - **Problem:** In 2 full local runs of both projects, the check found the Kanban page 453px wider than the viewport. The overflow stayed for the whole 5s poll, then the retry passed. Alone, or after list-bulk-edit, it passed 6 runs out of 6. The cause is unknown; another spec file's leftover workspace state (statuses or labels) is the first suspect.
 - **Why deferred / fix direction:** Trigger: it fails in the mobile CI shards after a release merge, or through its retry. Then log the widest element when the check fails, and find which earlier spec leaves the state.
 - **Source:** gates.sh runs on chore/e2e-condition-waits, 2026-11-24
+
+### ISS-222 · P3 · taskOrdering backend test can answer 409 under CI load
+
+- **Type:** flake · **Found:** 2026-11-25 · **Verified:** 2026-11-25 @ `c1d4d4e`
+- **Where:** backend/test/taskOrdering.test.ts, CI job `backend-tests`
+- **Problem:** One CI run on the webhooks Phase 1 PR failed with a 409 after about 9 seconds in a task-ordering test; the rerun passed. The webhook tests added database load in the same run, which may lengthen lock waits past a transaction timeout.
+- **Why deferred / fix direction:** One occurrence, not reproduced locally. Watch further runs; if it recurs, log the conflicting lock and raise that test's transaction timeout or serialize the webhook suites.
+- **Source:** webhooks Phase 1 CI, 2026-11-25
 
 ## Open — Dev env & ops
 
@@ -806,3 +830,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-010 · 2026-11-24 · CHANGELOG "The app serves its own fonts" · Guest link pages contact Google for fonts
 - ISS-146 · 2026-11-24 · CHANGELOG "End-to-end tests wait for conditions, not fixed sleeps" · E2E suite uses fixed waitForTimeout sleeps
 - ISS-002 · 2026-11-25 · CHANGELOG "Deleting a customer follows the owner rule" · DELETE /customers/:id lets the TAM of one project delete an unowned customer
+- ISS-143 · 2026-11-25 · CHANGELOG "Frontend lint for React hooks rules" · No ESLint setup, so the exhaustive-deps guard on TaskFormModal is inert

@@ -15,6 +15,43 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-11-26
+
+### Changed — 2026-11-26 — Version 1.5.0
+
+- The release version is `1.5.0` in `VERSION`, `backend/package.json`, `frontend/package.json` and the image tag in `setup.sh` (`SOLVRO_IMAGE_TAG="v1.5.0"`), so the login page and new installs show and pull this release.
+
+### Added — 2026-11-25 — Frontend lint for React hooks rules
+
+- `npm run lint` in `frontend/` runs ESLint (`frontend/eslint.config.js`) with two rules only: `react-hooks/rules-of-hooks` and `react-hooks/exhaustive-deps`. CI runs it after the frontend typecheck. Before this, the repo had no ESLint setup, so the existing `eslint-disable` comments did nothing and a hook with a missing dependency went unnoticed.
+- New dev dependencies: `eslint`, `typescript-eslint` (parser only, no rules on) and `eslint-plugin-react-hooks`.
+- 8 existing hooks break the dependency rule on purpose (a dependency left out, a computed dependency, or a value that is not memoized). Each now has a disable comment with the reason. No hook code or dependency list changed.
+
+### Fixed — 2026-11-25 — e2e cleanup finds fixture rows whose stamp has no digit
+
+- `backend/scripts/dev/cleanup-e2e-data.ts` (dev only): a fixture stamp is `Date.now()` in base 36 plus 4 random characters, and it can be all letters. The old check required a digit, so it missed those rows, and 32 test projects and 33 test customers stayed in the dev database. The check now reads the time in the stamp and matches a row only when it was created within 12 hours of that time, so a real name that ends in a long word still does not match.
+
+### Added — 2026-11-25 — Incoming webhooks
+
+- Each project can have up to 5 incoming webhook URLs (`POST /api/webhook/in/<token>`) that let any tool able to send a webhook (GitLab, GitHub, CI jobs, n8n, your own scripts) write task comments, with no tool-specific setup. Any JSON body, a form with a `payload` field, or plain text is scanned for Solvro task links, and each task found gets a comment with the first line of the text (for example a commit message) and the source link. A body with a top-level `solvro` key writes one comment directly: `{ "solvro": { "task": 345, "text": "Deployed to prod", "url": "https://ci.example.com/run/88" } }`. Only tasks of the URL's own project count, at most 20 tasks and 100 comments per request, and the same text or source link comments once on a task (`backend/src/lib/inbound/`, `backend/src/routes/webhook.ts`).
+- The token in the URL is the credential: it is stored only as a hash, shown once, kept out of the request log, and the proxy turns its access log off (`frontend/nginx.conf`). An unknown, disabled or deleted URL gets the same 404, and requests are rate-limited per URL and per address. A URL can also require a [Standard Webhooks](https://www.standardwebhooks.com/) signature: with a signing secret set, an unsigned, wrongly signed or older than 5 minutes request is refused, and a repeated `webhook-id` writes nothing.
+- Comments from an incoming URL are written as the user who created it; another owner who rotates it, changes its signing secret or enables it becomes the author of later comments. When the author is deactivated, can no longer open the project or loses the permission to comment, the URL turns itself off. Task comments show "via <URL name>" next to the author.
+- Project owners manage the URLs from "Integrations" in the project's actions menu: add, rotate, disable, enable, delete, and require or stop requiring a signature (`frontend/src/components/projects/integrations/`, `backend/src/routes/inboundHooks.ts`, endpoints under `/projects/:id/inbound-hooks`).
+- Outgoing webhooks refuse a target that is this server's own incoming URL, and they do not send `comment.created` for a comment written by an incoming URL, so the two directions cannot loop.
+- New tables `inbound_hooks`, `inbound_hook_links` and `inbound_hook_messages`, and new comment columns `source` and `inbound_hook_id`. Deleting a user also deletes the incoming URLs they created. Received `webhook-id` records are kept for 24 hours.
+- Tests: `backend/test/inbound/` (GitLab, GitHub, form and plain-text bodies, Solvro JSON, signatures, deduplication, project scoping, access, logging), new cases in `backend/test/webhooks/` for the loop rules, and `e2e/tests/incoming-webhooks.spec.ts`.
+
+### Fixed — 2026-11-25 — Kanban drag test aims at the target card's center
+
+- `e2e/tests/kanban-dnd.spec.ts` "same-column downward one-slot drop": the mouse drop now puts the dragged card's center on the target card's center, instead of a fixed 20px below the target. The old drop point depended on where the drag handle sits in the card, and with a tall card below the target it landed one slot too far, so the test failed on every run. No app change.
+
+### Added — 2026-11-25 — Outgoing webhooks
+
+- Settings > Integrations > Webhooks: a user with the new `webhook:manage` permission (added to the built-in TAM and Stakeholder roles) can add up to 10 webhooks that send Solvro events to another tool. Events: task created, status changed, assigned, due date changed and completed, comment added, project created and risk created, only about projects the webhook's owner can open; when the owner loses access to a project, loses the `webhook:manage` or `project:read` permission, or is deactivated, deliveries stop. The list and the edit dialog show only the target's host and a shortened path, never the full URL, so a token in the query string or the path stays on the server. Each webhook sends signed [Standard Webhooks](https://www.standardwebhooks.com/) JSON (HMAC-SHA256, secret shown once, rotatable). The section can send a test event, disable, enable and delete a webhook, and list its last 50 deliveries (`frontend/src/components/settings/webhooks/`, `backend/src/routes/webhooks.ts`).
+- Delivery runs in the backend (`backend/src/lib/webhooks/`): events go out within seconds, each webhook gets a fair share so one busy webhook cannot delay the others, a failed delivery is retried for about 18 hours, a webhook turns itself off after 20 failed deliveries in a row, and delivery history is kept for 30 days. A task description and notes are never sent, and a comment sends its first 500 characters. New tables `webhook_subscriptions` and `webhook_deliveries`; existing activity is marked as already sent, so nothing from before the upgrade is delivered.
+- Webhook targets must be public `https://` addresses. Two new settings, `WEBHOOK_ALLOW_PRIVATE_HOSTS` and `WEBHOOK_ALLOW_HTTP` (both default `false`), allow private or plain-http targets; the `setup.sh` compose file passes both, and `solvro config set` / `unset` accepts them. Guide: `docs/guides/webhooks.md`.
+- Tests: `backend/test/webhooks/` (event mapping, payload privacy, the Standard Webhooks signature vector, the address policy, retries and auto-disable, the routes), `e2e/tests/webhooks.spec.ts`, and `ci/check-update-cli.sh` cases for the new settings.
+
 ## [1.4.0] — 2026-11-25
 
 ### Changed — 2026-11-25 — Version 1.4.0

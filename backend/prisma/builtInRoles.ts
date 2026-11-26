@@ -12,12 +12,12 @@ import type { PrismaClient } from "@prisma/client";
 // prisma/ but not src/, and the seed runs there on every container start.
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
   ADMIN: ["*"],
-  TAM: ["project:read", "project:write", "customer:read", "customer:write", "task:read", "task:write", "task:comment"],
+  TAM: ["project:read", "project:write", "customer:read", "customer:write", "task:read", "task:write", "task:comment", "webhook:manage"],
   // STAKEHOLDER reads only the projects it is attached to (TAM, member or
   // customer owner). The read-everything grant (`project:view-all`) was
   // removed in the 2026-10 security hardening (docs/archive/plans/internal-sync.md);
   // an admin can grant it in Admin > Roles.
-  STAKEHOLDER: ["project:read", "customer:read", "task:comment"],
+  STAKEHOLDER: ["project:read", "customer:read", "task:comment", "webhook:manage"],
   PENDING: [],
 };
 

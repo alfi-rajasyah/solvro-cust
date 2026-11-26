@@ -463,6 +463,9 @@ export interface Comment {
   author: { id: number; username: string; email: string };
   /** Users the comment @mentions, as the server stored them (empty when none). */
   mentionedUserIds?: number[];
+  /** `incoming` when an incoming webhook URL wrote the comment. */
+  source?: string | null;
+  inboundHook?: { id: number; name: string } | null;
 }
 
 // Mirrors backend/src/lib/portfolio.ts (PortfolioProjectRow) — org-wide
@@ -819,6 +822,12 @@ export interface ProjectNotesWindow {
 
 export const queryKeys = {
   taskStatuses: ["task-statuses"] as const,
+  // Outgoing webhooks (the caller's own): the list, and one webhook's last 50
+  // deliveries (docs/archive/plans/webhooks.md).
+  webhooks: ["webhooks"] as const,
+  webhookDeliveries: (id: number) => ["webhooks", id, "deliveries"] as const,
+  // A project's incoming webhook URLs (owner-only; docs/archive/plans/webhooks.md, Phase 2).
+  projectInboundHooks: (projectId: number) => ["projects", projectId, "inbound-hooks"] as const,
   // Outline base URL for every signed-in user (sidebar link); the admin
   // settings live under adminQueryKeys.outlineSettings.
   outlineConfig: ["outline", "config"] as const,
@@ -5531,3 +5540,211 @@ export function useExecutiveReport() {
   });
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────
+// Outgoing webhooks (Settings › Integrations; docs/archive/plans/webhooks.md).
+// Own webhooks only, behind webhook:manage. The signing secret is never part
+// of a Webhook; it comes back once from create and rotate-secret.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const WEBHOOK_EVENT_TYPES = [
+  "task.created",
+  "task.status_changed",
+  "task.assigned",
+  "task.due_date_changed",
+  "task.completed",
+  "comment.created",
+  "project.created",
+  "risk.created",
+] as const;
+export type WebhookEventType = (typeof WEBHOOK_EVENT_TYPES)[number];
+export type WebhookDeliveryStatus = "PENDING" | "SUCCEEDED" | "FAILED";
+
+export interface Webhook {
+  id: number;
+  name: string;
+  /** Target host. The full URL never reaches the browser: a URL can carry a token. */
+  host: string;
+  /** scheme://host/path with any query replaced by "?…". */
+  urlPreview: string;
+  eventTypes: string[];
+  /** Empty means every project the owner can see. */
+  projectIds: number[];
+  active: boolean;
+  disabledReason: string | null;
+  consecutiveFailures: number;
+  createdAt: string;
+  updatedAt: string;
+  lastDelivery: { status: WebhookDeliveryStatus; statusCode: number | null; at: string } | null;
+}
+
+export interface WebhookDelivery {
+  id: number;
+  eventType: string;
+  status: WebhookDeliveryStatus;
+  attempts: number;
+  lastStatusCode: number | null;
+  lastError: string | null;
+  createdAt: string;
+  nextAttemptAt: string | null;
+}
+
+export interface WebhookCreateInput {
+  name: string;
+  url: string;
+  eventTypes: string[];
+  projectIds: number[];
+}
+
+/** Omitting `url` keeps the stored one. */
+export type WebhookUpdateInput = Partial<WebhookCreateInput> & { active?: boolean };
+
+export interface WebhookTestResult {
+  ok: boolean;
+  statusCode: number | null;
+  error: string | null;
+}
+
+export function useWebhooks(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.webhooks,
+    queryFn: ({ signal }) => apiRequest<{ webhooks: Webhook[] }>("/webhooks", { signal }).then((r) => r.webhooks),
+    enabled,
+  });
+}
+
+export function useCreateWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: WebhookCreateInput) =>
+      apiRequest<{ webhook: Webhook; secret: string }>("/webhooks", { method: "POST", body: input }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.webhooks, exact: true }),
+  });
+}
+
+export function useUpdateWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...patch }: WebhookUpdateInput & { id: number }) =>
+      apiRequest<{ webhook: Webhook }>(`/webhooks/${id}`, { method: "PATCH", body: patch }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.webhooks, exact: true }),
+  });
+}
+
+export function useDeleteWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiRequest<void>(`/webhooks/${id}`, { method: "DELETE" }),
+    onSuccess: (_data, id) => {
+      qc.removeQueries({ queryKey: queryKeys.webhookDeliveries(id) });
+      return qc.invalidateQueries({ queryKey: queryKeys.webhooks, exact: true });
+    },
+  });
+}
+
+export function useRotateWebhookSecret() {
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiRequest<{ secret: string }>(`/webhooks/${id}/rotate-secret`, { method: "POST" }),
+  });
+}
+
+/** Sends one `webhook.test` event now; writes no delivery row, so nothing to invalidate. */
+export function useTestWebhook() {
+  return useMutation({
+    mutationFn: (id: number) => apiRequest<WebhookTestResult>(`/webhooks/${id}/test`, { method: "POST" }),
+  });
+}
+
+export function useWebhookDeliveries(id: number | null) {
+  return useQuery({
+    queryKey: queryKeys.webhookDeliveries(id ?? 0),
+    queryFn: ({ signal }) =>
+      apiRequest<{ deliveries: WebhookDelivery[] }>(`/webhooks/${id}/deliveries`, { signal }).then(
+        (r) => r.deliveries,
+      ),
+    enabled: id != null,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Incoming webhook URLs (project Integrations dialog; docs/archive/plans/webhooks.md,
+// Phase 2). Owner-only. The URL and the signing secret come back once, from
+// create, rotate-token and signing-secret; the list never carries them.
+
+export interface InboundHook {
+  id: number;
+  name: string;
+  /** First characters of the token, for telling URLs apart. */
+  tokenPreview: string;
+  active: boolean;
+  disabledReason: string | null;
+  lastReceivedAt: string | null;
+  createdAt: string;
+  createdBy: { id: number; name: string };
+  hasSigningSecret: boolean;
+}
+
+/** `url` is null when the server has no APP_URL; `token` then carries the raw token instead. */
+export interface InboundHookUrlResult {
+  hook: InboundHook;
+  url: string | null;
+  token?: string;
+}
+
+export function useInboundHooks(projectId: number, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.projectInboundHooks(projectId),
+    queryFn: ({ signal }) =>
+      apiRequest<{ hooks: InboundHook[] }>(`/projects/${projectId}/inbound-hooks`, { signal }).then((r) => r.hooks),
+    enabled,
+  });
+}
+
+function useInboundHookMutation<TVars, TData>(projectId: number, fn: (vars: TVars) => Promise<TData>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSettled: () => qc.invalidateQueries({ queryKey: queryKeys.projectInboundHooks(projectId), exact: true }),
+  });
+}
+
+export function useCreateInboundHook(projectId: number) {
+  return useInboundHookMutation(projectId, (input: { name: string }) =>
+    apiRequest<InboundHookUrlResult>(`/projects/${projectId}/inbound-hooks`, { method: "POST", body: input }),
+  );
+}
+
+export function useUpdateInboundHook(projectId: number) {
+  return useInboundHookMutation(projectId, ({ hookId, ...patch }: { hookId: number; name?: string; active?: boolean }) =>
+    apiRequest<{ hook: InboundHook }>(`/projects/${projectId}/inbound-hooks/${hookId}`, { method: "PATCH", body: patch }),
+  );
+}
+
+export function useDeleteInboundHook(projectId: number) {
+  return useInboundHookMutation(projectId, (hookId: number) =>
+    apiRequest<void>(`/projects/${projectId}/inbound-hooks/${hookId}`, { method: "DELETE" }),
+  );
+}
+
+export function useRotateInboundHookToken(projectId: number) {
+  return useInboundHookMutation(projectId, (hookId: number) =>
+    apiRequest<InboundHookUrlResult>(`/projects/${projectId}/inbound-hooks/${hookId}/rotate-token`, { method: "POST" }),
+  );
+}
+
+export function useSetInboundHookSigningSecret(projectId: number) {
+  return useInboundHookMutation(projectId, (hookId: number) =>
+    apiRequest<{ hook: InboundHook; secret: string }>(`/projects/${projectId}/inbound-hooks/${hookId}/signing-secret`, {
+      method: "POST",
+    }),
+  );
+}
+
+export function useClearInboundHookSigningSecret(projectId: number) {
+  return useInboundHookMutation(projectId, (hookId: number) =>
+    apiRequest<{ hook: InboundHook }>(`/projects/${projectId}/inbound-hooks/${hookId}/signing-secret`, {
+      method: "DELETE",
+    }),
+  );
+}

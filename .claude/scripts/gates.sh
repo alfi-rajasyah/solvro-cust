@@ -125,6 +125,7 @@ if [ "$F_BACK" -eq 1 ]; then
 fi
 if [ "$F_FRONT" -eq 1 ]; then
   run_gate frontend-typecheck docker compose exec -T frontend npm run typecheck
+  run_gate frontend-lint docker compose exec -T frontend npm run lint  # react-hooks rules only (frontend/eslint.config.js)
   run_gate frontend-vitest docker compose exec -T frontend npm test
   # East-of-UTC run: pins the date-contract invariant (dateField.ts) — a reintroduced
   # local-midnight serialization is invisible under the container's default UTC clock.
@@ -228,7 +229,7 @@ if [ -f frontend/src/components/reui/sortable.tsx ]; then
   else fail guardrail-sortable-vendor "SOLVRO PATCH count $N != recorded $EXPECTED_SORTABLE_PATCHES"; fi
 else fail guardrail-sortable-vendor "frontend/src/components/reui/sortable.tsx missing"; fi
 
-# Same drift guard for the vendored Filters (vendored 2026-07-31; 18 sanctioned
+# Same drift guard for the vendored Filters (vendored 2026-07-31; 19 sanctioned
 # SOLVRO PATCH markers incl. comment-only ones — provenance header in the file;
 # bumped from 13 for the duplicate-chip idempotence guard, 2026-08-02: a shared
 # `findMatchingFilter` check (wrapping the module-level, unit-tested pure
@@ -237,8 +238,9 @@ else fail guardrail-sortable-vendor "frontend/src/components/reui/sortable.tsx m
 # branches of the field-then-value submenu flow (multiselect + single-select)
 # — since only the last three are reachable for this app's actual filter
 # fields (all `type: "select"` with populated options, so `addFilter` itself
-# is a fallback path, not the one users hit in practice)).
-EXPECTED_FILTERS_PATCHES=18
+# is a fallback path, not the one users hit in practice)); +1 lint-suppression
+# marker, 2026-11-25.
+EXPECTED_FILTERS_PATCHES=19
 if [ -f frontend/src/components/reui/filters.tsx ]; then
   N="$(grep -c 'SOLVRO PATCH' frontend/src/components/reui/filters.tsx)"
   if [ "$N" -eq "$EXPECTED_FILTERS_PATCHES" ]; then pass guardrail-filters-vendor
@@ -246,8 +248,9 @@ if [ -f frontend/src/components/reui/filters.tsx ]; then
 else fail guardrail-filters-vendor "frontend/src/components/reui/filters.tsx missing"; fi
 
 # Same drift guards for the vendored Data Grid family (dir-total) and Badge
-# (vendored 2026-08-01; counts include comment-only markers).
-EXPECTED_DATAGRID_PATCHES=42
+# (vendored 2026-08-01; counts include comment-only markers; data-grid +1
+# lint-suppression marker, 2026-11-25).
+EXPECTED_DATAGRID_PATCHES=43
 if [ -d frontend/src/components/reui/data-grid ]; then
   N="$(grep -rc 'SOLVRO PATCH' frontend/src/components/reui/data-grid/ | awk -F: '{s+=$2} END {print s}')"
   if [ "$N" -eq "$EXPECTED_DATAGRID_PATCHES" ]; then pass guardrail-datagrid-vendor

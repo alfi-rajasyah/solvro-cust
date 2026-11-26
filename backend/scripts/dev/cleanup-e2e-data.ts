@@ -30,8 +30,22 @@ import { deleteStoredObjects } from "../../src/lib/attachments/cleanup.js";
 
 const prisma = new PrismaClient();
 
-/** A fixture stamp at the end of a name: " m" plus 11 base-36 characters, one a digit. */
-const FIXTURE_STAMP = / m(?=[a-z0-9]*\d)[a-z0-9]{11}$/;
+/**
+ * A fixture stamp at the end of a name: " " plus `Date.now().toString(36)` (8 characters)
+ * plus 4 random base-36 characters. A stamp can be letters only, so the check decodes the
+ * first 8 characters as a time and accepts the name only when the row was created within
+ * 12 hours of that time, which a real name that ends in a 12-letter word almost never meets.
+ */
+const FIXTURE_STAMP_SHAPE = / ([a-z0-9]{8})[a-z0-9]{4}$/;
+const STAMP_WINDOW_MS = 12 * 60 * 60 * 1000;
+function hasFixtureStamp(name: string, createdAt: Date): boolean {
+  const match = FIXTURE_STAMP_SHAPE.exec(name);
+  if (!match) return false;
+  return (
+    Math.abs(createdAt.getTime() - parseInt(match[1], 36)) <= STAMP_WINDOW_MS
+  );
+}
+
 const E2E_LOGIN_EMAIL = process.env.E2E_ADMIN_EMAIL || "qa@solvro.test";
 
 async function main() {
@@ -44,27 +58,41 @@ async function main() {
 
   const customers = await prisma.customer.findMany({
     where: { description: { startsWith: "e2e" } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, createdAt: true },
   });
-  const customerIds = customers.filter((c) => FIXTURE_STAMP.test(c.name)).map((c) => c.id);
+  const customerIds = customers
+    .filter((c) => hasFixtureStamp(c.name, c.createdAt))
+    .map((c) => c.id);
 
   const projects = await prisma.project.findMany({
-    select: { id: true, name: true, customers: { select: { customerId: true } } },
+    select: {
+      id: true,
+      name: true,
+      createdAt: true,
+      customers: { select: { customerId: true } },
+    },
   });
   const projectIds = projects
     .filter(
-      (p) => FIXTURE_STAMP.test(p.name) || p.customers.some((c) => customerIds.includes(c.customerId)),
+      (p) =>
+        hasFixtureStamp(p.name, p.createdAt) ||
+        p.customers.some((c) => customerIds.includes(c.customerId)),
     )
     .map((p) => p.id);
 
   const users = await prisma.user.findMany({
-    where: { email: { endsWith: "@solvro.test" }, NOT: { email: E2E_LOGIN_EMAIL } },
+    where: {
+      email: { endsWith: "@solvro.test" },
+      NOT: { email: E2E_LOGIN_EMAIL },
+    },
     select: { id: true },
   });
 
   console.log(
     `e2e rows: ${projectIds.length} projects, ${customerIds.length} customers, ${users.length} users` +
-      (confirm ? "" : " (dry run; set E2E_CLEANUP_CONFIRM=delete to remove them)"),
+      (confirm
+        ? ""
+        : " (dry run; set E2E_CLEANUP_CONFIRM=delete to remove them)"),
   );
   if (!confirm) return;
 

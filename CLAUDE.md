@@ -70,6 +70,7 @@ docker compose down                     # stop; -v also wipes postgres (DESTRUCT
 
 docker compose exec backend  npm run typecheck   # typecheck backend (src, test, scripts)
 docker compose exec frontend npm run typecheck   # typecheck frontend
+docker compose exec frontend npm run lint        # ESLint, react-hooks rules only
 docker compose exec backend  npm test            # backend vitest — use the isolated test DB, see backend/CLAUDE.md
 cd e2e && npm test                               # playwright, desktop + mobile
 
