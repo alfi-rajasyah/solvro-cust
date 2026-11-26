@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-11-26
+
+### Changed — 2026-11-26 — Version 1.5.0
+
+- The release version is `1.5.0` in `VERSION`, `backend/package.json`, `frontend/package.json` and the image tag in `setup.sh` (`SOLVRO_IMAGE_TAG="v1.5.0"`), so the login page and new installs show and pull this release.
+
 ### Added — 2026-11-25 — Frontend lint for React hooks rules
 
 - `npm run lint` in `frontend/` runs ESLint (`frontend/eslint.config.js`) with two rules only: `react-hooks/rules-of-hooks` and `react-hooks/exhaustive-deps`. CI runs it after the frontend typecheck. Before this, the repo had no ESLint setup, so the existing `eslint-disable` comments did nothing and a hook with a missing dependency went unnoticed.
