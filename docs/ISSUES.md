@@ -2,7 +2,7 @@
 
 Open issues, sorted by area and then by severity. Each issue has an ID (`ISS-NNN`) that never changes and is never reused. Code comments and plans cite an issue by its ID.
 
-Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the code; none fixed or moot). Previous: 2026-11-24 @ `670f206`. The file before the restructure is kept verbatim at `docs/archive/ISSUES-2026-11-18-phase-log.md`; the mapping from every old entry to its ID, or to the reason it closed, is the ledger in `docs/archive/plans/issues-restructure.md`.
+Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the code; none fixed or moot). Previous: 2026-11-24 @ `670f206`. Delta triage 2026-11-27 @ `77280d7`: the 6 entries whose files changed since `f25aac3` were re-checked. The file before the restructure is kept verbatim at `docs/archive/ISSUES-2026-11-18-phase-log.md`; the mapping from every old entry to its ID, or to the reason it closed, is the ledger in `docs/archive/plans/issues-restructure.md`.
 
 ## How to use this file
 
@@ -41,8 +41,8 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-224 · P3 · Nothing re-seals stored secrets after a SECRETS_KEY rotation
 
-- **Type:** debt · **Found:** 2026-11-26 · **Verified:** 2026-11-26 @ `87c4c0b`
-- **Where:** open() in backend/src/lib/secretBox.ts (line ~107); rotation steps in docs/CONFIGURATION.md (line ~64)
+- **Type:** debt · **Found:** 2026-11-26 · **Verified:** 2026-11-27 @ `77280d7`
+- **Where:** open() in backend/src/lib/secretBox.ts (line ~123); rotation steps in docs/CONFIGURATION.md (line ~64)
 - **Problem:** A value moves to the new key only when it is written again. Nothing re-seals or counts the values still under `SECRETS_KEY_PREVIOUS` (an idle user's iTop token, an unchanged webhook secret), so the operator cannot know when the previous key can be removed.
 - **Why deferred / fix direction:** Rotation is rare, and keeping the previous key set is safe. Add a `backend/scripts/reseal-secrets.ts` that re-seals every `*Enc` column under the current key (or log a count at boot), then document "run it, then remove SECRETS_KEY_PREVIOUS".
 - **Source:** instant review of the ISS-011 fix, 2026-11-26
@@ -174,7 +174,7 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-034 · P3 · Rate limiter counters are per backend instance
 
-- **Type:** watch · **Found:** 2026-09-30 · **Verified:** 2026-11-26 @ `f25aac3`
+- **Type:** watch · **Found:** 2026-09-30 · **Verified:** 2026-11-27 @ `77280d7`
 - **Where:** createRateLimiter in backend/src/http/rateLimit.ts
 - **Problem:** Counters live in memory per instance and reset on restart, so the effective limit multiplies with more than one backend instance.
 - **Why deferred / fix direction:** Trigger: scaling the backend beyond one instance; then add a shared store.
@@ -431,8 +431,8 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-118 · P2 · Re-test Settings > iTop save on the real install before go-live
 
-- **Type:** watch · **Found:** 2026-09-24 · **Verified:** 2026-11-26 @ `f25aac3`
-- **Where:** ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS in backend/src/env.ts (line ~114)
+- **Type:** watch · **Found:** 2026-09-24 · **Verified:** 2026-11-27 @ `77280d7`
+- **Where:** ITOP_ALLOW_UNVERIFIED_PERSONAL_TOKENS in backend/src/env.ts (line ~129)
 - **Problem:** Personal tokens work only for profiles in the authent-token setting personal_tokens_allowed_profiles; the save may be refused on the real install until the opt-out env var is set.
 - **Why deferred / fix direction:** Trigger: go-live on the real install; re-test the save and set the env var if refused.
 - **Source:** snapshot line 2314, section "iTop integration — real-install findings (2026-09-24)"
@@ -515,16 +515,16 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-138 · P2 · Drag e2e specs flake on first attempt and pass on retry
 
-- **Type:** watch · **Found:** 2026-07-28 · **Verified:** 2026-11-26 @ `f25aac3`
-- **Where:** gantt-parity.spec.ts "(a) drag-move commits new dates and survives reload" (line 232), kanban-dnd.spec.ts "a refused drag shows an error" (line 139), list-dnd.spec.ts "cross-status reorder in one section sticks" (line 92)
-- **Problem:** CI confirms it: in each of the 3 most recent full runs (2026-11-26, develop and PR, run ids 45848996829, 45772251343, 45727735816) these same three desktop cases are reported flaky. The kanban G2 one-slot drop flaked on 2026-11-25 and was fixed by #174, so it no longer counts. Two more cases flake in the same runs: gantt-row-menu-focus "Add subtask: the new task's title input holds focus" (desktop, 2 runs, after #153) and task-filters "label filter: OR, No label, ..." (mobile, 1 run). The retry budget has one spare attempt.
-- **Why deferred / fix direction:** Flake-hunt pass done 2026-11-27 (CHANGELOG "e2e specs that failed on their first attempt"): spec races fixed for all five. Two fixes are not proven locally (row menu focus, mobile label filter). Close after several CI runs with none of the five flaky; if the row menu focus case recurs, suspect focus restore in SolvroGantt.tsx (afterMenuCloses).
+- **Type:** watch · **Found:** 2026-07-28 · **Verified:** 2026-11-27 @ `77280d7`
+- **Where:** gantt-parity.spec.ts "(a) drag-move commits new dates and survives reload" (line 233), kanban-dnd.spec.ts "a refused drag shows an error" (line 140), list-dnd.spec.ts "cross-status reorder in one section sticks" (line 94), gantt-row-menu-focus.spec.ts "Add subtask: the new task's title input holds focus" (line 38); mobile: task-filters.spec.ts "label filter" (line 80)
+- **Problem:** The 2026-11-27 spec fixes (CHANGELOG "e2e specs that failed on their first attempt") did not stop it: CI run 45921940198 at the merged commit `c90acfa` still reports the four desktop cases flaky, with the same first-attempt errors (Gantt PATCH wait times out, Kanban PATCH never sent, List order unchanged, row grip not focused). In each case the first drag or focus in CI does nothing and the retry works. None fail on the local dev server (:5173), so the cause is likely in the built CI stack (:8080), not in the specs.
+- **Why deferred / fix direction:** Capture the first attempt before another fix: set `trace: "retain-on-first-failure"` in e2e/playwright.config.ts and upload e2e/test-results/ from .github/workflows/ci.yml when a run has flaky tests, not only on failure. Then read the trace. One thing to rule out: the PWA service worker, which registers only on the built stack (`registerSW({ immediate: true })` in frontend/src/main.tsx).
 - **Source:** snapshot line 896, section "ReUI DateField swap — deferred findings (2026-07-28)"; merged duplicates at snapshot lines 2320
 
 ### ISS-145 · P3 · Connector hover-delete e2e test flakes rarely
 
-- **Type:** watch · **Found:** 2026-07-25 · **Verified:** 2026-11-26 @ `f25aac3`
-- **Where:** test "(c) connector create via dot-drag + delete via hover" in e2e/tests/gantt-parity.spec.ts (line ~315)
+- **Type:** watch · **Found:** 2026-07-25 · **Verified:** 2026-11-27 @ `77280d7`
+- **Where:** test "(c) connector create via dot-drag + delete via hover" in e2e/tests/gantt-parity.spec.ts (line ~318)
 - **Problem:** The hover-to-delete-connector assertion occasionally fails on the first attempt and passes on retry. The cause is not isolated.
 - **Why deferred / fix direction:** Trigger: it fails in CI more than occasionally. Then run a flake-hunt pass.
 - **Source:** snapshot line 545, section "Plan B Task 9 deferred findings — ReUI Gantt swap (2026-07-25)"
@@ -547,8 +547,8 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-154 · P3 · Three e2e specs flaked once and passed on retry
 
-- **Type:** watch · **Found:** 2026-09-02 · **Verified:** 2026-11-26 @ `f25aac3`
-- **Where:** gantt-parity.spec.ts connector-hover test (now "(c)", line ~315) and two tests in e2e/tests/kanban-dnd.spec.ts
+- **Type:** watch · **Found:** 2026-09-02 · **Verified:** 2026-11-27 @ `77280d7`
+- **Where:** gantt-parity.spec.ts connector-hover test (now "(c)", line ~318) and two tests in e2e/tests/kanban-dnd.spec.ts
 - **Problem:** A hover-to-reveal timing test and two shared-seed order tests failed once and retried clean. None are regressions.
 - **Why deferred / fix direction:** Tighten the wait condition or fixture isolation if one fails repeatedly.
 - **Source:** snapshot line 1772, section "Critical Path mark — deferred findings (2026-09-02)"
