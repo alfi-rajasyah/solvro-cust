@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-11-27
+
+### Changed — 2026-11-27 — Version 1.6.0
+
+- The release version is `1.6.0` in `VERSION`, `backend/package.json`, `frontend/package.json` and the image tag in `setup.sh` (`SOLVRO_IMAGE_TAG="v1.6.0"`), so the login page and new installs show and pull this release.
+
 ### Added — 2026-11-27 — Edit and delete task comments
 
 - A comment on any task, subtask included, has a "Comment actions" menu. The author can edit the comment, and the mentions stay. An edit that changes the text marks the comment "edited", with the edit time. The author or an admin can delete a comment after a confirmation. A comment written by an incoming webhook URL can be deleted but not edited. An edit notifies only the people it newly mentions.
