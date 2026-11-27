@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { apiBase, expect, loginViaUi, test } from "../fixtures/test";
+import { apiBase, expect, loginViaUi, settleAnimations, settleQuiet, test } from "../fixtures/test";
 import { createTask } from "../fixtures/seed";
 
 // Focus around the Gantt row menu. A dialog opened from a menu item must keep
@@ -28,6 +28,10 @@ test.describe("gantt row menu focus (desktop)", () => {
     await page.goto(`/projects/${seededProject.projectId}/gantt`, { waitUntil: "networkidle" });
     const row = page.locator(`[data-slot="gantt-row-group"][data-gantt-row-id="task-${task.id}"]`);
     await expect(row).toBeVisible();
+    // Late refetches re-render the rows; focus handed back to a row that was
+    // replaced mid-test lands on <body>. Let the page go quiet first.
+    await settleQuiet(page);
+    await settleAnimations(page);
     return { title, task, row, actions: row.getByRole("button", { name: "Task actions" }) };
   }
 

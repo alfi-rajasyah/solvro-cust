@@ -518,16 +518,8 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 - **Type:** watch · **Found:** 2026-07-28 · **Verified:** 2026-11-26 @ `f25aac3`
 - **Where:** gantt-parity.spec.ts "(a) drag-move commits new dates and survives reload" (line 232), kanban-dnd.spec.ts "a refused drag shows an error" (line 139), list-dnd.spec.ts "cross-status reorder in one section sticks" (line 92)
 - **Problem:** CI confirms it: in each of the 3 most recent full runs (2026-11-26, develop and PR, run ids 45848996829, 45772251343, 45727735816) these same three desktop cases are reported flaky. The kanban G2 one-slot drop flaked on 2026-11-25 and was fixed by #174, so it no longer counts. Two more cases flake in the same runs: gantt-row-menu-focus "Add subtask: the new task's title input holds focus" (desktop, 2 runs, after #153) and task-filters "label filter: OR, No label, ..." (mobile, 1 run). The retry budget has one spare attempt.
-- **Why deferred / fix direction:** Trigger fired 2026-11-26 (five cases flake). Run a flake-hunt pass.
+- **Why deferred / fix direction:** Flake-hunt pass done 2026-11-27 (CHANGELOG "e2e specs that failed on their first attempt"): spec races fixed for all five. Two fixes are not proven locally (row menu focus, mobile label filter). Close after several CI runs with none of the five flaky; if the row menu focus case recurs, suspect focus restore in SolvroGantt.tsx (afterMenuCloses).
 - **Source:** snapshot line 896, section "ReUI DateField swap — deferred findings (2026-07-28)"; merged duplicates at snapshot lines 2320
-
-### ISS-141 · P3 · pwa.spec.ts fails against the Vite dev server
-
-- **Type:** watch · **Found:** 2026-07-22 · **Verified:** 2026-11-26 @ `f25aac3`
-- **Where:** e2e/tests/pwa.spec.ts (lines ~7-26)
-- **Problem:** vite-plugin-pwa emits the manifest and service worker only in build mode, so the specs fail at BASE_URL=http://localhost:5173. They pass on the built CI stack (:8080).
-- **Why deferred / fix direction:** Accepted in e2e/CLAUDE.md. Trigger: running e2e against the dev server. Optional: skip the specs when BASE_URL is :5173.
-- **Source:** snapshot line 216, section "Known bugs / inconsistencies"
 
 ### ISS-145 · P3 · Connector hover-delete e2e test flakes rarely
 
@@ -804,3 +796,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-223 · 2026-11-26 · CHANGELOG "Webhook address checks and a limit on Send test" · Outgoing loop check misses an APP_URL with a path prefix
 - ISS-218 · 2026-11-26 · CHANGELOG "Escape closes a dialog in its first frame" · Task conflict dialog can be open with no rows, and Escape then leaves it open
 - ISS-011 · 2026-11-26 · CHANGELOG "A key id in stored secrets, and SECRETS_KEY rotation" · SECRETS_KEY rotation invalidates every stored token
+- ISS-141 · 2026-11-27 · CHANGELOG "e2e specs that failed on their first attempt" · pwa.spec.ts fails against the Vite dev server
