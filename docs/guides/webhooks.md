@@ -42,6 +42,8 @@ Do not write this check by hand. The Standard Webhooks project publishes a verif
 | `task.due_date_changed` | A task's start or due date changes. |
 | `task.completed` | A task moves to a status in the Done group. |
 | `comment.created` | Someone comments on a task. |
+| `comment.updated` | The author edits a comment on a task. |
+| `comment.deleted` | A comment on a task is deleted. |
 | `project.created` | A project is added. |
 | `risk.created` | A risk is added to a project. |
 
@@ -63,6 +65,10 @@ A Standard Webhooks body looks like this:
 ```
 
 - `comment.created` adds `comment: { id, text }`, with the first 500 characters of the comment.
+- `comment.updated` adds `comment: { id, text }`, with the first 500 characters of the edited comment.
+- `comment.deleted` adds `comment: { id, text: null }`. The deleted text is never sent.
+- Comments written through an incoming webhook URL send none of the three comment events, so two Solvro installations that relay to each other cannot loop.
+- A webhook keeps the event types it was set up with. After an upgrade, open it in Settings and select `comment.updated` and `comment.deleted` to receive them.
 - `risk.created` adds `risk: { id, title, status, probability, impact }`. `title` is the first 120 characters of the risk description.
 - A task description is never sent. Notes are never sent, so an internal note can never leave Solvro through a webhook.
 - The links use the server's `APP_URL`. Without it, `url` fields are empty.

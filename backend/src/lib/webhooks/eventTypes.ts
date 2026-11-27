@@ -8,6 +8,8 @@ export const WEBHOOK_EVENT_TYPES = [
   "task.due_date_changed",
   "task.completed",
   "comment.created",
+  "comment.updated",
+  "comment.deleted",
   "project.created",
   "risk.created",
 ] as const;

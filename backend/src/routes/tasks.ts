@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { Prisma, Priority, TaskStatus } from "@prisma/client";
 import { prisma } from "../prisma.js";
-import { requireAuth, requirePermission, type JwtPayload } from "../http/auth.js";
+import { hasPermission, requireAuth, requirePermission, type JwtPayload } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
 import { dateInput, dateString } from "../lib/dateInput.js";
 import { validate } from "../http/validate.js";
@@ -901,5 +901,122 @@ tasksRouter.post(
       return created;
     });
     res.status(201).json(comment);
+  },
+);
+
+const commentParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  commentId: z.coerce.number().int().positive(),
+});
+
+const commentInclude = {
+  author: { select: { id: true, username: true, email: true } },
+  inboundHook: { select: { id: true, name: true } },
+} as const;
+
+// Same rules as the project notes routes: only the author edits, the author or
+// an admin deletes (docs/archive/plans/comment-edit-delete.md).
+tasksRouter.patch(
+  "/:id/comments/:commentId",
+  requirePermission("task:comment"),
+  validate("params", commentParamSchema),
+  validate("body", createCommentSchema),
+  async (req, res) => {
+    const { id, commentId } = req.params as unknown as z.infer<typeof commentParamSchema>;
+    const { body, mentionedUserIds: requestedMentions = [] } = req.body as z.infer<
+      typeof createCommentSchema
+    >;
+    await ensureTaskVisible(req.user!, id);
+    const comment = await prisma.$transaction(async (tx) => {
+      const existing = await tx.comment.findFirst({ where: { id: commentId, taskId: id } });
+      if (!existing) throw new HttpError(404, "comment_not_found", "Comment not found");
+      if (existing.authorId !== req.user!.sub) {
+        throw new HttpError(403, "not_comment_author", "Only the author may edit this comment");
+      }
+      if (existing.source === "incoming") {
+        throw new HttpError(
+          409,
+          "comment_not_editable",
+          "A comment from an incoming webhook cannot be edited",
+        );
+      }
+      const task = await tx.task.findUnique({
+        where: { id },
+        select: { projectId: true, title: true },
+      });
+      if (!task) throw new HttpError(404, "not_found", "Task not found");
+      const visible = await filterActiveUsersWhoCanSeeProject(tx, task.projectId, requestedMentions);
+      const mentionedUserIds = requestedMentions.filter((uid) => visible.has(uid));
+
+      const stored = new Set(existing.mentionedUserIds);
+      const next = new Set(mentionedUserIds);
+      const mentionsChanged =
+        stored.size !== next.size || [...next].some((uid) => !stored.has(uid));
+      if (body === existing.body && !mentionsChanged) {
+        return tx.comment.findUniqueOrThrow({ where: { id: commentId }, include: commentInclude });
+      }
+
+      const updated = await tx.comment.update({
+        where: { id: commentId },
+        data: { body, mentionedUserIds, editedAt: new Date() },
+        include: commentInclude,
+      });
+      // Never the comment body or the mention ids, as on create.
+      const event = await recordActivity(tx, {
+        projectId: task.projectId,
+        actorId: req.user!.sub,
+        entityType: "comment",
+        entityId: commentId,
+        action: "updated",
+        entityLabel: task.title,
+        changes: { taskId: id },
+      });
+      // An edit is not a new comment: only mentions it adds are notified, and
+      // the task assignee is not (notifyForEvent adds `commented` on create only).
+      await notifyForEvent(tx, event, {
+        mentionedUserIds: mentionedUserIds.filter((uid) => !stored.has(uid)),
+      });
+      return updated;
+    });
+    res.json(comment);
+  },
+);
+
+tasksRouter.delete(
+  "/:id/comments/:commentId",
+  requirePermission("task:comment"),
+  validate("params", commentParamSchema),
+  async (req, res) => {
+    const { id, commentId } = req.params as unknown as z.infer<typeof commentParamSchema>;
+    await ensureTaskVisible(req.user!, id);
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.comment.findFirst({ where: { id: commentId, taskId: id } });
+      if (!existing) throw new HttpError(404, "comment_not_found", "Comment not found");
+      if (existing.authorId !== req.user!.sub && !hasPermission(req.user!, "*")) {
+        throw new HttpError(
+          403,
+          "not_comment_author",
+          "Only the author or an admin may delete this comment",
+        );
+      }
+      const task = await tx.task.findUnique({
+        where: { id },
+        select: { projectId: true, title: true },
+      });
+      if (!task) throw new HttpError(404, "not_found", "Task not found");
+      await tx.comment.delete({ where: { id: commentId } });
+      // `source` rides along because the row is gone when the webhook
+      // dispatcher runs and it must skip comments an incoming URL wrote.
+      await recordActivity(tx, {
+        projectId: task.projectId,
+        actorId: req.user!.sub,
+        entityType: "comment",
+        entityId: commentId,
+        action: "deleted",
+        entityLabel: task.title,
+        changes: { taskId: id, ...(existing.source ? { source: existing.source } : {}) },
+      });
+    });
+    res.status(204).send();
   },
 );

@@ -275,6 +275,78 @@ describe("sending", () => {
     expect(payload.data.task.id).toBe(f.task.id);
   });
 
+  describe("comment.updated and comment.deleted", () => {
+    const record = (f: Awaited<ReturnType<typeof projectFixture>>, commentId: number, action: string, changes: Record<string, unknown> = { taskId: f.task.id }) =>
+      recordActivity(prisma, {
+        projectId: f.project.id,
+        actorId: f.other.userId,
+        entityType: "comment",
+        entityId: commentId,
+        entityLabel: f.task.title,
+        action,
+        changes,
+      });
+    const both = ["comment.updated", "comment.deleted"];
+
+    it("comment.updated sends the 500-character excerpt", async () => {
+      const f = await projectFixture();
+      await makeSubscription(f.owner.userId, receiver.url, { eventTypes: both });
+      const comment = await prisma.comment.create({ data: { taskId: f.task.id, authorId: f.other.userId, body: "y".repeat(900) } });
+      await record(f, comment.id, "updated");
+      await runDispatchOnce();
+      expect(receiver.received).toHaveLength(1);
+      const payload = JSON.parse(receiver.received[0].body);
+      expect(payload.type).toBe("comment.updated");
+      expect(payload.data.comment).toEqual({ id: comment.id, text: "y".repeat(500) });
+      expect(payload.data.task.id).toBe(f.task.id);
+    });
+
+    it("comment.deleted sends text null and never reads the body, even when the row still exists", async () => {
+      const f = await projectFixture();
+      await makeSubscription(f.owner.userId, receiver.url, { eventTypes: both });
+      const comment = await prisma.comment.create({ data: { taskId: f.task.id, authorId: f.other.userId, body: "LEAKY OLD BODY" } });
+      await record(f, comment.id, "deleted");
+      await runDispatchOnce();
+      expect(receiver.received).toHaveLength(1);
+      const payload = JSON.parse(receiver.received[0].body);
+      expect(payload.type).toBe("comment.deleted");
+      expect(payload.data.comment).toEqual({ id: comment.id, text: null });
+      expect(receiver.received[0].body).not.toContain("LEAKY");
+    });
+
+    it("sends neither type for a comment an incoming URL wrote", async () => {
+      const f = await projectFixture();
+      await makeSubscription(f.owner.userId, receiver.url, { eventTypes: both });
+      const hook = await prisma.inboundHook.create({
+        data: { projectId: f.project.id, createdById: f.owner.userId, name: "CI", tokenHash: uniq("hash"), tokenPreview: "abcd" },
+      });
+      const sourced = await prisma.comment.create({
+        data: { taskId: f.task.id, authorId: f.owner.userId, body: "Deployed", source: "incoming", inboundHookId: hook.id },
+      });
+      await record(f, sourced.id, "updated");
+      // The deleted row's comment is gone: the skip reads `changes.source`.
+      await record(f, sourced.id + 100000, "deleted", { taskId: f.task.id, source: "incoming" });
+      const ordinary = await prisma.comment.create({ data: { taskId: f.task.id, authorId: f.other.userId, body: "ok" } });
+      await record(f, ordinary.id, "deleted", { taskId: f.task.id });
+      await runDispatchOnce();
+      expect(receiver.received).toHaveLength(1);
+      expect(JSON.parse(receiver.received[0].body).data.comment.id).toBe(ordinary.id);
+      expect(await prisma.activityEvent.count({ where: { webhookDispatchedAt: null } })).toBe(0);
+    });
+
+    it("an existing subscription with explicit event types does not receive the new types", async () => {
+      const f = await projectFixture();
+      const sub = await makeSubscription(f.owner.userId, receiver.url); // the pre-existing default list
+      expect(sub.eventTypes).not.toContain("comment.updated");
+      const comment = await prisma.comment.create({ data: { taskId: f.task.id, authorId: f.other.userId, body: "hi" } });
+      await record(f, comment.id, "updated");
+      await record(f, comment.id, "deleted");
+      await runDispatchOnce();
+      expect(receiver.received).toHaveLength(0);
+      expect(await prisma.webhookDelivery.count({ where: { subscriptionId: sub.id } })).toBe(0);
+    });
+  });
+
   it("sends nothing for a comment written by an incoming URL, and still marks its row dispatched", async () => {
     const f = await projectFixture();
     const sub = await makeSubscription(f.owner.userId, receiver.url, { eventTypes: ["comment.created"] });
