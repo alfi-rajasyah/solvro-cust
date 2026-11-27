@@ -38,10 +38,41 @@ export function isPrivateAddress(address: string): boolean {
     const lo = parseInt(hexMapped[2], 16);
     return isPrivateIPv4(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
   }
+  // Prefixes that carry an IPv4 address: NAT64 (64:ff9b::/96), 6to4 (2002::/16,
+  // the address is bits 16-47) and IPv4-translated (::ffff:0:a.b.c.d). A
+  // NAT64 or 6to4 gateway routes these to the embedded IPv4, so it decides.
+  const groups = expandIPv6(ip);
+  if (groups) {
+    const v4 = (hi: number, lo: number) => `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+    const zeros = (from: number, to: number) => groups.slice(from, to).every((g) => g === 0);
+    if (groups[0] === 0x64 && groups[1] === 0xff9b && zeros(2, 6)) return isPrivateIPv4(v4(groups[6], groups[7]));
+    if (groups[0] === 0x2002) return isPrivateIPv4(v4(groups[1], groups[2]));
+    if (zeros(0, 4) && groups[4] === 0xffff && groups[5] === 0) return isPrivateIPv4(v4(groups[6], groups[7]));
+  }
   const first = parseInt(ip.split(":")[0] || "0", 16);
   if ((first & 0xfe00) === 0xfc00) return true; // fc00::/7 unique local
   if ((first & 0xffc0) === 0xfe80) return true; // fe80::/10 link local
   return false;
+}
+
+/** The 8 hextets of a valid IPv6 literal (a dotted IPv4 tail counts as two), or null. */
+function expandIPv6(ip: string): number[] | null {
+  let text = ip;
+  const dotted = /^(.*:)(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(text);
+  if (dotted) {
+    const [a, b, c, d] = dotted.slice(2).map(Number);
+    if ([a, b, c, d].some((n) => n > 255)) return null;
+    text = `${dotted[1]}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const halves = text.split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  const fill = halves.length === 2 ? 8 - head.length - tail.length : 0;
+  if (fill < 0 || (halves.length === 1 && head.length !== 8)) return null;
+  const parts = [...head, ...Array<string>(fill).fill("0"), ...tail];
+  if (parts.length !== 8 || parts.some((g) => !/^[0-9a-f]{1,4}$/.test(g))) return null;
+  return parts.map((g) => parseInt(g, 16));
 }
 
 function isPrivateIPv4(ip: string): boolean {

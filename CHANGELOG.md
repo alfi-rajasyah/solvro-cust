@@ -15,6 +15,12 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-26 — Webhook address checks and a limit on Send test
+
+- `isPrivateAddress` in `backend/src/lib/itop/validateBaseUrl.ts` now reads the IPv4 address inside NAT64 (`64:ff9b::/96`), 6to4 (`2002::/16`) and IPv4-translated (`::ffff:0:a.b.c.d`) IPv6 addresses, and refuses the target when that IPv4 address is private. Before, a webhook or iTop address such as `https://[64:ff9b::a00:1]/` passed the check and could reach `10.0.0.1` through a NAT64 or 6to4 gateway.
+- An outgoing webhook can no longer target this deployment's own incoming webhook URL when `APP_URL` has a path, for example `https://host/solvro/api/webhook/in/...` (`pointsAtIncomingUrl` in `backend/src/lib/webhooks/validateTarget.ts`). Before, the check matched the incoming path only at the root of the host.
+- `POST /webhooks/:id/test` (Send test) allows 10 calls per minute per user, and answers `429 rate_limited` with a `Retry-After` header after that. Each call sends one outbound request of up to 10 seconds. `createRateLimiter` in `backend/src/http/rateLimit.ts` takes an optional `keyFor` for this; other limiters still count per client address.
+
 ### Added — 2026-11-26 — A release tag creates its GitHub Release
 
 - `.github/workflows/docker-publish.yml` has a new `release` job. After both images of a `v*` tag are pushed, it creates the tag's GitHub Release, titled "Solvro vX.Y.Z", with GitHub's generated "What's Changed" notes. Before, a tag published images but the Releases page stayed at the last Release made by hand.

@@ -114,6 +114,28 @@ describe("address policy", () => {
     expect(() => parseTarget("https://solvro.example.com/hook/in/abc", policy)).not.toThrow();
   });
 
+  it("also refuses the incoming webhook path after the path APP_URL carries", () => {
+    for (const appUrl of ["https://solvro.example.com/solvro", "https://solvro.example.com/solvro/", "https://solvro.example.com/Team/Solvro"]) {
+      const policy = { allowHttp: true, appUrl };
+      const base = new URL(appUrl).pathname.replace(/\/$/, "");
+      for (const path of ["/api/webhook/in/abc", "/webhook/in/abc"]) {
+        for (const target of [`https://solvro.example.com${base}${path}`, `https://solvro.example.com${base.toUpperCase()}${path}`]) {
+          expect(() => parseTarget(target, policy), target).toThrowError(expect.objectContaining({ reason: "loop" }));
+        }
+        // The root path is still refused.
+        expect(() => parseTarget(`https://solvro.example.com${path}`, policy)).toThrowError(expect.objectContaining({ reason: "loop" }));
+      }
+      // Another prefix, or other paths under this one, are not a loop.
+      expect(() => parseTarget("https://solvro.example.com/other/api/webhook/in/abc", policy)).not.toThrow();
+      expect(() => parseTarget(`https://solvro.example.com${base}/api/webhook/outline`, policy)).not.toThrow();
+      expect(() => parseTarget(`https://solvro.example.com${base}/hook/in/abc`, policy)).not.toThrow();
+    }
+    // Without a path on APP_URL, a prefixed path is not an incoming URL.
+    const bare = { allowHttp: true, appUrl: "https://solvro.example.com/" };
+    expect(() => parseTarget("https://solvro.example.com/solvro/api/webhook/in/abc", bare)).not.toThrow();
+    expect(() => parseTarget("https://solvro.example.com/api/webhook/in/abc", bare)).toThrowError(expect.objectContaining({ reason: "loop" }));
+  });
+
   it("refuses userinfo and unparsable URLs", () => {
     expect(() => parseTarget("https://user:pw@example.com/")).toThrowError(/user name or password/);
     expect(() => parseTarget("https://user@example.com/")).toThrowError(/user name or password/);
@@ -121,7 +143,7 @@ describe("address policy", () => {
   });
 
   it("refuses private, loopback, link-local and IPv4-mapped addresses, by literal and by name", async () => {
-    for (const host of ["127.0.0.1", "10.1.2.3", "192.168.0.9", "169.254.169.254", "[::1]", "[::ffff:10.0.0.1]", "[::ffff:7f00:1]", "[fd00::1]"]) {
+    for (const host of ["127.0.0.1", "10.1.2.3", "192.168.0.9", "169.254.169.254", "[::1]", "[::ffff:10.0.0.1]", "[::ffff:7f00:1]", "[fd00::1]", "[64:ff9b::a00:1]", "[2002:a00:1::]", "[::ffff:0:a00:1]"]) {
       await refused(resolveTarget(`https://${host}/hook`), "private");
     }
     await refused(resolveTarget("https://localhost/hook"), "private");

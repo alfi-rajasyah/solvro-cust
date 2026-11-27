@@ -4,6 +4,7 @@ import type { WebhookDelivery, WebhookSubscription } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { requireAuth, requirePermission, type JwtPayload } from "../http/auth.js";
 import { HttpError } from "../http/errors.js";
+import { createRateLimiter } from "../http/rateLimit.js";
 import { validate } from "../http/validate.js";
 import { projectVisibilityFilter } from "../lib/visibility.js";
 import { seal } from "../lib/secretBox.js";
@@ -166,7 +167,15 @@ webhooksRouter.post("/:id/rotate-secret", validate("params", idParamSchema), asy
   res.json({ secret });
 });
 
-webhooksRouter.post("/:id/test", validate("params", idParamSchema), async (req, res) => {
+// Each call sends one outbound POST of up to 10 seconds, so it is capped per
+// signed-in user (the router's requireAuth has set req.user by now).
+export const webhookTestRateLimiter = createRateLimiter({
+  limit: 10,
+  windowMs: 60_000,
+  keyFor: (req) => `user:${req.user?.sub ?? "unknown"}`,
+});
+
+webhooksRouter.post("/:id/test", webhookTestRateLimiter.middleware, validate("params", idParamSchema), async (req, res) => {
   const { id } = req.params as unknown as z.infer<typeof idParamSchema>;
   const current = await ownWebhook(req.user!.sub, id);
   const payload = buildTestPayload(current);

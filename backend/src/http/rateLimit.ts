@@ -71,6 +71,8 @@ export function createRateLimiter(opts: {
   limit: number;
   windowMs: number;
   maxKeys?: number;
+  /** Bucket key for a request; defaults to the client address (`rateLimitKey(req.ip)`). Authed routes pass the user id. */
+  keyFor?: (req: Request) => string;
 }): RateLimiter {
   const maxKeys = opts.maxKeys ?? RATE_LIMIT_MAX_KEYS;
   const hits = new Map<string, { count: number; resetAt: number }>();
@@ -95,7 +97,7 @@ export function createRateLimiter(opts: {
       const now = Date.now();
       // `req.ip` honours the app's `trust proxy` setting (src/app.ts), so behind
       // nginx it is the real client, not the proxy.
-      const key = rateLimitKey(req.ip);
+      const key = opts.keyFor ? opts.keyFor(req) : rateLimitKey(req.ip);
       let entry = hits.get(key);
       if (!entry || entry.resetAt <= now) {
         // Delete first so a re-used key moves to the newest end of the Map.

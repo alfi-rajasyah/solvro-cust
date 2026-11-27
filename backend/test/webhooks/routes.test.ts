@@ -2,6 +2,7 @@ import "../env.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../../src/app.js";
+import { webhookTestRateLimiter } from "../../src/routes/webhooks.js";
 import { prisma } from "../../src/prisma.js";
 import { open } from "../../src/lib/secretBox.js";
 import { createUserWithRole, seedRoles } from "../testAuth.js";
@@ -226,6 +227,26 @@ describe("POST /webhooks/:id/test and GET /webhooks/:id/deliveries", () => {
     const failed = await request(app).post(`/webhooks/${id}/test`).set(auth(tam.token));
     expect(failed.body).toEqual({ ok: false, statusCode: 500, error: "http_500" });
     receiver.respondWith(200);
+  });
+
+  it("limits Send test to 10 per minute per user and answers the 11th with 429 rate_limited", async () => {
+    webhookTestRateLimiter.reset();
+    const tam = await createUserWithRole("TAM");
+    const other = await createUserWithRole("TAM");
+    const id = (await request(app).post("/webhooks").set(auth(tam.token)).send(body({ url: receiver.url }))).body.webhook.id as number;
+    const otherId = (await request(app).post("/webhooks").set(auth(other.token)).send(body({ url: receiver.url }))).body.webhook.id as number;
+    for (let i = 0; i < 10; i++) {
+      const ok = await request(app).post(`/webhooks/${id}/test`).set(auth(tam.token));
+      expect(ok.status, `call ${i + 1}`).toBe(200);
+    }
+    const limited = await request(app).post(`/webhooks/${id}/test`).set(auth(tam.token));
+    expect(limited.status).toBe(429);
+    expect(limited.body).toMatchObject({ code: "rate_limited" });
+    expect(Number(limited.headers["retry-after"])).toBeGreaterThanOrEqual(1);
+    // The window is per user: another user is not affected.
+    const fine = await request(app).post(`/webhooks/${otherId}/test`).set(auth(other.token));
+    expect(fine.status).toBe(200);
+    webhookTestRateLimiter.reset();
   });
 
   it("lists the last 50 deliveries newest first and reports lastDelivery", async () => {
