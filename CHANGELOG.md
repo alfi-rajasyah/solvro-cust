@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-27 — GitHub issue forms
+
+- The default GitHub issue templates in `.github/ISSUE_TEMPLATE/` are replaced by two issue forms, `bug_report.yml` and `feature_request.yml`. The bug form asks for steps, the expected result, the area, how often it happens, and the Solvro version. The feature form asks for the problem, the wanted result, the area, and who needs it. Both forms add their label (`bug` or `enhancement`) and ask the reporter to confirm that the issue holds no customer data, internal notes, or credentials, because the repository can be public.
+
 ## [1.6.0] — 2026-11-27
 
 ### Changed — 2026-11-27 — Version 1.6.0
