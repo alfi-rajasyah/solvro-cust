@@ -1,6 +1,6 @@
 # Edit and delete task comments (GitHub #169)
 
-Status: planned, decisions taken (written 2026-11-27 @ `77280d7`)
+Status: shipped 2026-11-27 (written 2026-11-27 @ `77280d7`)
 Archive path: `docs/archive/plans/comment-edit-delete.md`
 
 Lane: P (new routes, a schema column, two new outgoing webhook event types, a new UI control on the task panel). One phase, one PR. Spine touches: `backend/src/routes/tasks.ts`, `schema.prisma` + a migration, `frontend/src/lib/queries.ts`, so the phase also gets instant opus reviews.
@@ -58,3 +58,16 @@ Settled by convention (no user decision needed):
 - The routes, hooks and UI above ship with their tests. `gates.sh` is green, and the spine instants and the phase review are cleared.
 - Delivery Gate PASS: in both themes and at 375px, edit, cancel, save, and delete with confirm, all on a subtask.
 - CHANGELOG entry, `docs/DESIGN.md` sync if the menu adds a pattern, and this plan archived in the same PR.
+
+## Record
+
+- Built as two parallel tasks (backend; frontend) against the API above, then e2e. Instant opus reviews on the backend and frontend commits, and one phase review. All their findings were fixed in the phase.
+- Changes from the plan:
+  - An edit counts only when the body changes. A save with the same body is a full no-op: no `editedAt`, no mention change, no activity, no webhook. This matches D2.
+  - The delete activity row stores `source` only when it is set (`"incoming"`).
+  - The incoming writer now records `source` on the `created` activity too, so one rule skips all three comment events for incoming comments, also after a delete.
+- Also fixed: `useAddComment` now refreshes the project's task rows, so the Kanban comment count updates.
+- Delivery Gate (2026-11-27): PASS, on a subtask, light and dark, at 1440px and 375px.
+  - Checked: the menu, Edit, Save with "edited", the delete confirm, and focus return (editor, then actions button, then the next comment or the composer).
+  - The first run failed: the edit box clipped a two-line comment. It was fixed in this phase, and `comments.spec.ts` now covers it.
+- Local smoke fails on the dev server, the same way on develop (ISS-225), so the gates ran with `--skip-smoke`. `comments.spec.ts` was run on both projects by hand. CI runs the smoke on the built stack.
