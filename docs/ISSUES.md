@@ -621,10 +621,10 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-166 · P3 · Dev backend tsx watch sometimes misses file edits
 
-- **Type:** watch · **Found:** 2026-08-15 · **Verified:** 2026-11-26 @ `f25aac3`
+- **Type:** watch · **Found:** 2026-08-15 · **Verified:** 2026-11-27 @ `b32458b`
 - **Where:** dev script in backend/package.json (line 8)
-- **Problem:** The tsx watch process occasionally keeps serving stale code after an edit on the dev stack.
-- **Why deferred / fix direction:** Run `docker compose restart backend`; investigate only if it recurs often.
+- **Problem:** The tsx watch process occasionally keeps serving stale code after an edit on the dev stack. Recurred 2026-11-27: after a checkout switched branches and back, the new `PATCH`/`DELETE /tasks/:id/comments/:commentId` routes answered 404 until a restart.
+- **Why deferred / fix direction:** Run `docker compose restart backend` (e2e/CLAUDE.md says so before specs that use a new route); investigate if it keeps recurring.
 - **Source:** snapshot line 1591, section "Pipeline native port — accepted risks & deferred items (2026-08-15)"; merged duplicates at snapshot lines 2337
 
 ### ISS-167 · P3 · npm audit fix crashes on the host with an arborist error
@@ -634,6 +634,14 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 - **Problem:** npm audit fix fails with 'Cannot read properties of null (reading edgesOut)'. Targeted npm update with --package-lock-only works.
 - **Why deferred / fix direction:** Trigger: npm upgrade. Use targeted npm update inside the container meanwhile.
 - **Source:** snapshot line 2425, section "Dependency advisories — remaining (2026-10-25)"
+
+### ISS-225 · P3 · Local smoke fails on the Vite dev server: Kanban after Overview runs out of request slots
+
+- **Type:** bug · **Found:** 2026-11-27 · **Verified:** 2026-11-27 @ `b32458b`
+- **Where:** e2e/tests/smoke.spec.ts "no console/page errors while navigating the app" (line 48), against BASE_URL=http://localhost:5173
+- **Problem:** Going from /overview to a project's Kanban fails in Chromium with `net::ERR_INSUFFICIENT_RESOURCES` on several module requests, then "Failed to fetch dynamically imported module ProjectDetail.tsx", so the route shows "This page could not be shown". It fails the same way on develop, with tracing on or off and after clearing `node_modules/.vite`. A direct load of the Kanban works. The built stack (CI) is not affected.
+- **Why deferred / fix direction:** Dev-server only; `gates.sh` smoke then fails locally. Find which module graph the Overview leaves in flight (about 480 requests), and try `server.warmup` or fewer dynamic imports on that route.
+- **Source:** #169 phase gates, 2026-11-27
 
 ## Open — Docs & process
 

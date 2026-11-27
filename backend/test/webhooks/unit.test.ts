@@ -33,7 +33,14 @@ describe("mapActivityToEvents", () => {
     expect(mapActivityToEvents(row("task", "updated", null))).toEqual([]);
     expect(mapActivityToEvents(row("project", "updated", { name: { from: "a", to: "b" } }))).toEqual([]);
     expect(mapActivityToEvents(row("risk", "updated", { status: { from: "OPEN", to: "CLOSED" } }))).toEqual([]);
-    expect(mapActivityToEvents(row("comment", "deleted"))).toEqual([]);
+    expect(mapActivityToEvents(row("comment", "moved"))).toEqual([]);
+  });
+
+  it("maps comment updates and deletions to their own event types", () => {
+    expect(mapActivityToEvents(row("comment", "updated", { taskId: 1 }))).toEqual(["comment.updated"]);
+    expect(mapActivityToEvents(row("comment", "deleted", { taskId: 1 }))).toEqual(["comment.deleted"]);
+    expect(WEBHOOK_EVENT_TYPES).toContain("comment.updated");
+    expect(WEBHOOK_EVENT_TYPES).toContain("comment.deleted");
   });
 
   it("never maps a note, whatever its action, and no event type mentions notes", () => {

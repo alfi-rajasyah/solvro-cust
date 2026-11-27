@@ -186,6 +186,13 @@ describe("describeActivity - comments", () => {
     expect(describeActivity(e).taskId).toBe(42);
   });
 
+  it("an edited or deleted comment still links to its task", () => {
+    for (const action of ["updated", "deleted"] as const) {
+      const e = ev({ entityType: "comment", entityId: 900, action, changes: { taskId: 42 } });
+      expect(describeActivity(e).taskId).toBe(42);
+    }
+  });
+
   it("edited / deleted / no label", () => {
     expect(text(ev({ entityType: "comment", action: "updated" }))).toBe(
       "maya.putri edited a comment on Configure backup jobs",

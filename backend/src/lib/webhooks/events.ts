@@ -1,6 +1,7 @@
 // Allow-list mapping from an activity row to webhook event types. A row that
 // matches no line maps to nothing (the dispatcher still stamps it as handled).
-// Notes, members, epics, share links and deletions never map, so an INTERNAL
+// Notes, members, epics and share links never map, and the only deletion that
+// maps is a comment's (it carries no text), so an INTERNAL
 // note can never reach a webhook (root CLAUDE.md Guardrails).
 import type { WebhookEventType } from "./eventTypes.js";
 
@@ -41,9 +42,12 @@ export function mapActivityToEvents(row: ActivityRowForMapping, statusIsDone = f
       if (assigneeSet(changes)) events.push("task.assigned");
       if (changes.startDate !== undefined || changes.dueDate !== undefined) events.push("task.due_date_changed");
     }
+  } else if (row.entityType === "comment") {
+    if (row.action === "created") events.push("comment.created");
+    else if (row.action === "updated") events.push("comment.updated");
+    else if (row.action === "deleted") events.push("comment.deleted");
   } else if (row.action === "created") {
-    if (row.entityType === "comment") events.push("comment.created");
-    else if (row.entityType === "project") events.push("project.created");
+    if (row.entityType === "project") events.push("project.created");
     else if (row.entityType === "risk") events.push("risk.created");
   }
   return events;
