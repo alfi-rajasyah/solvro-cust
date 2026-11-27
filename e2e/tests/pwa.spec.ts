@@ -4,6 +4,13 @@ import { test, expect, loginViaUi } from "../fixtures/test";
 // via feat/pwa-mobile and is now merged — these assertions are real.
 
 test.describe("pwa", () => {
+  // vite-plugin-pwa emits the manifest and service worker only in build or
+  // preview mode, so none of these can pass against the Vite dev server.
+  test.skip(
+    ({ baseURL }) => new URL(baseURL ?? "http://localhost:8080").port === "5173",
+    "manifest and service worker exist only in build mode (needs the built stack on :8080)",
+  );
+
   test("manifest link is present", async ({ page }) => {
     await page.goto("/", { waitUntil: "networkidle" });
     const manifestHref = await page

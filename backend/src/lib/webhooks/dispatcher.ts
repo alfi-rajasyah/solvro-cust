@@ -83,8 +83,17 @@ export async function dispatchActivity(): Promise<number> {
       select: { id: true, projectId: true, entityType: true, entityId: true, action: true, changes: true },
     });
     // A comment written by an incoming webhook URL (`source` set) sends no
-    // `comment.created`, so a relay between the two directions cannot loop.
-    const commentIds = rows.filter((r) => r.entityType === "comment" && r.action === "created").map((r) => r.entityId);
+    // `comment.*` event, so a relay between the two directions cannot loop.
+    // The comment's activity rows carry `source` in `changes` (the comment row
+    // may be gone by now), and one predicate decides all three types. Older
+    // `created` rows lack it; for those only, the live comment row is the fallback.
+    const hasSource = (changes: unknown): boolean => {
+      const s = (changes as { source?: unknown } | null)?.source;
+      return typeof s === "string" && s.length > 0;
+    };
+    const commentIds = rows
+      .filter((r) => r.entityType === "comment" && r.action === "created" && !hasSource(r.changes))
+      .map((r) => r.entityId);
     const sourced = new Set<number>();
     if (commentIds.length > 0) {
       const found = await tx.comment.findMany({ where: { id: { in: commentIds }, source: { not: null } }, select: { id: true } });
@@ -112,7 +121,10 @@ export async function dispatchActivity(): Promise<number> {
     for (const row of rows) {
       const name = newStatusName(row);
       const events = mapActivityToEvents(row, name !== null && doneNames.has(name)).filter(
-        (type) => !(type === "comment.created" && sourced.has(row.entityId)),
+        (type) => {
+          if (!type.startsWith("comment.")) return true;
+          return !hasSource(row.changes) && !(row.action === "created" && sourced.has(row.entityId));
+        },
       );
       if (events.length === 0) continue;
       for (const sub of subs) {

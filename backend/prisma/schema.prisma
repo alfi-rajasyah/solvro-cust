@@ -780,6 +780,9 @@ model Comment {
   // when the comment was written (routes/tasks.ts filters before storing).
   mentionedUserIds Int[]        @default([]) @map("mentioned_user_ids")
   createdAt        DateTime     @default(now()) @map("created_at")
+  // Set when an edit changed the body; null for a comment
+  // never edited (docs/archive/plans/comment-edit-delete.md).
+  editedAt         DateTime?    @map("edited_at")
   // Set (`incoming`) when an incoming webhook URL wrote the comment; the
   // outgoing dispatcher never sends `comment.created` for it
   // (docs/archive/plans/webhooks.md).

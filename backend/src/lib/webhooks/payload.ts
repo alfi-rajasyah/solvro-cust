@@ -109,8 +109,13 @@ export async function buildPayload(db: Db, row: ActivityRowForPayload, type: Web
         }
       : { id: Number.isInteger(taskId) ? taskId : null, title: row.entityLabel, status: null, assignee: null, dueDate: null, url: null };
     if (row.entityType === "comment") {
-      const comment = await db.comment.findUnique({ where: { id: row.entityId }, select: { id: true, body: true } });
-      data.comment = { id: row.entityId, text: comment ? excerpt(comment.body) : null };
+      if (type === "comment.deleted") {
+        // The row is gone and the old body is never read or sent.
+        data.comment = { id: row.entityId, text: null };
+      } else {
+        const comment = await db.comment.findUnique({ where: { id: row.entityId }, select: { id: true, body: true } });
+        data.comment = { id: row.entityId, text: comment ? excerpt(comment.body) : null };
+      }
     }
   } else if (row.entityType === "risk") {
     const risk = await db.risk.findUnique({

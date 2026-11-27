@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useLayoutEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Modal, isDragActive } from "./Modal";
@@ -77,5 +78,26 @@ describe("Modal Escape and drag guard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(onHeaderClose).toHaveBeenCalledTimes(1);
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe("Modal Escape before passive effects run (ISS-218)", () => {
+  it("closes on an Escape pressed in the commit the dialog first appears", () => {
+    const onClose = vi.fn();
+    // Runs after Modal's own layout effects and before any passive effect:
+    // the frame in which the dialog is visible but not yet settled.
+    function FirstFrameEscape() {
+      useLayoutEffect(() => {
+        fireEvent.keyDown(document, { key: "Escape" });
+      }, []);
+      return null;
+    }
+    render(
+      <>
+        <Modal open onClose={onClose} title="T">body</Modal>
+        <FirstFrameEscape />
+      </>,
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

@@ -15,6 +15,53 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-11-27
+
+### Changed — 2026-11-27 — Version 1.6.0
+
+- The release version is `1.6.0` in `VERSION`, `backend/package.json`, `frontend/package.json` and the image tag in `setup.sh` (`SOLVRO_IMAGE_TAG="v1.6.0"`), so the login page and new installs show and pull this release.
+
+### Added — 2026-11-27 — Edit and delete task comments
+
+- A comment on any task, subtask included, has a "Comment actions" menu. The author can edit the comment, and the mentions stay. An edit that changes the text marks the comment "edited", with the edit time. The author or an admin can delete a comment after a confirmation. A comment written by an incoming webhook URL can be deleted but not edited. An edit notifies only the people it newly mentions.
+- New routes: `PATCH` and `DELETE /tasks/:id/comments/:commentId` in `backend/src/routes/tasks.ts`. A new nullable `edited_at` column on `comments` (migration `20261127120000_comment_edited_at`) holds the edit time.
+- Outgoing webhooks have 2 new event types, `comment.updated` ("Comment edited") and `comment.deleted` ("Comment deleted"). `comment.deleted` never carries the comment text. Existing webhooks keep their selected event types, and they receive the new ones only after their owner selects them. Comments written through an incoming webhook URL send none of the 3 comment events. The incoming writer now records that source in the activity log, so this rule still holds after the comment is deleted. In every comment event, `text` is the comment as it is when the delivery is sent (`docs/guides/webhooks.md`).
+
+### Fixed — 2026-11-27 — Kanban comment count after a new comment
+
+- The comment count on a Kanban card now updates as soon as a comment is added (`useAddComment` in `frontend/src/lib/queries.ts` also refreshes the project's task rows).
+
+### Changed — 2026-11-27 — CI keeps the trace of a failed first attempt
+
+- `e2e/playwright.config.ts` records traces with `retain-on-first-failure` instead of `on-first-retry`. Before, CI recorded only the retry, which passed, so a test that failed once and then passed left no record of the failure.
+- The "Upload Playwright traces" step in `.github/workflows/ci.yml` runs on every run, not only when the job fails. A run with no failed attempt has nothing to upload, and the step then does nothing.
+
+### Fixed — 2026-11-27 — e2e specs that failed on their first attempt
+
+- `e2e/tests/pwa.spec.ts` skips itself when the base URL is the Vite dev server (port 5173). The manifest and service worker exist only in build mode, so these specs always failed there.
+- Five specs that failed on their first attempt in CI now wait for the page to settle instead of racing it: Gantt drag-move (`gantt-parity.spec.ts`), Kanban refused drag (`kanban-dnd.spec.ts`), List cross-status reorder (`list-dnd.spec.ts`), Gantt row menu focus (`gantt-row-menu-focus.spec.ts`) and the label filter on a phone (`task-filters.spec.ts`). A new `stableBox` helper in `e2e/fixtures/test.ts` waits until an element holds still before a drag starts. The specs also wait for the saved request, for animations, or for the server order.
+
+### Changed — 2026-11-26 — A key id in stored secrets, and SECRETS_KEY rotation
+
+- `backend/src/lib/secretBox.ts` now writes stored integration tokens and webhook secrets as `v2:`, with a key id taken from the key. The new optional `SECRETS_KEY_PREVIOUS` (`backend/src/env.ts`) keeps values sealed under the old key readable while `SECRETS_KEY` is rotated. Before, a new `SECRETS_KEY` made every stored iTop and Outline token and every webhook signing secret unreadable. Existing `v1:` values still open, and they move to the new key only when they are written again.
+- `setup.sh` passes `SECRETS_KEY_PREVIOUS` into the compose file it writes, and `solvro config` refuses to show or set it, like the other secrets. The rotation steps are in `docs/CONFIGURATION.md`.
+- **Action required before a rollback:** earlier releases cannot read `v2:` values. After an upgrade, roll back only together with the database backup taken before the upgrade. Tokens and secrets saved after the upgrade must then be entered again.
+
+### Fixed — 2026-11-26 — Escape closes a dialog in its first frame
+
+- `frontend/src/components/Modal.tsx` now attaches its Escape listener before the dialog paints (a layout effect, not a passive one). Before, a dialog that opened after a server response, such as the task conflict dialog after a 409, ignored an Escape pressed in its first frame. The listener still attaches once per open, so it stays ahead of the drag-cancel listener.
+
+### Fixed — 2026-11-26 — Webhook address checks and a limit on Send test
+
+- `isPrivateAddress` in `backend/src/lib/itop/validateBaseUrl.ts` now reads the IPv4 address inside NAT64 (`64:ff9b::/96`), 6to4 (`2002::/16`) and IPv4-translated (`::ffff:0:a.b.c.d`) IPv6 addresses, and refuses the target when that IPv4 address is private. Before, a webhook or iTop address such as `https://[64:ff9b::a00:1]/` passed the check and could reach `10.0.0.1` through a NAT64 or 6to4 gateway.
+- An outgoing webhook can no longer target this deployment's own incoming webhook URL when `APP_URL` has a path, for example `https://host/solvro/api/webhook/in/...` (`pointsAtIncomingUrl` in `backend/src/lib/webhooks/validateTarget.ts`). Before, the check matched the incoming path only at the root of the host.
+- `POST /webhooks/:id/test` (Send test) allows 10 calls per minute per user, and answers `429 rate_limited` with a `Retry-After` header after that. Each call sends one outbound request of up to 10 seconds. `createRateLimiter` in `backend/src/http/rateLimit.ts` takes an optional `keyFor` for this; other limiters still count per client address.
+
+### Added — 2026-11-26 — A release tag creates its GitHub Release
+
+- `.github/workflows/docker-publish.yml` has a new `release` job. After both images of a `v*` tag are pushed, it creates the tag's GitHub Release, titled "Solvro vX.Y.Z", with GitHub's generated "What's Changed" notes. Before, a tag published images but the Releases page stayed at the last Release made by hand.
+- "Latest" follows the same rule as the `stable` image tag: only the newest final `vX.Y.Z` gets it, so a backport tag pushed later does not. A tag with a suffix, such as `v1.6.0-rc1`, becomes a pre-release. A tag that already has a Release is left alone. Only this job can write to the repository contents; the image build keeps read-only access.
+
 ## [1.5.0] — 2026-11-26
 
 ### Changed — 2026-11-26 — Version 1.5.0

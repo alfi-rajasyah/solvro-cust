@@ -462,13 +462,14 @@ function buildBody(event: ActivityEvent): Parts {
   return genericSentence(event);
 }
 
-/** Task id an event links to: only task events, and never a deleted task. */
+/** Task id an event links to: a task event (never a deleted task), or a comment event that carries its task id. */
 export function eventTaskId(event: ActivityEvent): number | null {
   if (event.entityType === "task" && event.action !== "deleted") {
     return Number.isInteger(event.entityId) ? event.entityId : null;
   }
   // Comment events may carry the task they belong to; entityId is the comment.
-  if (event.entityType === "comment" && event.action !== "deleted" && isRecord(event.changes)) {
+  // A deleted comment still links: the task it was on is still there.
+  if (event.entityType === "comment" && isRecord(event.changes)) {
     const id = event.changes.taskId;
     if (typeof id === "number" && Number.isInteger(id)) return id;
   }

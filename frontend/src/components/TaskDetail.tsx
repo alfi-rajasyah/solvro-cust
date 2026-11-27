@@ -21,7 +21,14 @@ import { Sortable, SortableItem, SortableItemHandle } from "@/components/reui/so
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { CommentBody, CommentComposer } from "@/components/CommentMentions";
-import { fmtAgo, fmtRange } from "@/lib/formatDate";
+import { ConfirmModal } from "@/components/ConfirmModal";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { fmtAgo, fmtDateTime, fmtRange } from "@/lib/formatDate";
 import { parseStoryPoints } from "@/lib/storyPoints";
 import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
 import { assignableUsers, assigneeOptionLabel } from "@/lib/assignableUsers";
@@ -37,13 +44,16 @@ import {
   type StaleWrite,
 } from "@/lib/taskConflict";
 import {
+  type Comment,
   type Priority,
   type Task,
   type UpdateTaskInput,
   useAddComment,
   useComments,
   useCreateTask,
+  useDeleteComment,
   useDuplicateTask,
+  useEditComment,
   useItopStatus,
   useItopTicketsByRefs,
   useProject,
@@ -1117,7 +1127,7 @@ export function TaskDetail({ projectId, taskId, layout, onOpenTask, renderHeader
     <>
       {/* Comments */}
       <div className={cls}>
-        <PanelComments taskId={task.id} projectId={projectId} />
+        <PanelComments taskId={task.id} projectId={projectId} onOverlayChange={onRowOverlayChange} />
       </div>
     </>
   );
@@ -1209,18 +1219,137 @@ export function TaskDetail({ projectId, taskId, layout, onOpenTask, renderHeader
 }
 
 /**
+ * Reports an overlay's open state to the shell as balanced +1/-1 calls: one
+ * widget that never opened never reports, so mounting or unmounting it cannot
+ * clear another widget's flag (same rule as RowTicketCell).
+ */
+function useBalancedOverlay(open: boolean, report: ((open: boolean) => void) | undefined) {
+  const reportRef = useRef(report);
+  reportRef.current = report;
+  const reported = useRef(false);
+  // A layout effect, not a passive one: the flag is set in the commit that shows the overlay.
+  useLayoutEffect(() => {
+    if (open && !reported.current) {
+      reported.current = true;
+      reportRef.current?.(true);
+    } else if (!open && reported.current) {
+      reported.current = false;
+      reportRef.current?.(false);
+    }
+  }, [open]);
+  useLayoutEffect(
+    () => () => {
+      if (reported.current) reportRef.current?.(false);
+    },
+    [],
+  );
+}
+
+/**
+ * The "Comment actions" menu of one comment. Hidden until hover or focus on
+ * desktop, always shown on phones and touch screens (no hover there).
+ */
+function CommentActionsMenu({
+  canEdit,
+  canDelete,
+  onEdit,
+  onDelete,
+  onOverlayChange,
+  triggerRef,
+}: {
+  canEdit: boolean;
+  canDelete: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+  onOverlayChange?: (open: boolean) => void;
+  triggerRef: (el: HTMLButtonElement | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  useBalancedOverlay(open, onOverlayChange);
+  return (
+    <DropdownMenu onOpenChange={setOpen}>
+      <DropdownMenuTrigger
+        render={
+          <button
+            ref={triggerRef}
+            type="button"
+            aria-label="Comment actions"
+            title="Comment actions"
+            className="tap-target -my-1 inline-flex h-6 w-6 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container-high hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover/comment:opacity-100 md:group-focus-within/comment:opacity-100 md:data-popup-open:opacity-100 [@media(hover:none)]:opacity-100"
+          >
+            <span className="material-symbols-outlined text-base" aria-hidden="true">
+              more_horiz
+            </span>
+          </button>
+        }
+      />
+      {/* z-50: above the task panel's z-40 (frontend/CLAUDE.md "Popover z-index"). */}
+      <DropdownMenuContent align="end" className="w-40 bg-surface-container-lowest shadow-overlay!" positionerClassName="z-50">
+        {canEdit && (
+          <DropdownMenuItem onClick={onEdit} className="text-xs">
+            <span className="material-symbols-outlined text-base" aria-hidden="true">
+              edit
+            </span>
+            Edit
+          </DropdownMenuItem>
+        )}
+        {canDelete && (
+          <DropdownMenuItem variant="destructive" onClick={onDelete} className="text-xs">
+            <span className="material-symbols-outlined text-base" aria-hidden="true">
+              delete
+            </span>
+            Delete
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/**
  * Comment thread + single-line composer per the mockup ("Write a comment…"
  * placeholder + green send icon), backed by useComments / useAddComment.
  * This is the app's only comment UI (the former standalone CommentThread
  * component was never mounted and has been removed).
  */
-function PanelComments({ taskId, projectId }: { taskId: number; projectId: number }) {
+export function PanelComments({
+  taskId,
+  projectId,
+  onOverlayChange,
+}: {
+  taskId: number;
+  projectId: number;
+  /** Balanced open/close while a comment menu or the delete confirm is up, so Escape does not close the shell under it. */
+  onOverlayChange?: (open: boolean) => void;
+}) {
   // Posting needs task:comment (the server gate on POST /tasks/:id/comments);
   // reading the thread needs only project:read.
   const { user } = useAuth();
   const canComment = hasPermission(user, "task:comment");
+  // Edit is the author's alone; delete is the author's or an admin's (server rule).
+  const isAdmin = hasPermission(user, "*");
+  const isAuthor = (c: Comment) => user !== null && c.author.id === user.id;
   const { data: comments, isLoading, isError, error } = useComments(taskId);
   const addComment = useAddComment(taskId, projectId);
+  const editComment = useEditComment(taskId, projectId);
+  const deleteComment = useDeleteComment(taskId, projectId);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  useBalancedOverlay(deletingId !== null, onOverlayChange);
+
+  // Focus goes back to a control that still exists once the editor or the
+  // dialog closes (the file's focusTitleRef pattern): a comment's actions
+  // trigger, or the main composer after a delete with no next comment to land on.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRefs = useRef(new Map<number, HTMLButtonElement>());
+  const pendingFocus = useRef<{ triggerOf: number | null } | null>(null);
+  useEffect(() => {
+    const pending = pendingFocus.current;
+    if (!pending || editingId !== null || deletingId !== null) return;
+    pendingFocus.current = null;
+    const trigger = pending.triggerOf !== null ? triggerRefs.current.get(pending.triggerOf) : undefined;
+    (trigger ?? rootRef.current?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Write a comment"]'))?.focus();
+  }, [editingId, deletingId, comments]);
   const { data: project } = useProject(projectId);
   const { data: members } = useProjectMembers(projectId);
 
@@ -1235,7 +1364,7 @@ function PanelComments({ taskId, projectId }: { taskId: number; projectId: numbe
   }, [project, members]);
 
   return (
-    <div className="space-y-3">
+    <div ref={rootRef} className="space-y-3">
       <h2 className="font-display text-label-caps uppercase text-on-surface-variant">
         Comments {comments && comments.length > 0 && `· ${comments.length}`}
       </h2>
@@ -1259,7 +1388,7 @@ function PanelComments({ taskId, projectId }: { taskId: number; projectId: numbe
           {comments.map((c) => (
             <li key={c.id} className="flex gap-2.5">
               <AssigneeAvatar user={c.author} size="xs" />
-              <div className="min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2">
+              <div className="group/comment min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2">
                 <div className="mb-0.5 flex items-center justify-between gap-2 text-meta">
                   <span className="min-w-0 truncate">
                     <span className="font-medium text-on-surface">{c.author.username}</span>
@@ -1270,14 +1399,98 @@ function PanelComments({ taskId, projectId }: { taskId: number; projectId: numbe
                       </span>
                     )}
                   </span>
-                  <span className="shrink-0 text-on-surface-variant">{fmtAgo(c.createdAt)}</span>
+                  <span className="flex shrink-0 items-center gap-1 text-on-surface-variant">
+                    <span>
+                      {fmtAgo(c.createdAt)}
+                      {c.editedAt && (
+                        <>
+                          {" · "}
+                          <span title={`Edited ${fmtDateTime(c.editedAt)}`} data-testid="comment-edited">
+                            edited
+                          </span>
+                          <span className="sr-only"> {fmtDateTime(c.editedAt)}</span>
+                        </>
+                      )}
+                    </span>
+                    {canComment && (isAuthor(c) || isAdmin) && (
+                      <CommentActionsMenu
+                        canEdit={isAuthor(c) && c.source !== "incoming"}
+                        canDelete
+                        onOverlayChange={onOverlayChange}
+                        triggerRef={(el) => {
+                          if (el) triggerRefs.current.set(c.id, el);
+                          else triggerRefs.current.delete(c.id);
+                        }}
+                        onEdit={() => {
+                          editComment.reset();
+                          setEditingId(c.id);
+                        }}
+                        onDelete={() => {
+                          deleteComment.reset();
+                          setDeletingId(c.id);
+                        }}
+                      />
+                    )}
+                  </span>
                 </div>
-                <CommentBody body={c.body} mentionedUserIds={c.mentionedUserIds} users={people} />
+                {editingId === c.id ? (
+                  <CommentComposer
+                    candidates={people}
+                    isPending={editComment.isPending}
+                    error={editComment.error ? (editComment.error as Error).message : null}
+                    edit={{
+                      initialBody: c.body,
+                      initialMentionIds: c.mentionedUserIds ?? [],
+                      onCancel: () => {
+                        pendingFocus.current = { triggerOf: c.id };
+                        setEditingId(null);
+                      },
+                    }}
+                    onSend={async (body, mentionedUserIds) => {
+                      await editComment.mutateAsync({ commentId: c.id, body, mentionedUserIds });
+                      pendingFocus.current = { triggerOf: c.id };
+                      setEditingId(null);
+                    }}
+                  />
+                ) : (
+                  <CommentBody body={c.body} mentionedUserIds={c.mentionedUserIds} users={people} />
+                )}
               </div>
             </li>
           ))}
         </ol>
       )}
+
+      <ConfirmModal
+        open={deletingId !== null}
+        onClose={() => setDeletingId(null)}
+        onConfirm={async () => {
+          if (deletingId === null) return;
+          const index = (comments ?? []).findIndex((x) => x.id === deletingId);
+          const next = index >= 0 ? (comments ?? [])[index + 1] : undefined;
+          try {
+            await deleteComment.mutateAsync(deletingId);
+            pendingFocus.current = { triggerOf: next?.id ?? null };
+            setDeletingId(null);
+          } catch {
+            // surfaced in the dialog through deleteComment.error
+          }
+        }}
+        title="Delete this comment?"
+        body={
+          <>
+            <p>The comment is removed for everyone on this task. This cannot be undone.</p>
+            {deleteComment.error && (
+              <p role="alert" className="mt-2 text-meta text-error">
+                {(deleteComment.error as Error).message}
+              </p>
+            )}
+          </>
+        }
+        confirmLabel="Delete comment"
+        confirmTone="danger"
+        busy={deleteComment.isPending}
+      />
 
       {canComment && (
         <CommentComposer

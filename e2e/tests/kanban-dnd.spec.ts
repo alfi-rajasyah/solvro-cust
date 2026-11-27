@@ -12,6 +12,7 @@ import {
   captureTaskRequests,
   nextFrames,
   settleAnimations,
+  stableBox,
 } from "../fixtures/test";
 import { getTasks, setWipLimits, type SeededTask, createEpic } from "../fixtures/seed";
 import type { Page } from "@playwright/test";
@@ -160,11 +161,19 @@ test.describe("kanban drag & drop — desktop (mouse)", () => {
       expect(before.length, "need at least two TODO cards").toBeGreaterThanOrEqual(2);
       const mover = before[before.length - 1];
       const target = before[0];
+      // Measure only after the board has stopped moving, and wait for the
+      // refused PATCH before looking for the alert, so a drag that never
+      // started fails on the missing request rather than on the alert.
+      await settleAnimations(page);
+      const targetBox = await stableBox(page, page.getByText(target, { exact: true }).first());
       const grip = await gripFor(page, mover, "Move");
-      const targetBox = await page.getByText(target, { exact: true }).first().boundingBox();
       expect(grip, `grip for ${mover} not found`).toBeTruthy();
-      expect(targetBox, `${target} card not found`).toBeTruthy();
-      await mouseDrag(page, center(grip!), { x: targetBox!.x + 60, y: targetBox!.y + 8 });
+      // A request, not a response: the route fulfils it in the browser, so the
+      // network layer never reports a response for it.
+      await Promise.all([
+        page.waitForRequest((r) => /\/api\/tasks\/\d+$/.test(r.url()) && r.method() === "PATCH"),
+        mouseDrag(page, center(grip!), { x: targetBox.x + 60, y: targetBox.y + 8 }),
+      ]);
 
       const alert = page.getByTestId("kanban-action-error");
       await expect(alert).toBeVisible();

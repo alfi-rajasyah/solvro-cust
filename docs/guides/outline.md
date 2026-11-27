@@ -115,4 +115,4 @@ Signed-in embeds work only when Solvro and Outline share a parent domain, for ex
 | An embed shows "Sign in to Solvro to see this". | Solvro and Outline do not share a parent domain. Use a guest link, or move both under one domain. |
 | An embed is blocked and shows nothing. | `EMBED_FRAME_ANCESTORS` is empty or invalid. The website container logs the reason at start (`15-embed-frame-ancestors: ERROR: ...`). Use plain addresses like `https://docs.example.com`. |
 | A short "rate limited" note appears. | Outline limits requests per address, and all Solvro users reach Outline from one address. Wait and try again. |
-| Every user's connection stopped working. | `SECRETS_KEY` changed. Enter the client secret again, generate a new webhook secret and paste it into Outline, and each user connects again. |
+| Every user's connection stopped working. | `SECRETS_KEY` was changed without keeping the old one as `SECRETS_KEY_PREVIOUS` (see `docs/CONFIGURATION.md`). Enter the client secret again, generate a new webhook secret and paste it into Outline, and each user connects again. |

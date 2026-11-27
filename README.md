@@ -273,4 +273,4 @@ All guides: [docs/guides/](docs/guides/index.md).
 
 ## Branches and releases
 
-Work branches off `develop` and merges back by pull request; `develop` is the integration branch. `main` is the release branch: a merge into `main` runs CI, and only a green run publishes the `latest` images. `v*` tags publish versioned images directly, and a final `vX.Y.Z` tag also moves `stable`, the tag `solvro update` follows.
+Work branches off `develop` and merges back by pull request; `develop` is the integration branch. `main` is the release branch: a merge into `main` runs CI, and only a green run publishes the `latest` images. `v*` tags publish versioned images directly, and a final `vX.Y.Z` tag also moves `stable`, the tag `solvro update` follows. Each `v*` tag also gets its GitHub Release once its images are pushed.
