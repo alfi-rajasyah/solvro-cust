@@ -1,0 +1,106 @@
+name: Bug report
+description: Something in Solvro does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One bug per issue. This repository can be public, so leave out customer names, project data, internal notes, and any token or password.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened
+      description: One or two sentences. Say what you saw, not what you think the cause is.
+      placeholder: Dragging a task to another Kanban column puts it back in the old column after a reload.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Start from a page anyone can reach. Name the role you were signed in with.
+      placeholder: |
+        1. Sign in as a TAM.
+        2. Open a project and go to the Kanban tab.
+        3. Drag a task from "To do" to "In progress".
+        4. Reload the page.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      placeholder: The task stays in "In progress".
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Projects and tasks
+        - Customers
+        - Epics, risks, and services
+        - Kanban
+        - Gantt or Timeline
+        - Notes
+        - Exports (Excel, PDF)
+        - iTop
+        - Outline
+        - Sign-in, users, and permissions
+        - Admin settings
+        - Webhooks
+        - Install and upgrade (setup.sh)
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often
+      options:
+        - Every time
+        - Sometimes
+        - Once
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Solvro version
+      description: The login page shows it. Write "develop" and the commit if you run from source.
+      placeholder: v1.6.0
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and device
+      placeholder: Firefox 133 on Windows 11, or Safari on iPhone 15
+    validations:
+      required: false
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots or logs
+      description: |
+        Drag images here. For server errors, paste the matching lines from `docker compose logs backend`. Blur or cut anything that shows customer data.
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Before you submit
+      options:
+        - label: This issue holds no customer data, internal notes, tokens, or passwords.
+          required: true

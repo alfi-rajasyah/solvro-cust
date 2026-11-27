@@ -1,0 +1,75 @@
+name: Feature request
+description: Ask for a new feature or a change to how Solvro works.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Start from the work you are trying to do, not from the solution. This repository can be public, so leave out customer names and project data.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What do you do today, and where does it cost you time or go wrong?
+      placeholder: Before a customer call I copy every overdue task into a message by hand, project by project.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you want
+      description: Describe the result you need. A sketch or screenshot helps.
+      placeholder: One list of overdue tasks across my projects, which I can filter by customer.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Projects and tasks
+        - Customers
+        - Epics, risks, and services
+        - Kanban
+        - Gantt or Timeline
+        - Notes
+        - Exports (Excel, PDF)
+        - iTop
+        - Outline
+        - Sign-in, users, and permissions
+        - Admin settings
+        - Webhooks
+        - Install and upgrade (setup.sh)
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: who
+    attributes:
+      label: Who needs it
+      options:
+        - TAMs
+        - Admins
+        - Everyone
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: What you do now instead
+      description: Other tools, manual steps, or "nothing".
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Before you submit
+      options:
+        - label: This issue holds no customer data, internal notes, tokens, or passwords.
+          required: true
