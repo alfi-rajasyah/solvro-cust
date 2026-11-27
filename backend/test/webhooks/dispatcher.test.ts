@@ -278,7 +278,7 @@ describe("sending", () => {
   });
 
   describe("comment.updated and comment.deleted", () => {
-    const record = (f: Awaited<ReturnType<typeof projectFixture>>, commentId: number, action: string, changes: Record<string, unknown> = { taskId: f.task.id }) =>
+    const record = (f: Awaited<ReturnType<typeof projectFixture>>, commentId: number, action: "created" | "updated" | "deleted", changes: { taskId: number; source?: string } = { taskId: f.task.id }) =>
       recordActivity(prisma, {
         projectId: f.project.id,
         actorId: f.other.userId,
