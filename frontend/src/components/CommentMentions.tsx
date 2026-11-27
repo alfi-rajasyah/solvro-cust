@@ -80,6 +80,7 @@ export function CommentComposer({
 }) {
   const listId = useId();
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const [body, setBody] = useState(edit?.initialBody ?? "");
   const [caret, setCaret] = useState(edit?.initialBody.length ?? 0);
   const [highlight, setHighlight] = useState(0);
@@ -116,7 +117,8 @@ export function CommentComposer({
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
+    // scrollHeight leaves out the border the edit box draws on the textarea itself.
+    el.style.height = `${el.scrollHeight + (el.offsetHeight - el.clientHeight)}px`;
   }, [body]);
 
   // An editor opens ready to type, with the caret at the end of the text.
@@ -126,6 +128,8 @@ export function CommentComposer({
     if (!isEditing || !el) return;
     el.focus();
     el.setSelectionRange(el.value.length, el.value.length);
+    // Save and Cancel sit below the text: bring the whole editor into view.
+    formRef.current?.scrollIntoView?.({ block: "nearest" });
   }, [isEditing]);
 
   // Put the caret after an inserted mention once React has written the value.
@@ -210,15 +214,19 @@ export function CommentComposer({
   return (
     <>
       <form
+        ref={formRef}
         onSubmit={handleSubmit}
         onKeyDown={handleFormKeyDown}
-        className={`relative flex [@media(pointer:coarse)]:min-h-11 gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30 ${
-          edit ? "flex-col" : "items-end"
-        }`}
+        // Editing: the textarea is the bordered box and Save and Cancel sit under it, outside the border.
+        className={
+          edit
+            ? "relative flex flex-col gap-2"
+            : "relative flex [@media(pointer:coarse)]:min-h-11 items-end gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30"
+        }
       >
         <textarea
           ref={inputRef}
-          rows={1}
+          rows={edit ? 3 : 1}
           aria-label={edit ? "Edit comment" : "Write a comment"}
           aria-autocomplete="list"
           aria-haspopup="listbox"
@@ -239,7 +247,11 @@ export function CommentComposer({
           onKeyDown={handleKeyDown}
           maxLength={5000}
           placeholder={edit ? undefined : "Write a comment…"}
-          className="max-h-40 min-w-0 flex-1 resize-none border-none bg-transparent text-xs [@media(pointer:coarse)]:py-1.5 text-on-surface outline-hidden placeholder:text-on-surface-variant/80"
+          className={
+            edit
+              ? "block max-h-48 w-full min-w-0 resize-none rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-xs text-on-surface outline-hidden focus:border-primary focus:ring-2 focus:ring-primary/30"
+              : "max-h-40 min-w-0 flex-1 resize-none border-none bg-transparent text-xs [@media(pointer:coarse)]:py-1.5 text-on-surface outline-hidden placeholder:text-on-surface-variant/80"
+          }
         />
         {edit ? (
           <div className="flex justify-end gap-2">

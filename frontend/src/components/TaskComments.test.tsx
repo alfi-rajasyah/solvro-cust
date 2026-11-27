@@ -467,6 +467,31 @@ describe("focus after the editor or the dialog closes", () => {
   });
 });
 
+describe("the editor box", () => {
+  it("is a 3-row, content-sized box with Save and Cancel under it, scrolled into view", async () => {
+    thread = [comment(10, 1, { body: "First line\nSecond line" })];
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    show();
+    await screen.findByText(/First line/);
+    await openMenuOf(0);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Edit/ }));
+    const box = (await screen.findByRole("textbox", { name: "Edit comment" })) as HTMLTextAreaElement;
+    expect(box.rows).toBe(3);
+    expect(box.value).toBe("First line\nSecond line");
+    expect(box.selectionStart).toBe(box.value.length);
+    // Not stretched by flex (flex-1 collapses its height in a column) and capped, so it grows then scrolls.
+    expect(box.className).not.toContain("flex-1");
+    expect(box.className).toContain("max-h-48");
+    // The bordered box is the textarea; the buttons are siblings below it, not inside the border.
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(box.contains(save)).toBe(false);
+    expect(box.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(box.parentElement!.className).not.toContain("border");
+    expect(scroll).toHaveBeenCalledWith({ block: "nearest" });
+  });
+});
+
 describe("editing a comment with mentions", () => {
   it("keeps the mentioned user ids in the PATCH body", async () => {
     thread = [comment(10, 1, { body: "hi @other there", mentionedUserIds: [2] })];

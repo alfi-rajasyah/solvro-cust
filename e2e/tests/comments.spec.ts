@@ -216,6 +216,27 @@ test.describe("task comments: edit and delete on a subtask", () => {
     await expect(reloaded.getByTestId("comment-edited")).toBeVisible();
   });
 
+  test("the editor shows all of a two-line comment, with Save and Cancel under it and in view", async ({ page }, testInfo) => {
+    test.setTimeout(90_000);
+    const original = await postComment(apiBase(testInfo), "First comment: check the backup window\nbefore Thursday.");
+    await loginViaUi(page, thread.author.email, PASSWORD);
+    const panel = await openPanel(page);
+
+    await commentRow(panel, "before Thursday.").getByRole("button", { name: "Comment actions" }).click();
+    await page.getByRole("menuitem", { name: "Edit" }).click();
+    const editor = panel.getByRole("textbox", { name: "Edit comment" });
+    await expect(editor).toHaveValue(original);
+    // No clipped content: nothing scrolls inside the box.
+    await expect.poll(() => editor.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
+    expect(await editor.evaluate((el) => el.scrollTop)).toBe(0);
+    const save = panel.getByRole("button", { name: "Save" });
+    await expect(save).toBeInViewport();
+    await expect(panel.getByRole("button", { name: "Cancel" })).toBeInViewport();
+    // The buttons sit below the text box, not on top of it.
+    const [boxRect, saveRect] = [await editor.boundingBox(), await save.boundingBox()];
+    expect(saveRect!.y).toBeGreaterThanOrEqual(boxRect!.y + boxRect!.height);
+  });
+
   test("Escape cancels an edit, keeps the panel open and the text unchanged", async ({ page }, testInfo) => {
     test.setTimeout(90_000);
     const original = await postComment(apiBase(testInfo), "Keep this");
