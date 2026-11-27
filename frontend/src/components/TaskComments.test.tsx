@@ -64,16 +64,27 @@ function comment(id: number, authorId: number, over: Partial<Comment> = {}): Com
 
 let thread: Comment[];
 let failWith: Error | null;
+// While set, every thread GET waits on it: the refetch after a failed write is
+// held, so a test reads the cache the rollback left, not a fresh server copy.
+let gate: Promise<void> | null;
+// While set, a PATCH waits on it (a save that is still in flight).
+let patchGate: Promise<void> | null;
 
 beforeEach(() => {
   thread = [comment(10, 1), comment(11, 2)];
   failWith = null;
+  gate = null;
+  patchGate = null;
   auth.id = 1;
   auth.permissions = ["task:comment"];
   apiRequest.mockReset();
   apiRequest.mockImplementation(async (path: string, opts?: { method?: string; body?: { body: string } }) => {
     const method = opts?.method ?? "GET";
-    if (path === "/tasks/7/comments" && method === "GET") return thread;
+    if (path === "/tasks/7/comments" && method === "GET") {
+      if (gate) await gate;
+      return thread;
+    }
+    if (method === "PATCH" && patchGate) await patchGate;
     if (path.startsWith("/projects/3?")) return { id: 3, tam: { id: 1, username: "me" } };
     if (path === "/projects/3/members") return [{ userId: 2, username: "other" }];
     if (method === "PATCH" || method === "DELETE") {
@@ -94,8 +105,10 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+let client: QueryClient;
+
 function show(onOverlayChange?: (open: boolean) => void) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
       <PanelComments taskId={7} projectId={3} onOverlayChange={onOverlayChange} />
@@ -223,14 +236,21 @@ describe("editing a comment", () => {
     show();
     const box = await startEdit();
     failWith = new Error("You can only edit your own comments.");
-    fireEvent.change(box, { target: { value: "Will fail" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("You can only edit your own comments.");
-    // The editor stays open with the draft; the cached comment is back to its original text.
-    expect((screen.getByRole("textbox", { name: "Edit comment" }) as HTMLTextAreaElement).value).toBe("Will fail");
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.getByText("Body 10")).toBeTruthy();
-    expect(screen.queryByText("Will fail")).toBeNull();
+    let release!: () => void;
+    gate = new Promise<void>((r) => (release = r));
+    try {
+      fireEvent.change(box, { target: { value: "Will fail" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect((await screen.findByRole("alert")).textContent).toContain("You can only edit your own comments.");
+      // The editor stays open with the draft. The refetch is still held, so the
+      // original text that shows after Cancel is the rollback, not a server copy.
+      expect((screen.getByRole("textbox", { name: "Edit comment" }) as HTMLTextAreaElement).value).toBe("Will fail");
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(screen.getByText("Body 10")).toBeTruthy();
+      expect(screen.queryByText("Will fail")).toBeNull();
+    } finally {
+      release();
+    }
   });
 });
 
@@ -271,10 +291,196 @@ describe("deleting a comment", () => {
     show();
     await askToDelete();
     failWith = new Error("Comment not found.");
+    let release!: () => void;
+    gate = new Promise<void>((r) => (release = r));
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Delete comment" }));
+      expect((await screen.findByRole("alert")).textContent).toContain("Comment not found.");
+      // The refetch is held: the comment is back from the rollback alone.
+      expect(screen.getByText("Body 10")).toBeTruthy();
+      expect(screen.getByRole("dialog")).toBeTruthy();
+    } finally {
+      release();
+    }
+  });
+});
+
+// The panel's own Escape rule (TaskPanel.tsx): a capture listener snapshots
+// whether an overlay was open, and the bubble listener closes only when none was.
+function mountPanelEscape() {
+  const state = { overlay: false, blocked: false, closed: 0 };
+  const snapshot = (e: KeyboardEvent) => {
+    if (e.key === "Escape") state.blocked = state.overlay;
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape" && !state.blocked) state.closed++;
+  };
+  document.addEventListener("keydown", snapshot, true);
+  document.addEventListener("keydown", onKey);
+  return {
+    state,
+    setOverlay: (open: boolean) => {
+      state.overlay = open;
+    },
+    dispose: () => {
+      document.removeEventListener("keydown", snapshot, true);
+      document.removeEventListener("keydown", onKey);
+    },
+  };
+}
+
+describe("Escape never closes the panel behind an open comment overlay", () => {
+  it("leaves the panel open when Escape closes the actions menu", async () => {
+    const panel = mountPanelEscape();
+    try {
+      show(panel.setOverlay);
+      await waitForThread();
+      await openMenuOf(0);
+      const item = await screen.findByRole("menuitem", { name: /Edit/ });
+      fireEvent.keyDown(item, { key: "Escape" });
+      await waitFor(() => expect(screen.queryByRole("menuitem", { name: /Edit/ })).toBeNull());
+      expect(panel.state.closed).toBe(0);
+    } finally {
+      panel.dispose();
+    }
+  });
+
+  it("leaves the panel open when Escape closes the delete confirm", async () => {
+    const panel = mountPanelEscape();
+    try {
+      show(panel.setOverlay);
+      await waitForThread();
+      await openMenuOf(0);
+      fireEvent.click(await screen.findByRole("menuitem", { name: /Delete/ }));
+      await screen.findByRole("dialog");
+      fireEvent.keyDown(document.body, { key: "Escape" });
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(panel.state.closed).toBe(0);
+    } finally {
+      panel.dispose();
+    }
+  });
+
+  it.each(["Save", "Cancel"])("cancels the edit and leaves the panel open when Escape comes from %s", async (name) => {
+    const panel = mountPanelEscape();
+    try {
+      show(panel.setOverlay);
+      await waitForThread();
+      await openMenuOf(0);
+      fireEvent.click(await screen.findByRole("menuitem", { name: /Edit/ }));
+      await screen.findByRole("textbox", { name: "Edit comment" });
+      fireEvent.keyDown(screen.getByRole("button", { name }), { key: "Escape" });
+      expect(screen.queryByRole("textbox", { name: "Edit comment" })).toBeNull();
+      expect(panel.state.closed).toBe(0);
+    } finally {
+      panel.dispose();
+    }
+  });
+
+  it("ignores Escape while the save is pending, without closing the panel", async () => {
+    const panel = mountPanelEscape();
+    let release!: () => void;
+    patchGate = new Promise<void>((r) => (release = r));
+    try {
+      show(panel.setOverlay);
+      await waitForThread();
+      await openMenuOf(0);
+      fireEvent.click(await screen.findByRole("menuitem", { name: /Edit/ }));
+      const box = await screen.findByRole("textbox", { name: "Edit comment" });
+      fireEvent.change(box, { target: { value: "Slow save" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await screen.findByRole("button", { name: "Saving…" });
+      fireEvent.keyDown(box, { key: "Escape" });
+      fireEvent.keyDown(screen.getByRole("button", { name: "Saving…" }), { key: "Escape" });
+      expect(screen.getByRole("textbox", { name: "Edit comment" })).toBeTruthy();
+      expect(panel.state.closed).toBe(0);
+    } finally {
+      release();
+      panel.dispose();
+    }
+  });
+});
+
+describe("focus after the editor or the dialog closes", () => {
+  it("returns to the comment's actions button after Cancel and after Save", async () => {
+    show();
+    await waitForThread();
+    await openMenuOf(0);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Edit/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(document.activeElement).toBe(menuButtons()[0]));
+
+    await openMenuOf(0);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Edit/ }));
+    const box = await screen.findByRole("textbox", { name: "Edit comment" });
+    fireEvent.change(box, { target: { value: "Saved text" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("Saved text");
+    await waitFor(() => expect(document.activeElement).toBe(menuButtons()[0]));
+  });
+
+  it("moves to the next comment's actions button after a delete, else to the main composer", async () => {
+    auth.permissions = ["*"];
+    thread = [comment(10, 1), comment(11, 2)];
+    show();
+    await waitForThread();
+    await openMenuOf(0);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Delete/ }));
+    await screen.findByRole("dialog");
     fireEvent.click(screen.getByRole("button", { name: "Delete comment" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("Comment not found.");
-    expect(screen.getByText("Body 10")).toBeTruthy();
-    expect(screen.getByRole("dialog")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText("Body 10")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(menuButtons()[0]));
+
+    // The last comment has no next one: focus lands on the composer.
+    await openMenuOf(0);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Delete/ }));
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Delete comment" }));
+    await waitFor(() => expect(screen.queryByText("Body 11")).toBeNull());
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Write a comment" })),
+    );
+  });
+});
+
+describe("editing a comment with mentions", () => {
+  it("keeps the mentioned user ids in the PATCH body", async () => {
+    thread = [comment(10, 1, { body: "hi @other there", mentionedUserIds: [2] })];
+    show();
+    await waitFor(() => expect(screen.getByTestId("mention-chip")).toBeTruthy());
+    await openMenuOf(0);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Edit/ }));
+    const box = await screen.findByRole("textbox", { name: "Edit comment" });
+    expect(box.hasAttribute("placeholder")).toBe(false);
+    fireEvent.change(box, { target: { value: "hi @other friend" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(apiRequest).toHaveBeenCalledWith("/tasks/7/comments/10", {
+        method: "PATCH",
+        body: { body: "hi @other friend", mentionedUserIds: [2] },
+      }),
+    );
+  });
+});
+
+describe("task row counts", () => {
+  it("refreshes the project's task rows (comment badge) after adding and after deleting", async () => {
+    show();
+    await waitForThread();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    const taskRowsInvalidated = () =>
+      spy.mock.calls.some(([f]) => JSON.stringify(f?.queryKey) === JSON.stringify(["projects", 3, "tasks"]));
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Write a comment" }), { target: { value: "New one" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send comment" }));
+    await waitFor(() => expect(taskRowsInvalidated()).toBe(true));
+
+    spy.mockClear();
+    await openMenuOf(0);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Delete/ }));
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Delete comment" }));
+    await waitFor(() => expect(taskRowsInvalidated()).toBe(true));
   });
 });
 

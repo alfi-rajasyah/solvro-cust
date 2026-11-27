@@ -76,7 +76,7 @@ export function CommentComposer({
   isPending: boolean;
   error: string | null;
   onSend: (body: string, mentionedUserIds: number[]) => Promise<void>;
-  edit?: { initialBody: string; initialMentions: readonly MentionUser[]; onCancel: () => void };
+  edit?: { initialBody: string; initialMentionIds: readonly number[]; onCancel: () => void };
 }) {
   const listId = useId();
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -88,7 +88,19 @@ export function CommentComposer({
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
   // Every name picked from the list. The ids sent are derived from which of
   // these are still in the text, so deleting a mention drops its id.
-  const [recorded, setRecorded] = useState<MentionUser[]>(() => [...(edit?.initialMentions ?? [])]);
+  const [recorded, setRecorded] = useState<MentionUser[]>(() =>
+    candidates.filter((u) => edit?.initialMentionIds.includes(u.id)),
+  );
+  // The people list can arrive after the editor opens: the comment's own
+  // mentions join the recorded picks as soon as their names are known.
+  useEffect(() => {
+    if (!edit) return;
+    const known = candidates.filter((u) => edit.initialMentionIds.includes(u.id));
+    setRecorded((r) => {
+      const missing = known.filter((u) => !r.some((x) => x.id === u.id));
+      return missing.length ? [...r, ...missing] : r;
+    });
+  }, [candidates, edit]);
   const pendingCaret = useRef<number | null>(null);
 
   const query = activeMentionQuery(body, caret);
@@ -145,7 +157,7 @@ export function CommentComposer({
         // Cancels this edit only, not the task panel behind it.
         e.preventDefault();
         e.stopPropagation();
-        edit.onCancel();
+        if (!isPending) edit.onCancel();
         return;
       }
       if (e.key === "Enter" && !e.shiftKey && !isCoarsePointer()) {
@@ -171,6 +183,15 @@ export function CommentComposer({
     }
   }
 
+  // Escape from the Save or Cancel button (the textarea handles its own, with
+  // the picker first) cancels the edit and never reaches the panel behind it.
+  function handleFormKeyDown(e: KeyboardEvent<HTMLFormElement>) {
+    if (!edit || e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isPending) edit.onCancel();
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = body.trim();
@@ -190,6 +211,7 @@ export function CommentComposer({
     <>
       <form
         onSubmit={handleSubmit}
+        onKeyDown={handleFormKeyDown}
         className={`relative flex [@media(pointer:coarse)]:min-h-11 gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30 ${
           edit ? "flex-col" : "items-end"
         }`}
@@ -216,7 +238,7 @@ export function CommentComposer({
           onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
           onKeyDown={handleKeyDown}
           maxLength={5000}
-          placeholder="Write a comment…"
+          placeholder={edit ? undefined : "Write a comment…"}
           className="max-h-40 min-w-0 flex-1 resize-none border-none bg-transparent text-xs [@media(pointer:coarse)]:py-1.5 text-on-surface outline-hidden placeholder:text-on-surface-variant/80"
         />
         {edit ? (

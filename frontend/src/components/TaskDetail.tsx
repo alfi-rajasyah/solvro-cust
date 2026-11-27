@@ -1219,6 +1219,33 @@ export function TaskDetail({ projectId, taskId, layout, onOpenTask, renderHeader
 }
 
 /**
+ * Reports an overlay's open state to the shell as balanced +1/-1 calls: one
+ * widget that never opened never reports, so mounting or unmounting it cannot
+ * clear another widget's flag (same rule as RowTicketCell).
+ */
+function useBalancedOverlay(open: boolean, report: ((open: boolean) => void) | undefined) {
+  const reportRef = useRef(report);
+  reportRef.current = report;
+  const reported = useRef(false);
+  // A layout effect, not a passive one: the flag is set in the commit that shows the overlay.
+  useLayoutEffect(() => {
+    if (open && !reported.current) {
+      reported.current = true;
+      reportRef.current?.(true);
+    } else if (!open && reported.current) {
+      reported.current = false;
+      reportRef.current?.(false);
+    }
+  }, [open]);
+  useLayoutEffect(
+    () => () => {
+      if (reported.current) reportRef.current?.(false);
+    },
+    [],
+  );
+}
+
+/**
  * The "Comment actions" menu of one comment. Hidden until hover or focus on
  * desktop, always shown on phones and touch screens (no hover there).
  */
@@ -1227,23 +1254,28 @@ function CommentActionsMenu({
   canDelete,
   onEdit,
   onDelete,
-  onOpenChange,
+  onOverlayChange,
+  triggerRef,
 }: {
   canEdit: boolean;
   canDelete: boolean;
   onEdit: () => void;
   onDelete: () => void;
-  onOpenChange: (open: boolean) => void;
+  onOverlayChange?: (open: boolean) => void;
+  triggerRef: (el: HTMLButtonElement | null) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  useBalancedOverlay(open, onOverlayChange);
   return (
-    <DropdownMenu onOpenChange={onOpenChange}>
+    <DropdownMenu onOpenChange={setOpen}>
       <DropdownMenuTrigger
         render={
           <button
+            ref={triggerRef}
             type="button"
             aria-label="Comment actions"
             title="Comment actions"
-            className="tap-target inline-flex h-6 w-6 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container-high hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover/comment:opacity-100 md:group-focus-within/comment:opacity-100 md:data-popup-open:opacity-100 [@media(hover:none)]:opacity-100"
+            className="tap-target -my-1 inline-flex h-6 w-6 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container-high hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover/comment:opacity-100 md:group-focus-within/comment:opacity-100 md:data-popup-open:opacity-100 [@media(hover:none)]:opacity-100"
           >
             <span className="material-symbols-outlined text-base" aria-hidden="true">
               more_horiz
@@ -1303,13 +1335,21 @@ export function PanelComments({
   const deleteComment = useDeleteComment(taskId, projectId);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const overlayOpen = menuOpen || deletingId !== null;
-  useLayoutEffect(() => {
-    if (!overlayOpen) return;
-    onOverlayChange?.(true);
-    return () => onOverlayChange?.(false);
-  }, [overlayOpen, onOverlayChange]);
+  useBalancedOverlay(deletingId !== null, onOverlayChange);
+
+  // Focus goes back to a control that still exists once the editor or the
+  // dialog closes (the file's focusTitleRef pattern): a comment's actions
+  // trigger, or the main composer after a delete with no next comment to land on.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRefs = useRef(new Map<number, HTMLButtonElement>());
+  const pendingFocus = useRef<{ triggerOf: number | null } | null>(null);
+  useEffect(() => {
+    const pending = pendingFocus.current;
+    if (!pending || editingId !== null || deletingId !== null) return;
+    pendingFocus.current = null;
+    const trigger = pending.triggerOf !== null ? triggerRefs.current.get(pending.triggerOf) : undefined;
+    (trigger ?? rootRef.current?.querySelector<HTMLTextAreaElement>('textarea[aria-label="Write a comment"]'))?.focus();
+  }, [editingId, deletingId, comments]);
   const { data: project } = useProject(projectId);
   const { data: members } = useProjectMembers(projectId);
 
@@ -1324,7 +1364,7 @@ export function PanelComments({
   }, [project, members]);
 
   return (
-    <div className="space-y-3">
+    <div ref={rootRef} className="space-y-3">
       <h2 className="font-display text-label-caps uppercase text-on-surface-variant">
         Comments {comments && comments.length > 0 && `· ${comments.length}`}
       </h2>
@@ -1368,6 +1408,7 @@ export function PanelComments({
                           <span title={`Edited ${fmtDateTime(c.editedAt)}`} data-testid="comment-edited">
                             edited
                           </span>
+                          <span className="sr-only"> {fmtDateTime(c.editedAt)}</span>
                         </>
                       )}
                     </span>
@@ -1375,7 +1416,11 @@ export function PanelComments({
                       <CommentActionsMenu
                         canEdit={isAuthor(c) && c.source !== "incoming"}
                         canDelete
-                        onOpenChange={setMenuOpen}
+                        onOverlayChange={onOverlayChange}
+                        triggerRef={(el) => {
+                          if (el) triggerRefs.current.set(c.id, el);
+                          else triggerRefs.current.delete(c.id);
+                        }}
                         onEdit={() => {
                           editComment.reset();
                           setEditingId(c.id);
@@ -1395,11 +1440,15 @@ export function PanelComments({
                     error={editComment.error ? (editComment.error as Error).message : null}
                     edit={{
                       initialBody: c.body,
-                      initialMentions: people.filter((p) => c.mentionedUserIds?.includes(p.id)),
-                      onCancel: () => setEditingId(null),
+                      initialMentionIds: c.mentionedUserIds ?? [],
+                      onCancel: () => {
+                        pendingFocus.current = { triggerOf: c.id };
+                        setEditingId(null);
+                      },
                     }}
                     onSend={async (body, mentionedUserIds) => {
                       await editComment.mutateAsync({ commentId: c.id, body, mentionedUserIds });
+                      pendingFocus.current = { triggerOf: c.id };
                       setEditingId(null);
                     }}
                   />
@@ -1417,8 +1466,11 @@ export function PanelComments({
         onClose={() => setDeletingId(null)}
         onConfirm={async () => {
           if (deletingId === null) return;
+          const index = (comments ?? []).findIndex((x) => x.id === deletingId);
+          const next = index >= 0 ? (comments ?? [])[index + 1] : undefined;
           try {
             await deleteComment.mutateAsync(deletingId);
+            pendingFocus.current = { triggerOf: next?.id ?? null };
             setDeletingId(null);
           } catch {
             // surfaced in the dialog through deleteComment.error

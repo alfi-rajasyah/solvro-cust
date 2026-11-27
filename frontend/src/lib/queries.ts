@@ -3687,6 +3687,8 @@ export function useAddComment(taskId: number, projectId: number) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.comments(taskId) });
+      // The task rows carry `_count.comments` (the Kanban card badge).
+      qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
       invalidateProjectActivity(qc, projectId);
     },
   });
@@ -3727,6 +3729,14 @@ export function useEditComment(taskId: number, projectId: number) {
         ),
       );
       return { prev };
+    },
+    // The server's row replaces the optimistic one (its editedAt and stored
+    // mentions), so the thread is right before the refetch lands.
+    onSuccess: (saved) => {
+      if (!saved) return;
+      qc.setQueryData<Comment[]>(queryKeys.comments(taskId), (old) =>
+        old?.map((c) => (c.id === saved.id ? saved : c)),
+      );
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData(queryKeys.comments(taskId), ctx.prev);
