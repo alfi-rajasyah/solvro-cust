@@ -15,6 +15,11 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Changed — 2026-11-27 — CI keeps the trace of a failed first attempt
+
+- `e2e/playwright.config.ts` records traces with `retain-on-first-failure` instead of `on-first-retry`. Before, CI recorded only the retry, which passed, so a test that failed once and then passed left no record of the failure.
+- The "Upload Playwright traces" step in `.github/workflows/ci.yml` runs on every run, not only when the job fails. A run with no failed attempt has nothing to upload, and the step then does nothing.
+
 ### Fixed — 2026-11-27 — e2e specs that failed on their first attempt
 
 - `e2e/tests/pwa.spec.ts` skips itself when the base URL is the Vite dev server (port 5173). The manifest and service worker exist only in build mode, so these specs always failed there.
