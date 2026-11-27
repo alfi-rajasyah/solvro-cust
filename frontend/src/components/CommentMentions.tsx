@@ -249,7 +249,7 @@ export function CommentComposer({
           placeholder={edit ? undefined : "Write a comment…"}
           className={
             edit
-              ? "block max-h-48 w-full min-w-0 resize-none rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-xs text-on-surface outline-hidden focus:border-primary focus:ring-2 focus:ring-primary/30"
+              ? "block max-h-48 w-full min-w-0 resize-none rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 text-xs text-on-surface focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
               : "max-h-40 min-w-0 flex-1 resize-none border-none bg-transparent text-xs [@media(pointer:coarse)]:py-1.5 text-on-surface outline-hidden placeholder:text-on-surface-variant/80"
           }
         />
