@@ -2,7 +2,7 @@
 
 Open issues, sorted by area and then by severity. Each issue has an ID (`ISS-NNN`) that never changes and is never reused. Code comments and plans cite an issue by its ID.
 
-Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the code; none fixed or moot). Previous: 2026-11-24 @ `670f206`. Delta triage 2026-11-27 @ `77280d7`: the 6 entries whose files changed since `f25aac3` were re-checked. Delta triage 2026-11-27 @ `cc91ec1`: the 14 entries whose files changed since `77280d7` were re-checked; none fixed or moot. The file before the restructure is kept verbatim at `docs/archive/ISSUES-2026-11-18-phase-log.md`; the mapping from every old entry to its ID, or to the reason it closed, is the ledger in `docs/archive/plans/issues-restructure.md`.
+Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the code; none fixed or moot). Previous: 2026-11-24 @ `670f206`. Delta triage 2026-11-27 @ `77280d7`: the 6 entries whose files changed since `f25aac3` were re-checked. Delta triage 2026-11-27 @ `cc91ec1`: the 14 entries whose files changed since `77280d7` were re-checked; none fixed or moot. Delta triage 2026-11-27 @ `83f6093`: the 1 entry whose files changed since `cc91ec1` (ISS-166, `backend/package.json`) was re-checked; still open. The file before the restructure is kept verbatim at `docs/archive/ISSUES-2026-11-18-phase-log.md`; the mapping from every old entry to its ID, or to the reason it closed, is the ledger in `docs/archive/plans/issues-restructure.md`.
 
 ## How to use this file
 
@@ -621,7 +621,7 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-166 · P3 · Dev backend tsx watch sometimes misses file edits
 
-- **Type:** watch · **Found:** 2026-08-15 · **Verified:** 2026-11-27 @ `cc91ec1`
+- **Type:** watch · **Found:** 2026-08-15 · **Verified:** 2026-11-27 @ `83f6093`
 - **Where:** dev script in backend/package.json (line 8)
 - **Problem:** The tsx watch process occasionally keeps serving stale code after an edit on the dev stack. Recurred 2026-11-27: after a checkout switched branches and back, the new `PATCH`/`DELETE /tasks/:id/comments/:commentId` routes answered 404 until a restart.
 - **Why deferred / fix direction:** Run `docker compose restart backend` (e2e/CLAUDE.md says so before specs that use a new route); investigate if it keeps recurring.
