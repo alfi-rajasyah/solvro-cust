@@ -460,6 +460,8 @@ export interface Comment {
   authorId: number;
   body: string;
   createdAt: string;
+  /** Set when the author changed the text after posting; null for a comment never edited. */
+  editedAt: string | null;
   author: { id: number; username: string; email: string };
   /** Users the comment @mentions, as the server stored them (empty when none). */
   mentionedUserIds?: number[];
@@ -3690,6 +3692,78 @@ export function useAddComment(taskId: number, projectId: number) {
   });
 }
 
+// PATCH /tasks/:id/comments/:commentId (author only, not for a comment an
+// incoming webhook wrote). Optimistic: the thread shows the new text at once,
+// a failure restores the snapshot.
+export function useEditComment(taskId: number, projectId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      commentId,
+      body,
+      mentionedUserIds,
+    }: {
+      commentId: number;
+      body: string;
+      mentionedUserIds?: number[];
+    }) =>
+      apiRequest<Comment>(`/tasks/${taskId}/comments/${commentId}`, {
+        method: "PATCH",
+        body: mentionedUserIds && mentionedUserIds.length > 0 ? { body, mentionedUserIds } : { body },
+      }),
+    onMutate: async ({ commentId, body, mentionedUserIds }) => {
+      await qc.cancelQueries({ queryKey: queryKeys.comments(taskId) });
+      const prev = qc.getQueryData<Comment[]>(queryKeys.comments(taskId));
+      qc.setQueryData<Comment[]>(queryKeys.comments(taskId), (old) =>
+        old?.map((c) =>
+          c.id === commentId
+            ? {
+                ...c,
+                body,
+                mentionedUserIds: mentionedUserIds ?? [],
+                editedAt: c.body === body ? c.editedAt : new Date().toISOString(),
+              }
+            : c,
+        ),
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(queryKeys.comments(taskId), ctx.prev);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.comments(taskId) });
+      invalidateProjectActivity(qc, projectId);
+    },
+  });
+}
+
+// DELETE /tasks/:id/comments/:commentId (author or admin). Optimistic removal;
+// the task rows carry `_count.comments` (the Kanban card badge), so they refresh too.
+export function useDeleteComment(taskId: number, projectId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (commentId: number) =>
+      apiRequest<void>(`/tasks/${taskId}/comments/${commentId}`, { method: "DELETE" }),
+    onMutate: async (commentId) => {
+      await qc.cancelQueries({ queryKey: queryKeys.comments(taskId) });
+      const prev = qc.getQueryData<Comment[]>(queryKeys.comments(taskId));
+      qc.setQueryData<Comment[]>(queryKeys.comments(taskId), (old) =>
+        old?.filter((c) => c.id !== commentId),
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(queryKeys.comments(taskId), ctx.prev);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.comments(taskId) });
+      qc.invalidateQueries({ queryKey: queryKeys.projectTasks(projectId) });
+      invalidateProjectActivity(qc, projectId);
+    },
+  });
+}
+
 // ---- iTop tickets (Task 1.8) ------------------------------------------
 // Non-admin iTop reads: connection status (gates the Customer Tickets tab
 // and builds "Open in iTop" links) and a customer's ticket list + counts.
@@ -5554,6 +5628,8 @@ export const WEBHOOK_EVENT_TYPES = [
   "task.due_date_changed",
   "task.completed",
   "comment.created",
+  "comment.updated",
+  "comment.deleted",
   "project.created",
   "risk.created",
 ] as const;

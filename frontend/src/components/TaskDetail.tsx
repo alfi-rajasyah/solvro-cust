@@ -21,7 +21,14 @@ import { Sortable, SortableItem, SortableItemHandle } from "@/components/reui/so
 import { ApiError } from "@/lib/api";
 import { hasPermission, useAuth } from "@/lib/auth";
 import { CommentBody, CommentComposer } from "@/components/CommentMentions";
-import { fmtAgo, fmtRange } from "@/lib/formatDate";
+import { ConfirmModal } from "@/components/ConfirmModal";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { fmtAgo, fmtDateTime, fmtRange } from "@/lib/formatDate";
 import { parseStoryPoints } from "@/lib/storyPoints";
 import { useAssigneeMembership } from "@/lib/useAssigneeMembership";
 import { assignableUsers, assigneeOptionLabel } from "@/lib/assignableUsers";
@@ -37,13 +44,16 @@ import {
   type StaleWrite,
 } from "@/lib/taskConflict";
 import {
+  type Comment,
   type Priority,
   type Task,
   type UpdateTaskInput,
   useAddComment,
   useComments,
   useCreateTask,
+  useDeleteComment,
   useDuplicateTask,
+  useEditComment,
   useItopStatus,
   useItopTicketsByRefs,
   useProject,
@@ -1117,7 +1127,7 @@ export function TaskDetail({ projectId, taskId, layout, onOpenTask, renderHeader
     <>
       {/* Comments */}
       <div className={cls}>
-        <PanelComments taskId={task.id} projectId={projectId} />
+        <PanelComments taskId={task.id} projectId={projectId} onOverlayChange={onRowOverlayChange} />
       </div>
     </>
   );
@@ -1209,18 +1219,97 @@ export function TaskDetail({ projectId, taskId, layout, onOpenTask, renderHeader
 }
 
 /**
+ * The "Comment actions" menu of one comment. Hidden until hover or focus on
+ * desktop, always shown on phones and touch screens (no hover there).
+ */
+function CommentActionsMenu({
+  canEdit,
+  canDelete,
+  onEdit,
+  onDelete,
+  onOpenChange,
+}: {
+  canEdit: boolean;
+  canDelete: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <DropdownMenu onOpenChange={onOpenChange}>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            aria-label="Comment actions"
+            title="Comment actions"
+            className="tap-target inline-flex h-6 w-6 items-center justify-center rounded-sm text-on-surface-variant outline-hidden transition-colors hover:bg-surface-container-high hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary md:opacity-0 md:group-hover/comment:opacity-100 md:group-focus-within/comment:opacity-100 md:data-popup-open:opacity-100 [@media(hover:none)]:opacity-100"
+          >
+            <span className="material-symbols-outlined text-base" aria-hidden="true">
+              more_horiz
+            </span>
+          </button>
+        }
+      />
+      {/* z-50: above the task panel's z-40 (frontend/CLAUDE.md "Popover z-index"). */}
+      <DropdownMenuContent align="end" className="w-40 bg-surface-container-lowest shadow-overlay!" positionerClassName="z-50">
+        {canEdit && (
+          <DropdownMenuItem onClick={onEdit} className="text-xs">
+            <span className="material-symbols-outlined text-base" aria-hidden="true">
+              edit
+            </span>
+            Edit
+          </DropdownMenuItem>
+        )}
+        {canDelete && (
+          <DropdownMenuItem variant="destructive" onClick={onDelete} className="text-xs">
+            <span className="material-symbols-outlined text-base" aria-hidden="true">
+              delete
+            </span>
+            Delete
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/**
  * Comment thread + single-line composer per the mockup ("Write a comment…"
  * placeholder + green send icon), backed by useComments / useAddComment.
  * This is the app's only comment UI (the former standalone CommentThread
  * component was never mounted and has been removed).
  */
-function PanelComments({ taskId, projectId }: { taskId: number; projectId: number }) {
+export function PanelComments({
+  taskId,
+  projectId,
+  onOverlayChange,
+}: {
+  taskId: number;
+  projectId: number;
+  /** Balanced open/close while a comment menu or the delete confirm is up, so Escape does not close the shell under it. */
+  onOverlayChange?: (open: boolean) => void;
+}) {
   // Posting needs task:comment (the server gate on POST /tasks/:id/comments);
   // reading the thread needs only project:read.
   const { user } = useAuth();
   const canComment = hasPermission(user, "task:comment");
+  // Edit is the author's alone; delete is the author's or an admin's (server rule).
+  const isAdmin = hasPermission(user, "*");
+  const isAuthor = (c: Comment) => user !== null && c.author.id === user.id;
   const { data: comments, isLoading, isError, error } = useComments(taskId);
   const addComment = useAddComment(taskId, projectId);
+  const editComment = useEditComment(taskId, projectId);
+  const deleteComment = useDeleteComment(taskId, projectId);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const overlayOpen = menuOpen || deletingId !== null;
+  useLayoutEffect(() => {
+    if (!overlayOpen) return;
+    onOverlayChange?.(true);
+    return () => onOverlayChange?.(false);
+  }, [overlayOpen, onOverlayChange]);
   const { data: project } = useProject(projectId);
   const { data: members } = useProjectMembers(projectId);
 
@@ -1259,7 +1348,7 @@ function PanelComments({ taskId, projectId }: { taskId: number; projectId: numbe
           {comments.map((c) => (
             <li key={c.id} className="flex gap-2.5">
               <AssigneeAvatar user={c.author} size="xs" />
-              <div className="min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2">
+              <div className="group/comment min-w-0 flex-1 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2">
                 <div className="mb-0.5 flex items-center justify-between gap-2 text-meta">
                   <span className="min-w-0 truncate">
                     <span className="font-medium text-on-surface">{c.author.username}</span>
@@ -1270,14 +1359,86 @@ function PanelComments({ taskId, projectId }: { taskId: number; projectId: numbe
                       </span>
                     )}
                   </span>
-                  <span className="shrink-0 text-on-surface-variant">{fmtAgo(c.createdAt)}</span>
+                  <span className="flex shrink-0 items-center gap-1 text-on-surface-variant">
+                    <span>
+                      {fmtAgo(c.createdAt)}
+                      {c.editedAt && (
+                        <>
+                          {" · "}
+                          <span title={`Edited ${fmtDateTime(c.editedAt)}`} data-testid="comment-edited">
+                            edited
+                          </span>
+                        </>
+                      )}
+                    </span>
+                    {canComment && (isAuthor(c) || isAdmin) && (
+                      <CommentActionsMenu
+                        canEdit={isAuthor(c) && c.source !== "incoming"}
+                        canDelete
+                        onOpenChange={setMenuOpen}
+                        onEdit={() => {
+                          editComment.reset();
+                          setEditingId(c.id);
+                        }}
+                        onDelete={() => {
+                          deleteComment.reset();
+                          setDeletingId(c.id);
+                        }}
+                      />
+                    )}
+                  </span>
                 </div>
-                <CommentBody body={c.body} mentionedUserIds={c.mentionedUserIds} users={people} />
+                {editingId === c.id ? (
+                  <CommentComposer
+                    candidates={people}
+                    isPending={editComment.isPending}
+                    error={editComment.error ? (editComment.error as Error).message : null}
+                    edit={{
+                      initialBody: c.body,
+                      initialMentions: people.filter((p) => c.mentionedUserIds?.includes(p.id)),
+                      onCancel: () => setEditingId(null),
+                    }}
+                    onSend={async (body, mentionedUserIds) => {
+                      await editComment.mutateAsync({ commentId: c.id, body, mentionedUserIds });
+                      setEditingId(null);
+                    }}
+                  />
+                ) : (
+                  <CommentBody body={c.body} mentionedUserIds={c.mentionedUserIds} users={people} />
+                )}
               </div>
             </li>
           ))}
         </ol>
       )}
+
+      <ConfirmModal
+        open={deletingId !== null}
+        onClose={() => setDeletingId(null)}
+        onConfirm={async () => {
+          if (deletingId === null) return;
+          try {
+            await deleteComment.mutateAsync(deletingId);
+            setDeletingId(null);
+          } catch {
+            // surfaced in the dialog through deleteComment.error
+          }
+        }}
+        title="Delete this comment?"
+        body={
+          <>
+            <p>The comment is removed for everyone on this task. This cannot be undone.</p>
+            {deleteComment.error && (
+              <p role="alert" className="mt-2 text-meta text-error">
+                {(deleteComment.error as Error).message}
+              </p>
+            )}
+          </>
+        }
+        confirmLabel="Delete comment"
+        confirmTone="danger"
+        busy={deleteComment.isPending}
+      />
 
       {canComment && (
         <CommentComposer

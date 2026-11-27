@@ -60,29 +60,35 @@ function isCoarsePointer(): boolean {
  * focus and points at the picker's listbox with `aria-controls` /
  * `aria-activedescendant` (a textarea cannot take the combobox role, so it
  * stays a textbox with `aria-autocomplete="list"`).
+ *
+ * With `edit` it changes a posted comment instead: the box starts with that
+ * text and its mentions, Save replaces the send icon, and Cancel or Escape
+ * (with the picker shut) calls `edit.onCancel`.
  */
 export function CommentComposer({
   candidates,
   isPending,
   error,
   onSend,
+  edit,
 }: {
   candidates: readonly MentionUser[];
   isPending: boolean;
   error: string | null;
   onSend: (body: string, mentionedUserIds: number[]) => Promise<void>;
+  edit?: { initialBody: string; initialMentions: readonly MentionUser[]; onCancel: () => void };
 }) {
   const listId = useId();
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const [body, setBody] = useState("");
-  const [caret, setCaret] = useState(0);
+  const [body, setBody] = useState(edit?.initialBody ?? "");
+  const [caret, setCaret] = useState(edit?.initialBody.length ?? 0);
   const [highlight, setHighlight] = useState(0);
   // `@` index the user dismissed with Escape; the picker stays shut until the
   // query moves to a different `@`.
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
   // Every name picked from the list. The ids sent are derived from which of
   // these are still in the text, so deleting a mention drops its id.
-  const [recorded, setRecorded] = useState<MentionUser[]>([]);
+  const [recorded, setRecorded] = useState<MentionUser[]>(() => [...(edit?.initialMentions ?? [])]);
   const pendingCaret = useRef<number | null>(null);
 
   const query = activeMentionQuery(body, caret);
@@ -100,6 +106,15 @@ export function CommentComposer({
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
   }, [body]);
+
+  // An editor opens ready to type, with the caret at the end of the text.
+  const isEditing = edit !== undefined;
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!isEditing || !el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, [isEditing]);
 
   // Put the caret after an inserted mention once React has written the value.
   useEffect(() => {
@@ -126,6 +141,13 @@ export function CommentComposer({
     // Safari fires the confirming keydown after compositionend, with keyCode 229.
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (!open) {
+      if (e.key === "Escape" && edit) {
+        // Cancels this edit only, not the task panel behind it.
+        e.preventDefault();
+        e.stopPropagation();
+        edit.onCancel();
+        return;
+      }
       if (e.key === "Enter" && !e.shiftKey && !isCoarsePointer()) {
         e.preventDefault();
         e.currentTarget.form?.requestSubmit();
@@ -155,6 +177,7 @@ export function CommentComposer({
     if (!trimmed || isPending) return;
     try {
       await onSend(trimmed, deriveMentionedIds(trimmed, recorded));
+      if (edit) return;
       setBody("");
       setRecorded([]);
       setCaret(0);
@@ -167,12 +190,14 @@ export function CommentComposer({
     <>
       <form
         onSubmit={handleSubmit}
-        className="relative flex [@media(pointer:coarse)]:min-h-11 items-end gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30"
+        className={`relative flex [@media(pointer:coarse)]:min-h-11 gap-2 rounded-sm border border-outline-variant bg-surface-container-lowest px-3 py-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30 ${
+          edit ? "flex-col" : "items-end"
+        }`}
       >
         <textarea
           ref={inputRef}
           rows={1}
-          aria-label="Write a comment"
+          aria-label={edit ? "Edit comment" : "Write a comment"}
           aria-autocomplete="list"
           aria-haspopup="listbox"
           enterKeyHint={isCoarsePointer() ? "enter" : "send"}
@@ -194,14 +219,34 @@ export function CommentComposer({
           placeholder="Write a comment…"
           className="max-h-40 min-w-0 flex-1 resize-none border-none bg-transparent text-xs [@media(pointer:coarse)]:py-1.5 text-on-surface outline-hidden placeholder:text-on-surface-variant/80"
         />
-        <button
-          type="submit"
-          disabled={isPending || !body.trim()}
-          aria-label="Send comment"
-          className="tap-target flex shrink-0 items-center self-end text-primary disabled:opacity-40"
-        >
-          <span aria-hidden="true" className="material-symbols-outlined text-[17px]">send</span>
-        </button>
+        {edit ? (
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={edit.onCancel}
+              disabled={isPending}
+              className="[@media(pointer:coarse)]:min-h-11 rounded-sm border border-outline-variant px-3 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-50 focus-visible:outline-hidden focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isPending || !body.trim()}
+              className="[@media(pointer:coarse)]:min-h-11 rounded-sm bg-primary px-3 py-1 text-xs font-bold text-on-primary hover:bg-primary/90 disabled:opacity-50 outline-hidden focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            >
+              {isPending ? "Saving…" : "Save"}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="submit"
+            disabled={isPending || !body.trim()}
+            aria-label="Send comment"
+            className="tap-target flex shrink-0 items-center self-end text-primary disabled:opacity-40"
+          >
+            <span aria-hidden="true" className="material-symbols-outlined text-[17px]">send</span>
+          </button>
+        )}
 
         <span role="status" className="sr-only">
           {open

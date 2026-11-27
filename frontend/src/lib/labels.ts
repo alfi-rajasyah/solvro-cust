@@ -145,6 +145,8 @@ export const WEBHOOK_EVENT_LABEL: Record<string, string> = {
   "task.due_date_changed": "Task due date changed",
   "task.completed": "Task completed",
   "comment.created": "Comment added",
+  "comment.updated": "Comment edited",
+  "comment.deleted": "Comment deleted",
   "project.created": "Project created",
   "risk.created": "Risk added",
 };
