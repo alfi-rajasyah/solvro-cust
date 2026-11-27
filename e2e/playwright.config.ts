@@ -17,6 +17,8 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     trace: "retain-on-first-failure",
+    // ISS-138 experiment: no PWA service worker in any spec except pwa.spec.ts.
+    serviceWorkers: "block",
     screenshot: "only-on-failure",
   },
   projects: [

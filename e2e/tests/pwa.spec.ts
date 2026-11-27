@@ -4,6 +4,9 @@ import { test, expect, loginViaUi } from "../fixtures/test";
 // via feat/pwa-mobile and is now merged — these assertions are real.
 
 test.describe("pwa", () => {
+  // The config blocks service workers (ISS-138 experiment); this spec needs them.
+  test.use({ serviceWorkers: "allow" });
+
   // vite-plugin-pwa emits the manifest and service worker only in build or
   // preview mode, so none of these can pass against the Vite dev server.
   test.skip(
