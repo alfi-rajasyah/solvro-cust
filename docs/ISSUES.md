@@ -2,7 +2,7 @@
 
 Open issues, sorted by area and then by severity. Each issue has an ID (`ISS-NNN`) that never changes and is never reused. Code comments and plans cite an issue by its ID.
 
-Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the code; none fixed or moot). Previous: 2026-11-24 @ `670f206`. Delta triage 2026-11-27 @ `77280d7`: the 6 entries whose files changed since `f25aac3` were re-checked. The file before the restructure is kept verbatim at `docs/archive/ISSUES-2026-11-18-phase-log.md`; the mapping from every old entry to its ID, or to the reason it closed, is the ledger in `docs/archive/plans/issues-restructure.md`.
+Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the code; none fixed or moot). Previous: 2026-11-24 @ `670f206`. Delta triage 2026-11-27 @ `77280d7`: the 6 entries whose files changed since `f25aac3` were re-checked. Delta triage 2026-11-27 @ `cc91ec1`: the 14 entries whose files changed since `77280d7` were re-checked; none fixed or moot. The file before the restructure is kept verbatim at `docs/archive/ISSUES-2026-11-18-phase-log.md`; the mapping from every old entry to its ID, or to the reason it closed, is the ledger in `docs/archive/plans/issues-restructure.md`.
 
 ## How to use this file
 
@@ -33,7 +33,7 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-008 · P3 · Task duplicate needs task:write while task create needs project:write
 
-- **Type:** watch · **Found:** 2026-09-02 · **Verified:** 2026-11-26 @ `f25aac3`
+- **Type:** watch · **Found:** 2026-09-02 · **Verified:** 2026-11-27 @ `cc91ec1`
 - **Where:** POST /tasks/:id/duplicate in backend/src/routes/tasks.ts (line ~773); POST /projects/:id/tasks in backend/src/routes/projects.ts (line ~675)
 - **Problem:** A custom role holding task:write only can duplicate tasks it could not create through the form. This was a deliberate plan decision.
 - **Why deferred / fix direction:** Revisit if custom roles start splitting the two permissions.
@@ -123,7 +123,7 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-023 · P3 · GET /notes/recent has no noteDate-leading index
 
-- **Type:** watch · **Found:** 2026-08-31 · **Verified:** 2026-11-26 @ `f25aac3`
+- **Type:** watch · **Found:** 2026-08-31 · **Verified:** 2026-11-27 @ `cc91ec1`
 - **Where:** GET /notes/recent in backend/src/routes/notes.ts (line ~53); indexes at backend/prisma/schema.prisma (lines 908, 928)
 - **Problem:** The route filters both note tables by noteDate alone, so Postgres plans a seq scan plus sort. At current volume this stays in single-digit milliseconds.
 - **Why deferred / fix direction:** Add @@index([noteDate]) to both models via a migration when volume warrants it.
@@ -140,7 +140,7 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-026 · P3 · Tasks page offset paging can repeat or skip a row
 
-- **Type:** watch · **Found:** 2026-10-26 · **Verified:** 2026-11-26 @ `f25aac3`
+- **Type:** watch · **Found:** 2026-10-26 · **Verified:** 2026-11-27 @ `cc91ec1`
 - **Where:** GET /tasks offset in backend/src/routes/tasks.ts (line ~360)
 - **Problem:** A concurrent insert or delete can repeat or skip a row across Load more pages. The order itself is stable.
 - **Why deferred / fix direction:** Normal offset trade-off. Trigger: user reports. Then use cursor paging.
@@ -208,7 +208,7 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-045 · P3 · Subtask promote and re-parent only exist in the task modal
 
-- **Type:** watch · **Found:** 2026-07-27 · **Verified:** 2026-11-26 @ `f25aac3`
+- **Type:** watch · **Found:** 2026-07-27 · **Verified:** 2026-11-27 @ `cc91ec1`
 - **Where:** TaskDetail.tsx (panel body, no parent control); Parent field in frontend/src/components/TaskFormModal.tsx (~541)
 - **Problem:** Promoting or re-parenting a subtask needs the modal. No Promote shortcut was built after the dogfood window.
 - **Why deferred / fix direction:** Trigger: users report the modal round-trip as friction.
@@ -264,7 +264,7 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-062 · P3 · Duplicate mutations wait on inactive-query invalidations
 
-- **Type:** watch · **Found:** 2026-09-02 · **Verified:** 2026-11-26 @ `f25aac3`
+- **Type:** watch · **Found:** 2026-09-02 · **Verified:** 2026-11-27 @ `cc91ec1`
 - **Where:** useDuplicateTask (~2605) and useDuplicateSection (~2849) onSuccess in frontend/src/lib/queries.ts
 - **Problem:** isPending also waits on inactive queries. The cost is near zero because inactive queries refetch lazily.
 - **Why deferred / fix direction:** Await only projectTasks and fire the rest if latency ever shows.
@@ -280,7 +280,7 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-069 · P3 · Mention chips fall back to plain text for removed members
 
-- **Type:** watch · **Found:** 2026-09-30 · **Verified:** 2026-11-26 @ `f25aac3`
+- **Type:** watch · **Found:** 2026-09-30 · **Verified:** 2026-11-27 @ `cc91ec1`
 - **Where:** frontend/src/components/CommentMentions.tsx
 - **Problem:** Comments store user ids only, so a mentioned person later removed from the project, or a view-all user, renders as plain @name text instead of a chip.
 - **Why deferred / fix direction:** Accepted limitation; revisit only if the server begins returning resolved mention names.
@@ -312,7 +312,7 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-211 · P3 · Task page breadcrumb placeholder row has no customer
 
-- **Type:** watch · **Found:** 2026-11-23 · **Verified:** 2026-11-26 @ `f25aac3`
+- **Type:** watch · **Found:** 2026-11-23 · **Verified:** 2026-11-27 @ `cc91ec1`
 - **Where:** cachedTaskRow in frontend/src/lib/queries.ts (~1277), used as useTask placeholderData (~1314); consumed by frontend/src/pages/TaskPage.tsx (~27)
 - **Problem:** While the full task loads, the placeholder row carries `project.customer` as null (unknown), not the real customer. The breadcrumb is the only reader and does not use it.
 - **Why deferred / fix direction:** Trigger: a new consumer reads `project.customer` from the row before the fetch lands. Then wait for the fetch or fill it from the project query.
@@ -347,7 +347,7 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-099 · P3 · Computed critical path is deferred; only the manual mark exists
 
-- **Type:** decision · **Found:** 2026-08-02 · **Verified:** 2026-11-26 @ `f25aac3`
+- **Type:** decision · **Found:** 2026-08-02 · **Verified:** 2026-11-27 @ `cc91ec1`
 - **Where:** Task.isCriticalPath in backend/prisma/schema.prisma (line ~627); frontend/src/components/CriticalPathMark.tsx
 - **Problem:** The manual Critical Path flag shipped. A path computed from TaskDependency does not exist and is deferred by decision.
 - **Why deferred / fix direction:** Question: build a computed path (optionally a 'Suggest from dependencies' action) or leave the manual flag as the only mechanism?.
@@ -389,7 +389,7 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-111 · P3 · Subtask drag may flicker back before the reorder commits
 
-- **Type:** watch · **Found:** 2026-07-30 · **Verified:** 2026-11-26 @ `f25aac3`
+- **Type:** watch · **Found:** 2026-07-30 · **Verified:** 2026-11-27 @ `cc91ec1`
 - **Where:** Sortable onValueChange in frontend/src/components/TaskDetail.tsx (line ~922)
 - **Problem:** The list keeps the old order until the optimistic update lands after an await, so a snap-back flash is possible.
 - **Why deferred / fix direction:** Trigger: flicker seen in use. Then mirror the local-order pattern from SectionReorderModal.
@@ -397,7 +397,7 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-112 · P3 · Failed section PATCH can leave the reorder modal out of sync
 
-- **Type:** watch · **Found:** 2026-07-30 · **Verified:** 2026-11-26 @ `f25aac3`
+- **Type:** watch · **Found:** 2026-07-30 · **Verified:** 2026-11-27 @ `cc91ec1`
 - **Where:** useUpdateSection in frontend/src/lib/queries.ts (lines ~2771-2825)
 - **Problem:** A rollback after a failed PATCH discards optimistic state of queued mutations, and the modal's local order is only re-seeded on open.
 - **Why deferred / fix direction:** Trigger: PATCH /sections/:id fails mid-session in practice. Then re-seed the modal on settle.
@@ -507,7 +507,7 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-204 · P2 · Mobile e2e first runs after a release is merged into main
 
-- **Type:** decision · **Found:** 2026-11-20 · **Verified:** 2026-11-26 @ `f25aac3`
+- **Type:** decision · **Found:** 2026-11-20 · **Verified:** 2026-11-27 @ `cc91ec1`
 - **Where:** .github/workflows/ci.yml (e2e job `if:` line 239, matrix ~line 245)
 - **Problem:** PRs into develop run desktop e2e only, and PRs into main skip e2e (by design, to save Actions minutes, `f469b5a`). Mobile e2e therefore first runs on the push to main after the release merge. A mobile regression then blocks the image publish, but the code is already on main. The 2026-11-20 release (#114) shipped 24 PRs whose mobile e2e had never run.
 - **Why deferred / fix direction:** Decision for the user. Options: (a) before merging a release PR, run the full suite on develop by hand (`gh workflow run ci.yml --ref develop`, about 20 minutes) and merge only if green; (b) run desktop and mobile e2e on PRs into main (more minutes per release, none per feature PR); (c) accept the current order.
@@ -515,10 +515,10 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-138 · P2 · Drag e2e specs flake on first attempt and pass on retry
 
-- **Type:** watch · **Found:** 2026-07-28 · **Verified:** 2026-11-27 @ `77280d7`
+- **Type:** watch · **Found:** 2026-07-28 · **Verified:** 2026-11-27 @ `cc91ec1`
 - **Where:** gantt-parity.spec.ts "(a) drag-move commits new dates and survives reload" (line 233), kanban-dnd.spec.ts "a refused drag shows an error" (line 140), list-dnd.spec.ts "cross-status reorder in one section sticks" (line 94), gantt-row-menu-focus.spec.ts "Add subtask: the new task's title input holds focus" (line 38); mobile: task-filters.spec.ts "label filter" (line 80)
 - **Problem:** The 2026-11-27 spec fixes (CHANGELOG "e2e specs that failed on their first attempt") did not stop it: CI run 45921940198 at the merged commit `c90acfa` still reports the four desktop cases flaky, with the same first-attempt errors (Gantt PATCH wait times out, Kanban PATCH never sent, List order unchanged, row grip not focused). In each case the first drag or focus in CI does nothing and the retry works. None fail on the local dev server (:5173), so the cause is likely in the built CI stack (:8080), not in the specs.
-- **Why deferred / fix direction:** Capture the first attempt before another fix: set `trace: "retain-on-first-failure"` in e2e/playwright.config.ts and upload e2e/test-results/ from .github/workflows/ci.yml when a run has flaky tests, not only on failure. Then read the trace. One thing to rule out: the PWA service worker, which registers only on the built stack (`registerSW({ immediate: true })` in frontend/src/main.tsx).
+- **Why deferred / fix direction:** First-attempt traces are now kept (`retain-on-first-failure`, uploaded on every run). CI runs 45924805916 and 45933637247 kept 7 of them: the same Gantt drag, Gantt row focus, Kanban refused-drag and List reorder cases, plus a new one, gantt-parity.spec.ts "(c) connector create via dot-drag" (line 318). In each trace the PWA service worker registers on the first page load and precaches about 120 `/assets/` files; that download ends about 1 s before the first drag starts, so the drag does not compete with it. Next: read the trace snapshots at the first `mouseDown` (is the row rendered and the handler attached?) and check whether the service worker takes control of the page between the `goto` and the drag. To test the service worker theory, block it in the CI Playwright config (`serviceWorkers: "block"`) on a branch and count flaky tests over 3 runs.
 - **Source:** snapshot line 896, section "ReUI DateField swap — deferred findings (2026-07-28)"; merged duplicates at snapshot lines 2320
 
 ### ISS-145 · P3 · Connector hover-delete e2e test flakes rarely
@@ -579,7 +579,7 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-160 · P3 · CI npm audit step is report-only, not a gate
 
-- **Type:** watch · **Found:** 2026-10-25 · **Verified:** 2026-11-26 @ `f25aac3`
+- **Type:** watch · **Found:** 2026-10-25 · **Verified:** 2026-11-27 @ `cc91ec1`
 - **Where:** npm audit step in .github/workflows/ci.yml (line ~147)
 - **Problem:** The audit still runs with `continue-on-error` and never fails CI. The zod 4 upgrade (#162) cleared its blocker: `npm audit --omit=dev --audit-level=high` now reports 0 vulnerabilities for backend and no high ones for frontend (2 moderate: uuid via exceljs). The comment above the step still says "after the zod 4 upgrade".
 - **Why deferred / fix direction:** Trigger fired. Drop `continue-on-error` (and update the comment) once the user agrees; the moderate exceljs advisory stays below the gate.
@@ -621,7 +621,7 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ### ISS-166 · P3 · Dev backend tsx watch sometimes misses file edits
 
-- **Type:** watch · **Found:** 2026-08-15 · **Verified:** 2026-11-27 @ `b32458b`
+- **Type:** watch · **Found:** 2026-08-15 · **Verified:** 2026-11-27 @ `cc91ec1`
 - **Where:** dev script in backend/package.json (line 8)
 - **Problem:** The tsx watch process occasionally keeps serving stale code after an edit on the dev stack. Recurred 2026-11-27: after a checkout switched branches and back, the new `PATCH`/`DELETE /tasks/:id/comments/:commentId` routes answered 404 until a restart.
 - **Why deferred / fix direction:** Run `docker compose restart backend` (e2e/CLAUDE.md says so before specs that use a new route); investigate if it keeps recurring.
