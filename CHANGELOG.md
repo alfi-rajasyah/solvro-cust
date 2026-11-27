@@ -15,6 +15,16 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Added — 2026-11-27 — Edit and delete task comments
+
+- A comment on any task, subtask included, has a "Comment actions" menu. The author can edit the comment, and the mentions stay. An edit that changes the text marks the comment "edited", with the edit time. The author or an admin can delete a comment after a confirmation. A comment written by an incoming webhook URL can be deleted but not edited. An edit notifies only the people it newly mentions.
+- New routes: `PATCH` and `DELETE /tasks/:id/comments/:commentId` in `backend/src/routes/tasks.ts`. A new nullable `edited_at` column on `comments` (migration `20261127120000_comment_edited_at`) holds the edit time.
+- Outgoing webhooks have 2 new event types, `comment.updated` ("Comment edited") and `comment.deleted` ("Comment deleted"). `comment.deleted` never carries the comment text. Existing webhooks keep their selected event types, and they receive the new ones only after their owner selects them. Comments written through an incoming webhook URL send none of the 3 comment events. The incoming writer now records that source in the activity log, so this rule still holds after the comment is deleted. In every comment event, `text` is the comment as it is when the delivery is sent (`docs/guides/webhooks.md`).
+
+### Fixed — 2026-11-27 — Kanban comment count after a new comment
+
+- The comment count on a Kanban card now updates as soon as a comment is added (`useAddComment` in `frontend/src/lib/queries.ts` also refreshes the project's task rows).
+
 ### Changed — 2026-11-27 — CI keeps the trace of a failed first attempt
 
 - `e2e/playwright.config.ts` records traces with `retain-on-first-failure` instead of `on-first-retry`. Before, CI recorded only the retry, which passed, so a test that failed once and then passed left no record of the failure.
