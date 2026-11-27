@@ -540,87 +540,90 @@ export function TaskDetail({ projectId, taskId, layout, onOpenTask, renderHeader
   const descriptionBlock = (
     <>
       {/* Description: under the title so List and Gantt users can read it.
-          Read-only users get the text or nothing (label included); editors
-          get a placeholder. */}
-      {(task.description || canEdit) && (
-        <div className="mt-3">
-          {editingDescription ? (
-            <label
-              htmlFor={descriptionId}
-              className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant"
-            >
-              Description
-            </label>
-          ) : (
-            <p className="mb-1 font-display text-label-caps uppercase text-on-surface-variant">
-              Description
-            </p>
-          )}
-          {editingDescription ? (
-            <>
-              <textarea
-                id={descriptionId}
-                autoFocus
-                value={descriptionDraft}
-                onChange={(e) => setDescriptionDraft(e.target.value)}
-                onBlur={commitDescription}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    if (e.nativeEvent.isComposing) return;
-                    // Cancel this edit only; the panel-level Escape listener must not close the panel.
-                    e.stopPropagation();
-                    cancelDescription();
-                  } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                    e.preventDefault();
-                    // Keyboard save: focus goes back to the button (not on blur-save).
-                    focusDescriptionRef.current = true;
-                    commitDescription();
-                  }
-                }}
-                maxLength={2000}
-                placeholder="Add a description"
-                className="field-sizing-content min-h-24 max-h-64 w-full resize-y rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-base leading-snug text-on-surface placeholder:text-on-surface-variant focus-visible:border-primary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 md:text-sm"
-              />
-              <p className="mt-1 text-meta text-on-surface-variant">
-                Saves when you click away.
-                <span className="hidden md:[@media(pointer:fine)]:inline">
-                  {" "}
-                  {isApplePlatform() ? "⌘Enter" : "Ctrl+Enter"} saves, Esc cancels.
-                </span>
-              </p>
-            </>
-          ) : canEdit ? (
-            <button
-              ref={descriptionButtonRef}
-              type="button"
-              aria-label={task.description ? "Edit description" : undefined}
-              aria-describedby={task.description ? `${descriptionId}-text` : undefined}
-              onClick={() => {
-                descriptionSettledRef.current = false;
-                setEditBase(task);
-                setDescriptionDraft(task.description ?? "");
-                setEditingDescription(true);
+          Always rendered, so the field reads the same for every role. Without
+          task:write an empty description shows a muted "No description";
+          editors get the "Add a description" button instead. */}
+      <div className="mt-3">
+        {editingDescription ? (
+          <label
+            htmlFor={descriptionId}
+            className="mb-1 block font-display text-label-caps uppercase text-on-surface-variant"
+          >
+            Description
+          </label>
+        ) : (
+          <p className="mb-1 font-display text-label-caps uppercase text-on-surface-variant">
+            Description
+          </p>
+        )}
+        {editingDescription ? (
+          <>
+            <textarea
+              id={descriptionId}
+              autoFocus
+              value={descriptionDraft}
+              onChange={(e) => setDescriptionDraft(e.target.value)}
+              onBlur={commitDescription}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  if (e.nativeEvent.isComposing) return;
+                  // Cancel this edit only; the panel-level Escape listener must not close the panel.
+                  e.stopPropagation();
+                  cancelDescription();
+                } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  // Keyboard save: focus goes back to the button (not on blur-save).
+                  focusDescriptionRef.current = true;
+                  commitDescription();
+                }
               }}
-              className="[@media(pointer:coarse)]:min-h-11 -mx-2 block w-[calc(100%+1rem)] rounded-sm border border-transparent px-2 py-1 text-left text-base leading-snug outline-hidden hover:bg-surface-container-high focus-visible:ring-2 focus-visible:ring-primary md:text-sm"
-            >
-              <span
-                id={`${descriptionId}-text`}
-                className={`block ${
-                  task.description
-                    ? "whitespace-pre-wrap wrap-break-word text-on-surface"
-                    : "text-on-surface-variant"
-                }`}
-              >
-                {task.description || "Add a description"}
+              maxLength={2000}
+              placeholder="Add a description"
+              className="field-sizing-content min-h-24 max-h-64 w-full resize-y rounded-sm border border-outline-variant bg-surface-container-lowest px-2 py-1 text-base leading-snug text-on-surface placeholder:text-on-surface-variant focus-visible:border-primary focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/30 md:text-sm"
+            />
+            <p className="mt-1 text-meta text-on-surface-variant">
+              Saves when you click away.
+              <span className="hidden md:[@media(pointer:fine)]:inline">
+                {" "}
+                {isApplePlatform() ? "⌘Enter" : "Ctrl+Enter"} saves, Esc cancels.
               </span>
-            </button>
-          ) : (
-            <p className="whitespace-pre-wrap wrap-break-word text-base leading-snug text-on-surface md:text-sm">
-              {task.description}
             </p>
-          )}
-        </div>
-      )}
+          </>
+        ) : canEdit ? (
+          <button
+            ref={descriptionButtonRef}
+            type="button"
+            aria-label={task.description ? "Edit description" : undefined}
+            aria-describedby={task.description ? `${descriptionId}-text` : undefined}
+            onClick={() => {
+              descriptionSettledRef.current = false;
+              setEditBase(task);
+              setDescriptionDraft(task.description ?? "");
+              setEditingDescription(true);
+            }}
+            className="[@media(pointer:coarse)]:min-h-11 -mx-2 block w-[calc(100%+1rem)] rounded-sm border border-transparent px-2 py-1 text-left text-base leading-snug outline-hidden hover:bg-surface-container-high focus-visible:ring-2 focus-visible:ring-primary md:text-sm"
+          >
+            <span
+              id={`${descriptionId}-text`}
+              className={`block ${
+                task.description
+                  ? "whitespace-pre-wrap wrap-break-word text-on-surface"
+                  : "text-on-surface-variant"
+              }`}
+            >
+              {task.description || "Add a description"}
+            </span>
+          </button>
+        ) : (
+          <p
+            className={`whitespace-pre-wrap wrap-break-word text-base leading-snug md:text-sm ${
+              task.description ? "text-on-surface" : "text-on-surface-variant"
+            }`}
+          >
+            {task.description || "No description"}
+          </p>
+        )}
+      </div>
     </>
   );
 

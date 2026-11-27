@@ -105,6 +105,41 @@ function mountPage() {
   return render(<TaskDetail projectId={1} taskId={5} layout="page" onOpenTask={() => {}} />);
 }
 
+describe("TaskDetail description for every role", () => {
+  afterEach(() => {
+    authPerms.current = ["task:write"];
+  });
+
+  function mountWith(description: string | null) {
+    tasksQuery.current = { data: [{ ...task, description }], isError: false, error: null, refetch };
+    return render(<TaskDetail projectId={1} taskId={5} layout="page" onOpenTask={() => {}} />);
+  }
+
+  it("shows the label and a muted empty value to a read-only user with no description", () => {
+    authPerms.current = [];
+    mountWith(null);
+    expect(screen.getByText("Description")).toBeTruthy();
+    expect(screen.getByText("No description")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /description/i })).toBeNull();
+  });
+
+  it("shows the text to a read-only user with a description", () => {
+    authPerms.current = [];
+    mountWith("Some words");
+    expect(screen.getByText("Description")).toBeTruthy();
+    expect(screen.getByText("Some words")).toBeTruthy();
+    expect(screen.queryByText("No description")).toBeNull();
+    expect(screen.queryByRole("button", { name: /description/i })).toBeNull();
+  });
+
+  it("keeps the placeholder button for an editor with no description", () => {
+    mountWith(null);
+    expect(screen.getByText("Description")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add a description" })).toBeTruthy();
+    expect(screen.queryByText("No description")).toBeNull();
+  });
+});
+
 describe("TaskDetail page layout", () => {
   it("renders the fields in a labelled side region and the content outside it", () => {
     mountPage();

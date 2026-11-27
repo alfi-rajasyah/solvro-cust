@@ -332,7 +332,7 @@ describe("TaskPanel description", () => {
     expect(screen.getByRole("button", { name: "Add a description" })).toBeTruthy();
   });
 
-  it("is read-only without task:write, and shows nothing when empty", () => {
+  it("is read-only without task:write, and shows a muted empty value when empty", () => {
     authPerms.current = [];
     open();
     const el = screen.getByText(/Line one/);
@@ -342,7 +342,8 @@ describe("TaskPanel description", () => {
     cleanup();
     open({ description: null });
     expect(screen.queryByText("Add a description")).toBeNull();
-    expect(screen.queryByText("Description")).toBeNull();
+    expect(screen.getByText("Description")).toBeTruthy();
+    expect(screen.getByText("No description")).toBeTruthy();
   });
 });
 
