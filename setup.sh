@@ -68,7 +68,7 @@ UPLOADS_VOLUME_NAME="solvro_uploads"
 # (ci/check-version.sh keeps them equal). A newer setup.sh is the upgrade
 # (`solvro update` fetches and runs it): it rewrites IMAGE_TAG and pulls; a
 # plain `docker compose pull` / `up -d` never changes the release.
-SOLVRO_IMAGE_TAG="v1.5.0"
+SOLVRO_IMAGE_TAG="v1.6.0"
 
 # ------------------------------------------------------------------ options
 ADVANCED=0
