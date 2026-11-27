@@ -945,16 +945,14 @@ tasksRouter.patch(
         select: { projectId: true, title: true },
       });
       if (!task) throw new HttpError(404, "not_found", "Task not found");
-      const visible = await filterActiveUsersWhoCanSeeProject(tx, task.projectId, requestedMentions);
-      const mentionedUserIds = requestedMentions.filter((uid) => visible.has(uid));
-
-      const stored = new Set(existing.mentionedUserIds);
-      const next = new Set(mentionedUserIds);
-      const mentionsChanged =
-        stored.size !== next.size || [...next].some((uid) => !stored.has(uid));
-      if (body === existing.body && !mentionsChanged) {
+      // An edit means the body changed. A save with the same body is a full
+      // no-op, whatever mentions it sends: nothing is stored, logged or sent.
+      if (body === existing.body) {
         return tx.comment.findUniqueOrThrow({ where: { id: commentId }, include: commentInclude });
       }
+      const visible = await filterActiveUsersWhoCanSeeProject(tx, task.projectId, requestedMentions);
+      const mentionedUserIds = requestedMentions.filter((uid) => visible.has(uid));
+      const stored = new Set(existing.mentionedUserIds);
 
       const updated = await tx.comment.update({
         where: { id: commentId },

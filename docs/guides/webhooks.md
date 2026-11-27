@@ -67,6 +67,7 @@ A Standard Webhooks body looks like this:
 - `comment.created` adds `comment: { id, text }`, with the first 500 characters of the comment.
 - `comment.updated` adds `comment: { id, text }`, with the first 500 characters of the edited comment.
 - `comment.deleted` adds `comment: { id, text: null }`. The deleted text is never sent.
+- For all three comment events, `text` is the comment as it is when the delivery is sent, so a delayed or retried delivery can carry text edited since, and it is `null` once the comment is deleted.
 - Comments written through an incoming webhook URL send none of the three comment events, so two Solvro installations that relay to each other cannot loop.
 - A webhook keeps the event types it was set up with. After an upgrade, open it in Settings and select `comment.updated` and `comment.deleted` to receive them.
 - `risk.created` adds `risk: { id, title, status, probability, impact }`. `title` is the first 120 characters of the risk description.

@@ -147,7 +147,24 @@ describe("PATCH /tasks/:id/comments/:commentId", () => {
     expect(JSON.stringify(ev)).not.toMatch(/SECRET/);
   });
 
-  it("a mention-only change sets editedAt; mentions are filtered and only new ones notified", async () => {
+  it("a save with the same body is a full no-op, whatever mentions it sends", async () => {
+    const f = await fixture();
+    const before = await prisma.activityEvent.count({ where: { entityType: "comment", entityId: f.comment.id } });
+    const res = await patch(f.author.token, f.task.id, f.comment.id, {
+      body: "original SECRET body",
+      mentionedUserIds: [f.member.userId],
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.editedAt).toBeNull();
+    expect(res.body.mentionedUserIds).toEqual([]);
+    expect(await prisma.notification.count({ where: { userId: f.member.userId } })).toBe(0);
+    expect(await prisma.activityEvent.count({ where: { entityType: "comment", entityId: f.comment.id } })).toBe(before);
+    const row = await prisma.comment.findUniqueOrThrow({ where: { id: f.comment.id } });
+    expect(row.editedAt).toBeNull();
+    expect(row.mentionedUserIds).toEqual([]);
+  });
+
+  it("mentions are filtered and only newly added ones are notified when the body changes", async () => {
     const f = await fixture();
     const outsider = await createUserWithRole("TAM"); // cannot see the project
     const created = await request(app)
@@ -160,7 +177,7 @@ describe("PATCH /tasks/:id/comments/:commentId", () => {
     expect(await notified(f.member.userId)).toBe(1);
 
     const res = await patch(f.author.token, f.task.id, id, {
-      body: "hi",
+      body: "hi again",
       mentionedUserIds: [f.member.userId, f.stakeholder.userId, outsider.userId, 987654321],
     });
     expect(res.status).toBe(200);
@@ -176,6 +193,23 @@ describe("PATCH /tasks/:id/comments/:commentId", () => {
     await prisma.task.update({ where: { id: f.task.id }, data: { assignedToId: f.member.userId } });
     await patch(f.author.token, f.task.id, f.comment.id, { body: "changed" });
     expect(await prisma.notification.count({ where: { userId: f.member.userId } })).toBe(0);
+  });
+});
+
+describe("hidden task", () => {
+  it("404s not_found on PATCH and DELETE for a user who cannot see the task", async () => {
+    const f = await fixture();
+    const noMembership = await createUserWithRole("TAM"); // has task:comment, not on the project
+    const viewer = await createUserWithRole("STAKEHOLDER"); // task:comment, no view-all, not a member
+    for (const who of [noMembership, viewer]) {
+      const p = await patch(who.token, f.task.id, f.comment.id, { body: "x" });
+      expect(p.status).toBe(404);
+      expect(p.body.code).toBe("not_found");
+      const d = await del(who.token, f.task.id, f.comment.id);
+      expect(d.status).toBe(404);
+      expect(d.body.code).toBe("not_found");
+    }
+    expect(await prisma.comment.findUnique({ where: { id: f.comment.id } })).not.toBeNull();
   });
 });
 

@@ -107,7 +107,7 @@ export async function writeInboundComments(
         entityId: comment.id,
         action: "created",
         entityLabel: task.title,
-        changes: { taskId: task.id },
+        changes: { taskId: task.id, source: "incoming" },
       });
       await notifyForEvent(tx, event, { taskAssigneeId: task.assignedToId, mentionedUserIds: [] });
       linked += 1;
