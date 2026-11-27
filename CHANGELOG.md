@@ -15,6 +15,11 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-27 — e2e specs that failed on their first attempt
+
+- `e2e/tests/pwa.spec.ts` skips itself when the base URL is the Vite dev server (port 5173). The manifest and service worker exist only in build mode, so these specs always failed there.
+- Five specs that failed on their first attempt in CI now wait for the page to settle instead of racing it: Gantt drag-move (`gantt-parity.spec.ts`), Kanban refused drag (`kanban-dnd.spec.ts`), List cross-status reorder (`list-dnd.spec.ts`), Gantt row menu focus (`gantt-row-menu-focus.spec.ts`) and the label filter on a phone (`task-filters.spec.ts`). A new `stableBox` helper in `e2e/fixtures/test.ts` waits until an element holds still before a drag starts. The specs also wait for the saved request, for animations, or for the server order.
+
 ### Changed — 2026-11-26 — A key id in stored secrets, and SECRETS_KEY rotation
 
 - `backend/src/lib/secretBox.ts` now writes stored integration tokens and webhook secrets as `v2:`, with a key id taken from the key. The new optional `SECRETS_KEY_PREVIOUS` (`backend/src/env.ts`) keeps values sealed under the old key readable while `SECRETS_KEY` is rotated. Before, a new `SECRETS_KEY` made every stored iTop and Outline token and every webhook signing secret unreadable. Existing `v1:` values still open, and they move to the new key only when they are written again.

@@ -1,4 +1,4 @@
-import { expect, test as base, type Page, type Request, type TestInfo } from "@playwright/test";
+import { expect, test as base, type Locator, type Page, type Request, type TestInfo } from "@playwright/test";
 import { seedFixture, type SeededFixture } from "./seed";
 
 // Worker-scoped fixture: one seeded project per worker. playwright.config.ts
@@ -76,6 +76,29 @@ export async function nextFrames(page: Page, n = 2): Promise<void> {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     }
   }, n);
+}
+
+/** Bounding box of `target` once it has held still for two consecutive frames
+ * (layout shifts after first paint, such as a timeline scrolling into place or
+ * a list re-flowing, would otherwise move the drag point out from under the
+ * gesture). Fails if the element never stops moving or never appears. */
+export async function stableBox(
+  page: Page,
+  target: Locator,
+): Promise<{ x: number; y: number; width: number; height: number }> {
+  let last = "";
+  let box: { x: number; y: number; width: number; height: number } | null = null;
+  await expect
+    .poll(async () => {
+      await nextFrames(page, 2);
+      box = await target.boundingBox();
+      const key = box ? JSON.stringify(box) : "";
+      const still = key !== "" && key === last;
+      last = key;
+      return still;
+    })
+    .toBe(true);
+  return box!;
 }
 
 /** Resolves once no finite CSS/Web animation is running (drawer slide, layout

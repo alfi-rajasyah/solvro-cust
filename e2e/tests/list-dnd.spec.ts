@@ -7,6 +7,8 @@ import {
   mouseDrag,
   apiBase,
   waitForGanttReady,
+  settleAnimations,
+  stableBox,
 } from "../fixtures/test";
 import { getTasks, type SeededTask, createEpic } from "../fixtures/seed";
 import type { Page } from "@playwright/test";
@@ -104,22 +106,26 @@ test.describe("list & gantt drag & drop — desktop (mouse)", () => {
 
     await openList(page, seededProject.projectId);
 
+    await settleAnimations(page);
+    const alphaBox = await stableBox(page, page.getByText("Alpha", { exact: true }).first());
     const grip = await gripFor(page, "Gamma", "Drag to reorder");
-    const alphaBox = await page.getByText("Alpha", { exact: true }).first().boundingBox();
     expect(grip, "grip for Gamma not found").toBeTruthy();
-    expect(alphaBox, "Alpha row not found").toBeTruthy();
 
-    await mouseDrag(page, center(grip!), { x: alphaBox!.x + 60, y: alphaBox!.y + 8 });
+    await mouseDrag(page, center(grip!), { x: alphaBox.x + 60, y: alphaBox.y + 8 });
 
+    // The drop's PATCH can settle after the gesture returns, so poll the server
+    // order instead of reading it once. Gamma lands immediately before Alpha
+    // (upward drag -> insert-before arrayMove semantics: ProjectList.tsx
+    // handleDragEnd row-drop branch).
+    await expect
+      .poll(async () => {
+        const order = topLevelSorted(await getTasks(base, seededProject.token, seededProject.projectId));
+        const gammaIdx = order.findIndex((t) => t.title === "Gamma");
+        const alphaIdx = order.findIndex((t) => t.title === "Alpha");
+        return gammaIdx >= 0 && alphaIdx >= 0 ? alphaIdx - gammaIdx : null;
+      })
+      .toBe(1);
     const after = await getTasks(base, seededProject.token, seededProject.projectId);
-    const order = topLevelSorted(after);
-    const gammaIdx = order.findIndex((t) => t.title === "Gamma");
-    const alphaIdx = order.findIndex((t) => t.title === "Alpha");
-    expect(gammaIdx, "Gamma not found post-drag").toBeGreaterThanOrEqual(0);
-    expect(alphaIdx, "Alpha not found post-drag").toBeGreaterThanOrEqual(0);
-    // Gamma lands immediately before Alpha (upward drag -> insert-before
-    // arrayMove semantics — ProjectList.tsx handleDragEnd row-drop branch).
-    expect(gammaIdx).toBe(alphaIdx - 1);
 
     // The reorder must not touch status: Gamma keeps whatever the seed gave
     // it, and so does every other top-level task.

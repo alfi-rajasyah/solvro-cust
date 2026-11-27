@@ -1,4 +1,4 @@
-import { test, expect, loginViaUi, apiBase } from "../fixtures/test";
+import { test, expect, loginViaUi, apiBase, settleAnimations } from "../fixtures/test";
 import { createEpic, createSection } from "../fixtures/seed";
 
 // Epic and label filters (shared across List, Kanban, Gantt and Timeline).
@@ -131,12 +131,21 @@ test.describe("task filters", () => {
 
     // The label filter reaches Kanban through the tab link; Clear resets it.
     await page.keyboard.press("Escape");
+    // The List popover must be fully gone before the tab switch, or its exit
+    // animation and the next popover's open overlap.
+    await expect(page.locator("[data-slot=popover-content]")).toHaveCount(0);
     await page.getByRole("link", { name: "Kanban", exact: true }).click();
     await expect(page).toHaveURL(/labels=none/);
     await expect(shown("Bare task")).toBeVisible();
     await expect(hidden("Red task")).toHaveCount(0);
+    // Open the Kanban popover and let it finish positioning and animating in
+    // before clicking inside it: mid-animation the click point can still be
+    // covered by the page behind it.
     await page.getByRole("button", { name: /Filter/ }).click();
-    await page.getByRole("button", { name: "Clear filters" }).click();
+    const clear = page.getByRole("button", { name: "Clear filters" });
+    await expect(clear).toBeVisible();
+    await settleAnimations(page);
+    await clear.click();
     await expect(page).not.toHaveURL(/labels=/);
     await expect(shown("Red task")).toBeVisible();
   });

@@ -8,6 +8,7 @@ import {
   center,
   nextFrames,
   settleAnimations,
+  stableBox,
   waitForGanttReady,
 } from "../fixtures/test";
 import { createTask, getTasks, isoDateOffset, type SeededTask } from "../fixtures/seed";
@@ -246,11 +247,13 @@ test.describe("gantt parity — ReUI engine (desktop)", () => {
 
     const bar = barButton(page, task.id);
     await bar.scrollIntoViewIfNeeded();
-    const before = await bar.boundingBox();
-    expect(before, "bar not found before drag").toBeTruthy();
+    // Hold off until the bar has stopped moving: a late layout shift leaves the
+    // press landing beside the bar, no PATCH is ever sent and the wait below
+    // runs to the test timeout.
+    const before = await stableBox(page, bar);
 
-    const from = { x: before!.x + before!.width / 2, y: before!.y + before!.height / 2 };
-    const to = { x: from.x + Math.max(80, before!.width), y: from.y };
+    const from = { x: before.x + before.width / 2, y: before.y + before.height / 2 };
+    const to = { x: from.x + Math.max(80, before.width), y: from.y };
 
     const [patchRes] = await Promise.all([
       page.waitForResponse(
@@ -269,7 +272,7 @@ test.describe("gantt parity — ReUI engine (desktop)", () => {
     await expect(barButton(page, task.id)).toBeVisible();
     const afterReload = await barButton(page, task.id).boundingBox();
     expect(afterReload, "bar not found after reload").toBeTruthy();
-    expect(afterReload!.x).toBeGreaterThan(before!.x + 40);
+    expect(afterReload!.x).toBeGreaterThan(before.x + 40);
   });
 
   test("(b) resize-end changes dueDate, leaves startDate untouched", async ({ page, seededProject }) => {
