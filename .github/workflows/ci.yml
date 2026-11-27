@@ -379,11 +379,15 @@ jobs:
         if: failure()
         run: docker compose -f ci/docker-compose.ci.yml logs --no-color --tail 100
 
+      # always(): a flaky test fails its first attempt and passes on retry, so
+      # the job is green; the first attempt's trace is still in test-results/.
+      # A clean run leaves test-results/ empty and uploads nothing.
       - name: Upload Playwright traces
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-traces-${{ matrix.project }}-${{ matrix.shard }}
+          if-no-files-found: ignore
           path: |
             e2e/test-results/
             e2e/playwright-report/
