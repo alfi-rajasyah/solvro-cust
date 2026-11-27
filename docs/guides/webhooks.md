@@ -24,7 +24,7 @@ Webhooks need the `webhook:manage` permission. The built-in TAM and Stakeholder 
 
 Each user can have up to 10 webhooks. The URL must be `https://` and reach a public address, unless the server allows otherwise (see [Troubleshooting](#troubleshooting)).
 
-A "Comment added" event carries the first 500 characters of the comment. The receiving tool may show it to people who cannot open the project in Solvro, so pick the receiver with care.
+The "Comment added" and "Comment edited" events carry the first 500 characters of the comment. The receiving tool may show it to people who cannot open the project in Solvro, so pick the receiver with care.
 
 ## 3. Check the signature
 
@@ -42,7 +42,7 @@ Do not write this check by hand. The Standard Webhooks project publishes a verif
 | `task.due_date_changed` | A task's start or due date changes. |
 | `task.completed` | A task moves to a status in the Done group. |
 | `comment.created` | Someone comments on a task. |
-| `comment.updated` | The author edits a comment on a task. |
+| `comment.updated` | The author changes the text of a comment on a task. |
 | `comment.deleted` | A comment on a task is deleted. |
 | `project.created` | A project is added. |
 | `risk.created` | A risk is added to a project. |

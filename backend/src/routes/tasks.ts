@@ -828,6 +828,12 @@ tasksRouter.post(
   },
 );
 
+// The comment shape every comment route returns (GET, POST, PATCH).
+const commentInclude = {
+  author: { select: { id: true, username: true, email: true } },
+  inboundHook: { select: { id: true, name: true } },
+} as const;
+
 // Comments thread
 tasksRouter.get(
   "/:id/comments",
@@ -838,10 +844,7 @@ tasksRouter.get(
     const comments = await prisma.comment.findMany({
       where: { taskId: id },
       orderBy: { createdAt: "asc" },
-      include: {
-        author: { select: { id: true, username: true, email: true } },
-        inboundHook: { select: { id: true, name: true } },
-      },
+      include: commentInclude,
     });
     res.json(comments);
   },
@@ -879,10 +882,7 @@ tasksRouter.post(
           body,
           mentionedUserIds,
         },
-        include: {
-          author: { select: { id: true, username: true, email: true } },
-          inboundHook: { select: { id: true, name: true } },
-        },
+        include: commentInclude,
       });
       // Never the comment body or the mention ids: the event carries the
       // comment id and the task it belongs to (so the log can link to it).
@@ -908,11 +908,6 @@ const commentParamSchema = z.object({
   id: z.coerce.number().int().positive(),
   commentId: z.coerce.number().int().positive(),
 });
-
-const commentInclude = {
-  author: { select: { id: true, username: true, email: true } },
-  inboundHook: { select: { id: true, name: true } },
-} as const;
 
 // Same rules as the project notes routes: only the author edits, the author or
 // an admin deletes (docs/archive/plans/comment-edit-delete.md).

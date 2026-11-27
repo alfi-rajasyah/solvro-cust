@@ -232,6 +232,30 @@ describe("editing a comment", () => {
     }
   });
 
+  it("shows the server's copy of the saved comment before any refetch", async () => {
+    show();
+    const box = await startEdit();
+    // The server answers with its own row (here a different text and edit time);
+    // the thread refetch is held, so what renders can only come from the reply.
+    const base = apiRequest.getMockImplementation()!;
+    apiRequest.mockImplementation(async (path: string, opts?: { method?: string }) => {
+      if (opts?.method === "PATCH") {
+        return { ...thread[0], body: "Server text", editedAt: "2026-11-27T09:30:00.000Z" };
+      }
+      return base(path, opts);
+    });
+    let release!: () => void;
+    gate = new Promise<void>((r) => (release = r));
+    try {
+      fireEvent.change(box, { target: { value: "Sent text" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await screen.findByText("Server text");
+      expect(screen.queryByText("Sent text")).toBeNull();
+    } finally {
+      release();
+    }
+  });
+
   it("rolls the thread back and shows the error inline when the save fails", async () => {
     show();
     const box = await startEdit();
