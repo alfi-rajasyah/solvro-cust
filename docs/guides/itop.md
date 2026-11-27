@@ -109,4 +109,4 @@ To stop the background sync, for example during iTop maintenance, set `ITOP_SYNC
 | The webhook gets 404. | No webhook secret is generated in Solvro yet. |
 | The webhook gets 401. | The `X-Solvro-Webhook-Secret` header is missing or wrong. Copy the secret again, or generate a new one. |
 | Tickets stop updating. | Check the last sync line in Admin > iTop, and check that `ITOP_SYNC_DISABLED` is not `true`. |
-| Every stored token stopped working. | `SECRETS_KEY` changed. Enter the application token again, and each TAM saves their personal token again. |
+| Every stored token stopped working. | `SECRETS_KEY` was changed without keeping the old one as `SECRETS_KEY_PREVIOUS` (see `docs/CONFIGURATION.md`). Enter the application token again, and each TAM saves their personal token again. |

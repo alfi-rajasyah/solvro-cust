@@ -22,4 +22,4 @@ Step-by-step guides for running Solvro and connecting it to the tools around it.
 
 - Solvro does not ship or deploy iTop or Outline. Each deployment runs its own instance, and Solvro connects to it.
 - Both integrations are configured inside Solvro (Admin > iTop, Admin > Outline), not in environment variables. Outline also needs two Solvro environment variables, `APP_URL` and `EMBED_FRAME_ANCESTORS`.
-- Solvro encrypts every stored iTop and Outline token with the `SECRETS_KEY` in `~/solvro/.env`. If you change or lose that key, every token must be entered again.
+- Solvro encrypts every stored iTop and Outline token with the `SECRETS_KEY` in `~/solvro/.env`. If you lose that key, or change it without keeping the old one as `SECRETS_KEY_PREVIOUS` (see `docs/CONFIGURATION.md`), every token must be entered again.

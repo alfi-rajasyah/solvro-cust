@@ -280,6 +280,7 @@ COMPOSE_HEAD
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: 8h
       SECRETS_KEY: ${SECRETS_KEY}
+      SECRETS_KEY_PREVIOUS: ${SECRETS_KEY_PREVIOUS:-}
       # The browser app calls the API on its own origin, so only the public
       # Solvro address needs to be allowed; "*" when APP_URL is unknown.
       CORS_ORIGIN: "${APP_URL:-*}"
@@ -582,7 +583,7 @@ cmd_update() {
 }
 
 # Settings `solvro config` may change. Secrets (POSTGRES_PASSWORD, JWT_SECRET,
-# SECRETS_KEY) and IMAGE_TAG are never shown or set here.
+# SECRETS_KEY, SECRETS_KEY_PREVIOUS) and IMAGE_TAG are never shown or set here.
 CONFIG_KEYS=(APP_URL BIND_ADDR FRONTEND_PORT BACKEND_PORT POSTGRES_PORT TRUST_PROXY EMBED_FRAME_ANCESTORS ITOP_ALLOW_PRIVATE_HOSTS ITOP_SYNC_DISABLED WEBHOOK_ALLOW_PRIVATE_HOSTS WEBHOOK_ALLOW_HTTP)
 CONFIG_OPTIONAL=(POSTGRES_PORT TRUST_PROXY EMBED_FRAME_ANCESTORS ITOP_ALLOW_PRIVATE_HOSTS ITOP_SYNC_DISABLED WEBHOOK_ALLOW_PRIVATE_HOSTS WEBHOOK_ALLOW_HTTP)
 
@@ -602,7 +603,7 @@ config_key() { # dies unless $1 is a setting `solvro config` handles
   local k
   for k in "${CONFIG_KEYS[@]}"; do [[ "$k" == "$1" ]] && return 0; done
   case "$1" in
-    POSTGRES_PASSWORD|JWT_SECRET|SECRETS_KEY) die "$1 is a secret and cannot be changed here (see OPERATIONS.md)." ;;
+    POSTGRES_PASSWORD|JWT_SECRET|SECRETS_KEY|SECRETS_KEY_PREVIOUS) die "$1 is a secret and cannot be changed here (see OPERATIONS.md)." ;;
     IMAGE_TAG) die "IMAGE_TAG is set by 'solvro update'." ;;
   esac
   die "unknown setting '$1'. Settings: ${CONFIG_KEYS[*]}"
