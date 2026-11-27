@@ -317,14 +317,6 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 - **Problem:** While the full task loads, the placeholder row carries `project.customer` as null (unknown), not the real customer. The breadcrumb is the only reader and does not use it.
 - **Why deferred / fix direction:** Trigger: a new consumer reads `project.customer` from the row before the fetch lands. Then wait for the fetch or fill it from the project query.
 
-### ISS-218 · P3 · Task conflict dialog can be open with no rows, and Escape then leaves it open
-
-- **Type:** bug · **Found:** 2026-11-24 · **Verified:** 2026-11-26 @ `f25aac3`
-- **Where:** frontend/src/components/TaskConflictDialog.tsx and its Modal
-- **Problem:** The conflict dialog can be visible for a frame before its conflict rows render. An Escape pressed in that frame does not close it. An e2e run without a wait for the rows failed about 1 in 10 for this reason.
-- **Why deferred / fix direction:** Found while removing e2e sleeps (ISS-146); the spec now waits for the rows. Render the dialog only with its rows, or let Escape close it in every state.
-- **Source:** e2e/tests/task-conflict.spec.ts "Escape in the conflict dialog closes only the dialog"
-
 ## Open — Accessibility & tokens
 
 ### ISS-087 · P3 · IconTile outline variant has no visible fill on the lowest dark surface
@@ -810,3 +802,4 @@ Entries closed during the 2026-11-18 restructure are in the ledger in `docs/arch
 - ISS-220 · 2026-11-26 · CHANGELOG "Webhook address checks and a limit on Send test" · Webhook address check misses NAT64 and 6to4 forms
 - ISS-221 · 2026-11-26 · CHANGELOG "Webhook address checks and a limit on Send test" · Webhook Send test has no rate limit
 - ISS-223 · 2026-11-26 · CHANGELOG "Webhook address checks and a limit on Send test" · Outgoing loop check misses an APP_URL with a path prefix
+- ISS-218 · 2026-11-26 · CHANGELOG "Escape closes a dialog in its first frame" · Task conflict dialog can be open with no rows, and Escape then leaves it open

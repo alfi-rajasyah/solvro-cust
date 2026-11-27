@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-26 — Escape closes a dialog in its first frame
+
+- `frontend/src/components/Modal.tsx` now attaches its Escape listener before the dialog paints (a layout effect, not a passive one). Before, a dialog that opened after a server response, such as the task conflict dialog after a 409, ignored an Escape pressed in its first frame. The listener still attaches once per open, so it stays ahead of the drag-cancel listener.
+
 ### Fixed — 2026-11-26 — Webhook address checks and a limit on Send test
 
 - `isPrivateAddress` in `backend/src/lib/itop/validateBaseUrl.ts` now reads the IPv4 address inside NAT64 (`64:ff9b::/96`), 6to4 (`2002::/16`) and IPv4-translated (`::ffff:0:a.b.c.d`) IPv6 addresses, and refuses the target when that IPv4 address is private. Before, a webhook or iTop address such as `https://[64:ff9b::a00:1]/` passed the check and could reach `10.0.0.1` through a NAT64 or 6to4 gateway.
