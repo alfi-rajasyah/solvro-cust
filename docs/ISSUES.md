@@ -190,6 +190,14 @@ Last full triage: 2026-11-26 @ `f25aac3` (81 open entries checked against the co
 
 ## Open — Frontend UI
 
+### ISS-226 · P3 · A failed note save still flashes the note in the list before it disappears
+
+- **Type:** debt · **Found:** 2026-11-28 · **Verified:** 2026-11-28 @ `20f65bf`
+- **Where:** useAddProjectNote and useAddCustomerNote in frontend/src/lib/queries.ts (optimistic onMutate / onError rollback)
+- **Problem:** The optimistic add puts the note in the week list at once. When the save fails, the rollback removes it again. The editor now keeps the text and shows the error (#193, PR #197), so nothing is lost, but the note appears and then vanishes.
+- **Why deferred / fix direction:** `queries.ts` is a spine file, and the #193 fix stayed out of it. Drop the optimistic insert for note adds, or keep it and mark the row "Saving…" until the request settles. Needs the instant spine review.
+- **Source:** #193 fix, 2026-11-28
+
 ### ISS-039 · P3 · Inactive services can still be assigned to customers and projects
 
 - **Type:** decision · **Found:** 2026-07-15 · **Verified:** 2026-11-26 @ `f25aac3`
