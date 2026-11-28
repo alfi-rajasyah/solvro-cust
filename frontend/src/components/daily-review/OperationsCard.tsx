@@ -130,14 +130,14 @@ export function OperationsCard({ customer, today, days, currentUserId, canDelete
             />
           )}
           onAdd={(day, body, extra) =>
-            addNote.mutate({
+            addNote.mutateAsync({
               body,
               noteDate: day,
               title: extra.title.trim(),
             })
           }
           onUpdate={(noteId, body, extra) =>
-            updateNote.mutate({
+            updateNote.mutateAsync({
               noteId,
               body,
               title: extra.title.trim(),

@@ -334,8 +334,8 @@ export function ProjectCard({
               ariaLabel={`Note for ${project.name}`}
               fieldLabel="Note"
               rowsId={`week-rows-project-${project.id}`}
-              onAdd={(day, body) => addNote.mutate({ body, noteDate: day })}
-              onUpdate={(noteId, body) => updateNote.mutate({ noteId, body })}
+              onAdd={(day, body) => addNote.mutateAsync({ body, noteDate: day })}
+              onUpdate={(noteId, body) => updateNote.mutateAsync({ noteId, body })}
               onDelete={(noteId) => deleteNote.mutate({ noteId })}
               addPending={addNote.isPending}
               updatePending={updateNote.isPending}
