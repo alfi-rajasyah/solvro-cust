@@ -15,6 +15,10 @@ Entries are reverse-chronological. Each entry should record **what changed**, **
 
 ## [Unreleased]
 
+### Fixed — 2026-11-27 — Task description is visible to read-only users
+
+- The task detail panel and task page always show the Description field. Users without task edit permission saw no Description label when a task had no description, while editors saw the field. They now see "No description" in a muted style, or the text when there is one. Editing is still limited to users who can edit tasks. (#194)
+
 ### Fixed — 2026-11-27 — Daily Review notes are kept when a save fails
 
 - Project and Operations notes on the Daily Review page cleared the text box, or closed the editor, as soon as Save was pressed, before the server answered. A rejected note was lost with no message. The text now stays in the box until the save succeeds, and a failed save shows "Could not save the note: <reason>. Your text is kept." under the box. (#193)
