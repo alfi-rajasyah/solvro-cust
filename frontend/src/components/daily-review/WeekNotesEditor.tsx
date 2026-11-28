@@ -15,8 +15,10 @@
 // fresh rather than carrying stale collapsed/expanded state across weeks.
 import { type ReactNode, type Ref, useEffect, useId, useRef, useState } from "react";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { Alert, AlertDescription } from "@/components/reui/alert";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Textarea } from "@/components/ui/textarea";
+import { ApiError } from "@/lib/api";
 import { dayLabel } from "@/lib/dailyReviewStats";
 import { dayFromIso } from "@/lib/dateField";
 
@@ -34,6 +36,11 @@ export interface WeekNoteExtra {
 }
 
 const EMPTY_EXTRA: WeekNoteExtra = { title: "" };
+
+/** Backend cap on a note body (routes/projects.ts, customer notes) — the textarea enforces it so a long note is not rejected after typing. */
+export const NOTE_BODY_MAX = 4000;
+/** The character counter appears once a note is this close to the cap. */
+const COUNTER_FROM = NOTE_BODY_MAX - 500;
 
 export interface WeekNotesEditorProps<N extends WeekNoteBase> {
   days: string[];
@@ -53,8 +60,9 @@ export interface WeekNotesEditorProps<N extends WeekNoteBase> {
   /** When given, Save stays disabled (and ⌘/Ctrl+Enter is a no-op) until this returns true — e.g. requiring a non-empty title alongside the body. */
   extraValid?: (extra: WeekNoteExtra) => boolean;
   renderPrefix?: (note: N) => ReactNode;
-  onAdd: (day: string, body: string, extra: WeekNoteExtra) => void;
-  onUpdate: (noteId: number, body: string, extra: WeekNoteExtra) => void;
+  /** Must settle only when the save has finished: resolve on success, reject on failure. The draft is cleared (or the editor closed) after it resolves and kept, with an error shown, when it rejects — callers pass `mutateAsync`. */
+  onAdd: (day: string, body: string, extra: WeekNoteExtra) => Promise<unknown>;
+  onUpdate: (noteId: number, body: string, extra: WeekNoteExtra) => Promise<unknown>;
   onDelete: (noteId: number) => void;
   addPending: boolean;
   updatePending: boolean;
@@ -126,6 +134,9 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
   const [activeEdit, setActiveEdit] = useState<ActiveEdit | null>(null);
   const [editBody, setEditBody] = useState("");
   const [editExtra, setEditExtra] = useState<WeekNoteExtra>(EMPTY_EXTRA);
+
+  const [todayError, setTodayError] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
@@ -200,29 +211,53 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
 
   function startAdd(day: string) {
     setActiveEdit({ kind: "add", day });
+    setEditError(null);
     setEditBody("");
     setEditExtra(EMPTY_EXTRA);
   }
 
   function startEdit(note: N) {
     setActiveEdit({ kind: "edit", noteId: note.id });
+    setEditError(null);
     setEditBody(note.body);
     setEditExtra(extraFromNote ? extraFromNote(note) : EMPTY_EXTRA);
   }
 
-  function saveActiveEdit() {
-    const trimmed = editBody.trim();
-    if (!trimmed || !activeEdit || (extraValid && !extraValid(editExtra))) return;
-    if (activeEdit.kind === "add") onAdd(activeEdit.day, trimmed, editExtra);
-    else onUpdate(activeEdit.noteId, trimmed, editExtra);
-    setActiveEdit(null);
+  function failureMessage(err: unknown): string {
+    // The alert appends its own period, so drop one the server message may already carry.
+    return err instanceof ApiError && err.message ? err.message.replace(/\.+$/, "") : "The server did not respond as expected";
   }
 
-  function saveToday() {
+  async function saveActiveEdit() {
+    const trimmed = editBody.trim();
+    if (!trimmed || !activeEdit || (extraValid && !extraValid(editExtra))) return;
+    if (activeEdit.kind === "add" ? addPending : updatePending) return;
+    const target = activeEdit;
+    setEditError(null);
+    try {
+      if (target.kind === "add") await onAdd(target.day, trimmed, editExtra);
+      else await onUpdate(target.noteId, trimmed, editExtra);
+    } catch (err) {
+      setEditError(failureMessage(err));
+      return;
+    }
+    // Close only the editor that was saved — the user may have opened another meanwhile.
+    setActiveEdit((cur) => (cur === target ? null : cur));
+  }
+
+  async function saveToday() {
     const trimmed = todayBody.trim();
     if (!trimmed || (extraValid && !extraValid(todayExtra))) return;
-    onAdd(today, trimmed, todayExtra);
-    setTodayBody("");
+    if (addPending) return;
+    setTodayError(null);
+    try {
+      await onAdd(today, trimmed, todayExtra);
+    } catch (err) {
+      setTodayError(failureMessage(err));
+      return;
+    }
+    // Keep anything typed while the request was in flight.
+    setTodayBody((cur) => (cur.trim() === trimmed ? "" : cur));
     setTodayExtra(EMPTY_EXTRA);
   }
 
@@ -294,6 +329,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
                       onDelete={() => handleDelete(note.id)}
                       saving={updatePending}
                       deleting={deletePending}
+                      error={editError}
                     />
                   ) : (
                     <div key={note.id} className="flex items-start justify-between gap-2">
@@ -363,6 +399,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
                     onSave={saveActiveEdit}
                     onCancel={() => setActiveEdit(null)}
                     saving={addPending}
+                    error={editError}
                   />
                 )}
 
@@ -379,6 +416,7 @@ export function WeekNotesEditor<N extends WeekNoteBase>({
                     fieldLabel={fieldLabel}
                     onSave={saveToday}
                     saving={addPending}
+                    error={todayError}
                     textareaRef={todayTextareaRef}
                   />
                 )}
@@ -416,6 +454,7 @@ function NoteEditorForm({
   onDelete,
   saving,
   deleting,
+  error,
   textareaRef,
 }: {
   value: string;
@@ -432,6 +471,8 @@ function NoteEditorForm({
   onDelete?: () => void;
   saving?: boolean;
   deleting?: boolean;
+  /** Message from the last failed save of this form, shown above the buttons. */
+  error?: string | null;
   /** Only passed for the persistent "today" row — see WeekNotesEditor's `pendingInsert` effect. */
   textareaRef?: Ref<HTMLTextAreaElement>;
 }) {
@@ -457,8 +498,22 @@ function NoteEditorForm({
         placeholder={placeholder}
         aria-label={ariaLabel}
         rows={3}
+        maxLength={NOTE_BODY_MAX}
         className="min-h-16"
       />
+      {value.length >= COUNTER_FROM && (
+        <p
+          className={`text-right text-meta tabular-nums ${value.length >= NOTE_BODY_MAX ? "text-error" : "text-on-surface-variant"}`}
+          data-testid="note-char-count"
+        >
+          {value.length} / {NOTE_BODY_MAX}
+        </p>
+      )}
+      {error && (
+        <Alert variant="destructive" data-testid="note-save-error">
+          <AlertDescription>Could not save the note: {error}. Your text is kept.</AlertDescription>
+        </Alert>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <KbdGroup className="text-meta text-on-surface-variant">
           <Kbd>⌘</Kbd>
